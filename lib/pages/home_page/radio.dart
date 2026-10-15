@@ -7,10 +7,25 @@ part of '../home_page.dart';
 extension _HomeRadio on _HomePageState {
   String _radioSeedFor(YoutubeSearchResult video) {
     final query = _lastSearchQuery.trim();
+    final queryStyle = MusicStyleMatcher.styleFromText(query);
+    final videoStyle = MusicStyleMatcher.styleFromVideo(video);
+
+    // Query genre (misalnya "lagu Jawa" atau "Pop") adalah konteks utama.
+    // Jangan menggantinya dengan "nama channel lagu Indonesia", karena seed
+    // generik itu yang membuat radio dapat melompat ke genre lain.
+    if (query.isNotEmpty && queryStyle != null) {
+      return query;
+    }
+
     if (query.isNotEmpty &&
         !RadioService.queryLooksLikeCurrentTrack(query, video)) {
       return query;
     }
+
+    if (videoStyle != null) {
+      return MusicStyleMatcher.seedForStyle(videoStyle);
+    }
+
     return RadioService.seedFor(video);
   }
 
@@ -146,17 +161,27 @@ extension _HomeRadio on _HomePageState {
     // Ini menjamin auto-next tidak mati hanya karena request radio gagal.
     if (next == null && _activeList.isNotEmpty) {
       final currentId = _currentVideo?.videoId;
+      final targetStyle = MusicStyleMatcher.styleForContext(
+        query: _radio.seed,
+        currentVideo: _currentVideo,
+      );
       final candidates = _activeList.where((video) {
         if (video.videoId == currentId) return false;
         if (_dislikedIds.contains(video.videoId)) return false;
         if (YoutubeSearchService.isLikelyShortForm(video)) return false;
         if (YoutubeSearchService.isLikelyNonMusicVideo(video)) return false;
+        if (!MusicStyleMatcher.isCompatible(
+          video: video,
+          targetStyle: targetStyle,
+        )) return false;
         return RadioService.trackKeyFor(video).isNotEmpty;
       }).toList();
 
       if (candidates.isNotEmpty) {
+        final preferred = MusicStyleMatcher.prioritizeStyle(candidates, targetStyle);
+        final styleCandidates = preferred.isNotEmpty ? preferred : candidates;
         if (_playerUiState.value.isSmartShuffle) {
-          candidates.sort((a, b) => _smartShuffleScore(
+          styleCandidates.sort((a, b) => _smartShuffleScore(
                 b,
                 currentArtist: _currentVideo?.channelTitle,
               ).compareTo(
@@ -168,7 +193,7 @@ extension _HomeRadio on _HomePageState {
         }
 
         next = await _pickNonShort(
-          candidates,
+          styleCandidates,
           random: _playerUiState.value.isShuffle &&
               !_playerUiState.value.isSmartShuffle,
         );
@@ -189,6 +214,10 @@ extension _HomeRadio on _HomePageState {
     // favorit / terakhir diputar (bukan lagu yang sedang diputar).
     if (next == null) {
       final currentId = _currentVideo?.videoId;
+      final targetStyle = MusicStyleMatcher.styleForContext(
+        query: _radio.seed,
+        currentVideo: _currentVideo,
+      );
       final local = <YoutubeSearchResult>[
         ..._favorites,
         ..._recentlyPlayed,
@@ -196,11 +225,19 @@ extension _HomeRadio on _HomePageState {
         return video.videoId != currentId &&
             !_dislikedIds.contains(video.videoId) &&
             !YoutubeSearchService.isLikelyShortForm(video) &&
-            !YoutubeSearchService.isLikelyNonMusicVideo(video);
+            !YoutubeSearchService.isLikelyNonMusicVideo(video) &&
+            MusicStyleMatcher.isCompatible(
+              video: video,
+              targetStyle: targetStyle,
+            );
       }).toList();
 
       if (local.isNotEmpty) {
-        next = await _pickNonShort(local, random: true);
+        final preferred = MusicStyleMatcher.prioritizeStyle(local, targetStyle);
+        next = await _pickNonShort(
+          preferred.isNotEmpty ? preferred : local,
+          random: true,
+        );
       }
     }
 

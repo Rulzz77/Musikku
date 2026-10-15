@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 
 import '../models/youtube_search_result.dart';
+import 'music_style_matcher.dart';
 import 'youtube_search_service.dart';
 
 /// Autoplay / "radio": menyiapkan lagu terbaru yang masih relevan dengan kata kunci
@@ -110,13 +111,18 @@ class RadioService {
   /// Ambil satu lagu secara berbobot. Dipakai Shuffle Pintar supaya radio
   /// tetap acak tetapi juga menghindari judul/artist yang baru diputar.
   YoutubeSearchResult? takeSmart({required double Function(YoutubeSearchResult) score}) {
-    _pool.removeWhere((video) => _blockedIds().contains(video.videoId));
+    final targetStyle = MusicStyleMatcher.styleFromText(_seed);
+    _pool.removeWhere((video) =>
+        _blockedIds().contains(video.videoId) ||
+        !MusicStyleMatcher.isCompatible(video: video, targetStyle: targetStyle));
 
     if (_pool.isEmpty) {
       return null;
     }
 
-    final scored = _pool
+    final styleCandidates = MusicStyleMatcher.prioritizeStyle(_pool, targetStyle);
+    final candidatesPool = styleCandidates.isNotEmpty ? styleCandidates : _pool;
+    final scored = candidatesPool
         .map((video) {
           final key = trackKeyFor(video);
           final artist = _artistKey(video);
@@ -153,17 +159,23 @@ class RadioService {
   /// memakai pemilihan berbasis keragaman agar tidak selalu mengambil hasil
   /// paling populer pertama.
   YoutubeSearchResult? take({required bool random}) {
-    _pool.removeWhere((video) => _blockedIds().contains(video.videoId));
+    final targetStyle = MusicStyleMatcher.styleFromText(_seed);
+    _pool.removeWhere((video) =>
+        _blockedIds().contains(video.videoId) ||
+        !MusicStyleMatcher.isCompatible(video: video, targetStyle: targetStyle));
 
     if (_pool.isEmpty) {
       return null;
     }
 
+    final styleCandidates = MusicStyleMatcher.prioritizeStyle(_pool, targetStyle);
+    final candidatesPool = styleCandidates.isNotEmpty ? styleCandidates : _pool;
+
     if (random) {
-      final eligible = _pool
+      final eligible = candidatesPool
           .where((video) => !_recentlySelected(video))
           .toList();
-      final source = eligible.isNotEmpty ? eligible : _pool;
+      final source = eligible.isNotEmpty ? eligible : candidatesPool;
       final selected = source[_random.nextInt(source.length)];
       _pool.removeWhere((video) => video.videoId == selected.videoId);
       _rememberSelection(selected);
@@ -177,21 +189,21 @@ class RadioService {
     // Kandidat utama: hindari judul yang baru diputar dan artist yang sama
     // berturut-turut. Tetap batasi ke 12 teratas agar popularitas tetap punya
     // pengaruh.
-    final diverse = _pool.where((video) {
+    final diverse = candidatesPool.where((video) {
       if (_recentlySelected(video)) return false;
       final artist = _artistKey(video);
       if (currentArtist.isNotEmpty && artist == currentArtist) return false;
       return true;
     }).take(12).toList();
 
-    final sameArtistAllowed = _pool
+    final sameArtistAllowed = candidatesPool
         .where((video) => !_recentlySelected(video))
         .take(12)
         .toList();
 
     final source = diverse.isNotEmpty
         ? diverse
-        : (sameArtistAllowed.isNotEmpty ? sameArtistAllowed : _pool.take(12).toList());
+        : (sameArtistAllowed.isNotEmpty ? sameArtistAllowed : candidatesPool.take(12).toList());
 
     final topCount = source.length < 5 ? source.length : 5;
     final selected = source[_random.nextInt(topCount)];
@@ -466,6 +478,8 @@ class RadioService {
       return;
     }
 
+    final targetStyle = MusicStyleMatcher.styleFromText(seed);
+
     try {
       for (var attempt = 0; attempt < 8; attempt++) {
         final page = await _searchService.searchLatest(
@@ -488,7 +502,11 @@ class RadioService {
         }
 
         for (final video in page.results) {
-          if (video.videoId == currentId ||
+          if (!MusicStyleMatcher.isCompatible(
+                video: video,
+                targetStyle: targetStyle,
+              ) ||
+              video.videoId == currentId ||
               _playedIds.contains(video.videoId) ||
               _blockedIds().contains(video.videoId) ||
               knownIds.contains(video.videoId)) {

@@ -5,8 +5,29 @@ part of '../home_page.dart';
 
 /// Antrean, shuffle pool, dan menu video.
 extension _HomeQueue on _HomePageState {
+  String? get _shuffleMusicStyle {
+    if (_activeSource == _ListSource.favorites ||
+        _activeSource == _ListSource.playlist) {
+      return null; // Hormati urutan playlist/favorit buatan pengguna.
+    }
+
+    final query = _activeSource == _ListSource.radio && _radio.hasSeed
+        ? _radio.seed
+        : _lastSearchQuery;
+    return MusicStyleMatcher.styleForContext(
+      query: query,
+      currentVideo: _currentVideo,
+    );
+  }
+
   void _prepareShufflePool({bool excludeCurrent = true}) {
-    _shufflePool = List<YoutubeSearchResult>.from(_activeList);
+    final style = _shuffleMusicStyle;
+    _shufflePool = _activeList
+        .where((video) => MusicStyleMatcher.isCompatible(
+              video: video,
+              targetStyle: style,
+            ))
+        .toList();
 
     if (excludeCurrent && _currentVideo != null) {
       _shufflePool.removeWhere(
@@ -58,16 +79,28 @@ extension _HomeQueue on _HomePageState {
   }
 
   YoutubeSearchResult? _takeShuffleVideo() {
+    final style = _shuffleMusicStyle;
+    _shufflePool.removeWhere((video) => !MusicStyleMatcher.isCompatible(
+          video: video,
+          targetStyle: style,
+        ));
     if (_shufflePool.isEmpty) {
       return null;
     }
 
+    // Kandidat yang label genrenya cocok didahulukan; lagu tanpa label genre
+    // baru menjadi fallback setelah kandidat yang dikenali habis.
+    final preferred = MusicStyleMatcher.prioritizeStyle(_shufflePool, style);
+    final candidatesPool = preferred.isNotEmpty ? preferred : _shufflePool;
+
     if (!_playerUiState.value.isSmartShuffle) {
-      return _shufflePool.removeAt(_random.nextInt(_shufflePool.length));
+      final selected = candidatesPool[_random.nextInt(candidatesPool.length)];
+      _shufflePool.removeWhere((video) => video.videoId == selected.videoId);
+      return selected;
     }
 
     final currentArtist = _currentVideo?.channelTitle;
-    final scored = _shufflePool
+    final scored = candidatesPool
         .map(
           (video) => (
             video: video,

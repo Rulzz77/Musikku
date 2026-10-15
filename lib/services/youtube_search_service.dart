@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 
 import '../models/youtube_search_result.dart';
 import 'disk_cache.dart';
+import 'music_style_matcher.dart';
 
 class YoutubeSearchException implements Exception {
   final String message;
@@ -418,7 +419,7 @@ class YoutubeSearchService {
       );
     }
 
-    final cacheKey = 'radioPopularV35|${keyword.toLowerCase()}|${pageToken ?? ''}';
+    final cacheKey = 'radioPopularV36|${keyword.toLowerCase()}|${pageToken ?? ''}';
     final cached = _cache[cacheKey];
 
     if (cached != null &&
@@ -557,7 +558,9 @@ class YoutubeSearchService {
     // Kalau seed terlalu spesifik ke sumber AI / channel non-musik sehingga
     // semua kandidat tersaring, gunakan pool musik populer Indonesia sebagai
     // fallback. Ini lebih baik daripada memutar ulang video AI atau berhenti.
-    if (results.isEmpty && !keyword.toLowerCase().contains('lagu indonesia')) {
+    if (results.isEmpty &&
+        !keyword.toLowerCase().contains('lagu indonesia') &&
+        MusicStyleMatcher.styleFromText(keyword) == null) {
       final fallback = await _searchPopularMusicFallback();
       if (fallback.isNotEmpty) {
         results = fallback;
@@ -583,7 +586,7 @@ class YoutubeSearchService {
   }
 
   Future<List<YoutubeSearchResult>> _searchPopularMusicFallback() async {
-    final cacheKey = 'radioPopularFallbackV35';
+    final cacheKey = 'radioPopularFallbackV36';
     final cached = _cache[cacheKey];
     if (cached != null &&
         DateTime.now().difference(cached.time) < _radioCacheTtl &&

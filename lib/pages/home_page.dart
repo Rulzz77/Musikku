@@ -15,6 +15,7 @@ import '../models/player_ui_state.dart';
 import '../models/queue_item.dart';
 import '../models/youtube_search_result.dart';
 import '../services/lyrics_service.dart';
+import '../services/music_style_matcher.dart';
 import '../services/app_settings.dart';
 import '../services/app_update_service.dart';
 import '../services/queue_manager.dart';

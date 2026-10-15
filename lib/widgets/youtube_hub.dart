@@ -19,6 +19,7 @@ import '../pages/stats_page.dart';
 import 'channel_avatar.dart';
 import 'live_badge.dart';
 import 'data_usage_card.dart';
+import 'app_update_sheet.dart';
 
 /// Jembatan dari HomePage ke hub: tombol Back sistem dan membuka channel dari
 /// halaman tonton. Halaman channel hidup di dalam hub, jadi video / PiP yang
@@ -1648,6 +1649,11 @@ class _YoutubeHubState extends State<YoutubeHub> {
                     ),
                   ],
                 ),
+              ),
+              IconButton(
+                tooltip: 'Pembaruan aplikasi',
+                onPressed: () => unawaited(AppUpdateSheet.show(context)),
+                icon: const Icon(Icons.system_update_alt_rounded),
               ),
               IconButton(
                 tooltip: 'Pengaturan hemat data',

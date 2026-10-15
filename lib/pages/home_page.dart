@@ -16,6 +16,7 @@ import '../models/queue_item.dart';
 import '../models/youtube_search_result.dart';
 import '../services/lyrics_service.dart';
 import '../services/app_settings.dart';
+import '../services/app_update_service.dart';
 import '../services/queue_manager.dart';
 import '../services/radio_service.dart';
 import '../services/storage_service.dart';
@@ -25,6 +26,7 @@ import '../services/youtube_search_service.dart';
 import '../widgets/youtube_hub.dart';
 import '../widgets/music_player_page.dart';
 import '../widgets/mini_music_player.dart';
+import '../widgets/app_update_sheet.dart';
 import '../widgets/playlist_widgets.dart';
 import '../widgets/video_menu_sheet.dart';
 import 'artist_page.dart';
@@ -367,6 +369,36 @@ class _HomePageState extends State<HomePage>
   // HELPERS
   // ============================================================
 
+  Future<void> _checkForAppUpdateOnLaunch() async {
+    // Jangan menutupi pemutaran pertama. Cek setelah UI utama stabil dan diam-diam
+    // abaikan error jaringan atau repository yang belum punya Release.
+    await Future<void>.delayed(const Duration(seconds: 5));
+    if (!mounted || _youtubeWatchVideo != null || _youtubePipMode || _youtubeSystemPipMode) {
+      return;
+    }
+
+    try {
+      final result = await AppUpdateService.instance.checkForUpdate();
+      final release = result.release;
+      if (!mounted || !result.updateAvailable || release == null) return;
+
+      final preferences = await SharedPreferences.getInstance();
+      final promptKey = 'musikku_update_prompted_${release.version}';
+      if (preferences.getBool(promptKey) == true) return;
+      await preferences.setBool(promptKey, true);
+      if (!mounted) return;
+
+      await AppUpdateSheet.show(
+        context,
+        initialResult: result,
+        automaticPrompt: true,
+      );
+    } catch (error) {
+      // Auto-check tidak boleh mengganggu pengguna saat jaringan/API bermasalah.
+      debugPrint('AUTO UPDATE CHECK: $error');
+    }
+  }
+
   void _toast(
     String message, {
     Duration duration = const Duration(seconds: 2),
@@ -522,6 +554,7 @@ class _HomePageState extends State<HomePage>
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final pending = await NativeYoutubeController.takePendingVideo();
       if (pending != null && mounted) _openVideoFromNotification(pending);
+      unawaited(_checkForAppUpdateOnLaunch());
     });
   }
 

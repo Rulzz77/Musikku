@@ -5,6 +5,7 @@ import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.content.ContentUris
 import android.provider.MediaStore
+import android.provider.Settings
 import android.media.MediaMetadataRetriever
 import android.os.Build
 import android.annotation.TargetApi
@@ -22,6 +23,7 @@ import android.util.Log
 import android.content.Intent
 import android.os.Bundle
 import android.net.ConnectivityManager
+import android.net.Uri
 import android.net.NetworkCapabilities
 
 import com.ryanheise.audioservice.AudioServiceActivity
@@ -33,6 +35,9 @@ import io.flutter.plugin.common.StandardMessageCodec
 import io.flutter.plugin.platform.PlatformView
 import io.flutter.plugin.platform.PlatformViewFactory
 
+import java.io.File
+
+import androidx.core.content.FileProvider
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -222,6 +227,85 @@ class MainActivity : AudioServiceActivity() {
                         result.error("DATA_USAGE_FAILED", error.message, null)
                     }
                 }
+                else -> result.notImplemented()
+            }
+        }
+
+        // APK updater mandiri: izin instalasi dan FileProvider dibatasi hanya
+        // pada folder cache/apk_updates yang digunakan oleh AppUpdateService.
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "musikku/app_update",
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "canInstallPackages" -> {
+                    val allowed = Build.VERSION.SDK_INT < Build.VERSION_CODES.O ||
+                        packageManager.canRequestPackageInstalls()
+                    result.success(allowed)
+                }
+
+                "requestInstallPermission" -> {
+                    try {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+                            !packageManager.canRequestPackageInstalls()
+                        ) {
+                            val intent = Intent(
+                                Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                                Uri.parse("package:$packageName"),
+                            )
+                            startActivity(intent)
+                        }
+                        result.success(null)
+                    } catch (error: Exception) {
+                        Log.e(TAG, "Membuka pengaturan izin APK gagal", error)
+                        result.error("INSTALL_PERMISSION_SETTINGS", error.message, null)
+                    }
+                }
+
+                "installApk" -> {
+                    try {
+                        val rawPath = call.argument<String>("path")
+                            ?: throw IllegalArgumentException("Path APK tidak tersedia")
+                        val apkFile = File(rawPath).canonicalFile
+                        val allowedDir = File(cacheDir, "apk_updates").canonicalFile
+                        if (!apkFile.path.startsWith(allowedDir.path + File.separator) ||
+                            !apkFile.isFile || apkFile.length() < 4L
+                        ) {
+                            throw IllegalArgumentException("File APK tidak valid atau berada di luar folder updater")
+                        }
+
+                        val contentUri = FileProvider.getUriForFile(
+                            this,
+                            "$packageName.fileprovider",
+                            apkFile,
+                        )
+                        val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                            setDataAndType(contentUri, "application/vnd.android.package-archive")
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        startActivity(installIntent)
+                        result.success(true)
+                    } catch (error: Exception) {
+                        Log.e(TAG, "Membuka installer APK gagal", error)
+                        result.error("APK_INSTALLER_FAILED", error.message, null)
+                    }
+                }
+
+                "openReleasesPage" -> {
+                    try {
+                        startActivity(
+                            Intent(
+                                Intent.ACTION_VIEW,
+                                Uri.parse("https://github.com/Rulzz77/flutter_application_5/releases"),
+                            ),
+                        )
+                        result.success(true)
+                    } catch (error: Exception) {
+                        result.error("OPEN_RELEASES_FAILED", error.message, null)
+                    }
+                }
+
                 else -> result.notImplemented()
             }
         }

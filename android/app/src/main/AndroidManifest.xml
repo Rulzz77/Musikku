@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<manifest
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission
+        android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- ===================================================== -->
+    <!-- INTERNET -->
+    <!-- ===================================================== -->
+
+    <uses-permission
+        android:name="android.permission.INTERNET" />
+
+    <!-- ===================================================== -->
+    <!-- WAKE LOCK -->
+    <!-- Supaya perangkat tidak langsung melepas CPU saat
+         playback/background service aktif -->
+    <!-- ===================================================== -->
+
+    <uses-permission
+        android:name="android.permission.WAKE_LOCK" />
+
+    <!-- Audio effect / equalizer best-effort support. -->
+    <uses-permission
+        android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+
+    <!-- ===================================================== -->
+    <!-- FOREGROUND SERVICE -->
+    <!-- ===================================================== -->
+
+    <uses-permission
+        android:name="android.permission.FOREGROUND_SERVICE" />
+
+    <!-- ===================================================== -->
+    <!-- ANDROID 14+ -->
+    <!-- Foreground service khusus media playback -->
+    <!-- ===================================================== -->
+
+    <uses-permission
+        android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+
+    <!-- ===================================================== -->
+    <!-- ANDROID 13+ -->
+    <!-- Notification permission -->
+    <!-- ===================================================== -->
+
+    <uses-permission
+        android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- ===================================================== -->
+    <!-- APPLICATION -->
+    <!-- ===================================================== -->
+
+    <application
+        android:name="${applicationName}"
+        android:label="MusikKu"
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false"
+        android:supportsRtl="true">
+
+        <!-- ================================================= -->
+        <!-- MAIN FLUTTER ACTIVITY -->
+        <!-- ================================================= -->
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:taskAffinity=""
+            android:resizeableActivity="true"
+            android:supportsPictureInPicture="true"
+            android:theme="@style/LaunchTheme"
+            android:configChanges="
+                orientation|
+                keyboardHidden|
+                keyboard|
+                screenSize|
+                smallestScreenSize|
+                locale|
+                layoutDirection|
+                fontScale|
+                screenLayout|
+                density|
+                uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+
+            <!-- Android 16 pada layar besar dapat mengabaikan request orientasi.
+                 Property ini mempertahankan perilaku orientasi yang diminta Flutter
+                 untuk device yang membutuhkan landscape manual. -->
+            <property
+                android:name="android.window.PROPERTY_COMPAT_ALLOW_RESTRICTED_RESIZABILITY"
+                android:value="true" />
+
+            <meta-data
+                android:name="io.flutter.embedding.android.NormalTheme"
+                android:resource="@style/NormalTheme" />
+
+            <!-- ================================================= -->
+            <!-- LAUNCHER -->
+            <!-- ================================================= -->
+
+            <intent-filter>
+
+                <action
+                    android:name="android.intent.action.MAIN" />
+
+                <category
+                    android:name="android.intent.category.LAUNCHER" />
+
+            </intent-filter>
+
+        </activity>
+
+
+        <!-- ================================================= -->
+        <!-- PLAYBACK SERVICE -->
+        <!-- ================================================= -->
+
+        <service
+            android:name=".PlaybackService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback"
+            android:stopWithTask="false" />
+
+
+
+        <!-- ================================================= -->
+        <!-- FLUTTER EMBEDDING -->
+        <!-- ================================================= -->
+
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
+
+    </application>
+
+    <!-- ===================================================== -->
+    <!-- PACKAGE VISIBILITY -->
+    <!-- ===================================================== -->
+
+    <queries>
+
+        <intent>
+
+            <action
+                android:name="android.intent.action.PROCESS_TEXT" />
+
+            <data
+                android:mimeType="text/plain" />
+
+        </intent>
+
+    </queries>
+
+</manifest>

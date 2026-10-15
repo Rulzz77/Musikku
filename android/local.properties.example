@@ -1,0 +1,4 @@
+# Flutter/Android paths are machine-specific. Do not commit local.properties.
+# Example:
+# sdk.dir=C:\\Android\\Sdk
+# flutter.sdk=C:\\flutter

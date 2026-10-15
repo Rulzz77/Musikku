@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Keep cleartext disabled everywhere by default. -->
+    <base-config cleartextTrafficPermitted="false" />
+
+    <!-- Narrow exception for the local audio proxy used by the current build. -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain>127.0.0.1</domain>
+        <domain>localhost</domain>
+    </domain-config>
+</network-security-config>

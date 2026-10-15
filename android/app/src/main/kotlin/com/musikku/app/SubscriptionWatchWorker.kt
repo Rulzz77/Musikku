@@ -203,6 +203,7 @@ class SubscriptionWatchWorker(
 
         // 2) Status live + waktu terbit (1 unit kuota per 50 video).
         val liveIds = HashSet<String>()
+        val musicVideoIds = HashSet<String>()
         val publishedAt = HashMap<String, Long>()
         try {
             uploads.keys.chunked(50).forEach { chunk ->
@@ -215,6 +216,9 @@ class SubscriptionWatchWorker(
                     val item = items.getJSONObject(i)
                     val id = item.optString("id")
                     val snippet = item.optJSONObject("snippet") ?: continue
+                    // Keep Android background notifications music-only too.
+                    if (snippet.optString("categoryId") != "10") continue
+                    musicVideoIds.add(id)
                     if (snippet.optString("liveBroadcastContent") == "live") liveIds.add(id)
                     parseIsoMillis(snippet.optString("publishedAt"))?.let { publishedAt[id] = it }
                 }
@@ -231,6 +235,8 @@ class SubscriptionWatchWorker(
         val nowMs = System.currentTimeMillis()
 
         for (upload in uploads.values) {
+            // Unknown/non-music category is intentionally not notified.
+            if (upload.videoId !in musicVideoIds) continue
             val isSeedChannel = !seeded || !knownChannels.contains(upload.channelId)
             if (upload.videoId in liveIds) {
                 if (seenLive.add(upload.videoId)) {
@@ -284,8 +290,8 @@ class SubscriptionWatchWorker(
             }
         )
         manager.createNotificationChannel(
-            NotificationChannel(CHANNEL_VIDEOS, "Video dari subscription", NotificationManager.IMPORTANCE_DEFAULT).apply {
-                description = "Video baru dari channel yang kamu subscribe."
+            NotificationChannel(CHANNEL_VIDEOS, "Musik dari subscription", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                description = "Musik baru dari channel yang kamu subscribe."
             }
         )
     }
@@ -326,7 +332,7 @@ class SubscriptionWatchWorker(
             .setColor(0xFF5A52E8.toInt())
             .setContentTitle(
                 if (live) "🔴 ${upload.channelTitle} sedang live"
-                else "${upload.channelTitle} mengunggah video baru"
+                else "${upload.channelTitle} mengunggah musik baru"
             )
             .setContentText(upload.title)
             .setContentIntent(pending)

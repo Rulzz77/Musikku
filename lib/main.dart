@@ -52,25 +52,25 @@ class MusikKuApp extends StatelessWidget {
     );
 
     final scheme = base.copyWith(
-      // Midnight Flow palette: mint primary, cool navy surfaces.
-      primary: isDark ? const Color(0xFF66E3C4) : const Color(0xFF087F71),
-      onPrimary: isDark ? const Color(0xFF07130F) : Colors.white,
-      primaryContainer: isDark ? const Color(0xFF173A34) : const Color(0xFFD8F7EF),
-      onPrimaryContainer: isDark ? const Color(0xFFBDF8E9) : const Color(0xFF073D34),
+      // Music-first graphite surfaces with a YouTube-Music-inspired red accent.
+      primary: isDark ? const Color(0xFFFF375F) : const Color(0xFFD81936),
+      onPrimary: Colors.white,
+      primaryContainer: isDark ? const Color(0xFF3A131D) : const Color(0xFFFFE2E7),
+      onPrimaryContainer: isDark ? const Color(0xFFFFD7DF) : const Color(0xFF65091B),
       secondary: appSecondary,
       onSecondary: Colors.white,
-      secondaryContainer: isDark ? const Color(0xFF29263F) : const Color(0xFFECE8FF),
-      onSecondaryContainer: isDark ? const Color(0xFFE7E0FF) : const Color(0xFF30245D),
+      secondaryContainer: isDark ? const Color(0xFF3D2027) : const Color(0xFFFFE8ED),
+      onSecondaryContainer: isDark ? const Color(0xFFFFE0E7) : const Color(0xFF5C1125),
       surface: surface,
-      surfaceContainerLowest: isDark ? const Color(0xFF0A0F13) : Colors.white,
-      surfaceContainerLow: isDark ? const Color(0xFF111A20) : const Color(0xFFF8FBFB),
-      surfaceContainer: isDark ? const Color(0xFF18232B) : const Color(0xFFF0F5F4),
-      surfaceContainerHigh: isDark ? const Color(0xFF1B2933) : const Color(0xFFE8F0EF),
-      surfaceContainerHighest: isDark ? const Color(0xFF253642) : const Color(0xFFDFE9E7),
-      onSurface: isDark ? const Color(0xFFF0F7F6) : const Color(0xFF0B1716),
-      onSurfaceVariant: isDark ? const Color(0xFFA4B5BB) : const Color(0xFF5C6D6D),
-      outline: isDark ? const Color(0xFF40535D) : const Color(0xFFC6D4D1),
-      outlineVariant: isDark ? const Color(0xFF263942) : const Color(0xFFDCE6E4),
+      surfaceContainerLowest: isDark ? const Color(0xFF09090A) : Colors.white,
+      surfaceContainerLow: isDark ? const Color(0xFF121214) : const Color(0xFFFCFBFC),
+      surfaceContainer: isDark ? const Color(0xFF1B1B1F) : const Color(0xFFF3F1F2),
+      surfaceContainerHigh: isDark ? const Color(0xFF222226) : const Color(0xFFECE9EB),
+      surfaceContainerHighest: isDark ? const Color(0xFF2B2B30) : const Color(0xFFE4E0E3),
+      onSurface: isDark ? const Color(0xFFF8F6F7) : const Color(0xFF161316),
+      onSurfaceVariant: isDark ? const Color(0xFFB8B0B4) : const Color(0xFF696166),
+      outline: isDark ? const Color(0xFF4B4448) : const Color(0xFFD0C9CD),
+      outlineVariant: isDark ? const Color(0xFF343136) : const Color(0xFFE3DEE1),
       error: const Color(0xFFD94A5C),
     );
 

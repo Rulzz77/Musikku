@@ -1,7 +1,7 @@
 name: flutter_application_5
 description: "MusikKu - aplikasi streaming musik online dengan UI redesign tahap awal."
 publish_to: 'none'
-version: 2.5.11+71
+version: 2.5.12+72
 
 environment:
   sdk: ^3.13.4

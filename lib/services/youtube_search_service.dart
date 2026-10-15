@@ -208,7 +208,7 @@ class YoutubeSearchService {
       'music' => 'music',
       _ => 'music',
     };
-    final cacheKey = 'smartV4|${intent.apiQuery.toLowerCase()}|${intent.latest ? 'date' : 'relevance'}|$safeFilter';
+    final cacheKey = 'smartV5|${intent.apiQuery.toLowerCase()}|${intent.latest ? 'date' : 'relevance'}|$safeFilter';
     final cached = _cache[cacheKey];
 
     if (cached != null &&
@@ -291,6 +291,7 @@ class YoutubeSearchService {
           thumbnailUrl: _pickThumbnail(snippet['thumbnails']),
           publishedAt: DateTime.tryParse(snippet['publishedAt']?.toString() ?? ''),
           channelId: snippet['channelId']?.toString() ?? '',
+          categoryId: snippet['categoryId']?.toString() ?? '',
         ),
       );
     }
@@ -303,7 +304,8 @@ class YoutubeSearchService {
     results = results.where((video) {
       if (video.isLive || video.isUpcoming) return false;
       final seconds = video.durationSeconds;
-      return seconds == null || seconds > 60;
+      if (seconds != null && seconds <= 60) return false;
+      return isMusicCatalogItem(video);
     }).toList(growable: false);
 
     _cache[cacheKey] = _CacheEntry(DateTime.now(), results);
@@ -627,7 +629,8 @@ class YoutubeSearchService {
 
   static const Duration _feedTtl = Duration(minutes: 20);
 
-  /// Video yang sedang trending (semua kategori kalau [categoryId] kosong).
+  /// Musik yang sedang trending. Kategori 10 dipakai sebagai default agar
+  /// beranda tidak menampilkan upload dari kategori video lain.
   /// Memakai videos.list chart=mostPopular: hanya 1 unit kuota per panggilan
   /// dan TIDAK perlu login.
   Future<List<YoutubeSearchResult>> mostPopular({
@@ -642,7 +645,10 @@ class YoutubeSearchService {
       );
     }
 
-    final cacheKey = 'mostPopularV1|${categoryId ?? 'all'}';
+    final musicCategoryId = categoryId == null || categoryId.trim().isEmpty
+        ? '10'
+        : categoryId.trim();
+    final cacheKey = 'mostPopularMusicV2|$musicCategoryId';
     if (!force) {
       final cached = _cache[cacheKey];
       if (cached != null &&
@@ -664,7 +670,7 @@ class YoutubeSearchService {
       'regionCode': 'ID',
       // Ambil lebih banyak dari yang ditampilkan karena Shorts disaring.
       'maxResults': '50',
-      if (categoryId != null && categoryId.isNotEmpty) 'videoCategoryId': categoryId,
+      'videoCategoryId': musicCategoryId,
       'key': _apiKey,
     };
 
@@ -673,7 +679,8 @@ class YoutubeSearchService {
           .replace(queryParameters: params),
     );
     final items = data['items'];
-    final results = _parseVideoResources(items is List ? items : const []);
+    final parsed = _parseVideoResources(items is List ? items : const []);
+    final results = parsed.where(isMusicCatalogItem).toList(growable: false);
 
     if (results.isNotEmpty) {
       _cache[cacheKey] = _CacheEntry(DateTime.now(), results);
@@ -694,7 +701,7 @@ class YoutubeSearchService {
       );
     }
 
-    const cacheKey = 'recentMusicV2';
+    const cacheKey = 'recentMusicV3';
     if (!force) {
       final cached = _cache[cacheKey];
       if (cached != null &&
@@ -746,8 +753,9 @@ class YoutubeSearchService {
       ),
     );
     final items = detailData['items'];
-    final results = _parseVideoResources(items is List ? items : const []);
-    results.sort((a, b) => (b.viewCount ?? 0).compareTo(a.viewCount ?? 0));
+    final parsed = _parseVideoResources(items is List ? items : const []);
+    final results = parsed.where(isMusicCatalogItem).toList(growable: false)
+      ..sort((a, b) => (b.viewCount ?? 0).compareTo(a.viewCount ?? 0));
 
     if (results.isNotEmpty) {
       _cache[cacheKey] = _CacheEntry(DateTime.now(), results);
@@ -798,6 +806,7 @@ class YoutubeSearchService {
           concurrentViewers: d.concurrentViewers,
           liveStartTime: d.liveStartTime,
           channelId: d.channelId.isNotEmpty ? d.channelId : video.channelId,
+          categoryId: d.categoryId.isNotEmpty ? d.categoryId : video.categoryId,
         );
       }).toList(growable: false);
     } catch (_) {
@@ -1140,6 +1149,21 @@ class YoutubeSearchService {
     return !isLikelyShortForm(video) &&
         !isLikelyNonMusicVideo(video) &&
         !isLikelyAiGeneratedMusic(video);
+  }
+
+  /// MusicKu's main catalogue filter. Search/trending endpoints already ask
+  /// YouTube for category 10; account uploads must provide category 10 after
+  /// videos.list enrichment, or they are omitted instead of leaking non-music.
+  /// AI-made tracks are not rejected here because they are still music.
+  static bool isMusicCatalogItem(
+    YoutubeSearchResult video, {
+    bool requireCategoryId = false,
+  }) {
+    if (video.isLocal) return true;
+    final category = video.categoryId.trim();
+    if (category.isNotEmpty && category != '10') return false;
+    if (requireCategoryId && category != '10') return false;
+    return !isLikelyShortForm(video) && !isLikelyNonMusicVideo(video);
   }
 
   // ============================================================

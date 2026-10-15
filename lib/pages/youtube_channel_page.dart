@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../models/youtube_search_result.dart';
 import '../services/youtube_account_service.dart';
+import '../services/youtube_search_service.dart';
 import '../widgets/live_badge.dart';
 
 /// 1200 -> "1,2 rb", 3400000 -> "3,4 jt" (format YouTube Indonesia).
@@ -138,7 +139,12 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
       if (uploads.isNotEmpty) {
         final page = await _account.playlistItemsPage(uploads, maxResults: _pageSize);
         token = page.nextPageToken;
-        videos = await _account.withViewCounts(page.items);
+        videos = (await _account.withViewCounts(page.items))
+            .where((video) => YoutubeSearchService.isMusicCatalogItem(
+                  video,
+                  requireCategoryId: true,
+                ))
+            .toList(growable: false);
       }
       if (!mounted) return;
       setState(() {
@@ -172,7 +178,12 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
       setState(() {
         _liveItems = [
           ..._liveItems,
-          ...result.items.where((v) => !known.contains(v.videoId)),
+          ...result.items.where((video) =>
+              !known.contains(video.videoId) &&
+              YoutubeSearchService.isMusicCatalogItem(
+                video,
+                requireCategoryId: true,
+              )),
         ];
         _liveToken = result.nextPageToken;
         _liveScanned = true;
@@ -218,7 +229,12 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
           _oldestComplete = true;
         }
         final first = _oldestPool.take(_pageSize).toList(growable: false);
-        final withStats = await _account.withViewCounts(first);
+        final withStats = (await _account.withViewCounts(first))
+            .where((video) => YoutubeSearchService.isMusicCatalogItem(
+                  video,
+                  requireCategoryId: true,
+                ))
+            .toList(growable: false);
         if (!mounted || requestId != _sortRequestId) return;
         setState(() {
           _videos = withStats;
@@ -226,7 +242,12 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
         });
       } else {
         final page = await _account.playlistItemsPage(_uploadsId, maxResults: _pageSize);
-        final withStats = await _account.withViewCounts(page.items);
+        final withStats = (await _account.withViewCounts(page.items))
+            .where((video) => YoutubeSearchService.isMusicCatalogItem(
+                  video,
+                  requireCategoryId: true,
+                ))
+            .toList(growable: false);
         if (!mounted || requestId != _sortRequestId) return;
         setState(() {
           _videos = withStats;
@@ -254,7 +275,12 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
       List<YoutubeSearchResult> more;
       if (_oldestFirst) {
         final next = _oldestPool.skip(_oldestShown).take(_pageSize).toList(growable: false);
-        more = await _account.withViewCounts(next);
+        more = (await _account.withViewCounts(next))
+            .where((video) => YoutubeSearchService.isMusicCatalogItem(
+                  video,
+                  requireCategoryId: true,
+                ))
+            .toList(growable: false);
         if (!mounted || requestId != _sortRequestId) return;
         setState(() {
           _videos = [..._videos, ...more];
@@ -266,7 +292,12 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
           pageToken: _nextToken,
           maxResults: _pageSize,
         );
-        more = await _account.withViewCounts(page.items);
+        more = (await _account.withViewCounts(page.items))
+            .where((video) => YoutubeSearchService.isMusicCatalogItem(
+                  video,
+                  requireCategoryId: true,
+                ))
+            .toList(growable: false);
         if (!mounted || requestId != _sortRequestId) return;
         setState(() {
           _videos = [..._videos, ...more];
@@ -470,7 +501,7 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
   Widget _tabs() {
     final isLiveNow = _liveItems.any((v) => v.isLive);
     final labels = <Widget>[
-      const Text('Video'),
+      const Text('Musik'),
       Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -705,7 +736,7 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
     }
     if (_videos.isEmpty) {
       return const [
-        SliverToBoxAdapter(child: Padding(padding: EdgeInsets.all(24), child: Text('Belum ada video.'))),
+        SliverToBoxAdapter(child: Padding(padding: EdgeInsets.all(24), child: Text('Belum ada musik dari channel ini.'))),
       ];
     }
     return [

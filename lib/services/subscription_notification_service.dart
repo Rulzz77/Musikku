@@ -38,8 +38,8 @@ class SubscriptionNotificationService {
     await androidImpl?.createNotificationChannel(
       const AndroidNotificationChannel(
         'youtube_subscriptions',
-        'Video dari subscription',
-        description: 'Video baru dari channel yang kamu subscribe.',
+        'Musik dari subscription',
+        description: 'Musik baru dari channel yang kamu subscribe.',
         importance: Importance.defaultImportance,
       ),
     );

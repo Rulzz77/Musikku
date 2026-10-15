@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/youtube_search_result.dart';
+import 'youtube_search_service.dart';
 
 class YoutubeChannelSummary {
   final String id;
@@ -550,8 +551,13 @@ class YoutubeAccountService {
       },
       write: false,
     );
-    final results = _playlistItemsToTracks(playlist);
-    return _enrichViewCounts(results);
+    final enriched = await _enrichViewCounts(_playlistItemsToTracks(playlist));
+    return enriched
+        .where((video) => YoutubeSearchService.isMusicCatalogItem(
+              video,
+              requireCategoryId: true,
+            ))
+        .toList(growable: false);
   }
 
   Future<List<YoutubeSearchResult>> likedVideos({int maxResults = 50}) async {
@@ -576,7 +582,13 @@ class YoutubeAccountService {
       },
       write: false,
     );
-    return _enrichViewCounts(_playlistItemsToTracks(data));
+    final enriched = await _enrichViewCounts(_playlistItemsToTracks(data));
+    return enriched
+        .where((video) => YoutubeSearchService.isMusicCatalogItem(
+              video,
+              requireCategoryId: true,
+            ))
+        .toList(growable: false);
   }
 
   Future<List<YoutubePlaylistSummary>> playlists({int maxResults = 50}) async {
@@ -651,7 +663,13 @@ class YoutubeAccountService {
       },
       write: false,
     );
-    return _enrichViewCounts(_playlistItemsToTracks(data));
+    final enriched = await _enrichViewCounts(_playlistItemsToTracks(data));
+    return enriched
+        .where((video) => YoutubeSearchService.isMusicCatalogItem(
+              video,
+              requireCategoryId: true,
+            ))
+        .toList(growable: false);
   }
 
   Future<String> createPlaylist(
@@ -802,6 +820,7 @@ class YoutubeAccountService {
         concurrentViewers: d.concurrentViewers,
         liveStartTime: d.liveStartTime,
         channelId: d.channelId.isNotEmpty ? d.channelId : e.channelId,
+        categoryId: d.categoryId.isNotEmpty ? d.categoryId : e.categoryId,
       );
     }).toList(growable: false);
   }
@@ -843,6 +862,12 @@ class YoutubeAccountService {
     } catch (_) {
       enriched = all;
     }
+    enriched = enriched
+        .where((video) => YoutubeSearchService.isMusicCatalogItem(
+              video,
+              requireCategoryId: true,
+            ))
+        .toList(growable: false);
     enriched.sort((a, b) {
       // Yang sedang live selalu di atas, sisanya terbaru dulu.
       if (a.isLive != b.isLive) return a.isLive ? -1 : 1;
@@ -869,7 +894,12 @@ class YoutubeAccountService {
       pages++;
       if (page.items.isNotEmpty) {
         final detailed = await _enrichViewCounts(page.items);
-        found.addAll(detailed.where((v) => v.liveStatus.isNotEmpty));
+        found.addAll(detailed.where((video) =>
+            video.liveStatus.isNotEmpty &&
+            YoutubeSearchService.isMusicCatalogItem(
+              video,
+              requireCategoryId: true,
+            )));
       }
     } while (token != null && pages < maxPages);
     return (items: found, nextPageToken: token);

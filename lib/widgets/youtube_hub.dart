@@ -358,15 +358,33 @@ class _YoutubeHubState extends State<YoutubeHub> {
       if (index < popularVideos.length) addUnique(popularVideos[index]);
     }
 
+    final recentlyPlayed = widget.recentlyPlayed.take(12).toList(growable: false);
+
     return [
       SliverToBoxAdapter(child: _modernWelcomeHeader()),
       _chipRow(),
-      if (feed.isNotEmpty)
+      if (recentlyPlayed.isNotEmpty) ...[
+        _sectionHeader('Putar lagi'),
+        SliverToBoxAdapter(
+          child: SizedBox(
+            height: 190,
+            child: ListView.separated(
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+              scrollDirection: Axis.horizontal,
+              itemCount: recentlyPlayed.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 12),
+              itemBuilder: (context, index) => _quickPickCard(recentlyPlayed[index]),
+            ),
+          ),
+        ),
+      ],
+      if (feed.isNotEmpty) ...[
+        _sectionHeader('Pilihan musik untukmu'),
         SliverList.builder(
           itemCount: feed.length,
           itemBuilder: (context, index) => _videoCard(feed[index]),
-        )
-      else if (_feedLoading || _inlineLoading)
+        ),
+      ] else if (_feedLoading || _inlineLoading)
         const SliverToBoxAdapter(
           child: Padding(
             padding: EdgeInsets.all(28),
@@ -784,7 +802,7 @@ class _YoutubeHubState extends State<YoutubeHub> {
             ),
             const Padding(
               padding: EdgeInsets.fromLTRB(16, 10, 16, 4),
-              child: Text('Video baru', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+              child: Text('Musik baru', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
             ),
             if (items.isEmpty)
               const Padding(
@@ -1008,9 +1026,15 @@ class _YoutubeHubState extends State<YoutubeHub> {
   /// Memisahkan video biasa, yang sedang live, dan yang dijadwalkan; lalu
   /// kirim notifikasi sistem untuk video baru dan live baru.
   Future<void> _applyFeed(List<YoutubeSearchResult> feed) async {
-    final live = feed.where((v) => v.isLive).toList(growable: false);
-    final upcoming = feed.where((v) => v.isUpcoming).toList(growable: false);
-    final regular = feed.where((v) => !v.isLive && !v.isUpcoming).toList(growable: false);
+    final musicFeed = feed
+        .where((video) => YoutubeSearchService.isMusicCatalogItem(
+              video,
+              requireCategoryId: true,
+            ))
+        .toList(growable: false);
+    final live = musicFeed.where((v) => v.isLive).toList(growable: false);
+    final upcoming = musicFeed.where((v) => v.isUpcoming).toList(growable: false);
+    final regular = musicFeed.where((v) => !v.isLive && !v.isUpcoming).toList(growable: false);
     final notifications = SubscriptionNotificationService.instance;
     try {
       await notifications.syncAndNotify(regular);
@@ -1301,167 +1325,255 @@ class _YoutubeHubState extends State<YoutubeHub> {
 
   Widget _videoCard(YoutubeSearchResult video) {
     final scheme = Theme.of(context).colorScheme;
-    final progress = (widget.watchProgress[video.videoId] ?? 0).clamp(0.0, 1.0).toDouble();
+    final progress = (widget.watchProgress[video.videoId] ?? 0)
+        .clamp(0.0, 1.0)
+        .toDouble();
     final timeLabel = _watchTimeLabel(video);
     final channel = video.channelTitle.trim();
+    final isCurrent = widget.currentVideoId == video.videoId;
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 0, 14, 20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          AspectRatio(
-            aspectRatio: 16 / 9,
-            child: Material(
-              color: scheme.surfaceContainerHighest,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(18),
-                side: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.45)),
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: InkWell(
-                onTap: () => unawaited(widget.onPlay(video)),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      child: Material(
+        color: isCurrent
+            ? scheme.primaryContainer.withValues(alpha: 0.42)
+            : scheme.surfaceContainerLow,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(
+            color: isCurrent
+                ? scheme.primary.withValues(alpha: 0.24)
+                : scheme.outlineVariant.withValues(alpha: 0.28),
+          ),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => unawaited(widget.onPlay(video)),
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 78,
+                  height: 78,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(11),
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        Image.network(
+                          video.coverUrl,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, _, _) => ColoredBox(
+                            color: scheme.surfaceContainerHighest,
+                            child: Icon(
+                              Icons.music_note_rounded,
+                              color: scheme.onSurfaceVariant,
+                              size: 34,
+                            ),
+                          ),
+                        ),
+                        Center(
+                          child: Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.black.withValues(alpha: 0.48),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.55),
+                              ),
+                            ),
+                            child: Icon(
+                              isCurrent
+                                  ? Icons.graphic_eq_rounded
+                                  : Icons.play_arrow_rounded,
+                              color: Colors.white,
+                              size: 22,
+                            ),
+                          ),
+                        ),
+                        if (video.liveStatus.isNotEmpty)
+                          Positioned(
+                            left: 3,
+                            top: 3,
+                            child: LiveBadge(video: video),
+                          ),
+                        if (timeLabel.isNotEmpty)
+                          Positioned(
+                            right: 4,
+                            bottom: 5,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.78),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                timeLabel,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 8.5,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ),
+                        if (progress > 0)
+                          Align(
+                            alignment: Alignment.bottomCenter,
+                            child: LinearProgressIndicator(
+                              value: progress,
+                              minHeight: 2.5,
+                              backgroundColor: Colors.white.withValues(alpha: 0.30),
+                              valueColor: AlwaysStoppedAnimation<Color>(scheme.primary),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        video.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                          height: 1.22,
+                          letterSpacing: -0.1,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        channel.isEmpty ? 'Musik' : channel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        _metaLine(video),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant.withValues(alpha: 0.82),
+                          fontSize: 10.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (video.channelId.isNotEmpty) ...[
+                  const SizedBox(width: 5),
+                  ChannelAvatar(
+                    channelId: video.channelId,
+                    videoId: video.videoId,
+                    name: channel,
+                    radius: 15,
+                    onTap: () => _handleControllerOpenChannel(
+                      video.channelId,
+                      channel,
+                      '',
+                    ),
+                  ),
+                ],
+                const SizedBox(width: 3),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _quickPickCard(YoutubeSearchResult video) {
+    final scheme = Theme.of(context).colorScheme;
+    return SizedBox(
+      width: 132,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () => unawaited(widget.onPlay(video)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: AspectRatio(
+                aspectRatio: 1,
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
                     Image.network(
                       video.coverUrl,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, _, _) => Container(
+                      errorBuilder: (_, _, _) => ColoredBox(
                         color: scheme.surfaceContainerHighest,
-                        alignment: Alignment.center,
-                        child: Icon(Icons.music_note_rounded, color: scheme.onSurfaceVariant, size: 44),
-                      ),
-                    ),
-                    // A subtle bottom scrim keeps duration/progress readable over bright artwork.
-                    Positioned(
-                      left: 0,
-                      right: 0,
-                      bottom: 0,
-                      height: 76,
-                      child: IgnorePointer(
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [
-                                Colors.transparent,
-                                Colors.black.withValues(alpha: 0.48),
-                              ],
-                            ),
-                          ),
+                        child: Icon(
+                          Icons.music_note_rounded,
+                          color: scheme.onSurfaceVariant,
+                          size: 36,
                         ),
                       ),
                     ),
-                    Center(
-                      child: IgnorePointer(
-                        child: Container(
-                          width: 48,
-                          height: 48,
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.34),
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white.withValues(alpha: 0.62), width: 1),
-                          ),
-                          child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 31),
+                    Align(
+                      alignment: Alignment.bottomRight,
+                      child: Container(
+                        margin: const EdgeInsets.all(7),
+                        padding: const EdgeInsets.all(5),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.58),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.play_arrow_rounded,
+                          color: Colors.white,
+                          size: 19,
                         ),
                       ),
                     ),
-                    if (progress > 0)
-                      Align(
-                        alignment: Alignment.bottomCenter,
-                        child: LinearProgressIndicator(
-                          value: progress,
-                          minHeight: 3,
-                          backgroundColor: Colors.white.withValues(alpha: 0.28),
-                          valueColor: const AlwaysStoppedAnimation<Color>(Colors.red),
-                        ),
-                      ),
-                    if (video.liveStatus.isNotEmpty)
-                      Positioned(
-                        left: 8,
-                        top: 8,
-                        child: LiveBadge(video: video),
-                      ),
-                    if (timeLabel.isNotEmpty)
-                      Align(
-                        alignment: Alignment.bottomRight,
-                        child: Container(
-                          margin: const EdgeInsets.fromLTRB(0, 0, 8, 10),
-                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.80),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            timeLabel,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 0.1,
-                            ),
-                          ),
-                        ),
-                      ),
                   ],
                 ),
               ),
             ),
-          ),
-          InkWell(
-            borderRadius: BorderRadius.circular(10),
-            onTap: () => unawaited(widget.onPlay(video)),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(2, 12, 2, 2),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Foto profil channel; ketuk untuk membuka channel-nya.
-                  ChannelAvatar(
-                    channelId: video.channelId,
-                    videoId: video.videoId,
-                    name: channel,
-                    radius: 20,
-                    onTap: video.channelId.isEmpty
-                        ? null
-                        : () => _handleControllerOpenChannel(video.channelId, channel, ''),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          video.title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w800,
-                            height: 1.28,
-                            letterSpacing: -0.12,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          channel.isEmpty ? _metaLine(video) : '$channel • ${_metaLine(video)}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: scheme.onSurfaceVariant,
-                            fontSize: 12,
-                            height: 1.3,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+            const SizedBox(height: 6),
+            Text(
+              video.title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: scheme.onSurface,
+                fontSize: 11.5,
+                fontWeight: FontWeight.w800,
+                height: 1.2,
               ),
             ),
-          ),
-        ],
+            const SizedBox(height: 2),
+            Text(
+              video.channelTitle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: scheme.onSurfaceVariant,
+                fontSize: 10.5,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1565,9 +1677,9 @@ class _YoutubeHubState extends State<YoutubeHub> {
             ),
           ),
         ),
-        _sectionHeader('Video terbaru'),
+        _sectionHeader('Musik terbaru'),
         if (_subscriptionFeed.isEmpty)
-          const SliverToBoxAdapter(child: Padding(padding: EdgeInsets.all(18), child: Text('Belum ada video terbaru.')))
+          const SliverToBoxAdapter(child: Padding(padding: EdgeInsets.all(18), child: Text('Belum ada musik baru dari channel yang kamu subscribe.')))
         else
           SliverList.builder(
             itemCount: _subscriptionFeed.length,
@@ -1668,10 +1780,10 @@ class _YoutubeHubState extends State<YoutubeHub> {
         SliverToBoxAdapter(child: _loginCard())
       else ...[
         spacedCard(
-          'Video yang disukai',
-          '$likedCount video di akun YouTube',
+          'Lagu yang disukai',
+          '$likedCount lagu musik di akun YouTube',
           Icons.thumb_up_alt_outlined,
-          () => _showSongList('Video yang disukai', _liked),
+          () => _showSongList('Lagu yang disukai', _liked),
         ),
         spacedCard(
           'Playlist YouTube',
@@ -1859,7 +1971,7 @@ class _YoutubeHubState extends State<YoutubeHub> {
               (playlist) => ListTile(
                 leading: const Icon(Icons.playlist_play_rounded),
                 title: Text(playlist.title),
-                subtitle: Text('${playlist.itemCount} lagu'),
+                subtitle: Text('${playlist.itemCount} item • hanya musik ditampilkan'),
                 onTap: () {
                   Navigator.pop(context);
                   unawaited(_openPlaylist(playlist));

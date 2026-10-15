@@ -33,6 +33,10 @@ class YoutubeSearchResult {
   /// ID channel pemilik video (untuk foto profil dan membuka channel).
   final String channelId;
 
+  /// Kategori YouTube (`10` = Music). Dipakai untuk memastikan data akun
+  /// seperti subscription dan playlist hanya menampilkan konten musik.
+  final String categoryId;
+
   bool get isLive => liveStatus == 'live';
   bool get isUpcoming => liveStatus == 'upcoming';
   bool get isLiveRecording => liveStatus == 'recording';
@@ -76,6 +80,7 @@ class YoutubeSearchResult {
     this.concurrentViewers,
     this.liveStartTime,
     this.channelId = '',
+    this.categoryId = '',
   });
 
   YoutubeSearchResult copyWith({
@@ -94,6 +99,7 @@ class YoutubeSearchResult {
     int? concurrentViewers,
     DateTime? liveStartTime,
     String? channelId,
+    String? categoryId,
   }) {
     return YoutubeSearchResult(
       videoId: videoId ?? this.videoId,
@@ -111,6 +117,7 @@ class YoutubeSearchResult {
       concurrentViewers: concurrentViewers ?? this.concurrentViewers,
       liveStartTime: liveStartTime ?? this.liveStartTime,
       channelId: channelId ?? this.channelId,
+      categoryId: categoryId ?? this.categoryId,
     );
   }
 
@@ -131,6 +138,7 @@ class YoutubeSearchResult {
       'concurrentViewers': concurrentViewers,
       'liveStartTime': liveStartTime?.toIso8601String(),
       'channelId': channelId,
+      'categoryId': categoryId,
     };
   }
 
@@ -161,6 +169,7 @@ class YoutubeSearchResult {
           : null,
       liveStartTime: DateTime.tryParse(json['liveStartTime']?.toString() ?? ''),
       channelId: json['channelId']?.toString() ?? '',
+      categoryId: json['categoryId']?.toString() ?? '',
     );
   }
 
@@ -231,6 +240,7 @@ class YoutubeSearchResult {
       concurrentViewers: int.tryParse(liveDetails['concurrentViewers']?.toString() ?? ''),
       liveStartTime: DateTime.tryParse(startRaw?.toString() ?? ''),
       channelId: snippet['channelId']?.toString() ?? '',
+      categoryId: snippet['categoryId']?.toString() ?? '',
     );
   }
 

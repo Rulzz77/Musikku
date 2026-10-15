@@ -274,12 +274,14 @@ class _YoutubeHubState extends State<YoutubeHub> {
             maxResults: widget.settings.dataSaverLevel >= 2 ? 12 : (widget.settings.dataSaverLevel == 1 ? 20 : 30),
             force: force,
           );
+          break;
         case 2:
         default:
           videos = await _searchService.recentPopular(
             maxResults: widget.settings.dataSaverLevel >= 2 ? 12 : (widget.settings.dataSaverLevel == 1 ? 20 : 30),
             force: force,
           );
+          break;
       }
       if (!mounted || _activeChip != index) return;
       final freshVideos = List<YoutubeSearchResult>.from(videos);
@@ -1251,7 +1253,23 @@ class _YoutubeHubState extends State<YoutubeHub> {
   }
 
   Widget _chipRow() {
-    const labels = ['Musik', 'Lagu populer', 'Lagu terbaru'];
+    const labels = [
+      'Musik',
+      'Lagu populer',
+      'Lagu terbaru',
+      'Jawa',
+      'Pop Indonesia',
+      'Dangdut/Koplo',
+      'DJ/Remix',
+      'K-Pop',
+    ];
+    const genreQueries = <int, String>{
+      3: 'lagu Jawa Indonesia',
+      4: 'lagu Pop Indonesia',
+      5: 'lagu Dangdut Koplo Indonesia',
+      6: 'DJ Remix Indonesia',
+      7: 'K-Pop songs',
+    };
     final scheme = Theme.of(context).colorScheme;
     return SliverToBoxAdapter(
       child: SizedBox(
@@ -1262,7 +1280,10 @@ class _YoutubeHubState extends State<YoutubeHub> {
           itemCount: labels.length,
           separatorBuilder: (_, _) => const SizedBox(width: 8),
           itemBuilder: (context, index) {
-            final selected = _query.isEmpty && _activeChip == index;
+            final genreQuery = genreQueries[index];
+            final selected = genreQuery != null
+                ? _query.toLowerCase() == genreQuery.toLowerCase()
+                : _query.isEmpty && _activeChip == index;
             return ChoiceChip(
               label: Text(labels[index]),
               selected: selected,
@@ -1279,7 +1300,9 @@ class _YoutubeHubState extends State<YoutubeHub> {
                 borderRadius: BorderRadius.circular(999),
               ),
               labelStyle: TextStyle(
-                color: selected ? scheme.onPrimaryContainer : scheme.onSurfaceVariant,
+                color: selected
+                    ? scheme.onPrimaryContainer
+                    : scheme.onSurfaceVariant,
                 fontSize: 12.5,
                 fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
                 letterSpacing: 0.02,
@@ -1289,7 +1312,18 @@ class _YoutubeHubState extends State<YoutubeHub> {
                   _clearSearch();
                   return;
                 }
-                unawaited(_selectChip(index));
+                if (index == 1 || index == 2) {
+                  unawaited(_selectChip(index));
+                  return;
+                }
+                if (genreQuery != null) {
+                  setState(() {
+                    _activeChip = -1;
+                    _searchMode = 'music';
+                  });
+                  _searchController.text = genreQuery;
+                  unawaited(_search());
+                }
               },
             );
           },

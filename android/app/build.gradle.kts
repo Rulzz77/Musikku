@@ -50,6 +50,13 @@ android {
 
     buildTypes {
         release {
+            // R8 rules tambahan untuk referensi java.beans optional dari Rhino/NewPipe.
+            // Pertahankan aturan default Android dan gunakan file aplikasi ini.
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+
             // Pemakaian pribadi: kalau key.properties tidak ada, pakai kunci
             // debug supaya `flutter build apk --release` tetap jalan.
             signingConfig =

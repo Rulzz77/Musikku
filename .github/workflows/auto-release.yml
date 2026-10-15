@@ -1,3 +1,4 @@
+
 name: Build and publish MusikKu APK
 
 on:
@@ -23,65 +24,59 @@ jobs:
   release:
     name: Build APK and publish GitHub Release
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Read version and check release state
+      - name: Read version metadata
         id: release_state
-        env:
-          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
+
           VERSION_SPEC="$(sed -n 's/^version:[[:space:]]*//p' pubspec.yaml | head -n 1 | tr -d "\r'\"")"
+
           if [[ -z "$VERSION_SPEC" || "$VERSION_SPEC" != *+* ]]; then
-            echo "ERROR: pubspec.yaml version harus berformat contoh 2.5.12+72" >&2
+            echo "::error::Version pubspec.yaml harus berformat contoh 2.5.12+72"
             exit 1
           fi
+
           VERSION_NAME="${VERSION_SPEC%%+*}"
           BUILD_NUMBER="${VERSION_SPEC##*+}"
+
           APP_VERSION="$(sed -n "s/^[[:space:]]*const String appVersion = '\([^']*\)';/\1/p" lib/app_info.dart | head -n 1)"
+
           if [[ "$APP_VERSION" != "$VERSION_NAME" ]]; then
-            echo "ERROR: version pubspec.yaml ($VERSION_NAME) tidak cocok dengan lib/app_info.dart ($APP_VERSION). Samakan keduanya." >&2
+            echo "::error::Versi pubspec.yaml ($VERSION_NAME) tidak cocok dengan lib/app_info.dart ($APP_VERSION)"
             exit 1
           fi
+
           TAG="v${VERSION_NAME}"
+
           echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
           echo "build_number=$BUILD_NUMBER" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
-          SKIP="false"
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            ASSETS="$(gh release view "$TAG" --json assets --jq '.assets[].name' 2>/dev/null || true)"
-            if printf '%s\n' "$ASSETS" | grep -Fxq 'app-release.apk'; then
-              SKIP="true"
-              echo "Release $TAG sudah memiliki app-release.apk; tidak menerbitkan ulang." 
-              echo "Naikkan versi di pubspec.yaml dan lib/app_info.dart untuk membuat rilis baru."
-            else
-              echo "Release $TAG sudah ada tetapi belum memiliki app-release.apk; APK akan dilampirkan." 
-            fi
-          else
-            echo "Release $TAG belum ada; workflow akan membuatnya setelah build berhasil."
-          fi
-          echo "skip=$SKIP" >> "$GITHUB_OUTPUT"
+          echo "Versi aplikasi: $VERSION_NAME"
+          echo "Build number: $BUILD_NUMBER"
+          echo "Release tag: $TAG"
+          echo "APK akan selalu dibangun dan dipublikasikan."
 
       - name: Set up Java 17
-        if: steps.release_state.outputs.skip != 'true'
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
       - name: Set up Flutter
-        if: steps.release_state.outputs.skip != 'true'
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: '3.47.5'
           cache: true
 
       - name: Restore stable Android signing key
-        if: steps.release_state.outputs.skip != 'true'
         env:
           KEYSTORE_BASE64: ${{ secrets.MUSIKKU_KEYSTORE_BASE64 }}
           STORE_PASSWORD: ${{ secrets.MUSIKKU_STORE_PASSWORD }}
@@ -90,12 +85,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
           if [[ -z "$KEYSTORE_BASE64" || -z "$STORE_PASSWORD" || -z "$KEY_ALIAS" || -z "$KEY_PASSWORD" ]]; then
-            echo "Missing GitHub Actions secrets for Android signing." >&2
-            echo "Set MUSIKKU_KEYSTORE_BASE64, MUSIKKU_STORE_PASSWORD, MUSIKKU_KEY_ALIAS, and MUSIKKU_KEY_PASSWORD." >&2
+            echo "::error::Secret Android signing belum lengkap."
+            echo "Periksa MUSIKKU_KEYSTORE_BASE64, MUSIKKU_STORE_PASSWORD, MUSIKKU_KEY_ALIAS, dan MUSIKKU_KEY_PASSWORD."
             exit 1
           fi
+
           echo "$KEYSTORE_BASE64" | base64 --decode > android/app/musikku-upload-key.jks
+
           cat > android/key.properties <<EOF
           storeFile=app/musikku-upload-key.jks
           storePassword=$STORE_PASSWORD
@@ -104,24 +102,39 @@ jobs:
           EOF
 
       - name: Install Flutter dependencies
-        if: steps.release_state.outputs.skip != 'true'
         run: flutter pub get
 
       - name: Build signed release APK
-        if: steps.release_state.outputs.skip != 'true'
-        run: flutter build apk --release
-
-      - name: Verify APK output
-        if: steps.release_state.outputs.skip != 'true'
+        env:
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
         shell: bash
         run: |
           set -euo pipefail
+
+          if [[ -z "${YOUTUBE_API_KEY:-}" ]]; then
+            echo "::error::GitHub Secret YOUTUBE_API_KEY belum diatur."
+            exit 1
+          fi
+
+          flutter build apk --release \
+            --dart-define="YOUTUBE_API_KEY=${YOUTUBE_API_KEY}"
+
+      - name: Verify APK output
+        shell: bash
+        run: |
+          set -euo pipefail
+
           APK="build/app/outputs/flutter-apk/app-release.apk"
-          test -s "$APK"
-          echo "APK generated: $APK ($(stat -c%s "$APK") bytes)"
+
+          if [[ ! -s "$APK" ]]; then
+            echo "::error::APK tidak ditemukan atau kosong."
+            exit 1
+          fi
+
+          echo "APK berhasil dibuat."
+          echo "Ukuran: $(stat -c%s "$APK") bytes"
 
       - name: Publish APK to GitHub Release
-        if: steps.release_state.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.release_state.outputs.tag }}
@@ -130,12 +143,23 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
           APK="build/app/outputs/flutter-apk/app-release.apk"
-          NOTES="$(printf 'Automated MusikKu release %s+%s.\n\nAPK dibangun oleh GitHub Actions dari branch main. Instalasi update tetap memerlukan persetujuan Android.' "$VERSION_NAME" "$BUILD_NUMBER")"
+
+          NOTES="$(printf 'Automated MusikKu release %s+%s.\n\nAPK dibangun otomatis oleh GitHub Actions dari branch main.' "$VERSION_NAME" "$BUILD_NUMBER")"
+
           if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG sudah ada."
+            echo "Mengganti APK lama dengan APK hasil build terbaru."
+
             gh release upload "$TAG" "$APK" --clobber
           else
+            echo "Membuat release baru: $TAG"
+
             gh release create "$TAG" "$APK" \
               --title "MusikKu $VERSION_NAME" \
-              --notes "$NOTES"
+              --notes "$NOTES" \
+              --target "$GITHUB_SHA"
           fi
+
+          echo "Publikasi APK selesai."

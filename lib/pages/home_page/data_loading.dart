@@ -49,6 +49,14 @@ extension _HomeDataLoading on _HomePageState {
     ]);
     final likedIds = feedback[0];
     final dislikedIds = feedback[1];
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _playerVolumePercent = (prefs.getInt(_playerVolumePrefKey) ?? 100)
+          .clamp(0, 100)
+          .toInt();
+    } catch (_) {
+      _playerVolumePercent = 100;
+    }
 
     // Native backup menjadi sumber pemulihan yang lebih kuat ketika lagu
     // yang sama masih tersimpan di service. Flutter bisa sempat menulis

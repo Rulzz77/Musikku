@@ -153,7 +153,7 @@ extension _HomeControls on _HomePageState {
       if (shouldPause) {
         await _youtubeController.pauseVideo();
       } else {
-        await _setPlayerVolume(100);
+        await _setPlayerVolume(_playerVolumePercent);
         _crossfadeFadingVideoId = '';
         await _youtubeController.playVideo();
       }
@@ -299,8 +299,12 @@ extension _HomeControls on _HomePageState {
     if (isShuffle) {
       if (_shufflePool.isEmpty) {
         if (loopMode != LoopModeCustom.all) {
-          await _continueWithRadio(current, fromAutoNext: fromAutoNext);
-
+          if (_activeSource == _ListSource.local) {
+            await _stopPlayback();
+            _toast('Daftar musik lokal selesai.');
+          } else {
+            await _continueWithRadio(current, fromAutoNext: fromAutoNext);
+          }
           return;
         }
 
@@ -350,6 +354,12 @@ extension _HomeControls on _HomePageState {
     if (loopMode == LoopModeCustom.all) {
       await _playVideo(_activeList.first);
 
+      return;
+    }
+
+    if (_activeSource == _ListSource.local) {
+      await _stopPlayback();
+      _toast('Daftar musik lokal selesai.');
       return;
     }
 

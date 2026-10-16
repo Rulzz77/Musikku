@@ -87,6 +87,7 @@ extension _HomeStateSync on _HomePageState {
     }
 
     _nativeStateNotifier.value = state;
+    _syncBufferAlert(state);
 
     _savePlaybackProgress(state);
     _recordListeningStats(state);
@@ -464,4 +465,60 @@ extension _HomeStateSync on _HomePageState {
       debugPrint('NOTIFICATION ERROR: $e');
     }
   }
+
+
+  void _onBufferAlertThresholdChanged() {
+    if (_nativeState.isBuffering) _scheduleBufferAlert();
+  }
+
+  void _syncBufferAlert(NativeYoutubeState state) {
+    final activeId = state.videoId.isNotEmpty
+        ? state.videoId
+        : (_currentVideo?.videoId ?? '');
+
+    if (state.isBuffering && activeId.isNotEmpty) {
+      if (_bufferAlertVideoId != activeId || _bufferingStartedAt == null) {
+        _bufferAlertTimer?.cancel();
+        _bufferAlertTimer = null;
+        _bufferAlertVideoId = activeId;
+        _bufferingStartedAt = DateTime.now();
+        _bufferAlertShown = false;
+      }
+      if (!_bufferAlertShown && _bufferAlertTimer == null) {
+        _scheduleBufferAlert();
+      }
+      return;
+    }
+
+    _bufferAlertTimer?.cancel();
+    _bufferAlertTimer = null;
+    _bufferingStartedAt = null;
+    _bufferAlertShown = false;
+    if (activeId.isNotEmpty) _bufferAlertVideoId = activeId;
+  }
+
+  void _scheduleBufferAlert() {
+    _bufferAlertTimer?.cancel();
+    _bufferAlertTimer = null;
+    final startedAt = _bufferingStartedAt;
+    final videoId = _bufferAlertVideoId;
+    if (startedAt == null || videoId.isEmpty || _bufferAlertShown) return;
+
+    final threshold = Duration(seconds: widget.settings.bufferAlertSeconds.value);
+    final elapsed = DateTime.now().difference(startedAt);
+    final remaining = threshold - elapsed;
+    _bufferAlertTimer = Timer(remaining.isNegative ? Duration.zero : remaining, () {
+      _bufferAlertTimer = null;
+      if (!mounted || !_nativeState.isBuffering ||
+          _currentVideo?.videoId != videoId || _bufferAlertShown) {
+        return;
+      }
+      _bufferAlertShown = true;
+      _toast(
+        'Masih buffering setelah ${widget.settings.bufferAlertSeconds.value} detik. Periksa koneksi internet.',
+        duration: const Duration(seconds: 4),
+      );
+    });
+  }
+
 }

@@ -49,7 +49,7 @@ class MusikKuApp extends StatelessWidget {
   ThemeData _buildTheme(Brightness brightness, {required bool amoled}) {
     final isDark = brightness == Brightness.dark;
     final background = isDark ? (amoled ? Colors.black : appInk) : appLightBackground;
-    final surface = isDark ? appPanel : appLightPanel;
+    final surface = isDark ? (amoled ? Colors.black : appPanel) : appLightPanel;
 
     final base = ColorScheme.fromSeed(
       seedColor: appGoldStrong,
@@ -80,6 +80,11 @@ class MusikKuApp extends StatelessWidget {
       error: const Color(0xFFD94A5C),
     );
 
+    final baseTextTheme = ThemeData(
+      brightness: brightness,
+      useMaterial3: true,
+    ).textTheme;
+
     return ThemeData(
       brightness: brightness,
       useMaterial3: true,
@@ -92,6 +97,40 @@ class MusikKuApp extends StatelessWidget {
       ],
       scaffoldBackgroundColor: background,
       colorScheme: scheme,
+      textTheme: baseTextTheme.apply(
+        bodyColor: scheme.onSurface,
+        displayColor: scheme.onSurface,
+      ).copyWith(
+        displayLarge: baseTextTheme.displayLarge?.copyWith(
+          fontWeight: FontWeight.w900,
+          letterSpacing: -1.3,
+          height: 1.02,
+        ),
+        displayMedium: baseTextTheme.displayMedium?.copyWith(
+          fontWeight: FontWeight.w900,
+          letterSpacing: -0.9,
+        ),
+        headlineLarge: baseTextTheme.headlineLarge?.copyWith(
+          fontWeight: FontWeight.w900,
+          letterSpacing: -0.7,
+        ),
+        headlineMedium: baseTextTheme.headlineMedium?.copyWith(
+          fontWeight: FontWeight.w800,
+          letterSpacing: -0.45,
+        ),
+        titleLarge: baseTextTheme.titleLarge?.copyWith(
+          fontWeight: FontWeight.w800,
+          letterSpacing: -0.35,
+        ),
+        titleMedium: baseTextTheme.titleMedium?.copyWith(
+          fontWeight: FontWeight.w700,
+        ),
+        bodyMedium: baseTextTheme.bodyMedium?.copyWith(height: 1.35),
+        labelLarge: baseTextTheme.labelLarge?.copyWith(
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.1,
+        ),
+      ),
       appBarTheme: AppBarTheme(
         elevation: 0,
         scrolledUnderElevation: 0,
@@ -117,6 +156,44 @@ class MusikKuApp extends StatelessWidget {
             color: scheme.outlineVariant.withValues(alpha: isDark ? 0.36 : 0.68),
           ),
         ),
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: surface,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        titleTextStyle: TextStyle(
+          color: scheme.onSurface,
+          fontSize: 21,
+          fontWeight: FontWeight.w900,
+          letterSpacing: -0.45,
+        ),
+        contentTextStyle: TextStyle(
+          color: scheme.onSurfaceVariant,
+          fontSize: 14,
+          height: 1.4,
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: scheme.onSurface,
+          side: BorderSide(color: scheme.outlineVariant),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+        ),
+      ),
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
+        backgroundColor: scheme.primary,
+        foregroundColor: scheme.onPrimary,
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      ),
+      tooltipTheme: TooltipThemeData(
+        decoration: BoxDecoration(
+          color: isDark ? appPanelElevated : const Color(0xFF30272E),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        textStyle: const TextStyle(color: Colors.white, fontSize: 12),
+        waitDuration: const Duration(milliseconds: 500),
       ),
       chipTheme: ChipThemeData(
         backgroundColor: scheme.surfaceContainerLow,
@@ -236,7 +313,10 @@ class MusikKuApp extends StatelessWidget {
       listTileTheme: ListTileThemeData(
         iconColor: scheme.onSurfaceVariant,
         textColor: scheme.onSurface,
-        subtitleTextStyle: TextStyle(color: scheme.onSurfaceVariant),
+        subtitleTextStyle: TextStyle(color: scheme.onSurfaceVariant, height: 1.3),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        minVerticalPadding: 8,
       ),
     );
   }

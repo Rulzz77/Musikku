@@ -18,6 +18,20 @@ extension _HomeNavigation on _HomePageState {
     )));
   }
 
+  Future<void> _playFromCustomList(
+    YoutubeSearchResult video,
+    List<YoutubeSearchResult> list,
+  ) async {
+    if (!mounted || list.isEmpty) return;
+    _activeSource = _ListSource.local;
+    _activePlaylistId = null;
+    _activeList = List<YoutubeSearchResult>.from(list);
+    if (_playerUiState.value.isShuffle) {
+      _prepareShufflePool(excludeCurrent: true);
+    }
+    await _openYoutubeVideo(video);
+  }
+
   Future<void> _openYoutubeVideo(YoutubeSearchResult video) async {
     if (!mounted) return;
     final sameSong = _currentVideo?.videoId == video.videoId &&

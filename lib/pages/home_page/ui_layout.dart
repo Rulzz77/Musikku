@@ -28,6 +28,8 @@ extension _HomeUiLayout on _HomePageState {
                 favorites: _favorites,
                 currentVideoId: current?.videoId,
                 onStartRadio: _startRadioFromVideo,
+                onPlayFromList: _playFromCustomList,
+                onAddToQueue: _addToQueue,
                 onSearchQueryChanged: (query) {
                   _lastSearchQuery = query.trim();
                 },
@@ -69,6 +71,11 @@ extension _HomeUiLayout on _HomePageState {
                 onToggleSmartShuffle: _toggleSmartShuffle,
                 onCycleLoop: _cycleLoopMode,
                 onToggleFavorite: () => _toggleFavorite(watch),
+                onOpenQueue: _showQueueSheet,
+                onOpenAudioSettings: _showAudioSettingsSheet,
+                onOpenSleepTimer: _showSleepTimerSheet,
+                sleepActive: _sleepActive,
+                showDataUsageOnPlayer: widget.settings.showDataUsageOnPlayer,
               ),
             ),
         ],

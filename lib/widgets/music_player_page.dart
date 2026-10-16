@@ -7,6 +7,8 @@ import '../models/loop_mode.dart';
 import '../models/native_youtube_state.dart';
 import '../models/player_ui_state.dart';
 import '../models/youtube_search_result.dart';
+import 'data_usage_card.dart';
+import 'lyrics_panel.dart';
 
 /// Audio-only full player. No YouTube video surface is mounted here; Media3
 /// owns the stream so artwork, seek, next/previous, and background state all
@@ -26,6 +28,11 @@ class MusicPlayerPage extends StatefulWidget {
     required this.onToggleSmartShuffle,
     required this.onCycleLoop,
     required this.onToggleFavorite,
+    required this.onOpenQueue,
+    required this.onOpenAudioSettings,
+    required this.onOpenSleepTimer,
+    required this.sleepActive,
+    required this.showDataUsageOnPlayer,
   });
 
   final YoutubeSearchResult video;
@@ -40,6 +47,11 @@ class MusicPlayerPage extends StatefulWidget {
   final VoidCallback onToggleSmartShuffle;
   final VoidCallback onCycleLoop;
   final VoidCallback onToggleFavorite;
+  final VoidCallback onOpenQueue;
+  final VoidCallback onOpenAudioSettings;
+  final VoidCallback onOpenSleepTimer;
+  final ValueListenable<bool> sleepActive;
+  final ValueListenable<bool> showDataUsageOnPlayer;
 
   @override
   State<MusicPlayerPage> createState() => _MusicPlayerPageState();
@@ -240,6 +252,46 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                                   ],
                                 ),
                                 const SizedBox(height: 14),
+                                Wrap(
+                                  alignment: WrapAlignment.center,
+                                  spacing: 7,
+                                  runSpacing: 7,
+                                  children: [
+                                    OutlinedButton.icon(
+                                      onPressed: _openLyrics,
+                                      icon: const Icon(Icons.lyrics_rounded, size: 17),
+                                      label: const Text('Lirik'),
+                                      style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8), visualDensity: VisualDensity.compact),
+                                    ),
+                                    OutlinedButton.icon(
+                                      onPressed: widget.onOpenQueue,
+                                      icon: const Icon(Icons.queue_music_rounded, size: 17),
+                                      label: const Text('Antrean'),
+                                      style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8), visualDensity: VisualDensity.compact),
+                                    ),
+                                    OutlinedButton.icon(
+                                      onPressed: widget.onOpenAudioSettings,
+                                      icon: const Icon(Icons.equalizer_rounded, size: 17),
+                                      label: const Text('Efek audio'),
+                                      style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8), visualDensity: VisualDensity.compact),
+                                    ),
+                                    ValueListenableBuilder<bool>(
+                                      valueListenable: widget.sleepActive,
+                                      builder: (context, active, _) => OutlinedButton.icon(
+                                        onPressed: widget.onOpenSleepTimer,
+                                        icon: Icon(active ? Icons.timer_rounded : Icons.bedtime_outlined, size: 17, color: active ? scheme.primary : null),
+                                        label: Text(active ? 'Timer aktif' : 'Timer tidur'),
+                                        style: OutlinedButton.styleFrom(
+                                          foregroundColor: active ? scheme.primary : null,
+                                          side: BorderSide(color: active ? scheme.primary.withValues(alpha: 0.6) : scheme.outlineVariant),
+                                          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
+                                          visualDensity: VisualDensity.compact,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
                                 SliderTheme(
                                   data: SliderTheme.of(context).copyWith(
                                     // YouTube-style buffer bar:
@@ -353,6 +405,15 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                                       style: theme.textTheme.bodySmall?.copyWith(color: scheme.error),
                                     ),
                                   ),
+                                ValueListenableBuilder<bool>(
+                                  valueListenable: widget.showDataUsageOnPlayer,
+                                  builder: (context, visible, _) => visible
+                                      ? const Padding(
+                                          padding: EdgeInsets.only(top: 12),
+                                          child: DataUsageCard(),
+                                        )
+                                      : const SizedBox.shrink(),
+                                ),
                               ],
                             ),
                           ),
@@ -363,6 +424,32 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                 ),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openLyrics() {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      useSafeArea: true,
+      isScrollControlled: true,
+      constraints: const BoxConstraints(maxWidth: 640),
+      builder: (sheetContext) => FractionallySizedBox(
+        heightFactor: 0.78,
+        child: ValueListenableBuilder<PlayerUiState>(
+          valueListenable: widget.playerUiState,
+          builder: (context, ui, _) => SingleChildScrollView(
+            padding: const EdgeInsets.only(bottom: 20),
+            child: LyricsPanel(
+              lyrics: ui.video?.videoId == widget.video.videoId ? ui.lyrics : const [],
+              loading: ui.video?.videoId == widget.video.videoId && ui.lyricsLoading,
+              synced: ui.video?.videoId == widget.video.videoId && ui.lyricsSynced,
+              nativeState: widget.nativeState,
+              onSeek: widget.onSeek,
+            ),
           ),
         ),
       ),

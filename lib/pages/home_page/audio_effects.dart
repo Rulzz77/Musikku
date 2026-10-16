@@ -21,7 +21,7 @@ extension _HomeAudioEffects on _HomePageState {
       _crossfadeFadingVideoId = state.videoId;
       unawaited(
         _fadeVolume(
-          from: 100,
+          from: _playerVolumePercent,
           to: 0,
           duration: remaining < lead ? remaining : lead,
         ),
@@ -33,11 +33,17 @@ extension _HomeAudioEffects on _HomePageState {
     _volumeFadeGeneration++;
   }
 
-  Future<void> _setPlayerVolume(int percent) async {
+  Future<void> _setPlayerVolume(int percent, {bool persist = false}) async {
     _cancelVolumeFade();
     final safe = percent.clamp(0, 100).toInt();
     _playerVolumePercent = safe;
     await _youtubeController.setVolume(safe);
+    if (persist) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setInt(_playerVolumePrefKey, safe);
+      } catch (_) {}
+    }
   }
 
   Future<void> _fadeVolume({
@@ -51,8 +57,7 @@ extension _HomeAudioEffects on _HomePageState {
       if (generation != _volumeFadeGeneration) {
         return;
       }
-      _playerVolumePercent = to.clamp(0, 100).toInt();
-      await _youtubeController.setVolume(_playerVolumePercent);
+      await _youtubeController.setVolume(to.clamp(0, 100).toInt());
       return;
     }
 
@@ -66,7 +71,6 @@ extension _HomeAudioEffects on _HomePageState {
           .clamp(0, 100)
           .toInt();
       try {
-        _playerVolumePercent = value;
         await _youtubeController.setVolume(value);
       } catch (e) {
         debugPrint('FADE VOLUME ERROR: $e');
@@ -89,5 +93,269 @@ extension _HomeAudioEffects on _HomePageState {
     _stopAfterCurrent = false;
 
     _sleepActive.value = false;
+  }
+}
+
+extension _HomeAudioSettingsUi on _HomePageState {
+  Future<void> _applyEqualizerPreset(String preset) async {
+    _equalizerPreset = preset;
+    var applied = false;
+    try {
+      applied = await _youtubeController.setEqualizerPreset(preset);
+    } catch (_) {}
+    await _storage.saveEqualizerPreset(preset);
+    final current = _currentVideo;
+    if (current != null) {
+      await _storage.saveEqualizerPresetForTrack(current.videoId, preset);
+    }
+    if (mounted) setState(() {});
+    _toast(applied
+        ? 'Equalizer: $preset'
+        : 'Preset $preset disimpan. Efek EQ bergantung dukungan perangkat.');
+  }
+
+  void _showAudioSettingsSheet() {
+    var crossfadePreview = _crossfadeSeconds;
+    var volumePreview = _playerVolumePercent;
+    const presets = <({String name, String detail})>[
+      (name: 'Flat', detail: 'Suara netral'),
+      (name: 'Bass Boost', detail: 'Bass lebih terasa'),
+      (name: 'Pop', detail: 'Vokal dan detail cerah'),
+      (name: 'Rock', detail: 'Gitar dan drum lebih tegas'),
+      (name: 'Vocal', detail: 'Fokus pada suara vokal'),
+      (name: 'Electronic', detail: 'Bass dan treble untuk EDM'),
+    ];
+
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      useSafeArea: true,
+      isScrollControlled: true,
+      constraints: const BoxConstraints(maxWidth: 600),
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          final scheme = Theme.of(context).colorScheme;
+          return SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('Efek audio', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: -0.4)),
+                const SizedBox(height: 4),
+                Text('Sesuaikan karakter suara untuk sesi mendengarkanmu.', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12.5)),
+                const SizedBox(height: 22),
+                Row(
+                  children: [
+                    Icon(Icons.equalizer_rounded, color: scheme.primary),
+                    const SizedBox(width: 9),
+                    const Text('Equalizer', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
+                    const Spacer(),
+                    Text(_equalizerPreset, style: TextStyle(color: scheme.primary, fontWeight: FontWeight.w800, fontSize: 12)),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final preset in presets)
+                      ChoiceChip(
+                        label: Text(preset.name),
+                        selected: _equalizerPreset == preset.name,
+                        avatar: _equalizerPreset == preset.name ? const Icon(Icons.check_rounded, size: 16) : null,
+                        onSelected: (_) async {
+                          await _applyEqualizerPreset(preset.name);
+                          if (context.mounted) setSheetState(() {});
+                        },
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  presets.firstWhere((item) => item.name == _equalizerPreset, orElse: () => presets.first).detail,
+                  style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11.5),
+                ),
+                const SizedBox(height: 22),
+                Row(
+                  children: [
+                    Icon(Icons.swap_horiz_rounded, color: scheme.primary),
+                    const SizedBox(width: 9),
+                    const Expanded(child: Text('Crossfade antar lagu', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900))),
+                    Text(crossfadePreview == 0 ? 'Mati' : '$crossfadePreview dtk', style: TextStyle(color: scheme.primary, fontWeight: FontWeight.w900)),
+                  ],
+                ),
+                Slider(
+                  value: crossfadePreview.toDouble(),
+                  min: 0,
+                  max: 6,
+                  divisions: 6,
+                  label: crossfadePreview == 0 ? 'Mati' : '$crossfadePreview detik',
+                  onChanged: (value) => setSheetState(() => crossfadePreview = value.round()),
+                  onChangeEnd: (value) async {
+                    final seconds = value.round().clamp(0, 6).toInt();
+                    _crossfadeSeconds = seconds;
+                    await _storage.saveCrossfadeSeconds(seconds);
+                    if (mounted) setState(() {});
+                    setSheetState(() => crossfadePreview = seconds);
+                  },
+                ),
+                Text(
+                  crossfadePreview == 0
+                      ? 'Lagu berganti langsung saat track berikutnya mulai.'
+                      : 'Volume lagu saat ini turun perlahan selama sekitar $crossfadePreview detik terakhir.',
+                  style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11.5, height: 1.35),
+                ),
+                const SizedBox(height: 22),
+                Row(
+                  children: [
+                    Icon(Icons.volume_up_rounded, color: scheme.primary),
+                    const SizedBox(width: 9),
+                    const Expanded(child: Text('Volume pemutar', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900))),
+                    Text('$volumePreview%', style: TextStyle(color: scheme.primary, fontWeight: FontWeight.w900)),
+                  ],
+                ),
+                Slider(
+                  value: volumePreview.toDouble(),
+                  min: 0,
+                  max: 100,
+                  divisions: 20,
+                  label: '$volumePreview%',
+                  onChanged: (value) {
+                    final next = (value / 5).round() * 5;
+                    setSheetState(() => volumePreview = next);
+                    unawaited(_setPlayerVolume(next));
+                  },
+                  onChangeEnd: (value) => unawaited(_setPlayerVolume(value.round(), persist: true)),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: scheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(14)),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.info_outline_rounded, size: 18, color: scheme.onSurfaceVariant),
+                      const SizedBox(width: 9),
+                      Expanded(
+                        child: Text(
+                          'Efek equalizer adalah best-effort: keberhasilannya bergantung pada dukungan output audio perangkat Android. Crossfade memudarkan lagu aktif, bukan melakukan mixing dua stream secara penuh.',
+                          style: TextStyle(fontSize: 11, height: 1.35, color: scheme.onSurfaceVariant),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _showSleepTimerSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      useSafeArea: true,
+      constraints: const BoxConstraints(maxWidth: 520),
+      builder: (sheetContext) => ValueListenableBuilder<bool>(
+        valueListenable: _sleepActive,
+        builder: (context, active, _) {
+          final scheme = Theme.of(context).colorScheme;
+
+          void startTimer(Duration duration) {
+            _clearSleepTimer();
+            _stopAfterCurrent = false;
+            _sleepActive.value = true;
+            _sleepTimer = Timer(duration, () {
+              if (!mounted) return;
+              _clearSleepTimer();
+              unawaited(_stopPlayback());
+              _toast('Timer tidur selesai. Pemutaran dijeda.');
+            });
+            Navigator.of(sheetContext).pop();
+            _toast('MusikKu akan berhenti dalam ${duration.inMinutes} menit.');
+          }
+
+          void stopAfterTrack() {
+            _sleepTimer?.cancel();
+            _sleepTimer = null;
+            _stopAfterCurrent = true;
+            _sleepActive.value = true;
+            Navigator.of(sheetContext).pop();
+            _toast('Musik akan berhenti setelah lagu ini selesai.');
+          }
+
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 22),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(width: 44, height: 44, alignment: Alignment.center, decoration: BoxDecoration(color: scheme.primaryContainer, borderRadius: BorderRadius.circular(14)), child: Icon(Icons.bedtime_rounded, color: scheme.primary, size: 24)),
+                    const SizedBox(width: 12),
+                    const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('Timer tidur', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900)), SizedBox(height: 3), Text('Atur kapan musik berhenti.') ])),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                if (active)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(color: scheme.primaryContainer.withValues(alpha: 0.65), borderRadius: BorderRadius.circular(14)),
+                    child: Row(children: [Icon(Icons.timer_rounded, color: scheme.primary), const SizedBox(width: 9), Expanded(child: Text(_stopAfterCurrent ? 'Aktif • berhenti setelah lagu selesai' : 'Timer sedang aktif', style: TextStyle(color: scheme.onPrimaryContainer, fontWeight: FontWeight.w800))) ]),
+                  ),
+                GridView.count(
+                  crossAxisCount: 3,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  mainAxisSpacing: 8,
+                  crossAxisSpacing: 8,
+                  childAspectRatio: 1.65,
+                  children: [
+                    for (final minutes in const [15, 30, 45, 60, 90, 120])
+                      FilledButton.tonal(
+                        onPressed: () => startTimer(Duration(minutes: minutes)),
+                        style: FilledButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
+                        child: Text('$minutes menit', style: const TextStyle(fontWeight: FontWeight.w900)),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: _currentVideo == null ? null : stopAfterTrack,
+                    icon: const Icon(Icons.skip_next_rounded),
+                    label: const Text('Berhenti setelah lagu ini'),
+                  ),
+                ),
+                if (active)
+                  SizedBox(
+                    width: double.infinity,
+                    child: TextButton.icon(
+                      onPressed: () {
+                        _clearSleepTimer();
+                        Navigator.of(sheetContext).pop();
+                        _toast('Timer tidur dibatalkan.');
+                      },
+                      icon: const Icon(Icons.timer_off_rounded),
+                      label: const Text('Batalkan timer'),
+                    ),
+                  ),
+                const SizedBox(height: 4),
+                Text('Timer aktif selama aplikasi/proses MusikKu tetap berjalan. Opsi berhenti setelah lagu menggunakan event selesai dari pemutar.', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11.5, height: 1.35)),
+              ],
+            ),
+          );
+        },
+      ),
+    );
   }
 }

@@ -7,7 +7,8 @@ part of '../home_page.dart';
 extension _HomeQueue on _HomePageState {
   String? get _shuffleMusicStyle {
     if (_activeSource == _ListSource.favorites ||
-        _activeSource == _ListSource.playlist) {
+        _activeSource == _ListSource.playlist ||
+        _activeSource == _ListSource.local) {
       return null; // Hormati urutan playlist/favorit buatan pengguna.
     }
 
@@ -180,6 +181,194 @@ extension _HomeQueue on _HomePageState {
       onRemoveFromPlaylist: fromPlaylist == null
           ? null
           : () => _removeFromPlaylist(fromPlaylist, video),
+    );
+  }
+}
+
+// Sheet antrean terpadu dari layar Now Playing. Perubahan urutan, hapus item,
+// dan clear queue langsung disimpan sehingga antrean pulih setelah aplikasi dibuka lagi.
+extension _HomeQueueSheet on _HomePageState {
+  void _showQueueSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      useSafeArea: true,
+      isScrollControlled: true,
+      constraints: const BoxConstraints(maxWidth: 640),
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          final scheme = Theme.of(context).colorScheme;
+          final items = _queueManager.items;
+          final current = _currentVideo;
+          final maxHeight = MediaQuery.sizeOf(context).height * 0.82;
+
+          Future<void> clearQueue() async {
+            final confirm = await showDialog<bool>(
+              context: context,
+              builder: (dialogContext) => AlertDialog(
+                title: const Text('Kosongkan antrean?'),
+                content: const Text('Semua lagu yang menunggu akan dihapus dari antrean.'),
+                actions: [
+                  TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Batal')),
+                  FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Kosongkan')),
+                ],
+              ),
+            );
+            if (confirm != true) return;
+            _queueManager.clear();
+            await _storage.saveQueue(_queueManager.items);
+            if (mounted) setState(() {});
+            setSheetState(() {});
+          }
+
+          return SizedBox(
+            height: maxHeight,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 16, 12),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Antrean putar', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: -0.45)),
+                            const SizedBox(height: 3),
+                            Text('${items.length} lagu menunggu', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12)),
+                          ],
+                        ),
+                      ),
+                      if (items.isNotEmpty)
+                        IconButton(
+                          tooltip: 'Kosongkan antrean',
+                          onPressed: () => unawaited(clearQueue()),
+                          icon: const Icon(Icons.delete_sweep_outlined),
+                        ),
+                      if (items.isNotEmpty)
+                        IconButton.filledTonal(
+                          tooltip: 'Putar lagu pertama di antrean',
+                          onPressed: () {
+                            final first = _queueManager.takeFirst();
+                            if (first == null) return;
+                            unawaited(_storage.saveQueue(_queueManager.items));
+                            Navigator.of(sheetContext).pop();
+                            unawaited(_playVideo(first.video));
+                          },
+                          icon: const Icon(Icons.play_arrow_rounded),
+                        ),
+                    ],
+                  ),
+                ),
+                if (current != null)
+                  Container(
+                    margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: scheme.primaryContainer.withValues(alpha: 0.55),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.graphic_eq_rounded, color: scheme.primary),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('SEDANG DIPUTAR', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1, color: scheme.primary)),
+                              const SizedBox(height: 3),
+                              Text(current.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800)),
+                              Text(current.channelTitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                Expanded(
+                  child: items.isEmpty
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(28),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.queue_music_rounded, size: 54, color: scheme.onSurfaceVariant.withValues(alpha: 0.65)),
+                                const SizedBox(height: 12),
+                                const Text('Antrean masih kosong', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
+                                const SizedBox(height: 5),
+                                Text('Tambahkan lagu lewat menu ⋮ pada kartu lagu.', textAlign: TextAlign.center, style: TextStyle(color: scheme.onSurfaceVariant)),
+                              ],
+                            ),
+                          ),
+                        )
+                      : ReorderableListView.builder(
+                          padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+                          itemCount: items.length,
+                          onReorderItem: (oldIndex, newIndex) {
+                            // onReorderItem sudah menyesuaikan newIndex untuk item
+                            // yang dipindahkan; jangan kurangi indeks lagi.
+                            final target = newIndex.clamp(0, items.length - 1).toInt();
+                            _queueManager.move(oldIndex: oldIndex, newIndex: target);
+                            unawaited(_storage.saveQueue(_queueManager.items));
+                            if (mounted) setState(() {});
+                            setSheetState(() {});
+                          },
+                          itemBuilder: (context, index) {
+                            final item = items[index];
+                            final video = item.video;
+                            return Card(
+                              key: ValueKey<String>(item.id),
+                              margin: const EdgeInsets.symmetric(vertical: 4),
+                              color: scheme.surfaceContainerLow,
+                              child: ListTile(
+                                onTap: () {
+                                  _queueManager.remove(video.videoId);
+                                  unawaited(_storage.saveQueue(_queueManager.items));
+                                  Navigator.of(sheetContext).pop();
+                                  unawaited(_playVideo(video));
+                                },
+                                leading: ClipRRect(
+                                  borderRadius: BorderRadius.circular(10),
+                                  child: SizedBox(
+                                    width: 54,
+                                    height: 54,
+                                    child: video.coverUrl.isEmpty
+                                        ? ColoredBox(color: scheme.surfaceContainerHighest, child: Icon(Icons.music_note_rounded, color: scheme.onSurfaceVariant))
+                                        : Image.network(video.coverUrl, fit: BoxFit.cover, errorBuilder: (_, _, _) => ColoredBox(color: scheme.surfaceContainerHighest, child: Icon(Icons.music_note_rounded, color: scheme.onSurfaceVariant))),
+                                  ),
+                                ),
+                                title: Text(video.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
+                                subtitle: Text(video.channelTitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      tooltip: 'Hapus dari antrean',
+                                      visualDensity: VisualDensity.compact,
+                                      onPressed: () {
+                                        _queueManager.remove(video.videoId);
+                                        unawaited(_storage.saveQueue(_queueManager.items));
+                                        if (mounted) setState(() {});
+                                        setSheetState(() {});
+                                      },
+                                      icon: const Icon(Icons.close_rounded, size: 20),
+                                    ),
+                                    ReorderableDragStartListener(index: index, child: Icon(Icons.drag_handle_rounded, color: scheme.onSurfaceVariant)),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 }

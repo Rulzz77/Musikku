@@ -48,9 +48,10 @@ part 'home_page/ui_layout.dart';
 const String _shufflePrefKey = 'playback_shuffle_v1';
 const String _smartShufflePrefKey = 'playback_smart_shuffle_v1';
 const String _loopModePrefKey = 'playback_loop_mode_v1';
+const String _playerVolumePrefKey = 'player_volume_percent_v1';
 
 /// Daftar lagu yang sedang menjadi "playlist" untuk next / previous / shuffle.
-enum _ListSource { none, search, favorites, radio, playlist }
+enum _ListSource { none, search, favorites, radio, playlist, local }
 
 class HomePage extends StatefulWidget {
   const HomePage({
@@ -318,6 +319,12 @@ class _HomePageState extends State<HomePage>
 
   int _playerVolumePercent = 100;
 
+  // Peringatan jika buffering bertahan melebihi ambang yang dipilih.
+  Timer? _bufferAlertTimer;
+  String _bufferAlertVideoId = '';
+  DateTime? _bufferingStartedAt;
+  bool _bufferAlertShown = false;
+
   // ============================================================
   // HELPERS
   // ============================================================
@@ -404,6 +411,7 @@ class _HomePageState extends State<HomePage>
     widget.settings.dataSaver.addListener(_onDataSaverChanged);
     widget.settings.dataSaverMode.addListener(_onDataSaverChanged);
     widget.settings.cropVideoBranding.addListener(_applyVideoCrop);
+    widget.settings.bufferAlertSeconds.addListener(_onBufferAlertThresholdChanged);
     unawaited(_youtubeController.setVideoCrop(_videoCropZoom));
     unawaited(_youtubeController.setDataSaverLevel(widget.settings.dataSaverLevel));
 
@@ -543,6 +551,7 @@ class _HomePageState extends State<HomePage>
     WidgetsBinding.instance.removeObserver(this);
 
     _sleepTimer?.cancel();
+    _bufferAlertTimer?.cancel();
 
     _radio.dispose();
 
@@ -557,6 +566,7 @@ class _HomePageState extends State<HomePage>
 
     widget.settings.dataSaver.removeListener(_onDataSaverChanged);
     widget.settings.cropVideoBranding.removeListener(_applyVideoCrop);
+    widget.settings.bufferAlertSeconds.removeListener(_onBufferAlertThresholdChanged);
     widget.settings.dataSaverMode.removeListener(_onDataSaverChanged);
     _searchController.dispose();
     _searchFocusNode.dispose();

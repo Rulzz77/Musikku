@@ -16,6 +16,8 @@ import '../services/app_settings.dart';
 import '../pages/youtube_search_page.dart';
 import '../pages/youtube_channel_page.dart';
 import '../pages/stats_page.dart';
+import '../pages/app_settings_page.dart';
+import '../pages/local_music_page.dart';
 import 'channel_avatar.dart';
 import 'live_badge.dart';
 import 'data_usage_card.dart';
@@ -57,6 +59,8 @@ class YoutubeHub extends StatefulWidget {
   final List<YoutubeSearchResult> favorites;
   final String? currentVideoId;
   final Future<void> Function(YoutubeSearchResult video)? onStartRadio;
+  final Future<void> Function(YoutubeSearchResult video, List<YoutubeSearchResult> list) onPlayFromList;
+  final ValueChanged<YoutubeSearchResult> onAddToQueue;
   final ValueChanged<String>? onSearchQueryChanged;
   final AppSettingsController settings;
 
@@ -72,6 +76,8 @@ class YoutubeHub extends StatefulWidget {
     this.favorites = const [],
     this.currentVideoId,
     this.onStartRadio,
+    required this.onPlayFromList,
+    required this.onAddToQueue,
     this.onSearchQueryChanged,
     required this.settings,
   });
@@ -1858,10 +1864,10 @@ class _YoutubeHubState extends State<YoutubeHub> {
                   icon: const Icon(Icons.system_update_alt_rounded),
                 ),
                 IconButton(
-                  tooltip: 'Pengaturan hemat data',
-                  onPressed: _showDataSaverSheet,
+                  tooltip: 'Pengaturan MusikKu',
+                  onPressed: _showAppSettings,
                   visualDensity: VisualDensity.compact,
-                  icon: const Icon(Icons.settings_outlined),
+                  icon: const Icon(Icons.tune_rounded),
                 ),
               ],
             ),
@@ -1903,6 +1909,12 @@ class _YoutubeHubState extends State<YoutubeHub> {
         _startRadioFromCollection,
       ),
       spacedCard(
+        'Musik di perangkat',
+        'Pindai dan putar file audio lokal tanpa mengunggahnya',
+        Icons.folder_open_rounded,
+        _openLocalMusic,
+      ),
+      spacedCard(
         'Statistik mendengarkan',
         'Ringkasan aktivitas pemutaran',
         Icons.insights_outlined,
@@ -1915,6 +1927,12 @@ class _YoutubeHubState extends State<YoutubeHub> {
         'Atur request tambahan dan penyegaran feed',
         Icons.data_saver_on_outlined,
         _showDataSaverSheet,
+      ),
+      spacedCard(
+        'Pengaturan MusikKu',
+        'Tema, tampilan pemutar, dan preferensi jaringan',
+        Icons.tune_rounded,
+        _showAppSettings,
       ),
       if (_selectedPlaylist != null) ...[
         SliverToBoxAdapter(
@@ -1951,6 +1969,25 @@ class _YoutubeHubState extends State<YoutubeHub> {
           ),
       ],
     ];
+  }
+
+  void _openLocalMusic() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => LocalMusicPage(
+          onPlayFromList: widget.onPlayFromList,
+          onAddToQueue: widget.onAddToQueue,
+        ),
+      ),
+    );
+  }
+
+  void _showAppSettings() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => AppSettingsPage(settings: widget.settings),
+      ),
+    );
   }
 
   void _startRadioFromCollection() {

@@ -174,7 +174,7 @@ extension _HomePlayback on _HomePageState {
 
       if (transitionPlaying) {
         await _fadeVolume(
-          from: 100,
+          from: _playerVolumePercent,
           to: 0,
           duration: Duration(milliseconds: _crossfadeSeconds * 500),
         );
@@ -248,11 +248,11 @@ extension _HomePlayback on _HomePageState {
       if (transitionPlaying || wasAutoFading) {
         await _fadeVolume(
           from: 0,
-          to: 100,
+          to: _playerVolumePercent,
           duration: Duration(milliseconds: _crossfadeSeconds * 500),
         );
       } else {
-        await _setPlayerVolume(100);
+        await _setPlayerVolume(_playerVolumePercent);
       }
       _crossfadeFadingVideoId = '';
 

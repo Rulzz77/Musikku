@@ -2,6 +2,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_application_5/services/spotify_service.dart';
 
 void main() {
+  test('Spotify callback URI matches the fixed loopback registration', () {
+    expect(
+      SpotifyService.registeredRedirectUri,
+      'http://127.0.0.1:43821/callback',
+    );
+    expect(SpotifyService.callbackPort, 43821);
+  });
+
   test('Spotify imported playlist round-trips with ordered tracks and metadata', () {
     final source = SpotifyImportedPlaylist(
       playlist: const SpotifyPlaylist(

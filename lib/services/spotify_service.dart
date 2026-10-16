@@ -17,9 +17,12 @@ class SpotifyService {
   static final SpotifyService instance = SpotifyService._();
 
   static const String clientId = String.fromEnvironment('SPOTIFY_CLIENT_ID');
-  // Register http://127.0.0.1/callback in Spotify Dashboard. Spotify permits
-  // a dynamic port for loopback IP redirect URIs; custom schemes are not used.
-  static const String registeredRedirectUri = 'http://127.0.0.1/callback';
+  // Register this exact loopback URI in Spotify Developer Dashboard.
+  // A fixed port avoids dashboard validation issues with a portless URI.
+  // This is a public client flow using Authorization Code + PKCE.
+  static const int callbackPort = 43821;
+  static const String registeredRedirectUri =
+      'http://127.0.0.1:43821/callback';
   static const List<String> scopes = <String>[
     'user-read-private',
     'playlist-read-private',
@@ -67,14 +70,13 @@ class SpotifyService {
         .replaceAll('=', '');
     final state = _randomBase64Url(24);
 
-    // Spotify's current redirect URI policy supports HTTPS or loopback IPs.
-    // Bind a temporary loopback server and use its dynamically assigned port.
-    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    final redirect = Uri(
-      scheme: 'http',
-      host: '127.0.0.1',
-      port: server.port,
-      path: '/callback',
+    // Use the same fixed loopback port registered in Spotify Dashboard.
+    // If another process occupies it, ask the user to close the conflicting app
+    // and retry rather than silently sending a mismatched redirect URI.
+    final redirect = Uri.parse(registeredRedirectUri);
+    final server = await HttpServer.bind(
+      InternetAddress.loopbackIPv4,
+      callbackPort,
     );
     final authorizationUri = Uri.https(
       'accounts.spotify.com',

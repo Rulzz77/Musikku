@@ -431,7 +431,10 @@ class AppUpdateService {
 
     final a = parts(first);
     final b = parts(second);
-    for (var i = 0; i < 3; i++) {
+    // Compare every parsed component. Release tags may contain a fourth
+    // component (for example 2.5.14.1); ignoring it can hide an update.
+    final componentCount = a.length > b.length ? a.length : b.length;
+    for (var i = 0; i < componentCount; i++) {
       final av = i < a.length ? a[i] : 0;
       final bv = i < b.length ? b[i] : 0;
       if (av != bv) return av.compareTo(bv);

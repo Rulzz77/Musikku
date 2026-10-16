@@ -59,14 +59,14 @@ class MusikKuApp extends StatelessWidget {
 
     final scheme = base.copyWith(
       // Music-first graphite surfaces with a YouTube-Music-inspired red accent.
-      primary: isDark ? const Color(0xFFFF375F) : const Color(0xFFD81936),
+      primary: isDark ? const Color(0xFFFF416C) : const Color(0xFFD51F4E),
       onPrimary: Colors.white,
-      primaryContainer: isDark ? const Color(0xFF3A131D) : const Color(0xFFFFE2E7),
-      onPrimaryContainer: isDark ? const Color(0xFFFFD7DF) : const Color(0xFF65091B),
+      primaryContainer: isDark ? const Color(0xFF3B1828) : const Color(0xFFFFE3EA),
+      onPrimaryContainer: isDark ? const Color(0xFFFFD6E0) : const Color(0xFF6E1230),
       secondary: appSecondary,
       onSecondary: Colors.white,
-      secondaryContainer: isDark ? const Color(0xFF3D2027) : const Color(0xFFFFE8ED),
-      onSecondaryContainer: isDark ? const Color(0xFFFFE0E7) : const Color(0xFF5C1125),
+      secondaryContainer: isDark ? const Color(0xFF3B202D) : const Color(0xFFFFE9EF),
+      onSecondaryContainer: isDark ? const Color(0xFFFFE1E9) : const Color(0xFF63172F),
       surface: surface,
       surfaceContainerLowest: isDark ? const Color(0xFF09090A) : Colors.white,
       surfaceContainerLow: isDark ? const Color(0xFF121214) : const Color(0xFFFCFBFC),
@@ -103,7 +103,7 @@ class MusikKuApp extends StatelessWidget {
           color: scheme.onSurface,
           fontSize: 20,
           fontWeight: FontWeight.w800,
-          letterSpacing: -0.3,
+          letterSpacing: -0.45,
         ),
       ),
       cardTheme: CardThemeData(

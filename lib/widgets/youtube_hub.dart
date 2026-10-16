@@ -370,7 +370,7 @@ class _YoutubeHubState extends State<YoutubeHub> {
         _sectionHeader('Putar lagi'),
         SliverToBoxAdapter(
           child: SizedBox(
-            height: 190,
+            height: 204,
             child: ListView.separated(
               padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
               scrollDirection: Axis.horizontal,
@@ -406,103 +406,103 @@ class _YoutubeHubState extends State<YoutubeHub> {
   Widget _modernWelcomeHeader() {
     final scheme = Theme.of(context).colorScheme;
     final topInset = MediaQuery.paddingOf(context).top;
+    final hour = DateTime.now().hour;
+    final greeting = hour < 11
+        ? 'Selamat pagi'
+        : hour < 15
+            ? 'Selamat siang'
+            : hour < 18
+                ? 'Selamat sore'
+                : 'Selamat malam';
+
     return Padding(
-      padding: EdgeInsets.fromLTRB(16, topInset + 8, 10, 10),
+      padding: EdgeInsets.fromLTRB(18, topInset + 10, 12, 17),
       child: Row(
         children: [
           Container(
-            width: 44,
-            height: 44,
+            width: 46,
+            height: 46,
             decoration: BoxDecoration(
-              gradient: LinearGradient(
+              gradient: const LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [scheme.primary, const Color(0xFFFF8297)],
+                colors: [Color(0xFFFF6584), Color(0xFFD91F4D), Color(0xFF7F214B)],
               ),
-              borderRadius: BorderRadius.circular(15),
+              borderRadius: BorderRadius.circular(17),
               boxShadow: [
-                BoxShadow(
-                  color: scheme.primary.withValues(alpha: 0.24),
-                  blurRadius: 18,
-                  offset: const Offset(0, 6),
-                ),
+                BoxShadow(color: scheme.primary.withValues(alpha: 0.26), blurRadius: 18, offset: const Offset(0, 7)),
               ],
             ),
             alignment: Alignment.center,
-            child: const Icon(Icons.graphic_eq_rounded, color: Colors.white, size: 26),
+            child: const Icon(Icons.graphic_eq_rounded, color: Colors.white, size: 27),
           ),
-          const SizedBox(width: 11),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
+                Text(
+                  greeting.toUpperCase(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: scheme.primary, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.2),
+                ),
+                const SizedBox(height: 3),
                 Text(
                   appName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: scheme.onSurface,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: -0.7,
-                    height: 1.05,
-                  ),
+                  style: TextStyle(color: scheme.onSurface, fontSize: 23, fontWeight: FontWeight.w900, letterSpacing: -0.85, height: 1.0),
                 ),
-                const SizedBox(height: 3),
+                const SizedBox(height: 4),
                 Text(
-                  'Temukan musik yang kamu suka',
+                  'Suara yang pas buat harimu',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: scheme.onSurfaceVariant,
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w500,
-                  ),
+                  style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10.5, fontWeight: FontWeight.w500),
                 ),
               ],
             ),
           ),
+          const SizedBox(width: 3),
           IconButton.filledTonal(
             tooltip: 'Cari musik',
             visualDensity: VisualDensity.compact,
+            constraints: const BoxConstraints.tightFor(width: 39, height: 39),
+            style: IconButton.styleFrom(backgroundColor: scheme.surfaceContainerHighest.withValues(alpha: 0.82), padding: EdgeInsets.zero),
             onPressed: _openSearch,
-            icon: const Icon(Icons.search_rounded),
+            icon: const Icon(Icons.search_rounded, size: 22),
           ),
-          const SizedBox(width: 2),
           ValueListenableBuilder<Set<String>>(
             valueListenable: SubscriptionNotificationService.instance.unreadIds,
             builder: (context, ids, _) => IconButton(
               tooltip: 'Notifikasi',
               visualDensity: VisualDensity.compact,
+              constraints: const BoxConstraints.tightFor(width: 36, height: 40),
               onPressed: _showNotifications,
               icon: Badge(
                 isLabelVisible: _user != null && ids.isNotEmpty,
                 label: Text(ids.length > 99 ? '99+' : '${ids.length}'),
-                child: Icon(
-                  _liveNow.isNotEmpty ? Icons.notifications_active_rounded : Icons.notifications_none_rounded,
-                ),
+                child: Icon(_liveNow.isNotEmpty ? Icons.notifications_active_rounded : Icons.notifications_none_rounded, size: 22),
               ),
             ),
           ),
           IconButton(
             tooltip: _user == null ? 'Hubungkan YouTube' : 'Akun YouTube',
             visualDensity: VisualDensity.compact,
+            constraints: const BoxConstraints.tightFor(width: 36, height: 40),
             onPressed: _user == null ? _login : _showAccountSheet,
-            icon: CircleAvatar(
-              radius: 16,
-              backgroundColor: scheme.surfaceContainerHighest,
+            icon: Container(
+              width: 29,
+              height: 29,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(shape: BoxShape.circle, color: scheme.primaryContainer, border: Border.all(color: scheme.primary.withValues(alpha: 0.18))),
               child: _user == null
-                  ? Icon(Icons.person_outline_rounded, size: 18, color: scheme.onSurface)
+                  ? Icon(Icons.person_outline_rounded, size: 18, color: scheme.onPrimaryContainer)
                   : Text(
-                      (_user!.displayName?.trim().isNotEmpty == true
-                              ? _user!.displayName!.trim().characters.first
-                              : '?')
-                          .toUpperCase(),
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w800,
-                        color: scheme.onSurface,
-                      ),
+                      (_user!.displayName?.trim().isNotEmpty == true ? _user!.displayName!.trim().characters.first : '?').toUpperCase(),
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: scheme.onPrimaryContainer),
                     ),
             ),
           ),
@@ -513,56 +513,40 @@ class _YoutubeHubState extends State<YoutubeHub> {
 
   Widget _featuredMusicBanner() {
     final scheme = Theme.of(context).colorScheme;
-    final isCompact = MediaQuery.sizeOf(context).width < 380 ||
-        MediaQuery.textScalerOf(context).scale(14) > 18;
+    final isCompact = MediaQuery.sizeOf(context).width < 370 || MediaQuery.textScalerOf(context).scale(14) > 18;
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 2, 14, 8),
+      padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
       child: Container(
         decoration: BoxDecoration(
           gradient: const LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFF35121D), Color(0xFF981C3D), Color(0xFFE62B51)],
-            stops: [0, 0.58, 1],
+            colors: [Color(0xFF1A101B), Color(0xFF57203E), Color(0xFFD42A54)],
+            stops: [0, 0.56, 1],
           ),
-          borderRadius: BorderRadius.circular(26),
-          boxShadow: [
-            BoxShadow(
-              color: scheme.primary.withValues(alpha: 0.20),
-              blurRadius: 22,
-              offset: const Offset(0, 10),
-            ),
-          ],
+          borderRadius: BorderRadius.circular(28),
+          boxShadow: [BoxShadow(color: scheme.primary.withValues(alpha: 0.19), blurRadius: 25, offset: const Offset(0, 11))],
         ),
         clipBehavior: Clip.antiAlias,
         child: Stack(
           children: [
             Positioned(
-              right: -34,
-              top: -56,
+              right: -58,
+              top: -70,
               child: Container(
-                width: 176,
-                height: 176,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.10), width: 24),
-                ),
+                width: 210,
+                height: 210,
+                decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Colors.white.withValues(alpha: 0.075), width: 27)),
               ),
             ),
             Positioned(
-              right: 20,
-              bottom: -56,
-              child: Container(
-                width: 126,
-                height: 126,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.white.withValues(alpha: 0.06),
-                ),
-              ),
+              right: 76,
+              bottom: -88,
+              child: Container(width: 150, height: 150, decoration: BoxDecoration(shape: BoxShape.circle, color: const Color(0xFFFFC0D0).withValues(alpha: 0.07))),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 18, 19),
+              padding: const EdgeInsets.fromLTRB(20, 21, 17, 19),
               child: Row(
                 children: [
                   Expanded(
@@ -572,105 +556,72 @@ class _YoutubeHubState extends State<YoutubeHub> {
                       children: [
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.13),
-                            borderRadius: BorderRadius.circular(999),
-                            border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
-                          ),
-                          child: const Text(
-                            'MUSIK UNTUK MOMENMU',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 9,
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: 1.05,
-                            ),
-                          ),
+                          decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.11), borderRadius: BorderRadius.circular(999), border: Border.all(color: Colors.white.withValues(alpha: 0.16))),
+                          child: const Text('YOUR DAILY SOUNDTRACK', style: TextStyle(color: Color(0xFFFFDCE5), fontSize: 8.5, fontWeight: FontWeight.w900, letterSpacing: 1.05)),
                         ),
                         const SizedBox(height: 12),
-                        const Text(
-                          'Biar musik yang\nmenemani harimu.',
+                        Text(
+                          'Mood kamu.\nMusik kamu.',
                           maxLines: 2,
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 22,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: -0.6,
-                            height: 1.08,
-                          ),
+                          style: TextStyle(color: Colors.white, fontSize: isCompact ? 24 : 27, fontWeight: FontWeight.w900, letterSpacing: -0.95, height: 1.04),
                         ),
                         const SizedBox(height: 8),
-                        Text(
-                          'Cari lagu, temukan mood baru.',
-                          maxLines: 2,
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.82),
-                            fontSize: 11.5,
-                            height: 1.3,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
+                        Text('Temukan lagu baru atau putar lagi yang kamu suka.', maxLines: 2, style: TextStyle(color: Colors.white.withValues(alpha: 0.78), fontSize: 11, height: 1.35, fontWeight: FontWeight.w500)),
                         const SizedBox(height: 15),
-                        FilledButton.icon(
-                          onPressed: _openSearch,
-                          style: FilledButton.styleFrom(
-                            backgroundColor: Colors.white,
-                            foregroundColor: const Color(0xFF831832),
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                          ),
-                          icon: const Icon(Icons.explore_rounded, size: 17),
-                          label: const Text(
-                            'Jelajahi musik',
-                            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
-                          ),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            FilledButton.icon(
+                              onPressed: _openSearch,
+                              style: FilledButton.styleFrom(backgroundColor: Colors.white, foregroundColor: const Color(0xFF84203F), padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
+                              icon: const Icon(Icons.explore_rounded, size: 17),
+                              label: const Text('Jelajahi musik', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11.5)),
+                            ),
+                            OutlinedButton.icon(
+                              onPressed: _startRadioFromCollection,
+                              style: OutlinedButton.styleFrom(foregroundColor: Colors.white, side: BorderSide(color: Colors.white.withValues(alpha: 0.40)), padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
+                              icon: const Icon(Icons.radio_rounded, size: 16),
+                              label: const Text('Radio', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 11.5)),
+                            ),
+                          ],
                         ),
                       ],
                     ),
                   ),
                   if (!isCompact) ...[
-                    const SizedBox(width: 4),
+                    const SizedBox(width: 5),
                     SizedBox(
-                    width: 78,
-                    height: 116,
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        Container(
-                          width: 70,
-                          height: 70,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Colors.white.withValues(alpha: 0.12),
-                            border: Border.all(color: Colors.white.withValues(alpha: 0.24), width: 1.5),
+                      width: 91,
+                      height: 132,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          Container(width: 86, height: 86, decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Colors.white.withValues(alpha: 0.13), width: 1.4), color: Colors.white.withValues(alpha: 0.05))),
+                          Container(
+                            width: 72,
+                            height: 72,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFFFFD9E2), Color(0xFFFF7898), Color(0xFFB61F50)]),
+                              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.20), blurRadius: 15, offset: const Offset(0, 7))],
+                            ),
+                            child: const Icon(Icons.graphic_eq_rounded, color: Colors.white, size: 38),
                           ),
-                        ),
-                        Container(
-                          width: 52,
-                          height: 52,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            gradient: LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [Colors.white.withValues(alpha: 0.98), const Color(0xFFFFC1D0)],
+                          Positioned(top: 8, right: 2, child: Icon(Icons.music_note_rounded, color: Colors.white.withValues(alpha: 0.94), size: 25)),
+                          Positioned(
+                            bottom: 10,
+                            left: 0,
+                            child: Container(
+                              padding: const EdgeInsets.all(7),
+                              decoration: BoxDecoration(color: const Color(0xFF25121F).withValues(alpha: 0.72), borderRadius: BorderRadius.circular(13), border: Border.all(color: Colors.white.withValues(alpha: 0.16))),
+                              child: const Icon(Icons.headphones_rounded, color: Colors.white, size: 22),
                             ),
                           ),
-                          child: const Icon(Icons.graphic_eq_rounded, color: Color(0xFF981C3D), size: 31),
-                        ),
-                        Positioned(
-                          top: 8,
-                          right: 1,
-                          child: Icon(Icons.music_note_rounded, color: Colors.white.withValues(alpha: 0.9), size: 24),
-                        ),
-                        Positioned(
-                          bottom: 9,
-                          left: 2,
-                          child: Icon(Icons.headphones_rounded, color: Colors.white.withValues(alpha: 0.85), size: 24),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
                   ],
                 ],
               ),
@@ -1472,35 +1423,23 @@ class _YoutubeHubState extends State<YoutubeHub> {
     final scheme = Theme.of(context).colorScheme;
     return SliverToBoxAdapter(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 19, 10, 9),
+        padding: const EdgeInsets.fromLTRB(17, 20, 12, 10),
         child: Row(
           children: [
             Container(
-              width: 4,
-              height: 21,
+              width: 5,
+              height: 23,
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [scheme.primary, scheme.secondary],
-                ),
+                gradient: const LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFFFF7592), Color(0xFFD91F4D)]),
                 borderRadius: BorderRadius.circular(999),
               ),
             ),
             const SizedBox(width: 10),
             Expanded(
-              child: Text(
-                title,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: -0.35,
-                  height: 1.15,
-                ),
-              ),
+              child: Text(title, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: -0.55, height: 1.15)),
             ),
-            if (action != null)
-              TextButton(onPressed: onAction, child: Text(action)),
+            if (action != null) TextButton(onPressed: onAction, style: TextButton.styleFrom(visualDensity: VisualDensity.compact), child: Text(action, style: const TextStyle(fontWeight: FontWeight.w800))),
+            if (action == null) Icon(Icons.auto_awesome_rounded, size: 17, color: scheme.primary.withValues(alpha: 0.70)),
           ],
         ),
       ),
@@ -1509,9 +1448,7 @@ class _YoutubeHubState extends State<YoutubeHub> {
 
   Widget _videoCard(YoutubeSearchResult video) {
     final scheme = Theme.of(context).colorScheme;
-    final progress = (widget.watchProgress[video.videoId] ?? 0)
-        .clamp(0.0, 1.0)
-        .toDouble();
+    final progress = (widget.watchProgress[video.videoId] ?? 0).clamp(0.0, 1.0).toDouble();
     final timeLabel = _watchTimeLabel(video);
     final channel = video.channelTitle.trim();
     final isCurrent = widget.currentVideoId == video.videoId;
@@ -1519,16 +1456,10 @@ class _YoutubeHubState extends State<YoutubeHub> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
       child: Material(
-        color: isCurrent
-            ? scheme.primaryContainer.withValues(alpha: 0.42)
-            : scheme.surfaceContainerLow,
+        color: isCurrent ? scheme.primaryContainer.withValues(alpha: 0.50) : scheme.surfaceContainerLow,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-          side: BorderSide(
-            color: isCurrent
-                ? scheme.primary.withValues(alpha: 0.24)
-                : scheme.outlineVariant.withValues(alpha: 0.28),
-          ),
+          borderRadius: BorderRadius.circular(21),
+          side: BorderSide(color: isCurrent ? scheme.primary.withValues(alpha: 0.36) : scheme.outlineVariant.withValues(alpha: 0.34), width: isCurrent ? 1.2 : 0.8),
         ),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
@@ -1538,144 +1469,63 @@ class _YoutubeHubState extends State<YoutubeHub> {
             child: Row(
               children: [
                 SizedBox(
-                  width: 84,
-                  height: 84,
+                  width: 106,
+                  height: 78,
                   child: ClipRRect(
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(15),
                     child: Stack(
                       fit: StackFit.expand,
                       children: [
-                        Image.network(
-                          video.coverUrl,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, _, _) => ColoredBox(
-                            color: scheme.surfaceContainerHighest,
-                            child: Icon(
-                              Icons.music_note_rounded,
-                              color: scheme.onSurfaceVariant,
-                              size: 34,
-                            ),
-                          ),
-                        ),
+                        Image.network(video.coverUrl, fit: BoxFit.cover, errorBuilder: (_, _, _) => ColoredBox(color: scheme.surfaceContainerHighest, child: Icon(Icons.music_note_rounded, color: scheme.onSurfaceVariant, size: 32))),
+                        DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.black.withValues(alpha: 0.03), Colors.black.withValues(alpha: 0.40)]))),
                         Center(
                           child: Container(
-                            width: 32,
-                            height: 32,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: Colors.black.withValues(alpha: 0.48),
-                              border: Border.all(
-                                color: Colors.white.withValues(alpha: 0.55),
-                              ),
-                            ),
-                            child: Icon(
-                              isCurrent
-                                  ? Icons.graphic_eq_rounded
-                                  : Icons.play_arrow_rounded,
-                              color: Colors.white,
-                              size: 22,
-                            ),
+                            width: 34,
+                            height: 34,
+                            decoration: BoxDecoration(shape: BoxShape.circle, color: isCurrent ? scheme.primary : Colors.black.withValues(alpha: 0.53), border: Border.all(color: Colors.white.withValues(alpha: 0.72), width: 1.1)),
+                            child: Icon(isCurrent ? Icons.graphic_eq_rounded : Icons.play_arrow_rounded, color: Colors.white, size: 22),
                           ),
                         ),
-                        if (video.liveStatus.isNotEmpty)
-                          Positioned(
-                            left: 3,
-                            top: 3,
-                            child: LiveBadge(video: video),
-                          ),
+                        if (video.liveStatus.isNotEmpty) Positioned(left: 4, top: 4, child: LiveBadge(video: video)),
                         if (timeLabel.isNotEmpty)
                           Positioned(
                             right: 4,
-                            bottom: 5,
+                            bottom: 4,
                             child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 4,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.black.withValues(alpha: 0.78),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                timeLabel,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 8.5,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
+                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                              decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.78), borderRadius: BorderRadius.circular(5)),
+                              child: Text(timeLabel, style: const TextStyle(color: Colors.white, fontSize: 7.5, fontWeight: FontWeight.w800)),
                             ),
                           ),
                         if (progress > 0)
-                          Align(
-                            alignment: Alignment.bottomCenter,
-                            child: LinearProgressIndicator(
-                              value: progress,
-                              minHeight: 2.5,
-                              backgroundColor: Colors.white.withValues(alpha: 0.30),
-                              valueColor: AlwaysStoppedAnimation<Color>(scheme.primary),
-                            ),
-                          ),
+                          Align(alignment: Alignment.bottomCenter, child: LinearProgressIndicator(value: progress, minHeight: 2.5, backgroundColor: Colors.white.withValues(alpha: 0.30), valueColor: AlwaysStoppedAnimation<Color>(scheme.primary))),
                       ],
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 11),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text(
-                        video.title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w800,
-                          height: 1.22,
-                          letterSpacing: -0.1,
-                        ),
-                      ),
+                      if (isCurrent) ...[
+                        Row(children: [Icon(Icons.volume_up_rounded, size: 12, color: scheme.primary), const SizedBox(width: 4), Text('SEDANG DIPUTAR', style: TextStyle(color: scheme.primary, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 0.7))]),
+                        const SizedBox(height: 3),
+                      ],
+                      Text(video.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontSize: 13.5, fontWeight: FontWeight.w800, height: 1.2, letterSpacing: -0.2)),
                       const SizedBox(height: 5),
-                      Text(
-                        channel.isEmpty ? 'Musik' : channel,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        _metaLine(video),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: scheme.onSurfaceVariant.withValues(alpha: 0.82),
-                          fontSize: 10.5,
-                        ),
-                      ),
+                      Text(channel.isEmpty ? 'Musik' : channel, maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant, fontSize: 10.5, fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 3),
+                      Text(_metaLine(video), maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant.withValues(alpha: 0.84), fontSize: 9.5)),
                     ],
                   ),
                 ),
                 if (video.channelId.isNotEmpty) ...[
                   const SizedBox(width: 5),
-                  ChannelAvatar(
-                    channelId: video.channelId,
-                    videoId: video.videoId,
-                    name: channel,
-                    radius: 15,
-                    onTap: () => _handleControllerOpenChannel(
-                      video.channelId,
-                      channel,
-                      '',
-                    ),
-                  ),
+                  ChannelAvatar(channelId: video.channelId, videoId: video.videoId, name: channel, radius: 13, onTap: () => _handleControllerOpenChannel(video.channelId, channel, '')),
                 ],
-                const SizedBox(width: 3),
+                const SizedBox(width: 1),
               ],
             ),
           ),
@@ -1686,77 +1536,59 @@ class _YoutubeHubState extends State<YoutubeHub> {
 
   Widget _quickPickCard(YoutubeSearchResult video) {
     final scheme = Theme.of(context).colorScheme;
+    final isCurrent = widget.currentVideoId == video.videoId;
     return SizedBox(
-      width: 132,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: () => unawaited(widget.onPlay(video)),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: AspectRatio(
-                aspectRatio: 1,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    Image.network(
-                      video.coverUrl,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, _, _) => ColoredBox(
-                        color: scheme.surfaceContainerHighest,
-                        child: Icon(
-                          Icons.music_note_rounded,
-                          color: scheme.onSurfaceVariant,
-                          size: 36,
+      width: 146,
+      child: Material(
+        color: scheme.surfaceContainerLow,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(19), side: BorderSide(color: isCurrent ? scheme.primary.withValues(alpha: 0.36) : scheme.outlineVariant.withValues(alpha: 0.30))),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => unawaited(widget.onPlay(video)),
+          child: Padding(
+            padding: const EdgeInsets.all(7),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(14),
+                  child: SizedBox(
+                    width: double.infinity,
+                    height: 123,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        Image.network(video.coverUrl, fit: BoxFit.cover, errorBuilder: (_, _, _) => ColoredBox(color: scheme.surfaceContainerHighest, child: Icon(Icons.music_note_rounded, color: scheme.onSurfaceVariant, size: 34))),
+                        DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.transparent, Colors.black.withValues(alpha: 0.42)]))),
+                        Positioned(
+                          left: 7,
+                          top: 7,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                            decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.50), borderRadius: BorderRadius.circular(999)),
+                            child: const Text('PUTAR LAGI', style: TextStyle(color: Colors.white, fontSize: 7, fontWeight: FontWeight.w900, letterSpacing: 0.65)),
+                          ),
                         ),
-                      ),
+                        Align(
+                          alignment: Alignment.bottomRight,
+                          child: Container(
+                            margin: const EdgeInsets.all(7),
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(color: isCurrent ? scheme.primary : Colors.white, shape: BoxShape.circle, boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.18), blurRadius: 8)]),
+                            child: Icon(isCurrent ? Icons.graphic_eq_rounded : Icons.play_arrow_rounded, color: isCurrent ? Colors.white : const Color(0xFF9F1F43), size: 18),
+                          ),
+                        ),
+                      ],
                     ),
-                    Align(
-                      alignment: Alignment.bottomRight,
-                      child: Container(
-                        margin: const EdgeInsets.all(7),
-                        padding: const EdgeInsets.all(5),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.58),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.play_arrow_rounded,
-                          color: Colors.white,
-                          size: 19,
-                        ),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
+                const SizedBox(height: 7),
+                Text(video.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurface, fontSize: 11, fontWeight: FontWeight.w800, height: 1.15, letterSpacing: -0.1)),
+                const SizedBox(height: 3),
+                Text(video.channelTitle.isEmpty ? 'Musik' : video.channelTitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 9.5, fontWeight: FontWeight.w600)),
+              ],
             ),
-            const SizedBox(height: 6),
-            Text(
-              video.title,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: scheme.onSurface,
-                fontSize: 11.5,
-                fontWeight: FontWeight.w800,
-                height: 1.2,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              video.channelTitle,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: scheme.onSurfaceVariant,
-                fontSize: 10.5,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );

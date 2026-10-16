@@ -117,7 +117,7 @@ class AppUpdateService {
     final version = _versionFrom(tagName.isNotEmpty ? tagName : title);
     if (version.isEmpty) {
       throw const AppUpdateException(
-        'Tag versi pada GitHub Release tidak terbaca. Gunakan format v2.5.11.',
+        'Tag versi pada GitHub Release tidak terbaca. Gunakan format v2.6.0.',
       );
     }
 

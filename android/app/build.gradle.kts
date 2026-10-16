@@ -28,31 +28,26 @@ val releaseKeystoreFile = if (releaseSigningConfigured) {
     null
 }
 
-// Guard the actual release artifact tasks. Checking only the command-line
-// task names can be bypassed by `gradlew assemble` or `gradlew bundle`, which
-// may include release artifact tasks as dependencies.
-val releaseSigningGuardedTasks = setOf(
-    "validateSigningRelease",
-    "packageRelease",
-    "packageReleaseBundle",
-    "signReleaseBundle",
-)
-tasks.configureEach {
-    if (name in releaseSigningGuardedTasks) {
-        doFirst {
-            if (!releaseSigningConfigured) {
-                throw GradleException(
-                    "Build RELEASE dibatalkan: signing belum dikonfigurasi. " +
-                        "Isi android/key.properties dengan storeFile, storePassword, " +
-                        "keyAlias, dan keyPassword. Jangan menandatangani release dengan debug key."
-                )
-            }
-            if (releaseKeystoreFile?.isFile != true) {
-                throw GradleException(
-                    "Build RELEASE dibatalkan: file keystore pada android/key.properties tidak ditemukan."
-                )
-            }
-        }
+// Validate the resolved task graph, not only the command-line task name.
+// Aggregate tasks such as `assemble` can include release variants even though
+// the literal task name doesn't contain "release".
+gradle.taskGraph.whenReady { graph ->
+    val releaseVariantInGraph = graph.allTasks.any { task ->
+        task.project.path == ":app" &&
+            task.name.contains("Release", ignoreCase = true)
+    }
+
+    if (releaseVariantInGraph && !releaseSigningConfigured) {
+        throw GradleException(
+            "Build RELEASE dibatalkan: signing belum dikonfigurasi. " +
+                "Isi android/key.properties dengan storeFile, storePassword, " +
+                "keyAlias, dan keyPassword. Jangan menandatangani release dengan debug key."
+        )
+    }
+    if (releaseVariantInGraph && releaseKeystoreFile?.isFile != true) {
+        throw GradleException(
+            "Build RELEASE dibatalkan: file keystore pada android/key.properties tidak ditemukan."
+        )
     }
 }
 

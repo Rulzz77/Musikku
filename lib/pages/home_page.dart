@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../app_info.dart';
 import '../models/loop_mode.dart';
 import '../models/listening_stat.dart';
 import '../models/lyric.dart';
@@ -22,7 +21,6 @@ import '../services/queue_manager.dart';
 import '../services/radio_service.dart';
 import '../services/storage_service.dart';
 import '../services/youtube_controller.dart';
-import '../services/youtube_account_service.dart';
 import '../services/youtube_search_service.dart';
 import '../widgets/youtube_hub.dart';
 import '../widgets/music_player_page.dart';
@@ -45,8 +43,6 @@ part 'home_page/controls.dart';
 part 'home_page/queue.dart';
 part 'home_page/navigation.dart';
 part 'home_page/ui_layout.dart';
-part 'home_page/ui_gestures.dart';
-part 'home_page/ui_pip.dart';
 
 /// Kunci penyimpanan mode pemutaran musik (dipakai extension di part files).
 const String _shufflePrefKey = 'playback_shuffle_v1';
@@ -54,7 +50,7 @@ const String _smartShufflePrefKey = 'playback_smart_shuffle_v1';
 const String _loopModePrefKey = 'playback_loop_mode_v1';
 
 /// Daftar lagu yang sedang menjadi "playlist" untuk next / previous / shuffle.
-enum _ListSource { none, search, favorites, recent, radio, playlist }
+enum _ListSource { none, search, favorites, radio, playlist }
 
 class HomePage extends StatefulWidget {
   const HomePage({
@@ -181,46 +177,14 @@ class _HomePageState extends State<HomePage>
 
   YoutubeSearchResult? _youtubeWatchVideo;
 
-  bool _youtubePipMode = false;
   bool _youtubeSystemPipMode = false;
   YoutubeSearchResult? _systemPipReturnVideo;
-
-  final ValueNotifier<bool> _youtubeLandscapeDiscussionVisible =
-      ValueNotifier<bool>(false);
-
-  /// Mencegah tombol orientasi terpanggil dua kali selama Android
-  /// masih menyelesaikan perpindahan ukuran window.
-  bool _youtubeOrientationChanging = false;
-
 
   /// Legacy PiP state retained temporarily for compatibility with old saved state.
   bool _suppressAutoNextInPip = false;
 
   /// Legacy setting from the former video player; not shown in audio-only UI.
   /// Disimpan permanen dan dikirim ulang ke player native.
-
-  /// Legacy player gesture state; audio-only player does not use PiP.
-  // Disimpan di ValueNotifier supaya saat jari menggeser, HANYA player surface
-  // dan fade Hub yang rebuild (bukan seluruh HomePage tiap frame).
-  final ValueNotifier<double> _youtubeSwipeDyNotifier = ValueNotifier<double>(0.0);
-  double get _youtubePortraitSwipeDy => _youtubeSwipeDyNotifier.value;
-  set _youtubePortraitSwipeDy(double value) {
-    if (_youtubeSwipeDyNotifier.value != value) {
-      _youtubeSwipeDyNotifier.value = value;
-    }
-  }
-  bool _youtubePortraitSwipeDragging = false;
-
-  bool _youtubePointerDragStarted = false;
-  bool _youtubePointerStartedInDragZone = false;
-  double _youtubePointerTotalDy = 0.0;
-  double _youtubePointerTotalDx = 0.0;
-
-  /// Legacy position state; the audio-only player no longer shows PiP.
-  /// ValueNotifier previously made dragging rebuild only the floating layer, not
-  /// seluruh HomePage dan feed.
-  final ValueNotifier<Offset?> _youtubePipPosition =
-      ValueNotifier<Offset?>(null);
 
   /// Playlist buatan pengguna.
   List<Playlist> _playlists = [];
@@ -244,17 +208,9 @@ class _HomePageState extends State<HomePage>
 
   bool _isAutoNextProcessing = false;
 
-  Timer? _nearEndAutoNextTimer;
-
-  String _nearEndArmedVideoId = '';
-
   bool _isChangingTrack = false;
 
   String _lastHandledEndedVideoId = '';
-
-  int _autoNextRetries = 0;
-
-  Timer? _autoNextRetryTimer;
 
   int _playRequestId = 0;
 
@@ -281,10 +237,6 @@ class _HomePageState extends State<HomePage>
   // ============================================================
   // LAGU GAGAL DIPUTAR
   // ============================================================
-
-  /// Berapa lagu berturut-turut yang gagal. Dipakai agar auto-skip tidak
-  /// berputar tanpa henti kalau internet sedang mati.
-  int _consecutiveFailures = 0;
 
   String _failureHandledFor = '';
 
@@ -374,7 +326,7 @@ class _HomePageState extends State<HomePage>
     // Jangan menutupi pemutaran pertama. Cek setelah UI utama stabil dan diam-diam
     // abaikan error jaringan atau repository yang belum punya Release.
     await Future<void>.delayed(const Duration(seconds: 5));
-    if (!mounted || _youtubeWatchVideo != null || _youtubePipMode || _youtubeSystemPipMode) {
+    if (!mounted || _youtubeWatchVideo != null || _youtubeSystemPipMode) {
       return;
     }
 
@@ -418,13 +370,6 @@ class _HomePageState extends State<HomePage>
         content: Text(message),
       ),
     );
-  }
-
-  /// Dipakai oleh extension part untuk menghindari akses langsung ke
-  /// State.setState yang bersifat protected.
-  void _updateHomeState(VoidCallback fn) {
-    if (!mounted) return;
-    setState(fn);
   }
 
   String _formatStoredPosition(double seconds) {
@@ -487,11 +432,6 @@ class _HomePageState extends State<HomePage>
       },
       onPipWillEnter: () {
         if (mounted) {
-          _nearEndAutoNextTimer?.cancel();
-          _nearEndAutoNextTimer = null;
-          _nearEndArmedVideoId = '';
-          _autoNextRetryTimer?.cancel();
-          _autoNextRetryTimer = null;
           _systemPipReturnVideo = _youtubeWatchVideo ?? _currentVideo;
           unawaited(_youtubeController.setPlayerUiVisible(false));
           setState(() {
@@ -502,7 +442,6 @@ class _HomePageState extends State<HomePage>
             // Android dan halaman video terlihat "hilang". Biarkan video tetap
             // terpasang; yang berubah hanya mode/render surface-nya.
             _youtubeSystemPipMode = true;
-            _youtubePipMode = false;
             _youtubeWatchVideo = _youtubeWatchVideo ?? _currentVideo;
             _suppressAutoNextInPip = true;
           });
@@ -514,7 +453,6 @@ class _HomePageState extends State<HomePage>
           if (enabled) {
             setState(() {
               _youtubeSystemPipMode = true;
-              _youtubePipMode = false;
               _youtubeWatchVideo = _youtubeWatchVideo ?? _currentVideo;
               _suppressAutoNextInPip = true;
             });
@@ -531,7 +469,6 @@ class _HomePageState extends State<HomePage>
                 _currentVideo?.videoId == restoreVideo.videoId;
             setState(() {
               _youtubeSystemPipMode = false;
-              _youtubePipMode = false;
               _suppressAutoNextInPip = false;
               _youtubeWatchVideo = canRestore ? restoreVideo : null;
             });
@@ -610,13 +547,10 @@ class _HomePageState extends State<HomePage>
     _radio.dispose();
 
     _playbackWatchdog?.cancel();
-    _autoNextRetryTimer?.cancel();
-    _nearEndAutoNextTimer?.cancel();
 
     _videoStateSubscription?.cancel();
 
     _youtubeController.dispose();
-    _youtubeSwipeDyNotifier.dispose();
 
     _searchController.removeListener(_onSearchTextChanged);
     _searchFocusNode.removeListener(_onSearchFocusChanged);
@@ -629,8 +563,6 @@ class _HomePageState extends State<HomePage>
 
     _playerUiState.dispose();
     _nativeStateNotifier.dispose();
-    _youtubePipPosition.dispose();
-    _youtubeLandscapeDiscussionVisible.dispose();
     _sleepActive.dispose();
 
     super.dispose();

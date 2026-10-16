@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
@@ -12,15 +12,15 @@ import 'youtube_search_service.dart';
 class RadioService {
   RadioService(
     this._searchService, {
-    required this._currentVideoId,
+    required this.currentVideoId,
     Set<String> Function()? blockedIds,
-    this._onError,
+    this.onError,
   }) : _blockedIds = blockedIds ?? (() => <String>{});
 
   final YoutubeSearchService _searchService;
-  final String? Function() _currentVideoId;
+  final String? Function() currentVideoId;
   final Set<String> Function() _blockedIds;
-  final void Function(String message)? _onError;
+  final void Function(String message)? onError;
 
   final math.Random _random = math.Random();
 
@@ -29,6 +29,9 @@ class RadioService {
   String? _pageToken;
   Future<void>? _fetch;
   bool _disposed = false;
+  // Incremented whenever the radio context is reset so an older request cannot
+  // populate a new pool or clear the handle for a newer in-flight request.
+  int _fetchGeneration = 0;
 
   /// Video yang sudah diputar sesi ini, supaya autoplay tidak mengulang ID yang sama.
   final List<String> _playedIds = <String>[];
@@ -65,6 +68,7 @@ class RadioService {
     }
 
     if (normalized.toLowerCase() != _seed.toLowerCase()) {
+      _fetchGeneration++;
       _seed = normalized;
       _pool.clear();
       _pageToken = null;
@@ -85,6 +89,7 @@ class RadioService {
       return;
     }
 
+    _fetchGeneration++;
     _seed = normalized;
     _pool.clear();
     _pageToken = null;
@@ -93,18 +98,24 @@ class RadioService {
 
   /// Isi ulang pool. Kalau sedang berjalan, pemanggil ikut menunggu yang sama.
   Future<void> refill() {
-    final running = _fetch;
+    if (_disposed) return Future<void>.value();
 
+    final running = _fetch;
     if (running != null) {
       return running;
     }
 
-    final future = _fetchPage().whenComplete(() {
-      _fetch = null;
+    final generation = _fetchGeneration;
+    late final Future<void> future;
+    future = _fetchPage(generation).whenComplete(() {
+      // A fetch invalidated by restart may finish after a newer fetch starts.
+      // It must never clear the newer fetch's in-flight handle.
+      if (identical(_fetch, future)) {
+        _fetch = null;
+      }
     });
 
     _fetch = future;
-
     return future;
   }
 
@@ -316,7 +327,7 @@ class RadioService {
           ' ',
         )
         .replaceAll(
-          RegExp(r'\s+(?:ft\.?|feat\.?|featuring)\s+[^|\-–—]+$', caseSensitive: false),
+          RegExp(r'\s+(?:ft\.?|feat\.?|featuring)\s+[^|\-â€“â€”]+$', caseSensitive: false),
           ' ',
         );
 
@@ -343,7 +354,7 @@ class RadioService {
     }
 
     final rawParts = title
-        .split(RegExp(r'\s*[-–—|•:]\s*'))
+        .split(RegExp(r'\s*[-â€“â€”|â€¢:]\s*'))
         .map(normalizePhrase)
         .where((part) => part.length >= 3)
         .toList();
@@ -469,12 +480,15 @@ class RadioService {
 
   void dispose() {
     _disposed = true;
+    _fetchGeneration++;
+    _fetch = null;
+    _pool.clear();
   }
 
-  Future<void> _fetchPage() async {
+  Future<void> _fetchPage(int generation) async {
     final seed = _seed;
 
-    if (seed.isEmpty) {
+    if (_disposed || seed.isEmpty) {
       return;
     }
 
@@ -488,13 +502,15 @@ class RadioService {
         );
 
         // Seed sudah ganti (atau service sudah dibuang) selama menunggu.
-        if (_disposed || seed != _seed) {
+        if (_disposed ||
+            generation != _fetchGeneration ||
+            seed != _seed) {
           return;
         }
 
         _pageToken = page.nextPageToken;
 
-        final currentId = _currentVideoId();
+        final currentId = currentVideoId();
         final knownIds = _pool.map((video) => video.videoId).toSet();
         final knownTrackKeys = <String>{};
         for (final pooledVideo in _pool) {
@@ -560,14 +576,21 @@ class RadioService {
         }
       }
     } catch (e) {
+      // Ignore failures from a stale request just like stale successful
+      // responses. They must not reset the current page token or show errors
+      // for a newer radio context.
+      if (_disposed || generation != _fetchGeneration || seed != _seed) {
+        return;
+      }
+
       debugPrint('RADIO ERROR: $e');
 
       // Token halaman bisa basi; mulai dari halaman pertama di percobaan
       // berikutnya.
       _pageToken = null;
 
-      if (e is YoutubeSearchException && !_disposed) {
-        _onError?.call(e.message);
+      if (e is YoutubeSearchException) {
+        onError?.call(e.message);
       }
     }
   }
@@ -601,3 +624,4 @@ class RadioService {
   }
 
 }
+

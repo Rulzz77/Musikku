@@ -50,16 +50,13 @@
     <uses-permission
         android:name="android.permission.POST_NOTIFICATIONS" />
 
-    <!-- Local music library: Android 13+ uses READ_MEDIA_AUDIO. -->
-    <uses-permission
-        android:name="android.permission.READ_MEDIA_AUDIO" />
-
-    <!-- Legacy media permission for Android 12L and older only. -->
+    <!-- Local music library. Android 13+ uses READ_MEDIA_AUDIO; older
+         Android versions use READ_EXTERNAL_STORAGE (only through API 32). -->
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
     <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
 
-    <!-- Needed by MusikKu's direct APK updater (non-Play distribution). -->
     <uses-permission
         android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 

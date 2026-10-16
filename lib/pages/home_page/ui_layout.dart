@@ -66,6 +66,7 @@ extension _HomeUiLayout on _HomePageState {
                   seconds: position.inMilliseconds / 1000.0,
                 ),
                 onToggleShuffle: _toggleShuffle,
+                onToggleSmartShuffle: _toggleSmartShuffle,
                 onCycleLoop: _cycleLoopMode,
                 onToggleFavorite: () => _toggleFavorite(watch),
               ),

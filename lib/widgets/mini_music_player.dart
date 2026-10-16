@@ -50,8 +50,8 @@ class MiniMusicPlayer extends StatelessWidget {
           elevation: 9,
           shadowColor: Colors.black.withValues(alpha: 0.22),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18),
-            side: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.64)),
+            borderRadius: BorderRadius.circular(21),
+            side: BorderSide(color: scheme.primary.withValues(alpha: 0.16), width: 1.1),
           ),
           clipBehavior: Clip.antiAlias,
           child: Stack(
@@ -59,13 +59,13 @@ class MiniMusicPlayer extends StatelessWidget {
               InkWell(
                 onTap: onOpen,
                 child: SizedBox(
-                  height: 72,
+                  height: 76,
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(10, 8, 5, 8),
+                    padding: const EdgeInsets.fromLTRB(11, 9, 6, 9),
                     child: Row(
                       children: [
                         ClipRRect(
-                          borderRadius: BorderRadius.circular(9),
+                          borderRadius: BorderRadius.circular(12),
                           child: SizedBox(
                             width: 54,
                             height: 54,
@@ -77,7 +77,7 @@ class MiniMusicPlayer extends StatelessWidget {
                                 : Image.network(
                                     video.coverUrl,
                                     fit: BoxFit.cover,
-                                    errorBuilder: (_, __, ___) => ColoredBox(
+                                    errorBuilder: (_, _, _) => ColoredBox(
                                       color: scheme.surfaceContainerHighest,
                                       child: Icon(Icons.music_note_rounded, color: scheme.onSurfaceVariant),
                                     ),

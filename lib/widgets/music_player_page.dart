@@ -23,6 +23,7 @@ class MusicPlayerPage extends StatefulWidget {
     required this.onPrevious,
     required this.onSeek,
     required this.onToggleShuffle,
+    required this.onToggleSmartShuffle,
     required this.onCycleLoop,
     required this.onToggleFavorite,
   });
@@ -36,6 +37,7 @@ class MusicPlayerPage extends StatefulWidget {
   final Future<void> Function() onPrevious;
   final Future<void> Function(Duration position) onSeek;
   final VoidCallback onToggleShuffle;
+  final VoidCallback onToggleSmartShuffle;
   final VoidCallback onCycleLoop;
   final VoidCallback onToggleFavorite;
 
@@ -78,7 +80,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              scheme.surfaceContainerHighest.withValues(alpha: 0.82),
+              scheme.primary.withValues(alpha: 0.085),
               scheme.surface,
               scheme.surface,
             ],
@@ -103,8 +105,8 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                             'SEDANG DIPUTAR',
                             style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1.5),
                           ),
-                          SizedBox(height: 2),
-                          Text('MusikKu', style: TextStyle(fontSize: 12)),
+                          SizedBox(height: 3),
+                          Text('MusikKu • Pemutar audio', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
                         ],
                       ),
                     ),
@@ -162,17 +164,18 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                                     width: artSize,
                                     height: artSize,
                                     decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(28),
+                                      borderRadius: BorderRadius.circular(32),
                                       color: scheme.surfaceContainerHighest,
                                       border: Border.all(
-                                        color: scheme.outlineVariant.withValues(alpha: 0.42),
+                                        color: scheme.primary.withValues(alpha: 0.22),
+                                        width: 1.2,
                                       ),
                                       boxShadow: [
                                         BoxShadow(
                                           color: scheme.primary.withValues(alpha: 0.08),
-                                          blurRadius: 34,
-                                          spreadRadius: 1,
-                                          offset: const Offset(0, 16),
+                                          blurRadius: 40,
+                                          spreadRadius: 2,
+                                          offset: const Offset(0, 18),
                                         ),
                                         BoxShadow(
                                           color: Colors.black.withValues(alpha: 0.16),
@@ -186,7 +189,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                                         ? Image.network(
                                             artwork,
                                             fit: BoxFit.cover,
-                                            errorBuilder: (_, __, ___) => _artworkFallback(scheme),
+                                            errorBuilder: (_, _, _) => _artworkFallback(scheme),
                                             loadingBuilder: (context, child, progress) => progress == null
                                                 ? child
                                                 : _artworkFallback(scheme, loading: true),
@@ -243,11 +246,11 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                                     // red = already played, light gray = buffered ahead,
                                     // dark gray = not buffered yet.
                                     trackHeight: 4,
-                                    activeTrackColor: const Color(0xFFFF0033),
+                                    activeTrackColor: scheme.primary,
                                     secondaryActiveTrackColor: scheme.onSurface.withValues(alpha: 0.46),
                                     inactiveTrackColor: scheme.onSurface.withValues(alpha: 0.18),
-                                    thumbColor: const Color(0xFFFF0033),
-                                    overlayColor: const Color(0x22FF0033),
+                                    thumbColor: scheme.primary,
+                                    overlayColor: scheme.primary.withValues(alpha: 0.12),
                                     thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
                                     overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
                                   ),
@@ -289,9 +292,19 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                       children: [
                                         IconButton(
-                                          tooltip: ui.isShuffle ? 'Matikan shuffle' : 'Aktifkan shuffle',
+                                          tooltip: ui.isSmartShuffle
+                                              ? 'Smart Shuffle aktif • tekan lama untuk mematikan'
+                                              : 'Shuffle • tekan lama untuk Smart Shuffle',
                                           onPressed: widget.onToggleShuffle,
-                                          icon: Icon(Icons.shuffle_rounded, color: ui.isShuffle ? scheme.primary : scheme.onSurfaceVariant),
+                                          onLongPress: widget.onToggleSmartShuffle,
+                                          icon: Icon(
+                                            ui.isSmartShuffle
+                                                ? Icons.auto_awesome_rounded
+                                                : Icons.shuffle_rounded,
+                                            color: ui.isShuffle
+                                                ? scheme.primary
+                                                : scheme.onSurfaceVariant,
+                                          ),
                                         ),
                                         IconButton(
                                           tooltip: 'Lagu sebelumnya (MusikKu)',

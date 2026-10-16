@@ -95,10 +95,6 @@ extension _HomeStateSync on _HomePageState {
       _playbackWatchdog?.cancel();
     }
 
-    if (state.isPlaying) {
-      _consecutiveFailures = 0;
-    }
-
     if (state.playbackState == NativePlaybackState.error &&
         _currentVideo?.isLocal == true) {
       // Native local-file failures are handled here. Remote audio failures

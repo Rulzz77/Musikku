@@ -61,13 +61,6 @@ extension _HomePlayback on _HomePageState {
     _failureHandledFor = '';
 
     _lastHandledEndedVideoId = '';
-    _autoNextRetries = 0;
-    _autoNextRetryTimer?.cancel();
-    _autoNextRetryTimer = null;
-    _nearEndAutoNextTimer?.cancel();
-    _nearEndAutoNextTimer = null;
-    _nearEndArmedVideoId = '';
-
     final previous = _currentVideo;
 
     final sameVideo = previous?.videoId == video.videoId;

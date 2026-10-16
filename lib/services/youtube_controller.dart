@@ -290,7 +290,7 @@ class NativeYoutubeController {
         duration: Duration(milliseconds: (safeDuration * 1000).round()),
         videoId: videoId,
       ));
-      throw resolveFailure!;
+      throw resolveFailure;
     }
 
     final streamUrl = resolved?['streamUrl']?.toString().trim() ?? '';

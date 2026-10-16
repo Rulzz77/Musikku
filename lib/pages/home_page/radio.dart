@@ -173,7 +173,9 @@ extension _HomeRadio on _HomePageState {
         if (!MusicStyleMatcher.isCompatible(
           video: video,
           targetStyle: targetStyle,
-        )) return false;
+        )) {
+          return false;
+        }
         return RadioService.trackKeyFor(video).isNotEmpty;
       }).toList();
 

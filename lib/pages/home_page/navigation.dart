@@ -26,7 +26,6 @@ extension _HomeNavigation on _HomePageState {
         (video.isLocal || _youtubeController.isUsingYoutubeAudio);
     setState(() {
       _youtubeWatchVideo = video;
-      _youtubePipMode = false;
       _youtubeSystemPipMode = false;
       _suppressAutoNextInPip = false;
     });
@@ -57,39 +56,8 @@ extension _HomeNavigation on _HomePageState {
     setState(() {
       _youtubeWatchVideo = null;
       _youtubeSystemPipMode = false;
-      _youtubePipMode = false;
       _suppressAutoNextInPip = false;
     });
-  }
-
-  /// Tombol PiP di halaman tonton: tutup halaman, video tetap jalan
-  /// sebagai jendela mengambang.
-  Future<void> _enterFloatingPip() async {
-    if (_currentVideo == null || !mounted) return;
-    final wasPlaying = _nativeState.isEffectivelyPlaying;
-    final videoId = _currentVideo!.videoId;
-
-    _nearEndAutoNextTimer?.cancel();
-    _nearEndAutoNextTimer = null;
-    _nearEndArmedVideoId = '';
-    _autoNextRetryTimer?.cancel();
-    _autoNextRetryTimer = null;
-
-    setState(() {
-      _youtubeWatchVideo = null;
-      _youtubePipMode = true;
-      _suppressAutoNextInPip = true;
-      _youtubeLandscapeDiscussionVisible.value = false;
-    });
-
-    await WidgetsBinding.instance.endOfFrame;
-    await _youtubeController.setPlayerUiVisible(false);
-
-    if (wasPlaying && mounted && _currentVideo?.videoId == videoId) {
-      try {
-        await _youtubeController.playVideo();
-      } catch (_) {}
-    }
   }
 
   /// Buka lagi halaman tonton untuk video yang sedang diputar
@@ -100,9 +68,7 @@ extension _HomeNavigation on _HomePageState {
     unawaited(_youtubeController.setPlayerUiVisible(true));
     setState(() {
       _youtubeWatchVideo = video;
-      _youtubePipMode = false;
       _suppressAutoNextInPip = false;
-      _youtubeLandscapeDiscussionVisible.value = false;
     });
   }
 
@@ -111,65 +77,6 @@ extension _HomeNavigation on _HomePageState {
 
   void _applyVideoCrop() {
     unawaited(_youtubeController.setVideoCrop(_videoCropZoom));
-  }
-
-  Future<void> _toggleYoutubeLandscape() async {
-    if (!mounted || _youtubeOrientationChanging) return;
-
-    _youtubeOrientationChanging = true;
-    _youtubeLandscapeDiscussionVisible.value = false;
-    final size = MediaQuery.sizeOf(context);
-    final currentlyLandscape = size.width > size.height;
-    final orientations = currentlyLandscape
-        ? const [DeviceOrientation.portraitUp]
-        : const [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight];
-
-    try {
-      // Sembunyikan system bars secara native hanya untuk landscape. Flutter
-      // target SDK 36 memakai edge-to-edge dan tidak dapat memaksa immersive
-      // lewat SystemUiMode lama; native WindowInsetsController tetap bisa.
-      if (!currentlyLandscape) {
-        await _youtubeController.setLandscapeSystemUi(true);
-      }
-
-      await SystemChrome.setPreferredOrientations(orientations);
-
-      await WidgetsBinding.instance.endOfFrame;
-      await WidgetsBinding.instance.endOfFrame;
-      await Future<void>.delayed(const Duration(milliseconds: 60));
-
-      if (currentlyLandscape) {
-        // Setelah kembali portrait, tampilkan lagi status/navigation bar.
-        await _youtubeController.setLandscapeSystemUi(false);
-      } else {
-        // Re-apply once after the window has actually become landscape.
-        await _youtubeController.setLandscapeSystemUi(true);
-      }
-    } catch (e) {
-      if (mounted) {
-        _toast('Gagal mengganti orientasi: $e');
-      }
-    } finally {
-      _youtubeOrientationChanging = false;
-    }
-  }
-
-  /// Buka halaman channel dari halaman tonton (ketuk nama channel).
-  /// Video mengecil jadi PiP dan channel terbuka di hub, jadi Back dari video
-  /// berikutnya kembali ke channel ini.
-  void _openChannelPage(String channelId, String title) {
-    if (_youtubeWatchVideo != null) unawaited(_closeYoutubeWatch());
-    _hubController.openChannel(channelId, title: title);
-  }
-
-  Future<void> _rateYoutubeVideo(String videoId, String rating) async {
-    try {
-      final account = YoutubeAccountService.instance;
-      await account.rateVideo(videoId, rating);
-      if (mounted) _toast(rating == 'like' ? 'Ditandai suka.' : 'Ditandai tidak suka.');
-    } catch (e) {
-      if (mounted) _toast('Gagal memperbarui penilaian: $e');
-    }
   }
 
   void _openArtist(String artist) {
@@ -195,8 +102,8 @@ extension _HomeNavigation on _HomePageState {
   /// Mengembalikan true kalau Back dipakai untuk "mundur" satu layar
   /// di dalam app. False = sudah di layar depan, biarkan app ke background.
   bool _handleBack() {
-    // 0) Kalau halaman tonton masih landscape, Back pertama hanya mengembalikan
-    // orientasi ke portrait. Back berikutnya baru menutup halaman tonton/PiP.
+    // 0) Kalau layar Now Playing terbuka, Back pertama menutupnya tanpa
+    // menghentikan pemutaran audio.
     if (_youtubeWatchVideo != null) {
       _handleYoutubeWatchBack();
       return true;

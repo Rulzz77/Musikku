@@ -1,7 +1,7 @@
 name: flutter_application_5
-description: "MusikKu - aplikasi streaming musik online dengan UI redesign tahap awal."
+description: "MusikKu - pemutar musik Android."
 publish_to: 'none'
-version: 2.5.15+15
+version: 2.5.19+19
 
 environment:
   sdk: ^3.13.4
@@ -10,7 +10,6 @@ dependencies:
   flutter:
     sdk: flutter
 
-  cupertino_icons: ^1.0.8
   crypto: ^3.0.7
   # Tidak diimpor di Dart, tapi MainActivity memakai AudioServiceActivity
   # (menjaga Flutter engine tetap hidup saat background). Jangan dihapus

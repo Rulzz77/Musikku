@@ -431,8 +431,9 @@ class AppUpdateService {
 
     final a = parts(first);
     final b = parts(second);
-    // Compare every parsed component. Release tags may contain a fourth
-    // component (for example 2.5.14.1); ignoring it can hide an update.
+    // `_versionFrom` accepts up to four numeric components, so compare all of
+    // them. Previously the loop stopped after major/minor/patch and treated
+    // `2.5.15.1` as equal to `2.5.15`, which could hide a published update.
     final componentCount = a.length > b.length ? a.length : b.length;
     for (var i = 0; i < componentCount; i++) {
       final av = i < a.length ? a[i] : 0;

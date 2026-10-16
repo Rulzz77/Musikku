@@ -1,7 +1,7 @@
-import 'package:flutter_test/flutter_test.dart';
+﻿import 'package:flutter_test/flutter_test.dart';
 
-import '../lib/models/youtube_search_result.dart';
-import '../lib/services/music_style_matcher.dart';
+import 'package:flutter_application_5/models/youtube_search_result.dart';
+import 'package:flutter_application_5/services/music_style_matcher.dart';
 
 YoutubeSearchResult track(String title, String channel) => YoutubeSearchResult(
       videoId: title,
@@ -56,3 +56,4 @@ void main() {
     });
   });
 }
+

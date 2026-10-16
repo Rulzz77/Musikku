@@ -28,26 +28,43 @@ val releaseKeystoreFile = if (releaseSigningConfigured) {
     null
 }
 
-// Validate the resolved task graph, not only the command-line task name.
-// Aggregate tasks such as `assemble` can include release variants even though
-// the literal task name doesn't contain "release".
-gradle.taskGraph.whenReady { graph ->
-    val releaseVariantInGraph = graph.allTasks.any { task ->
-        task.project.path == ":app" &&
-            task.name.contains("Release", ignoreCase = true)
-    }
+// Verify production signing through release packaging tasks instead of
+// Gradle's taskGraph.whenReady closure. This is compatible with Kotlin DSL
+// and still covers assembleRelease, bundleRelease, packageRelease, and
+// validateSigningRelease (including aggregate tasks that depend on them).
+val verifyReleaseSigning = tasks.register("verifyReleaseSigning") {
+    group = "verification"
+    description = "Checks production signing configuration before building a release artifact."
 
-    if (releaseVariantInGraph && !releaseSigningConfigured) {
-        throw GradleException(
-            "Build RELEASE dibatalkan: signing belum dikonfigurasi. " +
-                "Isi android/key.properties dengan storeFile, storePassword, " +
-                "keyAlias, dan keyPassword. Jangan menandatangani release dengan debug key."
-        )
+    doLast {
+        if (!releaseSigningConfigured) {
+            throw GradleException(
+                "Build RELEASE dibatalkan: signing belum dikonfigurasi. " +
+                    "Isi android/key.properties dengan storeFile, storePassword, " +
+                    "keyAlias, dan keyPassword. Jangan menandatangani release dengan debug key."
+            )
+        }
+
+        if (releaseKeystoreFile?.isFile != true) {
+            throw GradleException(
+                "Build RELEASE dibatalkan: file keystore pada android/key.properties tidak ditemukan."
+            )
+        }
     }
-    if (releaseVariantInGraph && releaseKeystoreFile?.isFile != true) {
-        throw GradleException(
-            "Build RELEASE dibatalkan: file keystore pada android/key.properties tidak ditemukan."
-        )
+}
+
+tasks.configureEach {
+    val isReleasePackagingTask =
+        name.contains("Release", ignoreCase = true) &&
+            (
+                name.startsWith("assemble", ignoreCase = true) ||
+                    name.startsWith("bundle", ignoreCase = true) ||
+                    name.startsWith("package", ignoreCase = true) ||
+                    name.startsWith("validateSigning", ignoreCase = true)
+                )
+
+    if (isReleasePackagingTask) {
+        dependsOn(verifyReleaseSigning)
     }
 }
 

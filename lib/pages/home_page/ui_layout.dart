@@ -30,6 +30,7 @@ extension _HomeUiLayout on _HomePageState {
                 onStartRadio: _startRadioFromVideo,
                 onPlayFromList: _playFromCustomList,
                 onAddToQueue: _addToQueue,
+                onShowVideoMenu: (video) => _showVideoMenu(video),
                 onSearchQueryChanged: (query) {
                   _lastSearchQuery = query.trim();
                 },

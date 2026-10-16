@@ -21,6 +21,7 @@ import '../pages/local_music_page.dart';
 import 'channel_avatar.dart';
 import 'live_badge.dart';
 import 'data_usage_card.dart';
+import 'unified_artwork.dart';
 import 'app_update_sheet.dart';
 
 /// Jembatan dari HomePage ke hub: tombol Back sistem dan membuka channel dari
@@ -61,6 +62,7 @@ class YoutubeHub extends StatefulWidget {
   final Future<void> Function(YoutubeSearchResult video)? onStartRadio;
   final Future<void> Function(YoutubeSearchResult video, List<YoutubeSearchResult> list) onPlayFromList;
   final ValueChanged<YoutubeSearchResult> onAddToQueue;
+  final ValueChanged<YoutubeSearchResult>? onShowVideoMenu;
   final ValueChanged<String>? onSearchQueryChanged;
   final AppSettingsController settings;
 
@@ -78,6 +80,7 @@ class YoutubeHub extends StatefulWidget {
     this.onStartRadio,
     required this.onPlayFromList,
     required this.onAddToQueue,
+    this.onShowVideoMenu,
     this.onSearchQueryChanged,
     required this.settings,
   });
@@ -86,7 +89,7 @@ class YoutubeHub extends StatefulWidget {
   State<YoutubeHub> createState() => _YoutubeHubState();
 }
 
-enum _YoutubeSection { home, subscriptions, library }
+enum _YoutubeSection { home, samples, explore, subscriptions, library }
 
 class _YoutubeHubState extends State<YoutubeHub> {
   final _searchController = TextEditingController();
@@ -108,6 +111,36 @@ class _YoutubeHubState extends State<YoutubeHub> {
 
   /// Chip filter aktif di beranda (0 = Semua). -1 = pencarian bebas.
   int _activeChip = 0;
+
+  /// Explore uses the shared cached search service so genre results are live,
+  /// rather than hard-coded sample tracks.
+  String _exploreCategory = 'Pop Indonesia';
+  List<YoutubeSearchResult> _exploreResults = const [];
+  bool _exploreLoading = false;
+  String _exploreError = '';
+  static const List<String> _exploreCategories = [
+    'Sedang tren',
+    'Pop Indonesia',
+    'Dangdut/Koplo',
+    'K-Pop',
+    'Hip-hop',
+    'Rock',
+    'Jazz',
+    'Lo-fi',
+    'Musik religi',
+    'Soundtrack',
+  ];
+  static const Map<String, String> _exploreQueries = {
+    'Pop Indonesia': 'lagu pop Indonesia terbaru official music',
+    'Dangdut/Koplo': 'dangdut koplo Indonesia terbaru official',
+    'K-Pop': 'K-pop official music video latest',
+    'Hip-hop': 'hip hop music official video',
+    'Rock': 'rock music official video',
+    'Jazz': 'jazz music official',
+    'Lo-fi': 'lofi hip hop music mix',
+    'Musik religi': 'lagu religi Indonesia official music',
+    'Soundtrack': 'soundtrack film Indonesia official music',
+  };
 
   List<YoutubeSearchResult> _searchResults = const [];
   List<YoutubeChannelSearchResult> _searchChannels = const [];
@@ -136,9 +169,31 @@ class _YoutubeHubState extends State<YoutubeHub> {
   _OpenChannel? _openedChannel;
 
   bool _handleControllerBack() {
-    if (_openedChannel == null) return false;
-    setState(() => _openedChannel = null);
-    return true;
+    if (_openedChannel != null) {
+      setState(() => _openedChannel = null);
+      return true;
+    }
+    if (_section == _YoutubeSection.library && _selectedPlaylist != null) {
+      setState(() {
+        _selectedPlaylist = null;
+        _playlistItems = const [];
+      });
+      return true;
+    }
+    if (_section != _YoutubeSection.home) {
+      _searchRequestId++;
+      _searchController.clear();
+      setState(() {
+        _section = _YoutubeSection.home;
+        _query = '';
+        _searchResults = const [];
+        _searchChannels = const [];
+        _error = '';
+        _loading = false;
+      });
+      return true;
+    }
+    return false;
   }
 
   void _handleControllerOpenChannel(String id, String title, String thumbnailUrl) {
@@ -580,7 +635,10 @@ class _YoutubeHubState extends State<YoutubeHub> {
                           crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
                             FilledButton.icon(
-                              onPressed: _openSearch,
+                              onPressed: () {
+                                setState(() => _section = _YoutubeSection.explore);
+                                unawaited(_loadExploreCategory(_exploreCategory));
+                              },
                               style: FilledButton.styleFrom(backgroundColor: Colors.white, foregroundColor: const Color(0xFF84203F), padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
                               icon: const Icon(Icons.explore_rounded, size: 17),
                               label: const Text('Jelajahi musik', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11.5)),
@@ -1268,7 +1326,280 @@ class _YoutubeHubState extends State<YoutubeHub> {
   }
 
 
-  Widget _topBar() {
+  List<YoutubeSearchResult> _sampleVideos() {
+    final result = <YoutubeSearchResult>[];
+    final seen = <String>{};
+    for (final video in [..._trending, ...widget.recentlyPlayed]) {
+      if (video.videoId.isNotEmpty && !video.isLive && !video.isUpcoming && seen.add(video.videoId)) {
+        result.add(video);
+      }
+    }
+    return result;
+  }
+
+  Future<void> _loadExploreCategory(String category, {bool force = false}) async {
+    if (category == 'Sedang tren') {
+      setState(() {
+        _exploreCategory = category;
+        _exploreResults = _trending;
+        _exploreError = _feedError;
+        _exploreLoading = false;
+      });
+      if (_trending.isEmpty && !_feedLoading) {
+        await _loadHome(force: force);
+        if (!mounted) return;
+        setState(() {
+          _exploreResults = _trending;
+          _exploreError = _feedError;
+          _exploreLoading = false;
+        });
+      }
+      return;
+    }
+    if (!force && category == _exploreCategory && _exploreResults.isNotEmpty) return;
+    final query = _exploreQueries[category];
+    if (query == null) return;
+    setState(() {
+      _exploreCategory = category;
+      _exploreLoading = true;
+      _exploreError = '';
+    });
+    try {
+      final results = await _searchService.search(query, filter: 'music');
+      if (!mounted || _exploreCategory != category) return;
+      setState(() {
+        _exploreResults = results.where((video) => !video.isLive && !video.isUpcoming).toList(growable: false);
+        _exploreError = '';
+      });
+    } catch (error) {
+      if (!mounted || _exploreCategory != category) return;
+      setState(() {
+        _exploreResults = const [];
+        _exploreError = error is YoutubeSearchException
+            ? error.message
+            : 'Belum bisa memuat genre ini. Periksa koneksi lalu coba lagi.';
+      });
+    } finally {
+      if (mounted && _exploreCategory == category) {
+        setState(() => _exploreLoading = false);
+      }
+    }
+  }
+
+  List<Widget> _samplesView() {
+    final videos = _sampleVideos();
+    final scheme = Theme.of(context).colorScheme;
+    return [
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Temukan musik berikutnya', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900, letterSpacing: -0.7)),
+              const SizedBox(height: 6),
+              Text('Kartu pilihan dari musik populer dan yang pernah kamu dengarkan. Ketuk untuk memutar, atau buka menu untuk menyimpan ke koleksi.', style: TextStyle(color: scheme.onSurfaceVariant, height: 1.35)),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  FilledButton.icon(
+                    onPressed: videos.isEmpty ? null : () => unawaited(widget.onPlayFromList(videos.first, videos)),
+                    icon: const Icon(Icons.shuffle_rounded, size: 18),
+                    label: const Text('Putar mix'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: _feedLoading ? null : () => unawaited(_loadHome(force: true)),
+                    icon: const Icon(Icons.refresh_rounded, size: 18),
+                    label: const Text('Muat ulang'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+      if (videos.isEmpty && _feedLoading)
+        const SliverToBoxAdapter(child: Padding(padding: EdgeInsets.all(28), child: Center(child: CircularProgressIndicator())))
+      else if (videos.isEmpty)
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
+            child: Card(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  children: [
+                    const Icon(Icons.explore_rounded, size: 44),
+                    const SizedBox(height: 10),
+                    const Text('Sampel belum tersedia', style: TextStyle(fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 6),
+                    Text(_feedError.isNotEmpty ? _feedError : 'Muat rekomendasi musik terlebih dahulu.', textAlign: TextAlign.center, style: TextStyle(color: scheme.onSurfaceVariant)),
+                    const SizedBox(height: 12),
+                    FilledButton.icon(onPressed: () => unawaited(_loadHome(force: true)), icon: const Icon(Icons.refresh_rounded), label: const Text('Muat ulang')),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        )
+      else ...[
+        SliverToBoxAdapter(
+          child: SizedBox(
+            height: 304,
+            child: ListView.separated(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+              scrollDirection: Axis.horizontal,
+              itemCount: min(videos.length, 14).toInt(),
+              separatorBuilder: (_, _) => const SizedBox(width: 12),
+              itemBuilder: (context, index) => _sampleCard(videos[index]),
+            ),
+          ),
+        ),
+        _sectionHeader('Terus jelajahi'),
+        SliverList.builder(
+          itemCount: videos.length,
+          itemBuilder: (context, index) => _videoCard(videos[index]),
+        ),
+      ],
+      const SliverToBoxAdapter(child: SizedBox(height: 12)),
+    ];
+  }
+
+  Widget _sampleCard(YoutubeSearchResult video) {
+    final scheme = Theme.of(context).colorScheme;
+    final isCurrent = widget.currentVideoId == video.videoId;
+    return SizedBox(
+      width: 188,
+      child: Material(
+        color: scheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(20),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => unawaited(widget.onPlay(video)),
+          onLongPress: widget.onShowVideoMenu == null ? null : () => widget.onShowVideoMenu!(video),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    UnifiedArtwork(track: video, fit: BoxFit.cover, iconSize: 42),
+                    const DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0x00000000), Color(0xC9000000)]))),
+                    Positioned(left: 10, right: 8, bottom: 10, child: Row(children: [Expanded(child: Text(video.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, height: 1.15))), const SizedBox(width: 6), Icon(isCurrent ? Icons.graphic_eq_rounded : Icons.play_circle_fill_rounded, color: Colors.white, size: 29)])),
+                    Positioned(right: 4, top: 4, child: Material(color: Colors.black.withValues(alpha: 0.45), shape: const CircleBorder(), child: IconButton(tooltip: 'Opsi lagu', visualDensity: VisualDensity.compact, onPressed: widget.onShowVideoMenu == null ? null : () => widget.onShowVideoMenu!(video), icon: const Icon(Icons.more_vert_rounded, color: Colors.white, size: 19)))),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+                child: Row(
+                  children: [
+                    Expanded(child: Text(video.channelTitle.isEmpty ? 'Musik' : video.channelTitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11, fontWeight: FontWeight.w700))),
+                    IconButton(tooltip: 'Tambahkan ke antrean', visualDensity: VisualDensity.compact, onPressed: () { widget.onAddToQueue(video); ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ditambahkan ke antrean: ${video.title}'), duration: const Duration(seconds: 2))); }, icon: const Icon(Icons.queue_music_rounded, size: 20)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _exploreView() {
+    final scheme = Theme.of(context).colorScheme;
+    final shownResults = _exploreCategory == 'Sedang tren' ? _trending : _exploreResults;
+    final shownLoading = _exploreCategory == 'Sedang tren' ? _feedLoading : _exploreLoading;
+    final shownError = _exploreCategory == 'Sedang tren' ? _feedError : _exploreError;
+    return [
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Jelajahi musik', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900, letterSpacing: -0.7)),
+              const SizedBox(height: 6),
+              Text('Pilih genre untuk mencari katalog musik yang relevan.', style: TextStyle(color: scheme.onSurfaceVariant, height: 1.35)),
+              if (shownResults.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    FilledButton.icon(
+                      onPressed: () => unawaited(widget.onPlayFromList(shownResults.first, shownResults)),
+                      icon: const Icon(Icons.play_arrow_rounded, size: 18),
+                      label: const Text('Putar semua'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: widget.onStartRadio == null ? null : () => unawaited(widget.onStartRadio!(shownResults.first)),
+                      icon: const Icon(Icons.radio_rounded, size: 18),
+                      label: const Text('Radio genre'),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 2, 14, 10),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final category in _exploreCategories)
+                ChoiceChip(
+                  label: Text(category),
+                  selected: _exploreCategory == category,
+                  showCheckmark: false,
+                  onSelected: (selected) { if (selected && category != _exploreCategory) unawaited(_loadExploreCategory(category)); },
+                ),
+            ],
+          ),
+        ),
+      ),
+      if (shownLoading && shownResults.isEmpty)
+        const SliverToBoxAdapter(child: Padding(padding: EdgeInsets.all(28), child: Center(child: CircularProgressIndicator())))
+      else if (shownError.isNotEmpty && shownResults.isEmpty)
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.all(18),
+            child: Card(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  children: [
+                    const Icon(Icons.wifi_off_rounded, size: 40),
+                    const SizedBox(height: 10),
+                    const Text('Musik belum bisa dimuat', style: TextStyle(fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 6),
+                    Text(shownError, textAlign: TextAlign.center, style: TextStyle(color: scheme.onSurfaceVariant)),
+                    const SizedBox(height: 12),
+                    FilledButton.icon(onPressed: () => unawaited(_loadExploreCategory(_exploreCategory, force: true)), icon: const Icon(Icons.refresh_rounded), label: const Text('Coba lagi')),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        )
+      else if (shownResults.isEmpty)
+        SliverToBoxAdapter(child: Padding(padding: const EdgeInsets.all(24), child: Center(child: Text('Belum ada hasil untuk genre ini.', style: TextStyle(color: scheme.onSurfaceVariant)))))
+      else ...[
+        _sectionHeader('Pilihan ${_exploreCategory.toLowerCase()}'),
+        SliverList.builder(itemCount: shownResults.length, itemBuilder: (context, index) => _videoCard(shownResults[index])),
+      ],
+      const SliverToBoxAdapter(child: SizedBox(height: 12)),
+    ];
+  }
+
+  Widget _topBar({String? title}) {
     final scheme = Theme.of(context).colorScheme;
     return SliverToBoxAdapter(
       child: Padding(
@@ -1288,7 +1619,7 @@ class _YoutubeHubState extends State<YoutubeHub> {
             const SizedBox(width: 9),
             Expanded(
               child: Text(
-                appName,
+                title ?? appName,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: -0.5),
@@ -1470,6 +1801,7 @@ class _YoutubeHubState extends State<YoutubeHub> {
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: () => unawaited(widget.onPlay(video)),
+          onLongPress: widget.onShowVideoMenu == null ? null : () => widget.onShowVideoMenu!(video),
           child: Padding(
             padding: const EdgeInsets.all(9),
             child: Row(
@@ -1482,7 +1814,7 @@ class _YoutubeHubState extends State<YoutubeHub> {
                     child: Stack(
                       fit: StackFit.expand,
                       children: [
-                        Image.network(video.coverUrl, fit: BoxFit.cover, errorBuilder: (_, _, _) => ColoredBox(color: scheme.surfaceContainerHighest, child: Icon(Icons.music_note_rounded, color: scheme.onSurfaceVariant, size: 32))),
+                        UnifiedArtwork(track: video, fit: BoxFit.cover, iconSize: 32),
                         DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.black.withValues(alpha: 0.03), Colors.black.withValues(alpha: 0.40)]))),
                         Center(
                           child: Container(
@@ -1531,7 +1863,12 @@ class _YoutubeHubState extends State<YoutubeHub> {
                   const SizedBox(width: 5),
                   ChannelAvatar(channelId: video.channelId, videoId: video.videoId, name: channel, radius: 13, onTap: () => _handleControllerOpenChannel(video.channelId, channel, '')),
                 ],
-                const SizedBox(width: 1),
+                IconButton(
+                  tooltip: 'Opsi lagu',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: widget.onShowVideoMenu == null ? null : () => widget.onShowVideoMenu!(video),
+                  icon: const Icon(Icons.more_vert_rounded, size: 21),
+                ),
               ],
             ),
           ),
@@ -1564,7 +1901,7 @@ class _YoutubeHubState extends State<YoutubeHub> {
                     child: Stack(
                       fit: StackFit.expand,
                       children: [
-                        Image.network(video.coverUrl, fit: BoxFit.cover, errorBuilder: (_, _, _) => ColoredBox(color: scheme.surfaceContainerHighest, child: Icon(Icons.music_note_rounded, color: scheme.onSurfaceVariant, size: 34))),
+                        UnifiedArtwork(track: video, fit: BoxFit.cover, iconSize: 34),
                         DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.transparent, Colors.black.withValues(alpha: 0.42)]))),
                         Positioned(
                           left: 7,
@@ -2108,7 +2445,7 @@ class _YoutubeHubState extends State<YoutubeHub> {
               return ListTile(
                 leading: ClipRRect(
                   borderRadius: BorderRadius.circular(6),
-                  child: Image.network(video.coverUrl, width: 96, height: 54, fit: BoxFit.cover),
+                  child: UnifiedArtwork(track: video, width: 96, height: 54, fit: BoxFit.cover, iconSize: 24),
                 ),
                 title: Text(video.title, maxLines: 2, overflow: TextOverflow.ellipsis),
                 subtitle: Text(video.channelTitle, maxLines: 1, overflow: TextOverflow.ellipsis),
@@ -2198,6 +2535,10 @@ class _YoutubeHubState extends State<YoutubeHub> {
                   await _loadHome(force: true);
                   if (_account.isSignedIn) await _run(_refreshAccount);
                 }
+              } else if (_section == _YoutubeSection.samples) {
+                await _loadHome(force: true);
+              } else if (_section == _YoutubeSection.explore) {
+                await _loadExploreCategory(_exploreCategory, force: true);
               } else if (_account.isSignedIn) {
                 await _run(_refreshAccount);
               }
@@ -2209,7 +2550,14 @@ class _YoutubeHubState extends State<YoutubeHub> {
           child: CustomScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
-          if (_query.isNotEmpty || _section != _YoutubeSection.home) _topBar(),
+          if (_query.isNotEmpty || _section != _YoutubeSection.home)
+            _topBar(title: switch (_section) {
+              _YoutubeSection.home => appName,
+              _YoutubeSection.samples => 'Sampel',
+              _YoutubeSection.explore => 'Jelajahi',
+              _YoutubeSection.subscriptions => 'Subscription',
+              _YoutubeSection.library => 'Koleksi',
+            }),
           if (_query.isNotEmpty)
             SliverToBoxAdapter(
               child: Padding(
@@ -2227,7 +2575,7 @@ class _YoutubeHubState extends State<YoutubeHub> {
             ),
           // Di Beranda, chip dirender oleh _homeSections() (di bawah header
           // sambutan) supaya tidak menempel di bawah status bar.
-          if (_query.isNotEmpty || _section != _YoutubeSection.home) _chipRow(),
+          if (_query.isNotEmpty) _chipRow(),
           if (_needsAuthorization)
             SliverToBoxAdapter(
               child: Card(
@@ -2336,7 +2684,11 @@ class _YoutubeHubState extends State<YoutubeHub> {
                   itemBuilder: (context, index) => _videoCard(_searchResults[index]),
                 ),
             ],
-          ] else if (_section == _YoutubeSection.subscriptions)
+          ] else if (_section == _YoutubeSection.samples)
+            ..._samplesView()
+          else if (_section == _YoutubeSection.explore)
+            ..._exploreView()
+          else if (_section == _YoutubeSection.subscriptions)
             ..._subscriptionsView()
           else
             ..._libraryView(),
@@ -2382,12 +2734,24 @@ class _YoutubeHubState extends State<YoutubeHub> {
                   unawaited(_loadHome());
                   return;
                 }
+                _searchRequestId++;
+                _searchController.clear();
                 setState(() {
                   _section = nextSection;
+                  _query = '';
+                  _searchResults = const [];
+                  _searchChannels = const [];
                   _selectedPlaylist = null;
                   _playlistItems = const [];
+                  _loading = false;
+                  _error = '';
                 });
-                if (nextSection != _YoutubeSection.home && !_account.isSignedIn) {
+                if (nextSection == _YoutubeSection.samples && _trending.isEmpty && !_feedLoading) {
+                  unawaited(_loadHome());
+                } else if (nextSection == _YoutubeSection.explore) {
+                  unawaited(_loadExploreCategory(_exploreCategory));
+                }
+                if ((nextSection == _YoutubeSection.subscriptions || nextSection == _YoutubeSection.library) && !_account.isSignedIn) {
                   unawaited(_restoreAccountAfterUserAction());
                 }
               },
@@ -2398,6 +2762,16 @@ class _YoutubeHubState extends State<YoutubeHub> {
                   icon: Icon(Icons.home_outlined),
                   selectedIcon: Icon(Icons.home_rounded),
                   label: 'Beranda',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.play_circle_outline_rounded),
+                  selectedIcon: Icon(Icons.play_circle_fill_rounded),
+                  label: 'Sampel',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.explore_outlined),
+                  selectedIcon: Icon(Icons.explore_rounded),
+                  label: 'Jelajahi',
                 ),
                 NavigationDestination(
                   icon: Icon(Icons.subscriptions_outlined),

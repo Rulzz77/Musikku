@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../models/youtube_search_result.dart';
 import '../theme/app_colors.dart';
@@ -46,6 +47,21 @@ void showVideoMenuSheet(
                     ),
                   ),
                 ),
+                if (!video.isLocal)
+                  ListTile(
+                    leading: const Icon(Icons.share_outlined),
+                    title: const Text('Salin tautan lagu'),
+                    subtitle: const Text('Salin tautan publik agar mudah dibagikan.'),
+                    onTap: () async {
+                      Navigator.pop(sheetContext);
+                      await Clipboard.setData(ClipboardData(text: 'https://youtu.be/${video.videoId}'));
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Tautan lagu disalin.')),
+                        );
+                      }
+                    },
+                  ),
                 ListTile(
                   leading: const Icon(Icons.thumb_up_outlined),
                   title: Text(isLiked ? 'Batal suka' : 'Saya suka'),

@@ -12,7 +12,6 @@ import android.os.Process
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
-import android.util.Log
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.RenderProcessGoneDetail
@@ -300,7 +299,7 @@ class YoutubePlatformView(
 
                 if (currentState == "ended") {
 
-                    Log.d(
+                    MusikKuLogger.d(
                         TAG,
                         "PROGRESS BERHENTI: VIDEO ENDED"
                     )
@@ -335,7 +334,7 @@ class YoutubePlatformView(
 
                 if (videoDuration <= 0f) {
 
-                    Log.d(
+                    MusikKuLogger.d(
                         TAG,
                         "MENUNGGU CALLBACK DURATION..."
                     )
@@ -347,7 +346,7 @@ class YoutubePlatformView(
 
                 } else {
 
-                    Log.d(
+                    MusikKuLogger.d(
                         TAG,
                         "DURATION SUDAH TERSEDIA = $videoDuration"
                     )
@@ -366,22 +365,22 @@ class YoutubePlatformView(
             this
 
 
-        Log.d(
+        MusikKuLogger.d(
             TAG,
             "===================================="
         )
 
-        Log.d(
+        MusikKuLogger.d(
             TAG,
             "YOUTUBE PLATFORM VIEW DIBUAT"
         )
 
-        Log.d(
+        MusikKuLogger.d(
             TAG,
             "INSTANCE = $this"
         )
 
-        Log.d(
+        MusikKuLogger.d(
             TAG,
             "===================================="
         )
@@ -425,17 +424,17 @@ class YoutubePlatformView(
         // BACKGROUND PLAYBACK
         // ========================================================
 
-        Log.d(
+        MusikKuLogger.d(
             TAG,
             "===================================="
         )
 
-        Log.d(
+        MusikKuLogger.d(
             TAG,
             "MENGAKTIFKAN BACKGROUND PLAYBACK"
         )
 
-        Log.d(
+        MusikKuLogger.d(
             TAG,
             "===================================="
         )
@@ -489,17 +488,17 @@ class YoutubePlatformView(
                         player: YouTubePlayer
                     ) {
 
-                        Log.d(
+                        MusikKuLogger.d(
                             TAG,
                             "===================================="
                         )
 
-                        Log.d(
+                        MusikKuLogger.d(
                             TAG,
                             "YOUTUBE PLAYER READY"
                         )
 
-                        Log.d(
+                        MusikKuLogger.d(
                             TAG,
                             "===================================="
                         )
@@ -585,7 +584,7 @@ class YoutubePlatformView(
                             !videoId.isNullOrBlank()
                         ) {
 
-                            Log.d(
+                            MusikKuLogger.d(
                                 TAG,
                                 "LOAD PENDING VIDEO = $videoId"
                             )
@@ -638,22 +637,22 @@ class YoutubePlatformView(
                         videoId: String
                     ) {
 
-                        Log.d(
+                        MusikKuLogger.d(
                             TAG,
                             "===================================="
                         )
 
-                        Log.d(
+                        MusikKuLogger.d(
                             TAG,
                             "VIDEO ID CALLBACK"
                         )
 
-                        Log.d(
+                        MusikKuLogger.d(
                             TAG,
                             "VIDEO ID = $videoId"
                         )
 
-                        Log.d(
+                        MusikKuLogger.d(
                             TAG,
                             "===================================="
                         )
@@ -706,12 +705,12 @@ class YoutubePlatformView(
                         duration: Float
                     ) {
 
-                        Log.d(
+                        MusikKuLogger.d(
                             TAG,
                             "VIDEO DURATION CALLBACK"
                         )
 
-                        Log.d(
+                        MusikKuLogger.d(
                             TAG,
                             "DURATION = $duration"
                         )
@@ -776,7 +775,7 @@ class YoutubePlatformView(
                         playbackQuality: PlayerConstants.PlaybackQuality
                     ) {
                         actualPlaybackQuality = playbackQuality.name.lowercase()
-                        Log.d(
+                        MusikKuLogger.d(
                             TAG,
                             "PLAYBACK QUALITY AKTUAL = $actualPlaybackQuality"
                         )
@@ -831,32 +830,32 @@ class YoutubePlatformView(
                         }
 
 
-                        Log.d(
+                        MusikKuLogger.d(
                             TAG,
                             "===================================="
                         )
 
-                        Log.d(
+                        MusikKuLogger.d(
                             TAG,
                             "PLAYER STATE = $currentState"
                         )
 
-                        Log.d(
+                        MusikKuLogger.d(
                             TAG,
                             "POSITION = $currentPosition"
                         )
 
-                        Log.d(
+                        MusikKuLogger.d(
                             TAG,
                             "DURATION = $videoDuration"
                         )
 
-                        Log.d(
+                        MusikKuLogger.d(
                             TAG,
                             "VIDEO = $currentVideoId"
                         )
 
-                        Log.d(
+                        MusikKuLogger.d(
                             TAG,
                             "===================================="
                         )
@@ -893,27 +892,27 @@ class YoutubePlatformView(
                                     currentVideoId
 
 
-                                Log.d(
+                                MusikKuLogger.d(
                                     TAG,
                                     "===================================="
                                 )
 
-                                Log.d(
+                                MusikKuLogger.d(
                                     TAG,
                                     "VIDEO ENDED"
                                 )
 
-                                Log.d(
+                                MusikKuLogger.d(
                                     TAG,
                                     "ENDED VIDEO ID = $currentVideoId"
                                 )
 
-                                Log.d(
+                                MusikKuLogger.d(
                                     TAG,
                                     "MENGIRIM EVENT ENDED KE FLUTTER"
                                 )
 
-                                Log.d(
+                                MusikKuLogger.d(
                                     TAG,
                                     "===================================="
                                 )
@@ -925,7 +924,7 @@ class YoutubePlatformView(
 
                             } else {
 
-                                Log.d(
+                                MusikKuLogger.d(
                                     TAG,
                                     "ENDED SUDAH PERNAH DIKIRIM"
                                 )
@@ -973,27 +972,27 @@ class YoutubePlatformView(
                             PlayerConstants.PlayerError
                     ) {
 
-                        Log.e(
+                        MusikKuLogger.e(
                             TAG,
                             "===================================="
                         )
 
-                        Log.e(
+                        MusikKuLogger.e(
                             TAG,
                             "YOUTUBE ERROR"
                         )
 
-                        Log.e(
+                        MusikKuLogger.e(
                             TAG,
                             "ERROR = ${error.name}"
                         )
 
-                        Log.e(
+                        MusikKuLogger.e(
                             TAG,
                             "VIDEO ID = $currentVideoId"
                         )
 
-                        Log.e(
+                        MusikKuLogger.e(
                             TAG,
                             "===================================="
                         )
@@ -1131,7 +1130,7 @@ class YoutubePlatformView(
             videoId.isBlank()
         ) {
 
-            Log.w(
+            MusikKuLogger.w(
                 TAG,
                 "LOAD VIDEO: VIDEO ID KOSONG"
             )
@@ -1140,32 +1139,32 @@ class YoutubePlatformView(
         }
 
 
-        Log.d(
+        MusikKuLogger.d(
             TAG,
             "===================================="
         )
 
-        Log.d(
+        MusikKuLogger.d(
             TAG,
             "LOAD VIDEO"
         )
 
-        Log.d(
+        MusikKuLogger.d(
             TAG,
             "VIDEO ID = $videoId"
         )
 
-        Log.d(
+        MusikKuLogger.d(
             TAG,
             "IS READY = $isReady"
         )
 
-        Log.d(
+        MusikKuLogger.d(
             TAG,
             "PLAYER = $youtubePlayer"
         )
 
-        Log.d(
+        MusikKuLogger.d(
             TAG,
             "===================================="
         )
@@ -1357,12 +1356,12 @@ class YoutubePlatformView(
     fun setPlaybackQuality(requestedQuality: String) {
         val quality = normalizeQuality(requestedQuality)
         if (quality == null) {
-            Log.w(TAG, "SET QUALITY: level tidak dikenal = $requestedQuality")
+            MusikKuLogger.w(TAG, "SET QUALITY: level tidak dikenal = $requestedQuality")
             return
         }
 
         preferredQuality = quality
-        Log.d(TAG, "SET QUALITY PREFERENCE = $quality")
+        MusikKuLogger.d(TAG, "SET QUALITY PREFERENCE = $quality")
         handler.post { applyPlaybackQuality(force = true) }
     }
 
@@ -1372,27 +1371,27 @@ class YoutubePlatformView(
 
     fun play() {
 
-        Log.d(
+        MusikKuLogger.d(
             TAG,
             "===================================="
         )
 
-        Log.d(
+        MusikKuLogger.d(
             TAG,
             "NATIVE PLAY"
         )
 
-        Log.d(
+        MusikKuLogger.d(
             TAG,
             "IS READY = $isReady"
         )
 
-        Log.d(
+        MusikKuLogger.d(
             TAG,
             "PLAYER = $youtubePlayer"
         )
 
-        Log.d(
+        MusikKuLogger.d(
             TAG,
             "===================================="
         )
@@ -1402,7 +1401,7 @@ class YoutubePlatformView(
             !isReady
         ) {
 
-            Log.w(
+            MusikKuLogger.w(
                 TAG,
                 "PLAY: PLAYER BELUM READY"
             )
@@ -1449,7 +1448,7 @@ class YoutubePlatformView(
         try {
             playerUiController?.showUi(false)
         } catch (e: Exception) {
-            Log.w(TAG, "GAGAL MENYEMBUNYIKAN UI PLAYER", e)
+            MusikKuLogger.w(TAG, "GAGAL MENYEMBUNYIKAN UI PLAYER", e)
         }
     }
 
@@ -1462,17 +1461,17 @@ class YoutubePlatformView(
 
     fun pause() {
 
-        Log.d(
+        MusikKuLogger.d(
             TAG,
             "===================================="
         )
 
-        Log.d(
+        MusikKuLogger.d(
             TAG,
             "NATIVE PAUSE"
         )
 
-        Log.d(
+        MusikKuLogger.d(
             TAG,
             "===================================="
         )
@@ -1482,7 +1481,7 @@ class YoutubePlatformView(
             !isReady
         ) {
 
-            Log.w(
+            MusikKuLogger.w(
                 TAG,
                 "PAUSE: PLAYER BELUM READY"
             )
@@ -1673,7 +1672,7 @@ class YoutubePlatformView(
             data
 
 
-        Log.d(
+        MusikKuLogger.d(
             TAG,
             "SEND STATE:"
                 + " state=$state"
@@ -1712,7 +1711,7 @@ class YoutubePlatformView(
             sink == null
         ) {
 
-            Log.w(
+            MusikKuLogger.w(
                 TAG,
                 "EVENT SINK = NULL"
             )
@@ -1728,7 +1727,7 @@ class YoutubePlatformView(
             )
 
 
-            Log.d(
+            MusikKuLogger.d(
                 TAG,
                 "EVENT BERHASIL DIKIRIM KE FLUTTER"
             )
@@ -1737,7 +1736,7 @@ class YoutubePlatformView(
             e: Exception
         ) {
 
-            Log.e(
+            MusikKuLogger.e(
                 TAG,
                 "GAGAL KIRIM EVENT KE FLUTTER",
                 e
@@ -1770,7 +1769,7 @@ class YoutubePlatformView(
             webView == null
         ) {
 
-            Log.w(
+            MusikKuLogger.w(
                 TAG,
                 "WEBVIEW TIDAK DITEMUKAN, PRIORITAS RENDERER TIDAK DIATUR"
             )
@@ -1785,7 +1784,7 @@ class YoutubePlatformView(
                 false
             )
 
-            Log.d(
+            MusikKuLogger.d(
                 TAG,
                 "RENDERER PRIORITY = IMPORTANT (tidak di-waive saat background)"
             )
@@ -1802,7 +1801,7 @@ class YoutubePlatformView(
             e: Exception
         ) {
 
-            Log.e(
+            MusikKuLogger.e(
                 TAG,
                 "GAGAL ATUR RENDERER PRIORITY",
                 e
@@ -1823,7 +1822,7 @@ class YoutubePlatformView(
             detail: RenderProcessGoneDetail?
         ): Boolean {
 
-            Log.e(
+            MusikKuLogger.e(
                 TAG,
                 "RENDERER WEBVIEW MATI (crash=${detail?.didCrash()}), PLAYER DIBUAT ULANG"
             )
@@ -1905,7 +1904,7 @@ class YoutubePlatformView(
                 View.VISIBLE
             )
 
-            Log.d(
+            MusikKuLogger.d(
                 TAG,
                 "WEBVIEW BARU DIPAKSA TERLIHAT"
             )
@@ -1914,7 +1913,7 @@ class YoutubePlatformView(
             e: Exception
         ) {
 
-            Log.e(
+            MusikKuLogger.e(
                 TAG,
                 "GAGAL MEMAKSA WEBVIEW TERLIHAT",
                 e
@@ -1924,7 +1923,7 @@ class YoutubePlatformView(
 
     private fun onRecoveryFailed() {
 
-        Log.w(
+        MusikKuLogger.w(
             TAG,
             "PEMULIHAN PLAYER GAGAL DI BACKGROUND, MENUNGGU APP KEMBALI KE DEPAN"
         )
@@ -1958,7 +1957,7 @@ class YoutubePlatformView(
             needsRebuildOnForeground
         ) {
 
-            Log.d(
+            MusikKuLogger.d(
                 TAG,
                 "APP KEMBALI KE DEPAN, MEMBANGUN ULANG PLAYER"
             )
@@ -2012,7 +2011,7 @@ class YoutubePlatformView(
                 e: Exception
             ) {
 
-                Log.e(
+                MusikKuLogger.e(
                     TAG,
                     "GAGAL MEMBUANG PLAYER LAMA",
                     e
@@ -2083,7 +2082,7 @@ class YoutubePlatformView(
             e: Exception
         ) {
 
-            Log.e(
+            MusikKuLogger.e(
                 TAG,
                 "GAGAL MEMULIHKAN PLAYER",
                 e
@@ -2103,22 +2102,22 @@ class YoutubePlatformView(
 
     override fun dispose() {
 
-        Log.d(
+        MusikKuLogger.d(
             TAG,
             "===================================="
         )
 
-        Log.d(
+        MusikKuLogger.d(
             TAG,
             "YOUTUBE PLATFORM VIEW DISPOSE"
         )
 
-        Log.d(
+        MusikKuLogger.d(
             TAG,
             "PLAYER TIDAK DI-RELEASE"
         )
 
-        Log.d(
+        MusikKuLogger.d(
             TAG,
             "===================================="
         )
@@ -2148,17 +2147,17 @@ class YoutubePlatformView(
 
     fun release() {
 
-        Log.d(
+        MusikKuLogger.d(
             TAG,
             "===================================="
         )
 
-        Log.d(
+        MusikKuLogger.d(
             TAG,
             "YOUTUBE PLATFORM VIEW RELEASE"
         )
 
-        Log.d(
+        MusikKuLogger.d(
             TAG,
             "===================================="
         )
@@ -2213,7 +2212,7 @@ class YoutubePlatformView(
             e: Exception
         ) {
 
-            Log.e(
+            MusikKuLogger.e(
                 TAG,
                 "GAGAL RELEASE YOUTUBE VIEW",
                 e

@@ -1,0 +1,6 @@
+# Copy to android/key.properties locally, then fill real values.
+# Never commit key.properties or the actual .jks/.keystore file.
+storeFile=upload-keystore.jks
+storePassword=ISI_PASSWORD_KEYSTORE
+keyAlias=musikku
+keyPassword=ISI_PASSWORD_KEY

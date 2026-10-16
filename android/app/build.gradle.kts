@@ -6,15 +6,51 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+val keyPropertiesFile = rootProject.file("key.properties")
 val keystoreProperties = Properties().apply {
-    val f = rootProject.file("key.properties")
-    if (f.exists()) {
-        f.inputStream().use { load(it) }
+    if (keyPropertiesFile.exists()) {
+        keyPropertiesFile.inputStream().use { load(it) }
     }
+}
+
+val requiredReleaseSigningProperties = listOf(
+    "storeFile",
+    "storePassword",
+    "keyAlias",
+    "keyPassword",
+)
+val releaseSigningConfigured = requiredReleaseSigningProperties.all { key ->
+    !keystoreProperties.getProperty(key).isNullOrBlank()
+}
+val releaseTaskRequested = gradle.startParameter.taskNames.any { taskName ->
+    taskName.substringAfterLast(":").contains("release", ignoreCase = true)
+}
+val releaseKeystoreFile = if (releaseSigningConfigured) {
+    rootProject.file(keystoreProperties.getProperty("storeFile"))
+} else {
+    null
+}
+
+if (releaseTaskRequested && !releaseSigningConfigured) {
+    throw GradleException(
+        "Build RELEASE dibatalkan: signing belum dikonfigurasi. " +
+            "Isi android/key.properties dengan storeFile, storePassword, " +
+            "keyAlias, dan keyPassword. Jangan menandatangani release dengan debug key."
+    )
+}
+if (releaseTaskRequested && releaseKeystoreFile?.isFile != true) {
+    throw GradleException(
+        "Build RELEASE dibatalkan: file keystore pada android/key.properties tidak ditemukan."
+    )
 }
 
 android {
     namespace = "com.musikku.app"
+
+    // Explicit because native security/logger code relies on BuildConfig.DEBUG.
+    buildFeatures {
+        buildConfig = true
+    }
 
     compileSdk = 36
     ndkVersion = flutter.ndkVersion
@@ -37,19 +73,11 @@ android {
 
     signingConfigs {
         create("release") {
-            if (keystoreProperties.containsKey("storeFile")) {
-                storeFile = rootProject.file(
-                    keystoreProperties["storeFile"] as String
-                )
-
-                storePassword =
-                    keystoreProperties["storePassword"] as String
-
-                keyAlias =
-                    keystoreProperties["keyAlias"] as String
-
-                keyPassword =
-                    keystoreProperties["keyPassword"] as String
+            if (releaseSigningConfigured) {
+                storeFile = releaseKeystoreFile
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
             }
         }
     }
@@ -68,14 +96,9 @@ android {
                 "proguard-rules.pro"
             )
 
-            // Gunakan signing release jika key.properties tersedia.
-            // Jika tidak, gunakan debug signing untuk build lokal.
-            signingConfig =
-                if (keystoreProperties.containsKey("storeFile")) {
-                    signingConfigs.getByName("release")
-                } else {
-                    signingConfigs.getByName("debug")
-                }
+            // Release harus menggunakan keystore penerbit yang stabil.
+            // Pemeriksaan di atas sengaja menggagalkan task release jika keystore belum ada.
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 }

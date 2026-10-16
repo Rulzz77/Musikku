@@ -68,12 +68,31 @@ class AppHealthMonitor private constructor(private val context: Context) {
         watchdogThread = null
     }
 
+    private fun redact(raw: String, maxLength: Int): String {
+        var value = raw
+        val querySecret = Regex(
+            "([?&](?:key|api_key|access_token|refresh_token|token|client_secret)=)[^&#\\s]+",
+            RegexOption.IGNORE_CASE,
+        )
+        value = querySecret.replace(value) { match -> "${match.groupValues[1]}[REDACTED]" }
+        value = Regex("\\bBearer\\s+[A-Za-z0-9._~+/-]+=*", RegexOption.IGNORE_CASE)
+            .replace(value, "Bearer [REDACTED]")
+        value = Regex("\\bAIza[0-9A-Za-z_-]{20,}\\b")
+            .replace(value, "[GOOGLE_API_KEY_REDACTED]")
+        value = Regex("\\bya29\\.[0-9A-Za-z._-]{20,}\\b")
+            .replace(value, "[OAUTH_TOKEN_REDACTED]")
+        // YouTube media URLs can carry signed query parameters with changing names.
+        value = Regex("(https?://[^\\s?#]+)\\?[^\\s#]*", RegexOption.IGNORE_CASE)
+            .replace(value) { match -> "${match.groupValues[1]}?[QUERY_REDACTED]" }
+        return value.take(maxLength)
+    }
+
     fun record(kind: String, message: String, throwable: Throwable? = null) {
         val obj = JSONObject().apply {
             put("time", SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", Locale.US).format(Date()))
-            put("kind", kind)
-            put("error", message)
-            put("stack", throwable?.stackTraceToString() ?: "")
+            put("kind", redact(kind, 80))
+            put("error", redact(message, 1200))
+            put("stack", redact(throwable?.stackTraceToString() ?: "", 4000))
             put("platform", "android")
         }
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)

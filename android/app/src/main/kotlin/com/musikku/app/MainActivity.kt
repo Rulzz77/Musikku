@@ -19,7 +19,6 @@ import android.graphics.drawable.Icon
 import android.os.Handler
 import android.os.Looper
 import android.util.Rational
-import android.util.Log
 import android.content.Intent
 import android.os.Bundle
 import android.net.ConnectivityManager
@@ -36,6 +35,7 @@ import io.flutter.plugin.platform.PlatformView
 import io.flutter.plugin.platform.PlatformViewFactory
 
 import java.io.File
+import java.util.Locale
 
 import androidx.core.content.FileProvider
 import androidx.core.view.WindowCompat
@@ -48,6 +48,33 @@ private const val PIP_EXTRA_TYPE = "type"
 private const val PIP_PREVIOUS = 1
 private const val PIP_PLAY_PAUSE = 2
 private const val PIP_NEXT = 3
+
+/** Only direct YouTube media CDN URLs are accepted by the native audio player. */
+private fun isTrustedYoutubeAudioUrl(raw: String): Boolean {
+    if (raw.isBlank() || raw.length > 8192) return false
+    val uri = runCatching { Uri.parse(raw) }.getOrNull() ?: return false
+    val host = uri.host?.lowercase(Locale.ROOT).orEmpty()
+    val trustedHost = host == "googlevideo.com" || host.endsWith(".googlevideo.com")
+    return uri.scheme.equals("https", ignoreCase = true) &&
+        trustedHost &&
+        (uri.port == -1 || uri.port == 443) &&
+        uri.encodedAuthority?.contains('@') != true &&
+        uri.fragment.isNullOrEmpty()
+}
+
+private val allowedStreamHeaderNames = setOf("user-agent", "referer", "origin")
+private fun sanitizeStreamHeaders(raw: Map<String, Any?>): Map<String, String> =
+    raw.mapNotNull { (key, value) ->
+        val normalizedKey = key.trim()
+        val normalizedValue = value?.toString()?.trim().orEmpty()
+        val lowerKey = normalizedKey.lowercase(Locale.ROOT)
+        if (lowerKey !in allowedStreamHeaderNames || normalizedValue.isBlank() ||
+            normalizedValue.length > 2048 || normalizedValue.any { it == '\r' || it == '\n' }) {
+            null
+        } else {
+            normalizedKey to normalizedValue
+        }
+    }.toMap()
 
 // ============================================================
 // YOUTUBE PLATFORM VIEW FACTORY
@@ -64,22 +91,22 @@ class YoutubePlatformViewFactory :
         args: Any?
     ): PlatformView {
 
-        Log.d(
+        MusikKuLogger.d(
             "MusikKuNative",
             "===================================="
         )
 
-        Log.d(
+        MusikKuLogger.d(
             "MusikKuNative",
             "PLATFORM VIEW CREATE"
         )
 
-        Log.d(
+        MusikKuLogger.d(
             "MusikKuNative",
             "viewId = $viewId"
         )
 
-        Log.d(
+        MusikKuLogger.d(
             "MusikKuNative",
             "===================================="
         )
@@ -223,7 +250,7 @@ class MainActivity : AudioServiceActivity() {
                     try {
                         result.success(DataUsageTracker.snapshot(applicationContext))
                     } catch (error: Exception) {
-                        Log.e(TAG, "Membaca konsumsi data gagal", error)
+                        MusikKuLogger.e(TAG, "Membaca konsumsi data gagal", error)
                         result.error("DATA_USAGE_FAILED", error.message, null)
                     }
                 }
@@ -257,7 +284,7 @@ class MainActivity : AudioServiceActivity() {
                         }
                         result.success(null)
                     } catch (error: Exception) {
-                        Log.e(TAG, "Membuka pengaturan izin APK gagal", error)
+                        MusikKuLogger.e(TAG, "Membuka pengaturan izin APK gagal", error)
                         result.error("INSTALL_PERMISSION_SETTINGS", error.message, null)
                     }
                 }
@@ -287,7 +314,7 @@ class MainActivity : AudioServiceActivity() {
                         startActivity(installIntent)
                         result.success(true)
                     } catch (error: Exception) {
-                        Log.e(TAG, "Membuka installer APK gagal", error)
+                        MusikKuLogger.e(TAG, "Membuka installer APK gagal", error)
                         result.error("APK_INSTALLER_FAILED", error.message, null)
                     }
                 }
@@ -311,17 +338,17 @@ class MainActivity : AudioServiceActivity() {
         }
 
 
-        Log.d(
+        MusikKuLogger.d(
             TAG,
             "===================================="
         )
 
-        Log.d(
+        MusikKuLogger.d(
             TAG,
             "MUSIKKU NATIVE ENGINE AKTIF"
         )
 
-        Log.d(
+        MusikKuLogger.d(
             TAG,
             "===================================="
         )
@@ -349,7 +376,7 @@ class MainActivity : AudioServiceActivity() {
             methodChannel
 
 
-        Log.d(
+        MusikKuLogger.d(
             TAG,
             "NOTIFICATION METHOD CHANNEL SIAP"
         )
@@ -361,7 +388,7 @@ class MainActivity : AudioServiceActivity() {
 
         methodChannel.setMethodCallHandler { call, result ->
 
-            Log.d(
+            MusikKuLogger.d(
                 TAG,
                 "METHOD CHANNEL = ${call.method}"
             )
@@ -387,7 +414,7 @@ class MainActivity : AudioServiceActivity() {
                         SubscriptionWatchWorker.configure(applicationContext, enabled, apiKey, channels)
                         result.success(null)
                     } catch (e: Exception) {
-                        Log.e(TAG, "CONFIGURE WATCH GAGAL", e)
+                        MusikKuLogger.e(TAG, "CONFIGURE WATCH GAGAL", e)
                         result.error("WATCH_FAILED", e.message, null)
                     }
                 }
@@ -452,15 +479,10 @@ class MainActivity : AudioServiceActivity() {
                     val durationSeconds = call.argument<Double>("durationSeconds") ?: 0.0
                     val playing = call.argument<Boolean>("playing") ?: true
                     val headersRaw = call.argument<Map<String, Any?>>("headers") ?: emptyMap()
-                    val headers = headersRaw.mapNotNull { (key, value) ->
-                        val normalizedKey = key.trim()
-                        val normalizedValue = value?.toString()?.trim().orEmpty()
-                        if (normalizedKey.isBlank() || normalizedValue.isBlank()) null
-                        else normalizedKey to normalizedValue
-                    }.toMap()
+                    val headers = sanitizeStreamHeaders(headersRaw)
 
                     if (!videoId.matches(Regex("[A-Za-z0-9_-]{11}")) ||
-                        !streamUrl.startsWith("https://", ignoreCase = true)) {
+                        !isTrustedYoutubeAudioUrl(streamUrl)) {
                         result.error("INVALID_AUDIO_STREAM", "ID lagu atau URL audio tidak valid", null)
                         return@setMethodCallHandler
                     }
@@ -468,15 +490,17 @@ class MainActivity : AudioServiceActivity() {
                     // Music-only mode: ensure the embedded YouTube view is not
                     // playing alongside the native audio-only stream.
                     YoutubePlatformView.instance?.deactivateForExternalPlayback()
+                    val safeStartSeconds = if (startSeconds.isFinite()) startSeconds.coerceIn(0.0, 86400.0) else 0.0
+                    val safeDurationSeconds = if (durationSeconds.isFinite()) durationSeconds.coerceIn(0.0, 86400.0) else 0.0
                     PlaybackService.start(
                         this,
                         videoId = videoId,
-                        title = title,
-                        artist = artist,
-                        thumbnailUrl = thumbnailUrl,
+                        title = title.take(256),
+                        artist = artist.take(128),
+                        thumbnailUrl = thumbnailUrl.take(2048),
                         playing = playing,
-                        positionSeconds = startSeconds,
-                        durationSeconds = durationSeconds,
+                        positionSeconds = safeStartSeconds,
+                        durationSeconds = safeDurationSeconds,
                         sourceType = "youtube_audio",
                         mediaUri = streamUrl,
                         streamHeaders = headers,
@@ -523,27 +547,27 @@ class MainActivity : AudioServiceActivity() {
                         ) ?: 0.0
 
 
-                    Log.d(
+                    MusikKuLogger.d(
                         TAG,
                         "===================================="
                     )
 
-                    Log.d(
+                    MusikKuLogger.d(
                         TAG,
                         "MAINACTIVITY: LOAD VIDEO"
                     )
 
-                    Log.d(
+                    MusikKuLogger.d(
                         TAG,
                         "VIDEO ID = $videoId"
                     )
 
-                    Log.d(
+                    MusikKuLogger.d(
                         TAG,
                         "PLAYER INSTANCE = ${YoutubePlatformView.instance}"
                     )
 
-                    Log.d(
+                    MusikKuLogger.d(
                         TAG,
                         "===================================="
                     )
@@ -553,7 +577,7 @@ class MainActivity : AudioServiceActivity() {
                         videoId.isNullOrBlank()
                     ) {
 
-                        Log.e(
+                        MusikKuLogger.e(
                             TAG,
                             "LOAD VIDEO GAGAL: videoId kosong"
                         )
@@ -577,7 +601,7 @@ class MainActivity : AudioServiceActivity() {
 
                     if (player == null) {
 
-                        Log.e(
+                        MusikKuLogger.e(
                             TAG,
                             "LOAD VIDEO GAGAL: PLAYER BELUM READY"
                         )
@@ -592,7 +616,7 @@ class MainActivity : AudioServiceActivity() {
                     }
 
 
-                    Log.d(
+                    MusikKuLogger.d(
                         TAG,
                         "MEMANGGIL player.loadVideo()"
                     )
@@ -604,7 +628,7 @@ class MainActivity : AudioServiceActivity() {
                     )
 
 
-                    Log.d(
+                    MusikKuLogger.d(
                         TAG,
                         "player.loadVideo() SELESAI"
                     )
@@ -631,22 +655,22 @@ class MainActivity : AudioServiceActivity() {
 
                 "play" -> {
 
-                    Log.d(
+                    MusikKuLogger.d(
                         TAG,
                         "===================================="
                     )
 
-                    Log.d(
+                    MusikKuLogger.d(
                         TAG,
                         "MAINACTIVITY: METHOD PLAY DITERIMA"
                     )
 
-                    Log.d(
+                    MusikKuLogger.d(
                         TAG,
                         "PLAYER = ${YoutubePlatformView.instance}"
                     )
 
-                    Log.d(
+                    MusikKuLogger.d(
                         TAG,
                         "===================================="
                     )
@@ -668,21 +692,21 @@ class MainActivity : AudioServiceActivity() {
 
                     if (player == null) {
 
-                        Log.e(
+                        MusikKuLogger.e(
                             TAG,
                             "PLAY GAGAL: PLAYER NULL"
                         )
 
                     } else {
 
-                        Log.d(
+                        MusikKuLogger.d(
                             TAG,
                             "MEMANGGIL NATIVE PLAYER PLAY"
                         )
 
                         player.play()
 
-                        Log.d(
+                        MusikKuLogger.d(
                             TAG,
                             "NATIVE PLAYER PLAY SELESAI"
                         )
@@ -701,22 +725,22 @@ class MainActivity : AudioServiceActivity() {
 
                 "pause" -> {
 
-                    Log.d(
+                    MusikKuLogger.d(
                         TAG,
                         "===================================="
                     )
 
-                    Log.d(
+                    MusikKuLogger.d(
                         TAG,
                         "MAINACTIVITY: METHOD PAUSE DITERIMA"
                     )
 
-                    Log.d(
+                    MusikKuLogger.d(
                         TAG,
                         "PLAYER = ${YoutubePlatformView.instance}"
                     )
 
-                    Log.d(
+                    MusikKuLogger.d(
                         TAG,
                         "===================================="
                     )
@@ -738,21 +762,21 @@ class MainActivity : AudioServiceActivity() {
 
                     if (player == null) {
 
-                        Log.e(
+                        MusikKuLogger.e(
                             TAG,
                             "PAUSE GAGAL: PLAYER NULL"
                         )
 
                     } else {
 
-                        Log.d(
+                        MusikKuLogger.d(
                             TAG,
                             "MEMANGGIL NATIVE PLAYER PAUSE"
                         )
 
                         player.pause()
 
-                        Log.d(
+                        MusikKuLogger.d(
                             TAG,
                             "NATIVE PLAYER PAUSE SELESAI"
                         )
@@ -777,27 +801,27 @@ class MainActivity : AudioServiceActivity() {
                         ) ?: 0.0
 
 
-                    Log.d(
+                    MusikKuLogger.d(
                         TAG,
                         "===================================="
                     )
 
-                    Log.d(
+                    MusikKuLogger.d(
                         TAG,
                         "MAINACTIVITY: SEEK"
                     )
 
-                    Log.d(
+                    MusikKuLogger.d(
                         TAG,
                         "SECONDS = $seconds"
                     )
 
-                    Log.d(
+                    MusikKuLogger.d(
                         TAG,
                         "PLAYER = ${YoutubePlatformView.instance}"
                     )
 
-                    Log.d(
+                    MusikKuLogger.d(
                         TAG,
                         "===================================="
                     )
@@ -938,7 +962,7 @@ class MainActivity : AudioServiceActivity() {
                     }
 
 
-                    Log.d(
+                    MusikKuLogger.d(
                         TAG,
                         "CURRENT TIME = $current"
                     )
@@ -1074,32 +1098,32 @@ class MainActivity : AudioServiceActivity() {
                         ) ?: 0.0
 
 
-                    Log.d(
+                    MusikKuLogger.d(
                         TAG,
                         "===================================="
                     )
 
-                    Log.d(
+                    MusikKuLogger.d(
                         TAG,
                         "START NOTIFICATION"
                     )
 
-                    Log.d(
+                    MusikKuLogger.d(
                         TAG,
                         "TITLE = $title"
                     )
 
-                    Log.d(
+                    MusikKuLogger.d(
                         TAG,
                         "ARTIST = $artist"
                     )
 
-                    Log.d(
+                    MusikKuLogger.d(
                         TAG,
                         "PLAYING = $playing"
                     )
 
-                    Log.d(
+                    MusikKuLogger.d(
                         TAG,
                         "===================================="
                     )
@@ -1183,32 +1207,32 @@ class MainActivity : AudioServiceActivity() {
                         ) ?: 0.0
 
 
-                    Log.d(
+                    MusikKuLogger.d(
                         TAG,
                         "===================================="
                     )
 
-                    Log.d(
+                    MusikKuLogger.d(
                         TAG,
                         "UPDATE NOTIFICATION"
                     )
 
-                    Log.d(
+                    MusikKuLogger.d(
                         TAG,
                         "TITLE = $title"
                     )
 
-                    Log.d(
+                    MusikKuLogger.d(
                         TAG,
                         "ARTIST = $artist"
                     )
 
-                    Log.d(
+                    MusikKuLogger.d(
                         TAG,
                         "PLAYING = $playing"
                     )
 
-                    Log.d(
+                    MusikKuLogger.d(
                         TAG,
                         "===================================="
                     )
@@ -1247,17 +1271,17 @@ class MainActivity : AudioServiceActivity() {
 
                 "stopNotification" -> {
 
-                    Log.d(
+                    MusikKuLogger.d(
                         TAG,
                         "===================================="
                     )
 
-                    Log.d(
+                    MusikKuLogger.d(
                         TAG,
                         "STOP NOTIFICATION"
                     )
 
-                    Log.d(
+                    MusikKuLogger.d(
                         TAG,
                         "===================================="
                     )
@@ -1287,7 +1311,7 @@ class MainActivity : AudioServiceActivity() {
 
                 else -> {
 
-                    Log.w(
+                    MusikKuLogger.w(
                         TAG,
                         "METHOD TIDAK DIKENAL = ${call.method}"
                     )
@@ -1303,7 +1327,7 @@ class MainActivity : AudioServiceActivity() {
         // LOCAL MEDIA CHANNEL
         // ========================================================
 
-        Log.d(TAG, "REGISTER LOCAL MEDIA METHOD CHANNEL")
+        MusikKuLogger.d(TAG, "REGISTER LOCAL MEDIA METHOD CHANNEL")
 
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
@@ -1353,7 +1377,7 @@ class MainActivity : AudioServiceActivity() {
         // EVENT CHANNEL
         // ========================================================
 
-        Log.d(
+        MusikKuLogger.d(
             TAG,
             "REGISTER EVENT CHANNEL"
         )
@@ -1381,22 +1405,22 @@ class MainActivity : AudioServiceActivity() {
                     events: EventChannel.EventSink?
                 ) {
 
-                    Log.d(
+                    MusikKuLogger.d(
                         TAG,
                         "===================================="
                     )
 
-                    Log.d(
+                    MusikKuLogger.d(
                         TAG,
                         "EVENT CHANNEL: FLUTTER MULAI LISTEN"
                     )
 
-                    Log.d(
+                    MusikKuLogger.d(
                         TAG,
                         "EVENT SINK = $events"
                     )
 
-                    Log.d(
+                    MusikKuLogger.d(
                         TAG,
                         "===================================="
                     )
@@ -1416,17 +1440,17 @@ class MainActivity : AudioServiceActivity() {
                     arguments: Any?
                 ) {
 
-                    Log.d(
+                    MusikKuLogger.d(
                         TAG,
                         "===================================="
                     )
 
-                    Log.d(
+                    MusikKuLogger.d(
                         TAG,
                         "EVENT CHANNEL: FLUTTER STOP LISTEN"
                     )
 
-                    Log.d(
+                    MusikKuLogger.d(
                         TAG,
                         "===================================="
                     )
@@ -1444,22 +1468,22 @@ class MainActivity : AudioServiceActivity() {
         // REGISTER PLATFORM VIEW
         // ========================================================
 
-        Log.d(
+        MusikKuLogger.d(
             TAG,
             "===================================="
         )
 
-        Log.d(
+        MusikKuLogger.d(
             TAG,
             "REGISTER YOUTUBE PLATFORM VIEW"
         )
 
-        Log.d(
+        MusikKuLogger.d(
             TAG,
             "VIEW TYPE = musikku/youtube_player"
         )
 
-        Log.d(
+        MusikKuLogger.d(
             TAG,
             "===================================="
         )
@@ -1476,7 +1500,7 @@ class MainActivity : AudioServiceActivity() {
             )
 
 
-        Log.d(
+        MusikKuLogger.d(
             TAG,
             "YOUTUBE PLATFORM VIEW REGISTERED"
         )
@@ -1499,7 +1523,7 @@ class MainActivity : AudioServiceActivity() {
                 PackageManager.PERMISSION_GRANTED
             ) {
 
-                Log.d(
+                MusikKuLogger.d(
                     TAG,
                     "REQUEST NOTIFICATION PERMISSION"
                 )
@@ -1517,7 +1541,7 @@ class MainActivity : AudioServiceActivity() {
 
             } else {
 
-                Log.d(
+                MusikKuLogger.d(
                     TAG,
                     "NOTIFICATION PERMISSION SUDAH ADA"
                 )
@@ -1619,7 +1643,7 @@ class MainActivity : AudioServiceActivity() {
             retriever.setDataSource(this, uri)
             retriever.embeddedPicture
         } catch (e: Exception) {
-            Log.d(TAG, "LOCAL ARTWORK ERROR: ${e.message}")
+            MusikKuLogger.d(TAG, "LOCAL ARTWORK ERROR: ${e.message}")
             null
         } finally {
             try {
@@ -1697,7 +1721,7 @@ class MainActivity : AudioServiceActivity() {
             manager.registerDefaultNetworkCallback(callback)
             qualityNetworkCallback = callback
         } catch (e: Exception) {
-            Log.w(TAG, "Gagal mendaftarkan network callback", e)
+            MusikKuLogger.w(TAG, "Gagal mendaftarkan network callback", e)
         }
     }
 
@@ -1713,7 +1737,7 @@ class MainActivity : AudioServiceActivity() {
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
-        Log.d(TAG, "ACTIVITY CONFIG CHANGED orientation=${newConfig.orientation}")
+        MusikKuLogger.d(TAG, "ACTIVITY CONFIG CHANGED orientation=${newConfig.orientation}")
     }
 
     // ========================================================
@@ -1842,7 +1866,7 @@ class MainActivity : AudioServiceActivity() {
                 )
             )
         } catch (e: Exception) {
-            Log.e(TAG, "GAGAL MENYIAPKAN AUTO-ENTER PIP", e)
+            MusikKuLogger.e(TAG, "GAGAL MENYIAPKAN AUTO-ENTER PIP", e)
         }
     }
 
@@ -1853,7 +1877,7 @@ class MainActivity : AudioServiceActivity() {
         try {
             setPictureInPictureParams(buildPipParams())
         } catch (e: Exception) {
-            Log.e(TAG, "GAGAL MEMPERBARUI TOMBOL PIP", e)
+            MusikKuLogger.e(TAG, "GAGAL MEMPERBARUI TOMBOL PIP", e)
         }
     }
 
@@ -1868,7 +1892,7 @@ class MainActivity : AudioServiceActivity() {
         }
 
         systemPipEntryScheduled = true
-        Log.d(TAG, "MASUK ANDROID SYSTEM PIP LANGSUNG")
+        MusikKuLogger.d(TAG, "MASUK ANDROID SYSTEM PIP LANGSUNG")
         notificationMethodChannel?.invokeMethod("youtubePipWillEnter", null)
 
         try {
@@ -1879,13 +1903,13 @@ class MainActivity : AudioServiceActivity() {
             // which caused the previous if-expression to infer Any and fail
             // compilation when used as a Boolean condition.
             val entered: Boolean = enterPictureInPictureMode(buildPipParams(false))
-            Log.d(TAG, "ANDROID SYSTEM PIP ENTERED=$entered")
+            MusikKuLogger.d(TAG, "ANDROID SYSTEM PIP ENTERED=$entered")
             if (entered) onStarted?.invoke()
             systemPipEntryScheduled = false
             return entered
         } catch (e: Exception) {
             systemPipEntryScheduled = false
-            Log.e(TAG, "GAGAL MASUK ANDROID SYSTEM PIP", e)
+            MusikKuLogger.e(TAG, "GAGAL MASUK ANDROID SYSTEM PIP", e)
             return false
         }
     }
@@ -1900,7 +1924,7 @@ class MainActivity : AudioServiceActivity() {
             return
         }
         if (!enterSystemPipIfPossible()) {
-            Log.d(TAG, "USER LEAVE HINT: system PiP tidak diperlukan")
+            MusikKuLogger.d(TAG, "USER LEAVE HINT: system PiP tidak diperlukan")
         }
     }
 
@@ -1909,7 +1933,7 @@ class MainActivity : AudioServiceActivity() {
     ) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode)
         notificationMethodChannel?.invokeMethod("youtubePipChanged", isInPictureInPictureMode)
-        Log.d(TAG, "YOUTUBE PIP = $isInPictureInPictureMode")
+        MusikKuLogger.d(TAG, "YOUTUBE PIP = $isInPictureInPictureMode")
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             pipHandler.removeCallbacks(pipPoller)
@@ -1927,7 +1951,7 @@ class MainActivity : AudioServiceActivity() {
     // ========================================================
 
     override fun onTrimMemory(level: Int) {
-        Log.w(TAG, "TRIM MEMORY level=$level")
+        MusikKuLogger.w(TAG, "TRIM MEMORY level=$level")
         super.onTrimMemory(level)
     }
 
@@ -1961,7 +1985,7 @@ class MainActivity : AudioServiceActivity() {
         releasePipReceiver()
         audioEffectsController.release()
 
-        Log.d(TAG, "MAIN ACTIVITY DESTROY (isFinishing=$isFinishing)")
+        MusikKuLogger.d(TAG, "MAIN ACTIVITY DESTROY (isFinishing=$isFinishing)")
 
         // Activity benar-benar ditutup (task di-swipe dari recent apps atau
         // Stop dari notifikasi): hentikan musik, lepas player, dan matikan service/notifikasi.

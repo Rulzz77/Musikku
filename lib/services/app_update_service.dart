@@ -67,6 +67,7 @@ class AppUpdateService {
       'https://github.com/Rulzz77/flutter_application_5/releases';
   static const String _latestReleaseApi =
       'https://api.github.com/repos/Rulzz77/flutter_application_5/releases/latest';
+  static const int _maxApkSizeBytes = 250 * 1024 * 1024;
   static const MethodChannel _installerChannel =
       MethodChannel('musikku/app_update');
 
@@ -138,15 +139,24 @@ class AppUpdateService {
       }
     }
 
-    final htmlUrl = (decoded['html_url'] as String? ?? releasesPageUrl).trim();
+    final rawHtmlUrl = (decoded['html_url'] as String? ?? '').trim();
+    final htmlUrl = _isAllowedReleasePage(rawHtmlUrl) ? rawHtmlUrl : releasesPageUrl;
     final rawApkUrl = apkAsset?['browser_download_url'] as String?;
     final safeApkUrl = _isAllowedReleaseAsset(rawApkUrl) ? rawApkUrl : null;
     final sizeValue = apkAsset?['size'];
     final size = sizeValue is int ? sizeValue : int.tryParse('$sizeValue') ?? 0;
+    if (size < 0 || size > _maxApkSizeBytes) {
+      throw const AppUpdateException('Ukuran APK pada metadata rilis tidak wajar.');
+    }
     final digestValue = apkAsset?['digest'] as String?;
-    final sha256Digest = digestValue != null && digestValue.startsWith('sha256:')
-        ? digestValue.substring('sha256:'.length).toLowerCase()
-        : null;
+    String? sha256Digest;
+    if (digestValue != null && digestValue.isNotEmpty) {
+      final match = RegExp(r'^sha256:([0-9a-fA-F]{64})$').firstMatch(digestValue);
+      if (match == null) {
+        throw const AppUpdateException('Digest SHA-256 pada metadata rilis tidak valid.');
+      }
+      sha256Digest = match.group(1)!.toLowerCase();
+    }
     final publishedAtRaw = decoded['published_at'] as String?;
     final notes = (decoded['body'] as String? ?? '').trim();
 
@@ -196,6 +206,9 @@ class AppUpdateService {
         'Rilis belum memiliki URL APK GitHub yang valid.',
       );
     }
+    if (release.apkSize < 0 || release.apkSize > _maxApkSizeBytes) {
+      throw const AppUpdateException('Ukuran APK melebihi batas keamanan 250 MB.');
+    }
 
     final tempDirectory = await getTemporaryDirectory();
     final updateDirectory = Directory('${tempDirectory.path}/apk_updates');
@@ -206,32 +219,34 @@ class AppUpdateService {
       await file.delete();
     }
 
-    final request = http.Request('GET', Uri.parse(url))
-      ..followRedirects = true
-      ..headers['Accept'] = 'application/octet-stream'
-      ..headers['User-Agent'] = 'MusikKu-Updater';
-
-    http.StreamedResponse response;
-    try {
-      response = await _client.send(request).timeout(const Duration(seconds: 45));
-    } on TimeoutException {
-      throw const AppUpdateException('Download APK terlalu lama merespons.');
-    }
+    final response = await _sendVerifiedAssetRequest(url);
 
     if (response.statusCode != 200) {
+      await response.stream.listen((_) {}).cancel();
       throw AppUpdateException('Download APK gagal (HTTP ${response.statusCode}).');
     }
 
     final totalBytes = release.apkSize > 0
         ? release.apkSize
         : response.contentLength ?? 0;
+    if (totalBytes > _maxApkSizeBytes) {
+      await response.stream.listen((_) {}).cancel();
+      throw const AppUpdateException('Ukuran APK melebihi batas keamanan 250 MB.');
+    }
     var received = 0;
     final sink = file.openWrite();
     try {
       onProgress(0, totalBytes);
-      await for (final chunk in response.stream) {
+      await for (final chunk in response.stream.timeout(const Duration(seconds: 20))) {
+        final nextReceived = received + chunk.length;
+        if (nextReceived > _maxApkSizeBytes ||
+            (totalBytes > 0 && nextReceived > totalBytes)) {
+          throw const AppUpdateException(
+            'Ukuran APK melebihi ukuran yang diizinkan. Unduhan dibatalkan.',
+          );
+        }
         sink.add(chunk);
-        received += chunk.length;
+        received = nextReceived;
         onProgress(received, totalBytes);
       }
       await sink.flush();
@@ -305,12 +320,100 @@ class AppUpdateService {
     await _installerChannel.invokeMethod<void>('openReleasesPage');
   }
 
+  /// Follow only the HTTPS redirect hosts used by GitHub Release assets.
+  /// This prevents a compromised/malformed release response from redirecting
+  /// the APK download to an arbitrary host.
+  Future<http.StreamedResponse> _sendVerifiedAssetRequest(String rawUrl) async {
+    var current = Uri.parse(rawUrl);
+    const maxRedirects = 4;
+
+    for (var redirectCount = 0; redirectCount <= maxRedirects; redirectCount++) {
+      final isFirstHop = redirectCount == 0;
+      final validHop = isFirstHop
+          ? _isAllowedReleaseAsset(current.toString())
+          : _isAllowedDownloadRedirect(current);
+      if (!validHop) {
+        throw const AppUpdateException(
+          'URL unduhan/redirect APK tidak termasuk host tepercaya.',
+        );
+      }
+
+      final request = http.Request('GET', current)
+        ..followRedirects = false
+        ..headers['Accept'] = 'application/octet-stream'
+        ..headers['User-Agent'] = 'MusikKu-Updater';
+
+      final http.StreamedResponse response;
+      try {
+        response = await _client.send(request).timeout(const Duration(seconds: 45));
+      } on TimeoutException {
+        throw const AppUpdateException('Download APK terlalu lama merespons.');
+      }
+
+      if (!const <int>{301, 302, 303, 307, 308}.contains(response.statusCode)) {
+        return response;
+      }
+
+      final location = response.headers['location'];
+      await response.stream.listen((_) {}).cancel();
+      if (location == null || location.trim().isEmpty || redirectCount >= maxRedirects) {
+        throw const AppUpdateException('Redirect unduhan APK tidak valid atau terlalu banyak.');
+      }
+
+      final next = current.resolve(location.trim());
+      if (!_isAllowedDownloadRedirect(next)) {
+        throw const AppUpdateException(
+          'GitHub mengarahkan unduhan ke host yang tidak tepercaya.',
+        );
+      }
+      current = next;
+    }
+
+    throw const AppUpdateException('Redirect unduhan APK melebihi batas.');
+  }
+
+  static bool _isAllowedDownloadRedirect(Uri uri) {
+    if (uri.scheme != 'https' ||
+        uri.userInfo.isNotEmpty ||
+        uri.port != 443 ||
+        uri.fragment.isNotEmpty) {
+      return false;
+    }
+
+    if (uri.host == 'github.com') {
+      return uri.path.toLowerCase().startsWith(
+        '/rulzz77/flutter_application_5/releases/download/',
+      );
+    }
+
+    // Current GitHub Release asset delivery domains. Keep this exact allowlist
+    // narrow rather than permitting arbitrary *.githubusercontent.com hosts.
+    return const <String>{
+      'release-assets.githubusercontent.com',
+      'objects.githubusercontent.com',
+      'github-releases.githubusercontent.com',
+    }.contains(uri.host.toLowerCase());
+  }
+
+  static bool _isAllowedReleasePage(String value) {
+    final uri = Uri.tryParse(value);
+    return uri != null &&
+        uri.scheme == 'https' &&
+        uri.host == 'github.com' &&
+        uri.port == 443 &&
+        uri.userInfo.isEmpty &&
+        uri.path.toLowerCase().startsWith('/rulzz77/flutter_application_5/releases');
+  }
+
   static bool _isAllowedReleaseAsset(String? value) {
     if (value == null || value.isEmpty) return false;
     final uri = Uri.tryParse(value);
     return uri != null &&
         uri.scheme == 'https' &&
         uri.host == 'github.com' &&
+        uri.port == 443 &&
+        uri.userInfo.isEmpty &&
+        uri.fragment.isEmpty &&
         uri.path.toLowerCase().startsWith('/rulzz77/flutter_application_5/releases/download/');
   }
 

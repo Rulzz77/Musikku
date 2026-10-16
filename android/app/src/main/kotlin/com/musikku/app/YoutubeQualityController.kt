@@ -1,7 +1,6 @@
 package com.musikku.app
 
 import android.os.Handler
-import android.util.Log
 import android.webkit.WebView
 
 /**
@@ -88,10 +87,10 @@ class YoutubeQualityController(
         fun run() {
             try {
                 webView.evaluateJavascript(script) { value ->
-                    Log.d(TAG, "QUALITY HINT RESULT=$value")
+                    MusikKuLogger.d(TAG, "QUALITY HINT RESULT=$value")
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "QUALITY HINT FAILED", e)
+                MusikKuLogger.e(TAG, "QUALITY HINT FAILED", e)
             }
         }
 

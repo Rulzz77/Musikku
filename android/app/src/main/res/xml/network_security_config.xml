@@ -1,11 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <!-- Keep cleartext disabled everywhere by default. -->
+    <!-- Reject HTTP/cleartext traffic. Use HTTPS for API, streaming, and update requests. -->
     <base-config cleartextTrafficPermitted="false" />
-
-    <!-- Narrow exception for the local audio proxy used by the current build. -->
-    <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="false">127.0.0.1</domain>
-        <domain includeSubdomains="false">localhost</domain>
-    </domain-config>
 </network-security-config>

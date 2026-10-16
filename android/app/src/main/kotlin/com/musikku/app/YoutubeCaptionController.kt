@@ -1,7 +1,6 @@
 package com.musikku.app
 
 import android.os.Handler
-import android.util.Log
 import android.webkit.WebView
 
 /**
@@ -26,9 +25,17 @@ class YoutubeCaptionController(
         val enabled = isEnabled()
         val mode = getLanguage().trim().ifBlank { "id" }
         val vid = getVideoId()
+        val validSpecialMode = mode in setOf("original", "auto:id", "auto:en")
+        val validLanguageCode = Regex("^[A-Za-z]{2,3}(?:[-_][A-Za-z0-9]{2,8})*$").matches(mode)
+        if ((!validSpecialMode && !validLanguageCode) ||
+            !Regex("^[A-Za-z0-9_-]{11}$").matches(vid)) {
+            // These values are interpolated into a JavaScript string below.
+            // Reject unexpected characters instead of trying to escape arbitrary script input.
+            return
+        }
 
-        val safeMode = mode.replace("\\", "\\\\").replace("'", "\\'")
-        val safeVid = vid.replace("\\", "\\\\").replace("'", "\\'")
+        val safeMode = mode
+        val safeVid = vid
 
         val script = if (enabled) {
             """
@@ -136,10 +143,10 @@ class YoutubeCaptionController(
         fun run() {
             try {
                 webView.evaluateJavascript(script) { value ->
-                    Log.d(TAG, "CAPTION RESULT=$value")
+                    if (BuildConfig.DEBUG) MusikKuLogger.d(TAG, "CAPTION RESULT=$value")
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "CAPTION APPLY FAILED", e)
+                if (BuildConfig.DEBUG) MusikKuLogger.e(TAG, "CAPTION APPLY FAILED", e)
             }
         }
 

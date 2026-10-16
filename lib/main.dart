@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show debugPrint, kDebugMode;
 
 import 'app_info.dart';
 import 'pages/startup_page.dart';
@@ -10,6 +11,11 @@ import 'services/app_health_monitor.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Avoid writing playback identifiers, request URLs, or API error details to
+  // production logcat through the many debugPrint diagnostics in the app.
+  if (!kDebugMode) {
+    debugPrint = (String? message, {int? wrapWidth}) {};
+  }
   final health = AppHealthMonitor.instance;
 
   FlutterError.onError = (details) {

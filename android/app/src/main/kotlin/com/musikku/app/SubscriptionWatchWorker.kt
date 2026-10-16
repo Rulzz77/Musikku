@@ -10,7 +10,6 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.Build
-import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -90,7 +89,7 @@ class SubscriptionWatchWorker(
                 workManager.cancelUniqueWork(WORK_PERIODIC)
                 workManager.cancelUniqueWork(WORK_NOW)
                 p.edit().clear().apply()
-                Log.d(TAG, "WATCH DIMATIKAN")
+                MusikKuLogger.d(TAG, "WATCH DIMATIKAN")
                 return
             }
 
@@ -136,7 +135,7 @@ class SubscriptionWatchWorker(
                     .build()
                 workManager.enqueueUniqueWork(WORK_NOW, ExistingWorkPolicy.KEEP, now)
             }
-            Log.d(TAG, "WATCH AKTIF: ${array.length()} channel")
+            MusikKuLogger.d(TAG, "WATCH AKTIF: ${array.length()} channel")
         }
     }
 
@@ -196,7 +195,7 @@ class SubscriptionWatchWorker(
             }
         } catch (e: QuotaExceededException) {
             // Kuota harian habis: berhenti diam-diam, coba lagi di jadwal berikutnya.
-            Log.w(TAG, "KUOTA HABIS, lewati pengecekan ini")
+            MusikKuLogger.w(TAG, "KUOTA HABIS, lewati pengecekan ini")
             return Result.success()
         }
         if (uploads.isEmpty()) return Result.success()
@@ -224,7 +223,7 @@ class SubscriptionWatchWorker(
                 }
             }
         } catch (e: QuotaExceededException) {
-            Log.w(TAG, "KUOTA HABIS saat cek status live")
+            MusikKuLogger.w(TAG, "KUOTA HABIS saat cek status live")
             return Result.success()
         }
 
@@ -273,7 +272,7 @@ class SubscriptionWatchWorker(
             if (sent >= MAX_NOTIFICATIONS_PER_RUN) break
             if (postNotification(upload, live = false)) sent++
         }
-        Log.d(TAG, "CEK SELESAI: live=${toNotifyLive.size} video=${toNotifyVideo.size} terkirim=$sent")
+        MusikKuLogger.d(TAG, "CEK SELESAI: live=${toNotifyLive.size} video=${toNotifyVideo.size} terkirim=$sent")
         return Result.success()
     }
 
@@ -355,7 +354,7 @@ class SubscriptionWatchWorker(
             NotificationManagerCompat.from(appContext).notify(notificationId, builder.build())
             true
         } catch (e: SecurityException) {
-            Log.w(TAG, "NOTIFIKASI DITOLAK", e)
+            MusikKuLogger.w(TAG, "NOTIFIKASI DITOLAK", e)
             false
         }
     }
@@ -391,7 +390,7 @@ class SubscriptionWatchWorker(
         } catch (e: QuotaExceededException) {
             throw e
         } catch (e: Exception) {
-            Log.w(TAG, "HTTP GAGAL: ${e.message}")
+            MusikKuLogger.w(TAG, "HTTP GAGAL: ${e.message}")
             null
         } finally {
             connection?.disconnect()

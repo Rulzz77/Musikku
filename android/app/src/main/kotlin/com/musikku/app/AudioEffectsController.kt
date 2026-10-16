@@ -1,7 +1,6 @@
 package com.musikku.app
 
 import android.media.audiofx.Equalizer
-import android.util.Log
 import java.util.Locale
 
 /**
@@ -29,7 +28,7 @@ class AudioEffectsController {
             // walaupun semua band terlihat 0 dB.
             if (normalized == "flat") {
                 release()
-                Log.d(TAG, "EQ preset=Flat -> output EQ disabled")
+                MusikKuLogger.d(TAG, "EQ preset=Flat -> output EQ disabled")
                 return true
             }
 
@@ -37,10 +36,10 @@ class AudioEffectsController {
             eq.enabled = true
             val configured = applyDevicePreset(eq, normalized)
 
-            Log.d(TAG, "EQ preset=$name applied=$configured")
+            MusikKuLogger.d(TAG, "EQ preset=$name applied=$configured")
             configured
         } catch (e: Throwable) {
-            Log.w(TAG, "Equalizer unsupported: $e")
+            MusikKuLogger.w(TAG, "Equalizer unsupported: $e")
             release()
             false
         }

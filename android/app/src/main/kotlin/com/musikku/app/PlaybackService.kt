@@ -18,7 +18,6 @@ import android.os.Bundle
 import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
-import android.util.Log
 import android.view.KeyEvent
 import java.net.HttpURLConnection
 import java.net.URL
@@ -154,7 +153,7 @@ class PlaybackService : MediaBrowserServiceCompat() {
             if (intent?.action == AudioManager.ACTION_AUDIO_BECOMING_NOISY &&
                 currentPlaying
             ) {
-                Log.d(TAG, "AUDIO BECOMING NOISY -> pause")
+                MusikKuLogger.d(TAG, "AUDIO BECOMING NOISY -> pause")
                 if (isAudioPlayerSource()) {
                     localPlayer?.pause()
                 } else {
@@ -413,7 +412,7 @@ class PlaybackService : MediaBrowserServiceCompat() {
                     val shouldResume = currentPlaying || player.playWhenReady
                     currentPlaying = false
                     currentPositionMs = player.currentPosition.coerceAtLeast(0L)
-                    Log.e(TAG, "AUDIO PLAYER ERROR source=$currentSourceType id=$currentVideoId", error)
+                    MusikKuLogger.e(TAG, "AUDIO PLAYER ERROR source=$currentSourceType id=$currentVideoId", error)
                     emitLocalState("error")
                     updateMediaSession()
                     if (currentSourceType == "youtube_audio") {
@@ -664,7 +663,7 @@ class PlaybackService : MediaBrowserServiceCompat() {
             val bytes = retriever.embeddedPicture ?: return null
             BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
         } catch (e: Exception) {
-            Log.d(TAG, "LOCAL NOTIFICATION ARTWORK ERROR: ${e.message}")
+            MusikKuLogger.d(TAG, "LOCAL NOTIFICATION ARTWORK ERROR: ${e.message}")
             null
         } finally {
             try {
@@ -1093,7 +1092,7 @@ class PlaybackService : MediaBrowserServiceCompat() {
                 BitmapFactory.decodeStream(input)
             }
         } catch (e: Exception) {
-            Log.d(TAG, "NOTIFICATION ARTWORK ERROR: ${e.message}")
+            MusikKuLogger.d(TAG, "NOTIFICATION ARTWORK ERROR: ${e.message}")
             null
         } finally {
             connection?.disconnect()

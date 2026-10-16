@@ -3,7 +3,6 @@ package com.musikku.app
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
-import android.util.Log
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodChannel
 import org.schabi.newpipe.extractor.NewPipe
@@ -53,6 +52,8 @@ internal object NewPipeExtractorBridge {
                     val limit = (call.argument<Number>("limit")?.toInt() ?: 20).coerceIn(1, 30)
                     if (query.isBlank()) {
                         result.error("INVALID_QUERY", "Masukkan kata kunci pencarian.", null)
+                    } else if (query.length > 200 || query.any { it.code < 0x20 }) {
+                        result.error("INVALID_QUERY", "Kata kunci maksimal 200 karakter dan tidak boleh berisi karakter kontrol.", null)
                     } else {
                         runOnWorker(result, "NEWPIPE_SEARCH_FAILED") {
                             search(query, limit)
@@ -84,8 +85,18 @@ internal object NewPipeExtractorBridge {
                 val value = operation()
                 mainHandler.post { result.success(value) }
             } catch (error: Throwable) {
-                Log.e(TAG, "$errorCode: ${error.message ?: error.javaClass.simpleName}", error)
-                val message = (error.message ?: error.javaClass.simpleName).take(600)
+                // Extraction failures may include signed media URLs in messages or stack traces.
+                // Keep detailed diagnostics for debug builds only.
+                val message = if (BuildConfig.DEBUG) {
+                    (error.message ?: error.javaClass.simpleName).take(600)
+                } else {
+                    "Permintaan gagal. Periksa koneksi lalu coba lagi."
+                }
+                if (BuildConfig.DEBUG) {
+                    MusikKuLogger.e(TAG, "$errorCode: ${error.message ?: error.javaClass.simpleName}", error)
+                } else {
+                    MusikKuLogger.w(TAG, "$errorCode (${error.javaClass.simpleName})")
+                }
                 mainHandler.post {
                     result.error(errorCode, message, null)
                 }
@@ -102,7 +113,7 @@ internal object NewPipeExtractorBridge {
             ContentCountry("ID")
         )
         isInitialized = true
-        Log.i(TAG, "NewPipe Extractor initialized")
+        MusikKuLogger.i(TAG, "NewPipe Extractor initialized")
     }
 
     private fun search(query: String, limit: Int): List<Map<String, Any?>> {
@@ -142,8 +153,15 @@ internal object NewPipeExtractorBridge {
         val watchUrl = "https://www.youtube.com/watch?v=$videoId"
         val info = StreamInfo.getInfo(youtubeService, watchUrl)
         val streams: List<AudioStream> = info.audioStreams
-        val directStreams = streams.filter {
-            it.isUrl && it.content.startsWith("https://", ignoreCase = true)
+        val directStreams = streams.filter { stream ->
+            if (!stream.isUrl) return@filter false
+            val uri = runCatching { Uri.parse(stream.content.trim()) }.getOrNull() ?: return@filter false
+            val host = uri.host?.lowercase(Locale.ROOT).orEmpty()
+            uri.scheme.equals("https", ignoreCase = true) &&
+                (host == "googlevideo.com" || host.endsWith(".googlevideo.com")) &&
+                (uri.port == -1 || uri.port == 443) &&
+                uri.encodedAuthority?.contains('@') != true &&
+                uri.fragment.isNullOrEmpty()
         }
         // Prefer M4A/MP4 (typically AAC), which has broad decoder support on
         // Android devices. Use the highest bitrate among compatible formats;
@@ -160,7 +178,7 @@ internal object NewPipeExtractorBridge {
         val url = selected.content.trim()
         if (url.isEmpty()) throw IOException("URL audio dari NewPipe kosong.")
         val suffix = selected.format?.suffix.orEmpty()
-        Log.d(
+        MusikKuLogger.d(
             TAG,
             "Audio stream selected: format=${suffix.ifBlank { "unknown" }}, " +
                 "codec=${selected.codec}, bitrate=${selected.averageBitrate}, " +
@@ -199,11 +217,18 @@ internal object NewPipeExtractorBridge {
         private val client = OkHttpClient.Builder()
             .connectTimeout(18, TimeUnit.SECONDS)
             .readTimeout(22, TimeUnit.SECONDS)
+            .callTimeout(35, TimeUnit.SECONDS)
             .followRedirects(true)
-            .followSslRedirects(true)
+            // Do not follow HTTPS -> HTTP redirects, even if an upstream page asks to.
+            .followSslRedirects(false)
             .build()
 
         override fun execute(request: ExtractorRequest): ExtractorResponse {
+            val requestedUri = runCatching { Uri.parse(request.url()) }.getOrNull()
+                ?: throw IOException("URL extractor tidak valid.")
+            if (!requestedUri.scheme.equals("https", ignoreCase = true) || requestedUri.host.isNullOrBlank()) {
+                throw IOException("Koneksi extractor hanya mengizinkan HTTPS.")
+            }
             val method = request.httpMethod().uppercase(Locale.ROOT)
             val requestBuilder = HttpRequest.Builder().url(request.url())
             val requestHeaders = request.headers().orEmpty()

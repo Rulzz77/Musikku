@@ -18,6 +18,7 @@ import '../pages/youtube_channel_page.dart';
 import '../pages/stats_page.dart';
 import '../pages/app_settings_page.dart';
 import '../pages/local_music_page.dart';
+import '../pages/spotify_library_page.dart';
 import 'channel_avatar.dart';
 import 'live_badge.dart';
 import 'data_usage_card.dart';
@@ -2228,6 +2229,12 @@ class _YoutubeHubState extends State<YoutubeHub> {
         ),
       ],
       spacedCard(
+        'Spotify Library',
+        'Hubungkan Spotify untuk melihat playlist dan daftar lagumu',
+        Icons.library_music_rounded,
+        _openSpotifyLibrary,
+      ),
+      spacedCard(
         'Riwayat dengar',
         '${widget.recentlyPlayed.length} lagu didengarkan di MusikKu',
         Icons.history_rounded,
@@ -2314,6 +2321,24 @@ class _YoutubeHubState extends State<YoutubeHub> {
         builder: (_) => LocalMusicPage(
           onPlayFromList: widget.onPlayFromList,
           onAddToQueue: widget.onAddToQueue,
+        ),
+      ),
+    );
+  }
+
+  void _openSpotifyLibrary() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => SpotifyLibraryPage(
+          onSearchInMusikKu: (track) async {
+            if (!mounted) return;
+            _searchController.text = '${track.name} ${track.artistLabel} official audio';
+            setState(() {
+              _activeChip = -1;
+              _searchMode = 'music';
+            });
+            await _search();
+          },
         ),
       ),
     );

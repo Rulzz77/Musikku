@@ -1,4 +1,3 @@
-
 name: Build and publish MusikKu APK
 
 on:
@@ -23,7 +22,10 @@ concurrency:
 jobs:
   release:
     name: Build APK and publish GitHub Release
+    # Build/release only from main, including manual runs.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 45
 
     steps:
       - name: Checkout source
@@ -38,22 +40,32 @@ jobs:
           VERSION_SPEC="$(sed -n 's/^version:[[:space:]]*//p' pubspec.yaml | head -n 1 | tr -d "\r'\"")"
 
           if [[ -z "$VERSION_SPEC" || "$VERSION_SPEC" != *+* ]]; then
-            echo "::error::Version pubspec.yaml harus berformat contoh 2.5.12+72"
+            echo "::error::Version pubspec.yaml harus berformat contoh 4.4.0+29"
             exit 1
           fi
 
           VERSION_NAME="${VERSION_SPEC%%+*}"
           BUILD_NUMBER="${VERSION_SPEC##*+}"
 
+          if [[ ! "$BUILD_NUMBER" =~ ^[0-9]+$ ]]; then
+            echo "::error::Build number harus berupa angka, ditemukan: $BUILD_NUMBER"
+            exit 1
+          fi
+
           APP_VERSION="$(sed -n "s/^[[:space:]]*const String appVersion = '\([^']*\)';/\1/p" lib/app_info.dart | head -n 1)"
+          APP_BUILD_NUMBER="$(sed -n "s/^[[:space:]]*const String appBuildNumber = '\([^']*\)';/\1/p" lib/app_info.dart | head -n 1)"
 
           if [[ "$APP_VERSION" != "$VERSION_NAME" ]]; then
             echo "::error::Versi pubspec.yaml ($VERSION_NAME) tidak cocok dengan lib/app_info.dart ($APP_VERSION)"
             exit 1
           fi
 
-          TAG="v${VERSION_NAME}"
+          if [[ "$APP_BUILD_NUMBER" != "$BUILD_NUMBER" ]]; then
+            echo "::error::Build number pubspec.yaml ($BUILD_NUMBER) tidak cocok dengan lib/app_info.dart ($APP_BUILD_NUMBER)"
+            exit 1
+          fi
 
+          TAG="v${VERSION_NAME}"
           echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
           echo "build_number=$BUILD_NUMBER" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
@@ -61,7 +73,6 @@ jobs:
           echo "Versi aplikasi: $VERSION_NAME"
           echo "Build number: $BUILD_NUMBER"
           echo "Release tag: $TAG"
-          echo "APK akan selalu dibangun dan dipublikasikan."
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -92,7 +103,11 @@ jobs:
             exit 1
           fi
 
-          echo "$KEYSTORE_BASE64" | base64 --decode > android/app/musikku-upload-key.jks
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > android/app/musikku-upload-key.jks
+          test -s android/app/musikku-upload-key.jks || {
+            echo "::error::Keystore hasil decode kosong. Periksa MUSIKKU_KEYSTORE_BASE64."
+            exit 1
+          }
 
           cat > android/key.properties <<EOF
           storeFile=app/musikku-upload-key.jks
@@ -107,6 +122,10 @@ jobs:
       - name: Build signed release APK
         env:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          # Web OAuth Client ID bukan rahasia; Variables direkomendasikan.
+          # Fallback ke Secrets jika sebelumnya sudah disimpan sebagai secret.
+          YOUTUBE_WEB_CLIENT_ID: ${{ vars.YOUTUBE_WEB_CLIENT_ID || secrets.YOUTUBE_WEB_CLIENT_ID }}
+          SPOTIFY_CLIENT_ID: ${{ vars.SPOTIFY_CLIENT_ID }}
         shell: bash
         run: |
           set -euo pipefail
@@ -116,23 +135,48 @@ jobs:
             exit 1
           fi
 
+          if [[ -z "${YOUTUBE_WEB_CLIENT_ID:-}" ]]; then
+            echo "::error::YOUTUBE_WEB_CLIENT_ID belum diatur. Tambahkan sebagai Repository variable (disarankan) atau Repository secret."
+            exit 1
+          fi
+
+          if [[ "$YOUTUBE_WEB_CLIENT_ID" != *.apps.googleusercontent.com ]]; then
+            echo "::error::Format YOUTUBE_WEB_CLIENT_ID terlihat tidak benar. Gunakan OAuth Client ID bertipe Web application dari Google Cloud Console."
+            exit 1
+          fi
+
+          if [[ -z "${SPOTIFY_CLIENT_ID:-}" ]]; then
+            echo "::error::GitHub Repository Variable SPOTIFY_CLIENT_ID belum diatur."
+            echo "Buat aplikasi Web API di Spotify Developer Dashboard dan simpan Client ID sebagai Variable SPOTIFY_CLIENT_ID."
+            exit 1
+          fi
+
           flutter build apk --release \
-            --dart-define="YOUTUBE_API_KEY=${YOUTUBE_API_KEY}"
+            --dart-define="YOUTUBE_API_KEY=${YOUTUBE_API_KEY}" \
+            --dart-define="YOUTUBE_WEB_CLIENT_ID=${YOUTUBE_WEB_CLIENT_ID}" \
+            --dart-define="SPOTIFY_CLIENT_ID=${SPOTIFY_CLIENT_ID}"
 
       - name: Verify APK output
+        id: apk_info
         shell: bash
         run: |
           set -euo pipefail
 
           APK="build/app/outputs/flutter-apk/app-release.apk"
-
           if [[ ! -s "$APK" ]]; then
             echo "::error::APK tidak ditemukan atau kosong."
             exit 1
           fi
 
+          APK_SIZE="$(stat -c%s "$APK")"
+          APK_SHA256="$(sha256sum "$APK" | awk '{print $1}')"
+          echo "size=$APK_SIZE" >> "$GITHUB_OUTPUT"
+          echo "sha256=$APK_SHA256" >> "$GITHUB_OUTPUT"
+          printf '%s  %s\n' "$APK_SHA256" "$(basename "$APK")" > "${APK}.sha256"
+
           echo "APK berhasil dibuat."
-          echo "Ukuran: $(stat -c%s "$APK") bytes"
+          echo "Ukuran: $APK_SIZE bytes"
+          echo "SHA-256: $APK_SHA256"
 
       - name: Publish APK to GitHub Release
         env:
@@ -145,21 +189,18 @@ jobs:
           set -euo pipefail
 
           APK="build/app/outputs/flutter-apk/app-release.apk"
-
-          NOTES="$(printf 'Automated MusikKu release %s+%s.\n\nAPK dibangun otomatis oleh GitHub Actions dari branch main.' "$VERSION_NAME" "$BUILD_NUMBER")"
+          CHECKSUM="${APK}.sha256"
+          NOTES="$(printf 'Automated MusikKu release %s+%s.\n\nAPK dibangun otomatis oleh GitHub Actions dari branch main.\n\nSHA-256: %s' "$VERSION_NAME" "$BUILD_NUMBER" "${{ steps.apk_info.outputs.sha256 }}")"
 
           if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Release $TAG sudah ada."
-            echo "Mengganti APK lama dengan APK hasil build terbaru."
-
-            gh release upload "$TAG" "$APK" --clobber
+            echo "Release $TAG sudah ada; mengganti asset APK dan checksum dengan hasil build terbaru."
+            gh release upload "$TAG" "$APK" "$CHECKSUM" --clobber
           else
             echo "Membuat release baru: $TAG"
-
-            gh release create "$TAG" "$APK" \
+            gh release create "$TAG" "$APK" "$CHECKSUM" \
               --title "MusikKu $VERSION_NAME" \
               --notes "$NOTES" \
               --target "$GITHUB_SHA"
           fi
 
-          echo "Publikasi APK selesai."
+          echo "Publikasi APK dan checksum selesai."

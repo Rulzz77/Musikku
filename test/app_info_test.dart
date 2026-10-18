@@ -5,6 +5,6 @@ void main() {
   test('app version and build metadata are populated', () {
     expect(appName, 'MusikKu');
     expect(appVersion, '4.6.8');
-    expect(appBuildNumber, '41');
+    expect(appBuildNumber, '42');
   });
 }

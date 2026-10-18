@@ -117,6 +117,10 @@ extension _HomeAudioSettingsUi on _HomePageState {
   void _showAudioSettingsSheet() {
     var crossfadePreview = _crossfadeSeconds;
     var volumePreview = _playerVolumePercent;
+    final customBands = <double>[0, 0, 0, 0, 0];
+    var customBandsLoaded = false;
+    const customBandsPrefKey = 'equalizer_manual_bands_v1';
+    const bandLabels = <String>['60 Hz', '230 Hz', '910 Hz', '3.6 kHz', '14 kHz'];
     const presets = <({String name, String detail})>[
       (name: 'Flat', detail: 'Suara netral'),
       (name: 'Bass Boost', detail: 'Bass lebih terasa'),
@@ -135,6 +139,22 @@ extension _HomeAudioSettingsUi on _HomePageState {
       builder: (sheetContext) => StatefulBuilder(
         builder: (context, setSheetState) {
           final scheme = Theme.of(context).colorScheme;
+          if (!customBandsLoaded) {
+            customBandsLoaded = true;
+            unawaited(() async {
+              try {
+                final prefs = await SharedPreferences.getInstance();
+                final saved = prefs.getStringList(customBandsPrefKey);
+                if (saved != null && saved.length == 5 && context.mounted) {
+                  setSheetState(() {
+                    for (var i = 0; i < 5; i++) {
+                      customBands[i] = (double.tryParse(saved[i]) ?? 0).clamp(-12, 12).toDouble();
+                    }
+                  });
+                }
+              } catch (_) {}
+            }());
+          }
           return SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
             child: Column(
@@ -175,6 +195,62 @@ extension _HomeAudioSettingsUi on _HomePageState {
                 Text(
                   presets.firstWhere((item) => item.name == _equalizerPreset, orElse: () => presets.first).detail,
                   style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11.5),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    const Expanded(child: Text('Equalizer manual 5-band', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800))),
+                    Text('±12 dB', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11)),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                for (var band = 0; band < customBands.length; band++)
+                  Row(
+                    children: [
+                      SizedBox(width: 54, child: Text(bandLabels[band], style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant))),
+                      Expanded(
+                        child: Slider(
+                          value: customBands[band],
+                          min: -12,
+                          max: 12,
+                          divisions: 24,
+                          label: '${customBands[band].toStringAsFixed(0)} dB',
+                          onChanged: (value) => setSheetState(() => customBands[band] = value),
+                          onChangeEnd: (_) async {
+                            var applied = false;
+                            try {
+                              applied = await _youtubeController.setEqualizerBands(customBands);
+                              final prefs = await SharedPreferences.getInstance();
+                              await prefs.setStringList(customBandsPrefKey, customBands.map((v) => v.toString()).toList());
+                            } catch (_) {}
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                content: Text(applied ? 'Equalizer manual diterapkan' : 'Equalizer manual belum didukung oleh output perangkat ini'),
+                                duration: const Duration(seconds: 2),
+                              ));
+                            }
+                          },
+                        ),
+                      ),
+                      SizedBox(width: 42, child: Text('${customBands[band] >= 0 ? '+' : ''}${customBands[band].toStringAsFixed(0)}', textAlign: TextAlign.end, style: const TextStyle(fontSize: 11))),
+                    ],
+                  ),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    onPressed: () async {
+                      setSheetState(() { for (var i = 0; i < customBands.length; i++) { customBands[i] = 0; } });
+                      var applied = false;
+                      try {
+                        applied = await _youtubeController.setEqualizerBands(customBands);
+                        final prefs = await SharedPreferences.getInstance();
+                        await prefs.setStringList(customBandsPrefKey, customBands.map((v) => v.toString()).toList());
+                      } catch (_) {}
+                      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(applied ? 'Equalizer manual direset' : 'Reset tersimpan di tampilan; output perangkat tidak mendukung EQ manual')));
+                    },
+                    icon: const Icon(Icons.restart_alt_rounded, size: 18),
+                    label: const Text('Reset band'),
+                  ),
                 ),
                 const SizedBox(height: 22),
                 Row(

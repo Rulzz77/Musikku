@@ -535,6 +535,22 @@ class NativeYoutubeController {
     return result == true;
   }
 
+  /// Apply five manual EQ bands in dB (-12..+12). Android may report false
+  /// when the current device/output mix does not support an output EQ.
+  Future<bool> setEqualizerBands(List<double> bandsDb) async {
+    final safeBands = List<double>.generate(
+      5,
+      (index) => (index < bandsDb.length ? bandsDb[index] : 0.0)
+          .clamp(-12.0, 12.0)
+          .toDouble(),
+    );
+    final result = await _methods.invokeMethod<dynamic>(
+      'setEqualizerBands',
+      {'bandsDb': safeBands},
+    );
+    return result == true;
+  }
+
   // ========================================================
   // CURRENT TIME
   // ========================================================

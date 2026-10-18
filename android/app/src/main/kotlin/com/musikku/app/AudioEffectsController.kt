@@ -109,6 +109,34 @@ class AudioEffectsController {
     }
 
     @Synchronized
+    fun applyManualBands(levelsDb: List<Double>): Boolean {
+        return try {
+            val eq = equalizer ?: Equalizer(0, 0).also { equalizer = it }
+            val bands = eq.numberOfBands.toInt()
+            if (bands <= 0) return false
+            val range = eq.bandLevelRange
+            val min = range[0].toInt()
+            val max = range[1].toInt()
+            eq.enabled = true
+            for (band in 0 until bands) {
+                // Map device band count to the five UI bands, even if hardware
+                // exposes a different number of bands.
+                val sourceIndex = if (bands == 1) 2 else
+                    (band.toDouble() * 4.0 / (bands - 1)).toInt().coerceIn(0, 4)
+                val db = levelsDb.getOrElse(sourceIndex) { 0.0 }.coerceIn(-12.0, 12.0)
+                val levelMb = (db * 100.0).toInt().coerceIn(min, max).toShort()
+                eq.setBandLevel(band.toShort(), levelMb)
+            }
+            MusikKuLogger.d(TAG, "EQ manual bands applied count=$bands")
+            true
+        } catch (e: Throwable) {
+            MusikKuLogger.w(TAG, "Manual equalizer unsupported: $e")
+            release()
+            false
+        }
+    }
+
+    @Synchronized
     fun release() {
         try {
             equalizer?.enabled = false

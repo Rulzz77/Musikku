@@ -58,7 +58,8 @@ class _LyricsPanelState extends State<LyricsPanel> {
     _lastIndex = index;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_scroll.hasClients) return;
-      final target = (index * 54.0) - 105.0;
+      final viewport = _scroll.position.viewportDimension;
+      final target = (index * 58.0) - (viewport / 2) + 26.0;
       _scroll.animateTo(
         target.clamp(0.0, _scroll.position.maxScrollExtent).toDouble(),
         duration: const Duration(milliseconds: 220),
@@ -99,7 +100,7 @@ class _LyricsPanelState extends State<LyricsPanel> {
 
     final lyricList = ListView.builder(
       controller: _scroll,
-      padding: const EdgeInsets.fromLTRB(12, 4, 12, 18),
+      padding: const EdgeInsets.fromLTRB(20, 72, 20, 72),
       itemCount: widget.lyrics.length,
       itemBuilder: (context, index) {
         final line = widget.lyrics[index];
@@ -112,20 +113,19 @@ class _LyricsPanelState extends State<LyricsPanel> {
             margin: const EdgeInsets.symmetric(vertical: 2),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
-              color: active
-                  ? scheme.primaryContainer.withValues(alpha: 0.72)
-                  : Colors.transparent,
+              color: Colors.transparent,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(
               line.text,
+              textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: active ? 18 : 15,
-                height: 1.28,
+                fontSize: active ? 23 : 17,
+                height: 1.32,
                 fontWeight: active ? FontWeight.w900 : FontWeight.w600,
                 color: active
-                    ? scheme.onPrimaryContainer
-                    : scheme.onSurfaceVariant,
+                    ? scheme.primary
+                    : scheme.onSurfaceVariant.withValues(alpha: index < current ? 0.55 : 0.82),
               ),
             ),
           ),
@@ -155,7 +155,7 @@ class _LyricsPanelState extends State<LyricsPanel> {
           : const EdgeInsets.fromLTRB(14, 8, 14, 8),
       clipBehavior: Clip.antiAlias,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 12, 10, 6),

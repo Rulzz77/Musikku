@@ -919,6 +919,10 @@ class MainActivity : AudioServiceActivity() {
                     val preset = call.argument<String>("preset") ?: "Flat"
                     result.success(audioEffectsController.applyPreset(preset))
                 }
+                "setEqualizerBands" -> {
+                    val rawBands = call.argument<List<Number>>("bandsDb") ?: emptyList()
+                    result.success(audioEffectsController.applyManualBands(rawBands.map { it.toDouble() }))
+                }
 
 
                 "getNetworkType" -> {

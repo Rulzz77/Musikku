@@ -1,4 +1,4 @@
-# MusikKu 4.7.8 — Build 51
+# MusikKu 4.8.0 — Build 55
 
 Source Flutter + Android. Build 49 focuses on playlist organization and safer queue editing.
 
@@ -45,3 +45,9 @@ CI tetap perlu menjalankan `flutter analyze`, `flutter test`, dan `flutter build
 
 
 Build 52 hotfix: explicit import for `ValueListenable` in the custom playlist page.
+
+
+## Perbaikan sesi login Build 55
+- Migrasi ke `google_sign_in 6.3.0` dan `signInSilently()` untuk mencoba memulihkan akun Android tanpa pemilih akun setiap membuka aplikasi.
+- Aplikasi mencoba pemulihan tanpa bergantung pada email tersimpan; jika pengguna sengaja logout, flag lokal mencegah auto-restore.
+- Metadata versi: `4.8.1+55`.

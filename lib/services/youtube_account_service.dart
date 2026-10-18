@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -79,26 +80,23 @@ class YoutubeAccountService {
   static const _scopeManage = 'https://www.googleapis.com/auth/youtube';
   static const _base = 'https://www.googleapis.com/youtube/v3';
   static const _sessionOkKey = 'youtube_session_ok';
+  static const _explicitSignOutKey = 'youtube_user_explicitly_signed_out';
 
   /// Dipakai untuk data publik (channel, video, playlist upload) saat pengguna
   /// belum login, jadi halaman channel bisa dibuka tanpa akun Google.
   static const String _apiKey = String.fromEnvironment('YOUTUBE_API_KEY');
 
-  /// SEMUA scope diminta sekaligus dalam satu layar izin. Sebelumnya login
-  /// meminta readonly, lalu tombol "Izinkan" meminta scope lain, sementara
-  /// pemanggilan API memeriksa scope yang berbeda lagi, sehingga izin diminta
-  /// berulang dan login terlihat gagal.
+  /// Minta scope YouTube saat login mobile. Di Android versi plugin 7.x
+  /// memakai Credential Manager yang tidak menjamin silent re-auth; versi 6.3
+  /// menyediakan signInSilently() yang didesain untuk memulihkan sesi tanpa UI.
   static const _allScopes = <String>[_scopeReadonly, _scopeManage];
 
-  final GoogleSignIn _signIn = GoogleSignIn.instance;
+  late final GoogleSignIn _signIn;
   GoogleSignInAccount? _user;
   bool _initialized = false;
-  Future<void> _authorizationTail = Future<void>.value();
   Future<void> _sessionTail = Future<void>.value();
-  StreamSubscription<GoogleSignInAuthenticationEvent>? _authEventsSubscription;
-  bool _interactiveAuthorizationAllowed = false;
+  StreamSubscription<GoogleSignInAccount?>? _currentUserSubscription;
   bool _readonlyAuthorizationGranted = false;
-  Completer<GoogleSignInAccount?>? _lightweightRestoreCompleter;
 
   GoogleSignInAccount? get user => _user;
   bool get isSignedIn => _user != null;
@@ -114,139 +112,99 @@ class YoutubeAccountService {
         'atau konfigurasikan OAuth Web client ID untuk package com.musikku.app.',
       );
     }
-    await _signIn.initialize(serverClientId: serverClientId);
 
-    _authEventsSubscription ??= _signIn.authenticationEvents.listen(
-      (event) {
-        if (event is GoogleSignInAuthenticationEventSignIn) {
-          _user = event.user;
-          // Restore event dapat datang setelah attemptLightweightAuthentication
-          // selesai. Cek readonly authorization tanpa memunculkan UI.
-          unawaited(_refreshRestoredAuthorization(event.user));
-          // google_sign_in 7.x menganjurkan stream authenticationEvents sebagai
-          // sumber kebenaran state sign-in. attemptLightweightAuthentication()
-          // boleh mengembalikan null sementara event sign-in tetap dikirim.
-          final completer = _lightweightRestoreCompleter;
-          if (completer != null && !completer.isCompleted) {
-            completer.complete(event.user);
-          }
-        } else if (event is GoogleSignInAuthenticationEventSignOut) {
-          _user = null;
-          _readonlyAuthorizationGranted = false;
-          unawaited(_clearRememberedUser());
-        }
-      },
+    _signIn = GoogleSignIn(
+      scopes: _allScopes,
+      serverClientId: serverClientId,
+    );
+    _currentUserSubscription ??= _signIn.onCurrentUserChanged.listen(
+      (account) => unawaited(_handleCurrentUserChanged(account)),
       onError: (_) {},
     );
-
     _initialized = true;
   }
 
-  Future<void> _refreshRestoredAuthorization(GoogleSignInAccount account) async {
-    try {
-      final authorization = await account.authorizationClient.authorizationForScopes(<String>[_scopeReadonly]);
-      if (identical(_user, account)) {
-        _readonlyAuthorizationGranted = authorization != null;
+  Future<void> _handleCurrentUserChanged(GoogleSignInAccount? account) async {
+    if (account != null) {
+      _user = account;
+      // In Android the configured OAuth scopes are requested during sign-in.
+      _readonlyAuthorizationGranted = true;
+      try {
+        await _rememberUser(account);
+        await _setSessionOk(true);
+        await _setExplicitSignOut(false);
+      } catch (_) {
+        // Account state is still usable for this process; persistence can retry
+        // on the next successful restore.
       }
-    } catch (_) {
-      // Jangan tampilkan UI di background. Fitur yang butuh authorization
-      // interaktif akan memintanya saat user menekan aksinya.
+      return;
+    }
+
+    // A null stream value is also emitted during initial bootstrap. Preserve
+    // saved identity unless an account was actually active in this process.
+    final hadActiveUser = _user != null;
+    _user = null;
+    _readonlyAuthorizationGranted = false;
+    if (hadActiveUser) {
+      try {
+        await _setExplicitSignOut(true);
+        await _clearRememberedUser();
+      } catch (_) {
+        // Do not crash the authentication stream because local cleanup failed.
+      }
     }
   }
 
   Future<GoogleSignInAccount> signIn() async {
     return _serializeSession(() async {
       await _ensureInitialized();
-      if (!_signIn.supportsAuthenticate()) {
-        throw StateError('Google Sign-In tidak tersedia pada platform ini.');
+      final account = await _signIn.signIn();
+      if (account == null) {
+        throw StateError('Login Google dibatalkan.');
       }
-
-      // Authentication dan authorization dipisahkan. Berhasil memilih akun
-      // Google harus tetap dianggap login, meskipun scope YouTube belum bisa
-      // diberikan pada saat yang sama. Kalau consent gagal/dibatalkan, user
-      // tidak dikeluarkan lagi sehingga tidak masuk loop login setiap buka app.
-      final account = await _signIn.authenticate();
       _user = account;
+      _readonlyAuthorizationGranted = true;
       await _rememberUser(account);
       await _setSessionOk(true);
-
-      _interactiveAuthorizationAllowed = true;
-      try {
-        await _authorize(<String>[_scopeReadonly]);
-        _readonlyAuthorizationGranted = true;
-      } catch (e) {
-        _readonlyAuthorizationGranted = false;
-        // Jangan signOut. UI akan menampilkan tombol "Izinkan" dan hanya
-        // meminta consent ketika user benar-benar memakai fitur akun.
-        // Authentication Google sendiri sudah sukses.
-      } finally {
-        _interactiveAuthorizationAllowed = false;
-      }
-
+      await _setExplicitSignOut(false);
       return account;
     });
   }
 
-  /// Memulihkan sesi login TANPA menampilkan popup apa pun.
-  ///
-  /// Jangan bergantung pada nilai Future dari attemptLightweightAuthentication()
-  /// saja: pada google_sign_in 7.x, state yang benar harus diambil dari
-  /// authenticationEvents, dan Future-nya bisa bernilai null walaupun event
-  /// sign-in tetap diterbitkan.
+  /// Restore the last Google account without opening an interactive login flow.
+  /// Unlike google_sign_in 7.x's Android Credential Manager path, the 6.3.0
+  /// API exposes signInSilently() for this purpose. Always attempt it: a prior
+  /// app version may already have removed the saved email marker on startup.
   Future<void> tryRestoreSession() async {
     await _serializeSession(() async {
       if (_user != null) return;
-      final remembered = await hasRestorableSession();
-      if (!remembered) return;
       await _ensureInitialized();
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool(_explicitSignOutKey) ?? false) return;
 
-      final restoreCompleter = Completer<GoogleSignInAccount?>();
-      _lightweightRestoreCompleter = restoreCompleter;
       try {
-        GoogleSignInAccount? restored;
-        try {
-          restored = await _signIn.attemptLightweightAuthentication();
-        } catch (_) {
-          restored = null;
-        }
-
-        // Nilai Future boleh null walaupun authenticationEvents mengirim
-        // event SignIn sesudahnya. Beri event stream kesempatan menyelesaikan
-        // restore, tetapi jangan pernah menampilkan UI login otomatis.
-        if (_user == null && restored == null) {
-          try {
-            _user = await restoreCompleter.future.timeout(
-              const Duration(milliseconds: 1800),
-            );
-          } on TimeoutException {
-            // Tidak ada akun yang bisa dipulihkan secara diam-diam.
-          }
-        } else if (_user == null && restored != null) {
-          _user = restored;
-        }
-
-        if (_user != null) {
-          await _rememberUser(_user!);
+        final restored = await _signIn.signInSilently(suppressErrors: true);
+        final account = restored ?? _signIn.currentUser ?? _user;
+        if (account != null) {
+          _user = account;
+          _readonlyAuthorizationGranted = true;
+          await _rememberUser(account);
           await _setSessionOk(true);
-          final authorization = await _user!.authorizationClient
-              .authorizationForScopes(<String>[_scopeReadonly]);
-          _readonlyAuthorizationGranted = authorization != null;
+          await _setExplicitSignOut(false);
         }
-      } finally {
-        _lightweightRestoreCompleter = null;
+        // If restore fails, keep the saved identity for the UI and try again
+        // next launch instead of deleting the account marker.
+      } catch (_) {
+        // Silent restore must never open a login UI or break app startup.
       }
     });
   }
 
-  /// true kalau sebelumnya login + izin YouTube sudah selesai dengan sukses,
-  /// jadi aman dipulihkan diam-diam saat aplikasi dibuka.
+  /// Dipertahankan untuk UI yang menampilkan akun terakhir yang diingat.
   Future<bool> hasRestorableSession() async {
     final prefs = await SharedPreferences.getInstance();
-    // Identitas akun yang pernah berhasil login cukup untuk mencoba
-    // lightweight authentication lagi. Status scope boleh kadaluarsa/revoke
-    // tanpa memaksa pengguna memilih akun Google dari awal.
     final email = prefs.getString('youtube_last_account_email') ?? '';
-    return email.isNotEmpty;
+    return email.isNotEmpty && !(prefs.getBool(_explicitSignOutKey) ?? false);
   }
 
   Future<void> _setSessionOk(bool value) async {
@@ -254,9 +212,17 @@ class YoutubeAccountService {
     await prefs.setBool(_sessionOkKey, value);
   }
 
+  Future<void> _setExplicitSignOut(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_explicitSignOutKey, value);
+  }
+
   Future<void> signOut() async {
     await _serializeSession(() async {
       await _ensureInitialized();
+      // Mark this as a deliberate logout before the plugin emits a null account
+      // event, preventing silent restore from signing the user straight back in.
+      await _setExplicitSignOut(true);
       await _signIn.signOut();
       _user = null;
       _readonlyAuthorizationGranted = false;
@@ -278,48 +244,30 @@ class YoutubeAccountService {
     }();
   }
 
-  Future<GoogleSignInClientAuthorization> _authorize(List<String> scopes) {
-    final previous = _authorizationTail;
-    final done = Completer<void>();
-    _authorizationTail = done.future;
-    return () async {
-      await previous;
-      try {
-        final account = _user;
-        if (account == null) {
-          throw StateError('Belum login ke Google.');
-        }
-        var authorization = await account.authorizationClient.authorizationForScopes(scopes);
-        if (authorization == null) {
-          if (!_interactiveAuthorizationAllowed) {
-            throw StateError('YOUTUBE_AUTH_REQUIRED');
-          }
-          authorization = await account.authorizationClient.authorizeScopes(scopes);
-        }
-        return authorization;
-      } finally {
-        done.complete();
-      }
-    }();
+  Future<void> _authorize() async {
+    await _ensureInitialized();
+    if (_user == null) {
+      throw StateError('Belum login ke Google.');
+    }
+    // For Android, google_sign_in 6.3 authorizes requested scopes as part of
+    // native sign-in. The constructor requests both YouTube scopes up front.
+    _readonlyAuthorizationGranted = true;
   }
 
   Future<bool> authorizeYouTubeAccess() async {
     return _serializeSession(() async {
       await _ensureInitialized();
       if (_user == null) return false;
-      _interactiveAuthorizationAllowed = true;
       try {
-        await _authorize(_allScopes);
-        _readonlyAuthorizationGranted = true;
-        return true;
-      } finally {
-        _interactiveAuthorizationAllowed = false;
+        final authentication = await _user!.authentication;
+        return authentication.accessToken?.isNotEmpty ?? false;
+      } catch (_) {
+        return false;
       }
     });
   }
 
-  /// Dipanggil dari tap pengguna (mis. tombol Subscribe) saat butuh akun:
-  /// pulihkan sesi lama kalau ada, kalau tidak tampilkan pemilih akun Google.
+  /// Restore a saved session first; otherwise start interactive sign-in after a user tap.
   Future<void> ensureSignedIn() async {
     await tryRestoreSession();
     if (_user == null) {
@@ -352,11 +300,17 @@ class YoutubeAccountService {
 
   Future<String> _accessToken({required bool write}) async {
     await _ensureInitialized();
-    if (_user == null) {
+    final account = _user;
+    if (account == null) {
       throw StateError('Silakan login Google terlebih dahulu.');
     }
-    final authorization = await _authorize(_allScopes);
-    return authorization.accessToken;
+    await _authorize();
+    final authentication = await account.authentication;
+    final token = authentication.accessToken;
+    if (token == null || token.isEmpty) {
+      throw StateError('Token Google belum tersedia. Buka akun dan login kembali.');
+    }
+    return token;
   }
 
   Future<Map<String, dynamic>> _get(
@@ -938,8 +892,8 @@ class YoutubeAccountService {
     return '';
   }
   Future<void> dispose() async {
-    await _authEventsSubscription?.cancel();
-    _authEventsSubscription = null;
+    await _currentUserSubscription?.cancel();
+    _currentUserSubscription = null;
   }
 }
 
@@ -951,19 +905,19 @@ String describeLoginError(Object e) {
     }
     return e.message;
   }
-  if (e is GoogleSignInException) {
-    final code = e.code.name;
-    final detail = (e.description ?? '').trim();
-    if (code == 'canceled') {
-      return 'Login dibatalkan atau ditolak Google. Kalau kamu tidak '
-          'membatalkannya, biasanya konfigurasi OAuth belum cocok: cek SHA-1 '
-          'dan package com.musikku.app di Google Cloud, Web Client ID, dan '
-          'pastikan akunmu terdaftar sebagai test user.'
+  // google_sign_in 6.3 exposes native sign-in failures as PlatformException;
+  // The newer 7.x exception type is not part of this dependency version.
+  if (e is PlatformException) {
+    final code = e.code;
+    final detail = (e.message ?? '').trim();
+    if (code == 'sign_in_canceled' || code == 'sign_in_cancelled' || code == 'canceled') {
+      return 'Login dibatalkan atau ditolak Google.'
           '${detail.isEmpty ? '' : ' ($detail)'}';
     }
-    if (code == 'clientConfigurationError' || code == 'providerConfigurationError') {
-      return 'Konfigurasi Google Sign-In salah ($code). Cek SHA-1, package '
-          'com.musikku.app, dan Web Client ID.${detail.isEmpty ? '' : ' ($detail)'}';
+    if (code == 'sign_in_failed' || code == 'sign_in_required' || code == '10') {
+      return 'Login Google gagal ($code). Cek SHA-1, package '
+          'com.musikku.app, Web Client ID, dan konfigurasi OAuth.'
+          '${detail.isEmpty ? '' : ' ($detail)'}';
     }
     return 'Login gagal ($code).${detail.isEmpty ? '' : ' $detail'}';
   }

@@ -1,7 +1,7 @@
 name: flutter_application_5
 description: "MusikKu - pemutar musik Android."
 publish_to: 'none'
-version: 4.7.8+52
+version: 4.8.1+55
 
 environment:
   sdk: ^3.13.4
@@ -16,7 +16,7 @@ dependencies:
   # kecuali MainActivity diganti.
   audio_service: ^0.18.19
   flutter_local_notifications: ^22.3.1
-  google_sign_in: ^7.2.0
+  google_sign_in: ^6.3.0
   http: ^1.5.0
   path_provider: ^2.1.6
   shared_preferences: ^2.5.5

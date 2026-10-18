@@ -58,7 +58,11 @@ void main() {
     expect(find.text('Pembaruan MusikKu'), findsOneWidget);
     expect(find.text('Pembaruan tersedia • v99.0.0'), findsOneWidget);
 
-    await tester.pageBack();
+    // The updater is a Material modal bottom sheet, not a Cupertino page.
+    // Pop the modal route directly instead of tester.pageBack(), which expects
+    // a CupertinoNavigationBarBackButton to be present in the widget tree.
+    final sheetContext = tester.element(find.text('Pembaruan MusikKu'));
+    Navigator.of(sheetContext).pop();
     await tester.pumpAndSettle();
 
     // The same automatic release prompt must not reappear after being dismissed.

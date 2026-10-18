@@ -439,7 +439,7 @@ class _YoutubeHubState extends State<YoutubeHub> {
             itemBuilder: (context, index) {
               final actions = <({String title, String subtitle, IconData icon, VoidCallback onTap})>[
                 (title: 'Mix favorit', subtitle: '${widget.favorites.length} lagu tersimpan', icon: Icons.auto_awesome_rounded, onTap: _playFavoritesMix),
-                (title: 'Musik lokal', subtitle: 'File di perangkat', icon: Icons.folder_music_rounded, onTap: _openLocalMusic),
+                (title: 'Musik lokal', subtitle: 'File di perangkat', icon: Icons.library_music_rounded, onTap: _openLocalMusic),
                 (title: 'Riwayat', subtitle: '${widget.recentlyPlayed.length} lagu terakhir', icon: Icons.history_rounded, onTap: _openRecentHistory),
                 (title: 'Radio', subtitle: 'Temukan lagu serupa', icon: Icons.radio_rounded, onTap: _startRadioFromCollection),
               ];
@@ -2381,7 +2381,7 @@ class _YoutubeHubState extends State<YoutubeHub> {
               _libraryQuickTile(
                 title: 'Musik lokal',
                 subtitle: 'File di perangkat',
-                icon: Icons.folder_music_rounded,
+                icon: Icons.library_music_rounded,
                 onTap: _openLocalMusic,
               ),
               _libraryQuickTile(

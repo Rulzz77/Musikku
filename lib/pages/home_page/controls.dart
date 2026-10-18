@@ -250,7 +250,7 @@ extension _HomeControls on _HomePageState {
 
     if (!fromAutoNext) {
       unawaited(_recordManualSkipIfNeeded());
-      _lastHandledEndedVideoId = '';
+      _playbackSessionGuard.resetEndedEvent();
     }
 
     final isShuffle = _playerUiState.value.isShuffle;

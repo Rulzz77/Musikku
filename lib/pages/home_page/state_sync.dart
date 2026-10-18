@@ -130,7 +130,7 @@ extension _HomeStateSync on _HomePageState {
     // Lagu diputar lagi (mis. Play setelah lagu terakhir selesai) →
     // "ended" berikutnya harus bisa diproses lagi.
     if (state.isPlaying) {
-      _lastHandledEndedVideoId = '';
+      _playbackSessionGuard.resetEndedEvent();
     }
 
     _maybeStartAutoCrossfade(state);
@@ -148,7 +148,7 @@ extension _HomeStateSync on _HomePageState {
         state.videoId.isNotEmpty ? state.videoId : currentVideoId;
 
     // Tidak ada ID / sedang pindah lagu.
-    if (endedVideoId.isEmpty || _isChangingTrack) {
+    if (endedVideoId.isEmpty || _playbackSessionGuard.isChangingTrack) {
       return;
     }
 
@@ -166,12 +166,11 @@ extension _HomeStateSync on _HomePageState {
     }
 
     // Event ended yang sama sudah diproses / masih diproses.
-    if (endedVideoId == _lastHandledEndedVideoId || _isAutoNextProcessing) {
+    // Claim before starting async work; duplicate native callbacks cannot
+    // advance the queue more than once for the same end event.
+    if (!_playbackSessionGuard.tryClaimEndedEvent(endedVideoId)) {
       return;
     }
-
-    // Tandai sebelum async.
-    _lastHandledEndedVideoId = endedVideoId;
 
     unawaited(_handleAutoNext(endedVideoId));
   }

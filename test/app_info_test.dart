@@ -4,7 +4,7 @@ import 'package:flutter_application_5/app_info.dart';
 void main() {
   test('app version and build metadata are populated', () {
     expect(appName, 'MusikKu');
-    expect(appVersion, '4.8.5');
-    expect(appBuildNumber, '59');
+    expect(appVersion, '4.8.8');
+    expect(appBuildNumber, '62');
   });
 }

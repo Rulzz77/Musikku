@@ -1,61 +1,10 @@
-# MusikKu 4.8.4 — Build 58
+# MusikKu 4.8.8 — Build 62
 
-Source Flutter + Android. Build 49 focuses on playlist organization and safer queue editing.
+Build 62 is an architecture/reliability pass based on Build 60 library behavior. It introduces an explicit YouTube library API interface, repository/cache boundaries, request generation guards, and feature-oriented part files for the YouTube hub.
 
-## Perubahan Build 49
-- Menambahkan **Playlist pintar** yang dihitung dari data lokal: Mix Favorit, Baru Diputar, Paling Sering Diputar (saat statistik tersedia), dan Putar Lagi. Daftar dihitung ulang dari favorit, riwayat, katalog lagu yang dikenal, dan statistik pemutaran; tidak membuat salinan data persisten baru.
-- Menambahkan layar **Playlist MusikKu** di menu Koleksi. Pengguna dapat membuat, mengganti nama, menghapus playlist, menambahkan beberapa lagu dari favorit/riwayat/daftar yang sedang dimuat, memutar playlist/lagu, menghapus lagu, dan drag-and-drop urutan lagu. Urutan disimpan melalui storage playlist yang sudah ada.
-- Menambahkan **Undo** untuk penghapusan satu lagu dari antrean dan pengosongan antrean. Item dipulihkan pada posisi sebelumnya, menolak ID duplikat, dan tidak menghapus item baru yang ditambahkan setelah aksi awal.
-- Mempertahankan drag-and-drop antrean yang sudah tersedia, serta menguji pemulihan queue dan urutan playlist.
-- Metadata versi: `4.7.5+49`.
+## Validate the build
+1. Upload this source to the repository's `main` branch or run the configured workflow manually.
+2. Ensure `flutter analyze`, `flutter test`, and release APK jobs all pass.
+3. Install the resulting APK and verify account restore, account switching/logout, collection cache, playlist opening, and explore/home refreshes.
 
-## Verifikasi sebelum rilis
-
-Jalankan di lingkungan yang memiliki Flutter SDK dan Android SDK:
-
-```bash
-flutter pub get
-flutter analyze
-flutter test
-flutter build apk --release
-```
-
-Uji perangkat yang disarankan: buka Koleksi → Playlist MusikKu; buat playlist, tambahkan lagu dari menu lagu, ubah urutan, tutup dan buka kembali aplikasi; uji Undo setelah menghapus satu lagu dari antrean; kosongkan antrean lalu Undo; tambahkan lagu baru sebelum Undo dan pastikan tidak hilang; pastikan playlist pintar kosong atau berisi lagu sesuai data yang tersedia.
-
-Laporan terpisah ada pada `CHANGELOG.md`, `FEATURE-AUDIT.md`, `VALIDATION-REPORT.md`, dan `UI-REGRESSION-AUDIT.md`.
-
-
-## Perbaikan Build 49
-- Memperbaiki import ambigu metadata versi di halaman Diagnostik.
-- Memperbaiki variabel tema di halaman Playlist MusikKu.
-- Menggunakan callback `onReorderItem` yang baru dan menguji ulang perpindahan indeks playlist.
-
-
-Build 49 adds a manual 5-band EQ interface, centered synced lyrics, and cleanup of a duplicate crossfade UI state update. See CHANGELOG.md and FEATURE-AUDIT.md for limits and validation status.
-
-
-## Perubahan Build 51
-- Pemulihan sesi akun Google secara diam-diam saat aplikasi dibuka kembali.
-- Lagu aktif ditandai di playlist MusikKu dan daftar koleksi.
-- Notifikasi unggahan/live subscription dihapus; notifikasi kontrol media Android tetap dipakai untuk playback di latar belakang.
-- Riwayat pencarian bisa dihapus satu per satu atau sekaligus.
-- Metadata versi: `4.7.8+52`.
-
-CI tetap perlu menjalankan `flutter analyze`, `flutter test`, dan `flutter build apk --release`; pemeriksaan tersebut belum tersedia di lingkungan penyusunan ZIP ini.
-
-
-Build 52 hotfix: explicit import for `ValueListenable` in the custom playlist page.
-
-
-## Perbaikan startup Build 57 dan sesi login
-- Migrasi ke `google_sign_in 6.3.0` dan `signInSilently()` untuk mencoba memulihkan akun Android tanpa pemilih akun setiap membuka aplikasi.
-- Aplikasi mencoba pemulihan tanpa bergantung pada email tersimpan; jika pengguna sengaja logout, flag lokal mencegah auto-restore.
-- Metadata versi: `4.8.3+57`.
-
-
-## Fix startup Build 57
-- `WidgetsFlutterBinding.ensureInitialized()` dan `runApp()` sekarang dipanggil di dalam zone yang sama untuk mencegah Flutter `Zone mismatch`.
-- Tetap mempertahankan handler error Flutter, platform, dan zone.
-
-## Build 58 — Pembaruan otomatis
-Di Pengaturan MusikKu → Pembaruan aplikasi, pengguna dapat menyalakan/mematikan pemeriksaan update startup dan memilih agar APK rilis terverifikasi diunduh serta installer Android dibuka otomatis. Opsi kedua tidak berarti instalasi tanpa sentuhan: konfirmasi Android dan Google Play Protect tetap berlaku.
+Local ZIP/source checks do not replace Flutter CI or testing on an Android device. See `ARCHITECTURE.md` and `VALIDATION-REPORT.md` for boundaries and limitations.

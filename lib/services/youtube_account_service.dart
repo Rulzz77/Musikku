@@ -1,77 +1,20 @@
 import 'dart:async';
-import 'dart:convert';
-
 import 'package:flutter/services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/youtube_search_result.dart';
+import '../models/youtube_account_models.dart';
+import 'youtube_library_api.dart';
+import 'youtube_account_http_client.dart';
+import 'youtube_account_response_parser.dart';
 import 'youtube_search_service.dart';
 
-class YoutubeChannelSummary {
-  final String id;
-  final String title;
-  final String description;
-  final String thumbnailUrl;
-  final String uploadsPlaylistId;
-  final int? subscriberCount;
+export '../models/youtube_account_models.dart';
+export 'youtube_library_api.dart';
+export 'youtube_login_errors.dart' show describeLoginError;
 
-  const YoutubeChannelSummary({
-    required this.id,
-    required this.title,
-    required this.description,
-    required this.thumbnailUrl,
-    required this.uploadsPlaylistId,
-    this.subscriberCount,
-  });
-}
-
-class YoutubeChannelDetails {
-  final String id;
-  final String title;
-  final String handle;
-  final String description;
-  final String avatarUrl;
-  final String bannerUrl;
-  final int? subscriberCount;
-  final bool hiddenSubscriberCount;
-  final int? videoCount;
-  final String uploadsPlaylistId;
-
-  const YoutubeChannelDetails({
-    required this.id,
-    required this.title,
-    this.handle = '',
-    this.description = '',
-    this.avatarUrl = '',
-    this.bannerUrl = '',
-    this.subscriberCount,
-    this.hiddenSubscriberCount = false,
-    this.videoCount,
-    this.uploadsPlaylistId = '',
-  });
-}
-
-class YoutubePlaylistSummary {
-  final String id;
-  final String title;
-  final String description;
-  final String privacyStatus;
-  final int itemCount;
-  final String thumbnailUrl;
-
-  const YoutubePlaylistSummary({
-    required this.id,
-    required this.title,
-    required this.description,
-    required this.privacyStatus,
-    required this.itemCount,
-    this.thumbnailUrl = '',
-  });
-}
-
-class YoutubeAccountService {
+class YoutubeAccountService implements YoutubeLibraryApi {
   static final YoutubeAccountService instance = YoutubeAccountService._();
 
   YoutubeAccountService._();
@@ -97,6 +40,13 @@ class YoutubeAccountService {
   Future<void> _sessionTail = Future<void>.value();
   StreamSubscription<GoogleSignInAccount?>? _currentUserSubscription;
   bool _readonlyAuthorizationGranted = false;
+
+  late final YoutubeAccountHttpClient _httpClient = YoutubeAccountHttpClient(
+    apiKey: _apiKey,
+    baseUrl: _base,
+    isSignedIn: () => _user != null,
+    accessToken: _accessToken,
+  );
 
   GoogleSignInAccount? get user => _user;
   bool get isSignedIn => _user != null;
@@ -317,77 +267,21 @@ class YoutubeAccountService {
     String path,
     Map<String, String> params, {
     required bool write,
-  }) async {
-    // Endpoint milik akun (mine=true) wajib login. Selain itu datanya publik
-    // dan boleh diambil dengan API key kalau belum login / izin belum siap.
-    final isPrivate = params['mine'] == 'true';
-
-    Future<Map<String, dynamic>> publicGet() async {
-      final uri = Uri.parse('$_base/$path').replace(
-        queryParameters: <String, String>{...params, 'key': _apiKey},
-      );
-      final response = await http.get(uri);
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw StateError('YouTube API ${response.statusCode}: ${response.body}');
-      }
-      return Map<String, dynamic>.from(jsonDecode(response.body) as Map);
-    }
-
-    if (!isPrivate && _apiKey.isNotEmpty && _user == null) {
-      return publicGet();
-    }
-
-    final String token;
-    try {
-      token = await _accessToken(write: write);
-    } catch (_) {
-      if (!isPrivate && _apiKey.isNotEmpty) return publicGet();
-      rethrow;
-    }
-    final uri = Uri.parse('$_base/$path').replace(queryParameters: params);
-    final response = await http.get(uri, headers: {'Authorization': 'Bearer $token'});
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StateError('YouTube API ${response.statusCode}: ${response.body}');
-    }
-    return Map<String, dynamic>.from(jsonDecode(response.body) as Map);
-  }
+  }) => _httpClient.get(path, params, write: write);
 
   Future<Map<String, dynamic>> _post(
     String path,
     Map<String, dynamic> body, {
     required bool write,
-  }) async {
-    final token = await _accessToken(write: write);
-    final response = await http.post(
-      Uri.parse('$_base/$path'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
-      body: jsonEncode(body),
-    );
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StateError('YouTube API ${response.statusCode}: ${response.body}');
-    }
-    return Map<String, dynamic>.from(jsonDecode(response.body) as Map);
-  }
+  }) => _httpClient.post(path, body, write: write);
 
   Future<void> _delete(
     String path,
     Map<String, String> params, {
     required bool write,
-  }) async {
-    final token = await _accessToken(write: write);
-    final uri = Uri.parse('$_base/$path').replace(queryParameters: params);
-    final response = await http.delete(
-      uri,
-      headers: {'Authorization': 'Bearer $token'},
-    );
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StateError('YouTube API ${response.statusCode}: ${response.body}');
-    }
-  }
+  }) => _httpClient.delete(path, params, write: write);
 
+  @override
   Future<List<YoutubeChannelSummary>> subscriptions({int maxResults = 50}) async {
     // Ambil semua halaman (maks. 4 x 50 = 200 channel) supaya jumlah
     // subscription tidak terpotong di 50.
@@ -428,7 +322,7 @@ class YoutubeAccountService {
           id: channelId,
           title: snippet['title']?.toString() ?? 'Channel',
           description: snippet['description']?.toString() ?? '',
-          thumbnailUrl: _thumbnail(snippet['thumbnails']),
+          thumbnailUrl: YoutubeAccountResponseParser.thumbnail(snippet['thumbnails']),
           uploadsPlaylistId: '',
         ),
       );
@@ -463,8 +357,8 @@ class YoutubeAccountService {
             id: id,
             title: snippet['title']?.toString() ?? original?.title ?? 'Channel',
             description: snippet['description']?.toString() ?? original?.description ?? '',
-            thumbnailUrl: _thumbnail(snippet['thumbnails']).isNotEmpty
-                ? _thumbnail(snippet['thumbnails'])
+            thumbnailUrl: YoutubeAccountResponseParser.thumbnail(snippet['thumbnails']).isNotEmpty
+                ? YoutubeAccountResponseParser.thumbnail(snippet['thumbnails'])
                 : (original?.thumbnailUrl ?? ''),
             uploadsPlaylistId: related['uploads']?.toString() ?? '',
             subscriberCount: int.tryParse(stats['subscriberCount']?.toString() ?? ''),
@@ -505,7 +399,7 @@ class YoutubeAccountService {
       },
       write: false,
     );
-    final enriched = await _enrichViewCounts(_playlistItemsToTracks(playlist));
+    final enriched = await _enrichViewCounts(YoutubeAccountResponseParser.playlistItemsToTracks(playlist));
     final musicOnly = enriched
         .where((video) => YoutubeSearchService.isMusicCatalogItem(
               video,
@@ -517,6 +411,7 @@ class YoutubeAccountService {
     return YoutubeSearchService().removeShorts(musicOnly);
   }
 
+  @override
   Future<List<YoutubeSearchResult>> likedVideos({int maxResults = 50}) async {
     final channelData = await _get(
       'channels',
@@ -539,7 +434,7 @@ class YoutubeAccountService {
       },
       write: false,
     );
-    final enriched = await _enrichViewCounts(_playlistItemsToTracks(data));
+    final enriched = await _enrichViewCounts(YoutubeAccountResponseParser.playlistItemsToTracks(data));
     final musicOnly = enriched
         .where((video) => YoutubeSearchService.isMusicCatalogItem(
               video,
@@ -549,6 +444,7 @@ class YoutubeAccountService {
     return YoutubeSearchService().removeShorts(musicOnly);
   }
 
+  @override
   Future<List<YoutubePlaylistSummary>> playlists({int maxResults = 50}) async {
     final data = await _get(
       'playlists',
@@ -572,7 +468,7 @@ class YoutubeAccountService {
         description: snippet['description']?.toString() ?? '',
         privacyStatus: status['privacyStatus']?.toString() ?? 'private',
         itemCount: (content['itemCount'] as num?)?.toInt() ?? 0,
-        thumbnailUrl: _thumbnail(snippet['thumbnails']),
+        thumbnailUrl: YoutubeAccountResponseParser.thumbnail(snippet['thumbnails']),
       );
     }).where((item) => item.id.isNotEmpty).toList(growable: false);
   }
@@ -596,7 +492,7 @@ class YoutubeAccountService {
     );
     final token = data['nextPageToken']?.toString();
     return (
-      items: _playlistItemsToTracks(data),
+      items: YoutubeAccountResponseParser.playlistItemsToTracks(data),
       nextPageToken: (token == null || token.isEmpty) ? null : token,
     );
   }
@@ -611,6 +507,7 @@ class YoutubeAccountService {
     return out;
   }
 
+  @override
   Future<List<YoutubeSearchResult>> playlistItems(String playlistId, {int maxResults = 50}) async {
     final data = await _get(
       'playlistItems',
@@ -621,7 +518,7 @@ class YoutubeAccountService {
       },
       write: false,
     );
-    final enriched = await _enrichViewCounts(_playlistItemsToTracks(data));
+    final enriched = await _enrichViewCounts(YoutubeAccountResponseParser.playlistItemsToTracks(data));
     final musicOnly = enriched
         .where((video) => YoutubeSearchService.isMusicCatalogItem(
               video,
@@ -729,7 +626,7 @@ class YoutubeAccountService {
       title: snippet['title']?.toString() ?? 'Channel',
       handle: snippet['customUrl']?.toString() ?? '',
       description: snippet['description']?.toString() ?? '',
-      avatarUrl: _thumbnail(snippet['thumbnails']),
+      avatarUrl: YoutubeAccountResponseParser.thumbnail(snippet['thumbnails']),
       bannerUrl: image['bannerExternalUrl']?.toString() ?? '',
       subscriberCount: int.tryParse(stats['subscriberCount']?.toString() ?? ''),
       hiddenSubscriberCount: stats['hiddenSubscriberCount'] == true,
@@ -787,6 +684,7 @@ class YoutubeAccountService {
   /// Video terbaru dari banyak channel sekaligus (paralel) lewat playlist
   /// upload-nya, lengkap dengan status live. Hemat kuota: 1 unit per channel
   /// + 1 unit per 50 video.
+  @override
   Future<List<YoutubeSearchResult>> subscriptionFeed(
     List<YoutubeChannelSummary> channels, {
     int channelLimit = 20,
@@ -869,68 +767,8 @@ class YoutubeAccountService {
     return (items: found, nextPageToken: token);
   }
 
-  List<YoutubeSearchResult> _playlistItemsToTracks(Map<String, dynamic> data) {
-    final items = data['items'];
-    if (items is! List) return const [];
-    return items.map((item) {
-      final map = Map<String, dynamic>.from(item as Map);
-      final snippet = Map<String, dynamic>.from(map['snippet'] as Map? ?? const {});
-      final content = Map<String, dynamic>.from(map['contentDetails'] as Map? ?? const {});
-      final videoId = content['videoId']?.toString() ?? '';
-      return YoutubeSearchResult(
-        videoId: videoId,
-        title: snippet['title']?.toString() ?? 'Tanpa judul',
-        channelTitle: snippet['videoOwnerChannelTitle']?.toString() ??
-            snippet['channelTitle']?.toString() ??
-            'Channel',
-        thumbnailUrl: _thumbnail(snippet['thumbnails']),
-        publishedAt: DateTime.tryParse(snippet['publishedAt']?.toString() ?? ''),
-        channelId: snippet['videoOwnerChannelId']?.toString() ?? '',
-      );
-    }).where((item) => item.videoId.isNotEmpty).toList(growable: false);
-  }
-
-  String _thumbnail(dynamic raw) {
-    if (raw is! Map) return '';
-    for (final key in const ['maxres', 'high', 'standard', 'medium', 'default']) {
-      final item = raw[key];
-      if (item is Map) {
-        final url = item['url']?.toString() ?? '';
-        if (url.isNotEmpty) return url;
-      }
-    }
-    return '';
-  }
   Future<void> dispose() async {
     await _currentUserSubscription?.cancel();
     _currentUserSubscription = null;
   }
-}
-
-/// Mengubah error login/izin menjadi pesan yang bisa ditindaklanjuti.
-String describeLoginError(Object e) {
-  if (e is StateError) {
-    if (e.message == 'YOUTUBE_AUTH_REQUIRED') {
-      return 'Izin YouTube belum disetujui. Tekan "Izinkan" atau login ulang.';
-    }
-    return e.message;
-  }
-  // google_sign_in 6.3 exposes native sign-in failures as PlatformException;
-  // The newer 7.x exception type is not part of this dependency version.
-  if (e is PlatformException) {
-    final code = e.code;
-    final detail = (e.message ?? '').trim();
-    if (code == 'sign_in_canceled' || code == 'sign_in_cancelled' || code == 'canceled') {
-      return 'Login dibatalkan atau ditolak Google.'
-          '${detail.isEmpty ? '' : ' ($detail)'}';
-    }
-    if (code == 'sign_in_failed' || code == 'sign_in_required' || code == '10') {
-      return 'Login Google gagal ($code). Cek SHA-1, package '
-          'com.musikku.app, Web Client ID, dan konfigurasi OAuth.'
-          '${detail.isEmpty ? '' : ' ($detail)'}';
-    }
-    return 'Login gagal ($code).${detail.isEmpty ? '' : ' $detail'}';
-  }
-  final text = e.toString();
-  return 'Gagal: ${text.length > 180 ? '${text.substring(0, 180)}…' : text}';
 }

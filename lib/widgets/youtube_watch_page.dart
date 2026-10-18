@@ -13,7 +13,8 @@ import '../services/youtube_video_service.dart';
 import 'channel_avatar.dart';
 import 'live_badge.dart';
 import 'lyrics_panel.dart';
-import '../utils/time_formatters.dart';
+import 'youtube_watch_page/comment_tiles.dart';
+import 'youtube_watch_page/live_chat_panel.dart';
 
 enum YoutubeCommentSort {
   relevance,
@@ -555,137 +556,16 @@ class _YoutubeWatchPageState extends State<YoutubeWatchPage> {
     });
   }
 
-  Widget _liveMessageTile(LiveChatMessage message) {
-    final scheme = Theme.of(context).colorScheme;
-    final nameColor = message.isOwner
-        ? scheme.primary
-        : message.isModerator
-            ? Colors.lightBlueAccent
-            : scheme.onSurfaceVariant;
-    final row = Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        CircleAvatar(
-          radius: 12,
-          backgroundColor: scheme.surfaceContainerHighest,
-          backgroundImage: message.avatarUrl.isNotEmpty ? NetworkImage(message.avatarUrl) : null,
-          child: message.avatarUrl.isEmpty ? const Icon(Icons.person_outline_rounded, size: 13) : null,
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text.rich(
-            TextSpan(
-              children: [
-                TextSpan(
-                  text: message.author,
-                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12.5, color: nameColor),
-                ),
-                if (message.isOwner || message.isModerator)
-                  WidgetSpan(
-                    alignment: PlaceholderAlignment.middle,
-                    child: Padding(
-                      padding: const EdgeInsets.only(left: 3),
-                      child: Icon(
-                        message.isOwner ? Icons.verified_rounded : Icons.build_circle_rounded,
-                        size: 13,
-                        color: nameColor,
-                      ),
-                    ),
-                  ),
-                if (message.sentAt != null && !_liveIsReplay)
-                  TextSpan(
-                    text: '  ${formatClockTime(message.sentAt)}',
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: scheme.onSurfaceVariant,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                if (_liveIsReplay && message.offsetMs > 0)
-                  TextSpan(
-                    text: '  ${formatVideoOffset(message.offsetMs)}',
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: scheme.onSurfaceVariant,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                const TextSpan(text: '  '),
-                TextSpan(text: message.text, style: const TextStyle(fontSize: 13, height: 1.3)),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-    if (message.amount.isEmpty) {
-      return Padding(padding: const EdgeInsets.symmetric(vertical: 5), child: row);
-    }
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 5),
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: scheme.tertiaryContainer,
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            message.amount,
-            style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12, color: scheme.onTertiaryContainer),
-          ),
-          const SizedBox(height: 4),
-          row,
-        ],
-      ),
-    );
-  }
 
   /// Daftar live chat (dipakai portrait dan landscape).
-  Widget _liveChatList(ColorScheme scheme) {
-    if (_liveChat.isEmpty) {
-      final String message;
-      if (_liveEnded) {
-        message = 'Siaran berakhir atau chat ditutup.';
-      } else if (_liveFailures >= 3) {
-        message = 'Chat gagal dimuat, mencoba lagi…';
-      } else if (_liveIsReplay) {
-        message = 'Belum ada chat di bagian video ini.';
-      } else {
-        message = 'Menunggu pesan baru…';
-      }
-      return Center(
-        child: _liveLoading
-            ? const CircularProgressIndicator()
-            : Padding(
-                padding: const EdgeInsets.all(24),
-                child: Text(
-                  message,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: scheme.onSurfaceVariant),
-                ),
-              ),
-      );
-    }
-    final showFooter = _liveEnded && !_liveIsReplay;
-    return ListView.builder(
+  Widget _liveChatList() {
+    return YoutubeLiveChatPanel(
+      messages: _liveChat,
       controller: _liveScroll,
-      padding: const EdgeInsets.fromLTRB(2, 4, 2, 8),
-      itemCount: _liveChat.length + (showFooter ? 1 : 0),
-      itemBuilder: (context, index) {
-        if (index >= _liveChat.length) {
-          return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Text(
-              'Siaran berakhir atau chat ditutup.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
-            ),
-          );
-        }
-        return _liveMessageTile(_liveChat[index]);
-      },
+      loading: _liveLoading,
+      ended: _liveEnded,
+      failures: _liveFailures,
+      isReplay: _liveIsReplay,
     );
   }
 
@@ -698,7 +578,7 @@ class _YoutubeWatchPageState extends State<YoutubeWatchPage> {
         color: scheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(16),
       ),
-      child: _liveChatList(scheme),
+      child: _liveChatList(),
     );
   }
 
@@ -963,115 +843,14 @@ class _YoutubeWatchPageState extends State<YoutubeWatchPage> {
     }
   }
 
-  Widget _replyTile(YoutubeCommentReply reply) {
-    final scheme = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.only(top: 10, left: 34),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          CircleAvatar(
-            radius: 14,
-            backgroundImage: reply.authorAvatarUrl.isNotEmpty ? NetworkImage(reply.authorAvatarUrl) : null,
-            child: reply.authorAvatarUrl.isEmpty ? const Icon(Icons.person_outline_rounded, size: 14) : null,
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(reply.author, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
-                const SizedBox(height: 3),
-                Text(reply.text, style: const TextStyle(height: 1.3, fontSize: 12.5)),
-                const SizedBox(height: 3),
-                Wrap(
-                  spacing: 10,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    Text('${reply.likeCount} suka', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10.5)),
-                    if (reply.publishedAt != null)
-                      Text(
-                        formatRelativeTime(reply.publishedAt),
-                        style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10.5),
-                      ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _commentTile(YoutubeComment comment) {
-    final scheme = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(0, 8, 0, 16),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          CircleAvatar(
-            radius: 18,
-            backgroundImage: comment.authorAvatarUrl.isNotEmpty ? NetworkImage(comment.authorAvatarUrl) : null,
-            child: comment.authorAvatarUrl.isEmpty ? const Icon(Icons.person_outline_rounded, size: 18) : null,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(comment.author, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
-                const SizedBox(height: 4),
-                Text(comment.text, style: const TextStyle(height: 1.35)),
-                const SizedBox(height: 7),
-                Wrap(
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    Text(
-                      '${comment.likeCount} suka',
-                      style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11.5),
-                    ),
-                    if (comment.publishedAt != null) ...[
-                      const SizedBox(width: 12),
-                      Text(
-                        formatRelativeTime(comment.publishedAt),
-                        style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11.5),
-                      ),
-                    ],
-                    if (comment.replyCount > 0) ...[
-                      const SizedBox(width: 12),
-                      TextButton(
-                        onPressed: () => unawaited(_toggleReplies(comment)),
-                        style: TextButton.styleFrom(
-                          padding: EdgeInsets.zero,
-                          minimumSize: Size.zero,
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        ),
-                        child: Text(
-                          _expandedReplies.contains(comment.id)
-                              ? 'Sembunyikan balasan'
-                              : 'Lihat ${comment.replyCount} balasan',
-                          style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-                if (_expandedReplies.contains(comment.id)) ...[
-                  if (_replyLoading.contains(comment.id))
-                    const Padding(
-                      padding: EdgeInsets.only(left: 34, top: 8),
-                      child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
-                    )
-                  else
-                    ...(_commentReplies[comment.id] ?? comment.replies).map(_replyTile),
-                ],
-              ],
-            ),
-          ),
-        ],
-      ),
+    return YoutubeCommentTile(
+      comment: comment,
+      expanded: _expandedReplies.contains(comment.id),
+      loadingReplies: _replyLoading.contains(comment.id),
+      replies: _commentReplies[comment.id] ?? comment.replies,
+      onToggleReplies: () => unawaited(_toggleReplies(comment)),
     );
   }
 
@@ -1094,7 +873,7 @@ class _YoutubeWatchPageState extends State<YoutubeWatchPage> {
               child: _liveAvailable && _showLiveChat
                   ? Padding(
                       padding: const EdgeInsets.fromLTRB(14, 2, 14, 10),
-                      child: _liveChatList(scheme),
+                      child: _liveChatList(),
                     )
                   : ListView(
                       padding: const EdgeInsets.fromLTRB(14, 2, 14, 22),

@@ -21,6 +21,7 @@ import '../services/app_update_service.dart';
 import '../services/channel_block_filter.dart';
 import '../services/queue_manager.dart';
 import '../services/playback_source_policy.dart';
+import '../services/playback_session_guard.dart';
 import '../services/radio_service.dart';
 import '../services/storage_service.dart';
 import '../services/smart_queue_scorer.dart';
@@ -87,6 +88,9 @@ class _HomePageState extends State<HomePage>
   final YoutubeSearchService _searchService = YoutubeSearchService();
 
   final QueueManager _queueManager = QueueManager();
+
+  /// Coordinates stale playback requests and duplicate native ended events.
+  final PlaybackSessionGuard _playbackSessionGuard = PlaybackSessionGuard();
 
   final StorageService _storage = StorageService();
 
@@ -220,13 +224,6 @@ class _HomePageState extends State<HomePage>
   // AUTO NEXT PROTECTION
   // ============================================================
 
-  bool _isAutoNextProcessing = false;
-
-  bool _isChangingTrack = false;
-
-  String _lastHandledEndedVideoId = '';
-
-  int _playRequestId = 0;
 
   // ============================================================
   // AUTOPLAY / RADIO (lagu berikutnya untuk lagu dari pencarian)

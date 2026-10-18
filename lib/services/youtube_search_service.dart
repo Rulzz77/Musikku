@@ -7,6 +7,12 @@ import 'package:http/http.dart' as http;
 import '../models/youtube_search_result.dart';
 import 'disk_cache.dart';
 import 'music_style_matcher.dart';
+import 'youtube_search_query.dart';
+import 'youtube_music_policy.dart';
+import 'youtube_search_response_parser.dart';
+import 'youtube_search_api_errors.dart';
+
+export 'youtube_search_query.dart' show SmartSearchIntent;
 
 class YoutubeSearchException implements Exception {
   final String message;
@@ -43,21 +49,6 @@ class RadioPage {
   });
 }
 
-class SmartSearchIntent {
-  final String originalQuery;
-  final String apiQuery;
-  final String label;
-  final bool latest;
-  final bool musicContext;
-
-  const SmartSearchIntent({
-    required this.originalQuery,
-    required this.apiQuery,
-    required this.label,
-    required this.latest,
-    required this.musicContext,
-  });
-}
 
 class YoutubeSearchService {
   bool dataSaver = false;
@@ -81,6 +72,8 @@ class YoutubeSearchService {
   static const String _baseUrl =
       'https://www.googleapis.com/youtube/v3/search';
 
+  static const YoutubeSearchApiErrors _apiErrors = YoutubeSearchApiErrors();
+
   // Satu request search = 100 unit dari kuota harian 10.000 unit.
   // Cache membuat pencarian yang sama tidak menghabiskan kuota lagi.
   static const int _cacheLimit = 20;
@@ -98,91 +91,11 @@ class YoutubeSearchService {
     ttl: Duration(hours: 12),
   );
 
-  static List<YoutubeSearchResult> _resultsFromJson(Object? raw) {
-    if (raw is! List) {
-      return <YoutubeSearchResult>[];
-    }
+  static List<YoutubeSearchResult> _resultsFromJson(Object? raw) =>
+      YoutubeSearchResponseParser.resultsFromJson(raw);
 
-    final list = raw
-        .whereType<Map>()
-        .map((item) => YoutubeSearchResult.fromJson(
-              Map<String, dynamic>.from(item),
-            ))
-        .where((video) => video.videoId.isNotEmpty)
-        .toList();
-
-    // Cache lama (sebelum ada channelId) bikin foto channel tidak pernah
-    // muncul. Anggap cache seperti itu kedaluwarsa supaya diambil ulang.
-    if (list.any((v) => !v.isLocal && v.channelId.isEmpty)) {
-      return <YoutubeSearchResult>[];
-    }
-    return list;
-  }
-
-  SmartSearchIntent interpretSearch(String query) {
-    final original = query.trim();
-    final lower = original.toLowerCase();
-
-    final latestWords = <String>[
-      'terbaru',
-      'terkini',
-      'baru',
-      'new',
-      'latest',
-      'rilis',
-    ];
-    final latest = latestWords.any(lower.contains);
-
-    final musicWords = <String>[
-      'dj',
-      'pop',
-      'rock',
-      'dangdut',
-      'remix',
-      'disco',
-      'jazz',
-      'hip hop',
-      'hiphop',
-      'kpop',
-      'k-pop',
-      'metal',
-      'indie',
-      'akustik',
-      'galau',
-      'nostalgia',
-      'lagu',
-      'musik',
-      'song',
-    ];
-    final musicContext = musicWords.any(lower.contains);
-
-    final era = RegExp(r'\b(19[5-9]0|20(?:0|1|2)0)[sS]?\b').firstMatch(lower);
-    final eraLabel = era?.group(1);
-    final hasIndonesia = lower.contains('indonesia') ||
-        RegExp(r'(^|\s)indo($|\s)').hasMatch(lower);
-
-    final labels = <String>[];
-    if (musicContext) labels.add('musik');
-    if (latest) labels.add('terbaru');
-    if (eraLabel != null) labels.add('${eraLabel}s');
-    if (!hasIndonesia && musicContext) labels.add('Indonesia');
-
-    final extra = <String>[];
-    if (musicContext && !hasIndonesia) extra.add('Indonesia');
-
-    final apiQuery = [
-      original,
-      ...extra,
-    ].join(' ').trim();
-
-    return SmartSearchIntent(
-      originalQuery: original,
-      apiQuery: apiQuery,
-      label: labels.isEmpty ? 'pencarian biasa' : labels.join(' • '),
-      latest: latest,
-      musicContext: musicContext,
-    );
-  }
+  SmartSearchIntent interpretSearch(String query) =>
+      YoutubeSearchQueryParser.interpret(query);
 
   String describeSearch(String query) => interpretSearch(query).label;
 
@@ -818,24 +731,8 @@ class YoutubeSearchService {
   }
 
   /// Resource videos.list -> model, tanpa Shorts (<= 60 detik).
-  List<YoutubeSearchResult> _parseVideoResources(List items) {
-    final out = <YoutubeSearchResult>[];
-    for (final item in items) {
-      if (item is! Map) continue;
-      final video = YoutubeSearchResult.fromVideoResource(
-        Map<String, dynamic>.from(item),
-        pickThumbnail: _pickThumbnail,
-        decode: _decodeHtml,
-      );
-      if (video == null) continue;
-      final seconds = video.durationSeconds;
-      if (!video.isLive && !video.isUpcoming && seconds != null && seconds <= 60) {
-        continue;
-      }
-      out.add(video);
-    }
-    return out;
-  }
+  List<YoutubeSearchResult> _parseVideoResources(List items) =>
+      YoutubeSearchResponseParser.parseVideoResources(items);
 
   /// Alias untuk source lama. Semua radio baru memakai [searchLatest].
   Future<RadioPage> searchPopular(
@@ -902,43 +799,8 @@ class YoutubeSearchService {
     return decoded is Map ? decoded : <String, dynamic>{};
   }
 
-  List<YoutubeSearchResult> _parseItems(List items) {
-    final results = <YoutubeSearchResult>[];
-
-    for (final item in items) {
-      if (item is! Map) {
-        continue;
-      }
-
-      final id = item['id'];
-      final snippet = item['snippet'];
-
-      if (id is! Map || snippet is! Map) {
-        continue;
-      }
-
-      final videoId = id['videoId']?.toString() ?? '';
-
-      if (videoId.isEmpty) {
-        continue;
-      }
-
-      results.add(
-        YoutubeSearchResult(
-          videoId: videoId,
-          title: _decodeHtml(snippet['title']?.toString() ?? 'Tanpa judul'),
-          channelTitle: _decodeHtml(
-            snippet['channelTitle']?.toString() ?? 'Unknown',
-          ),
-          thumbnailUrl: _pickThumbnail(snippet['thumbnails']),
-          publishedAt: DateTime.tryParse(snippet['publishedAt']?.toString() ?? ''),
-          channelId: snippet['channelId']?.toString() ?? '',
-        ),
-      );
-    }
-
-    return results;
-  }
+  List<YoutubeSearchResult> _parseItems(List items) =>
+      YoutubeSearchResponseParser.parseSearchItems(items);
 
   Future<List<YoutubeSearchResult>> _ensureViewCounts(
     List<YoutubeSearchResult> videos,
@@ -1035,139 +897,29 @@ class YoutubeSearchService {
     return result;
   }
 
-  static bool isLikelyShortForm(YoutubeSearchResult video) {
-    final title = video.title.toLowerCase();
-    final channel = video.channelTitle.toLowerCase();
-    final combined = '$title $channel';
+  static bool isLikelyShortForm(YoutubeSearchResult video) =>
+      YoutubeMusicPolicy.isLikelyShortForm(video);
 
-    // Menangkap label yang umum dipakai pada Shorts / short-form uploads.
-    return RegExp(
-      r'''(?:#shorts?\b|\bytshorts\b|\byoutube\s+shorts\b|\bshorts?\s*(?:video|music|song|remix)\b|\bshort\s+video\b|\bvertical\s+(?:video|music)\b|\bshort-form\b)''',
-      caseSensitive: false,
-    ).hasMatch(combined);
-  }
+  static bool isLikelyNonMusicVideo(YoutubeSearchResult video) =>
+      YoutubeMusicPolicy.isLikelyNonMusicVideo(video);
 
-
-  /// Tolak video yang secara jelas bukan lagu/musik. Search API sudah
-  /// memakai videoCategoryId=10, tetapi beberapa upload berkategori Musik
-  /// masih berupa podcast, interview, reaction, tutorial, berita, trailer,
-  /// dan konten percakapan. Auto-next sebaiknya tidak memasukkan jenis ini.
-  static bool isLikelyNonMusicVideo(YoutubeSearchResult video) {
-    final title = video.title.toLowerCase();
-    final channel = video.channelTitle.toLowerCase();
-    final combined = '$title $channel';
-
-    const blocked = <String>[
-      'podcast',
-      'interview',
-      'wawancara',
-      'talkshow',
-      'talk show',
-      'reaction',
-      'reaksi',
-      'review',
-      'tutorial',
-      'how to',
-      'cara membuat',
-      'berita',
-      'news',
-      'vlog',
-      'daily vlog',
-      'trailer',
-      'teaser',
-      'gameplay',
-      'gaming',
-      'streaming',
-      'livestream',
-      'live stream',
-      'web series',
-      'webseries',
-      'talking',
-      'diskusi',
-      'pod',
-    ];
-
-    for (final word in blocked) {
-      if (combined.contains(word)) {
-        return true;
-      }
-    }
-
-    return false;
-  }
-
-  static bool isLikelyAiGeneratedMusic(YoutubeSearchResult video) {
-    final title = video.title.toLowerCase();
-    final channel = video.channelTitle.toLowerCase();
-    final combined = '$title $channel';
-
-    // Tidak ada flag API yang menyatakan 'AI music' secara sempurna. Karena
-    // itu filter memakai sinyal yang kuat dan spesifik, bukan sekadar kata
-    // 'ai' tunggal agar nama artis/lagu normal tidak ikut terblokir.
-    const strongMarkers = <String>[
-      'ai cover',
-      'ai version',
-      'ai music',
-      'ai song',
-      'ai vocals',
-      'ai voice',
-      'ai generated',
-      'ai-generated',
-      'generated by ai',
-      'made with ai',
-      'musicgen',
-      'voice clone',
-      'voice-cloned',
-      'deepfake voice',
-      'suno ai',
-      'udio ai',
-    ];
-
-    if (strongMarkers.any(combined.contains)) {
-      return true;
-    }
-
-    if (RegExp(r'\b(?:suno|udio)\b').hasMatch(channel)) {
-      return true;
-    }
-
-    // Banyak channel generatif memberi label 'AI' di nama channel, misalnya
-    // 'Kacaw AI'. Untuk radio musik, hindari channel yang secara eksplisit
-    // menandai dirinya sebagai AI.
-    if (RegExp(r'(?:^|[\s_-])ai(?:$|[\s_-])').hasMatch(channel)) {
-      return true;
-    }
-
-    return RegExp(r'\b(?:artificial\s+intelligence|synthetic\s+voice)\b')
-        .hasMatch(combined);
-  }
+  static bool isLikelyAiGeneratedMusic(YoutubeSearchResult video) =>
+      YoutubeMusicPolicy.isLikelyAiGeneratedMusic(video);
 
   List<YoutubeSearchResult> _filterAiMusicCandidates(
     List<YoutubeSearchResult> videos,
-  ) {
-    return videos.where((video) => !isLikelyAiGeneratedMusic(video)).toList();
-  }
+  ) => YoutubeMusicPolicy.filterAiMusicCandidates(videos);
 
-  static bool isMusicCandidate(YoutubeSearchResult video) {
-    return !isLikelyShortForm(video) &&
-        !isLikelyNonMusicVideo(video) &&
-        !isLikelyAiGeneratedMusic(video);
-  }
+  static bool isMusicCandidate(YoutubeSearchResult video) =>
+      YoutubeMusicPolicy.isMusicCandidate(video);
 
-  /// MusicKu's main catalogue filter. Search/trending endpoints already ask
-  /// YouTube for category 10; account uploads must provide category 10 after
-  /// videos.list enrichment, or they are omitted instead of leaking non-music.
-  /// AI-made tracks are not rejected here because they are still music.
   static bool isMusicCatalogItem(
     YoutubeSearchResult video, {
     bool requireCategoryId = false,
-  }) {
-    if (video.isLocal) return true;
-    final category = video.categoryId.trim();
-    if (category.isNotEmpty && category != '10') return false;
-    if (requireCategoryId && category != '10') return false;
-    return !isLikelyShortForm(video) && !isLikelyNonMusicVideo(video);
-  }
+  }) => YoutubeMusicPolicy.isMusicCatalogItem(
+        video,
+        requireCategoryId: requireCategoryId,
+      );
 
   // ============================================================
   // DETEKSI YOUTUBE SHORTS (akurat)
@@ -1355,93 +1107,16 @@ class YoutubeSearchService {
     }
   }
 
-  String _pickThumbnail(dynamic thumbnails) {
-    if (thumbnails is! Map) {
-      return '';
-    }
+  String _pickThumbnail(dynamic thumbnails) =>
+      YoutubeSearchResponseParser.pickThumbnail(thumbnails);
 
-    for (final size in const ['high', 'medium', 'default']) {
-      final image = thumbnails[size];
+  String _errorReason(http.Response response) =>
+      _apiErrors.errorReason(response);
 
-      if (image is Map) {
-        final url = image['url']?.toString() ?? '';
-
-        if (url.isNotEmpty) {
-          return url;
-        }
-      }
-    }
-
-    return '';
-  }
-
-  String _errorReason(http.Response response) {
-    try {
-      final body = jsonDecode(response.body);
-      final error = body is Map && body['error'] is Map
-          ? body['error'] as Map
-          : null;
-      final errors = error?['errors'];
-      if (errors is List && errors.isNotEmpty && errors.first is Map) {
-        return (errors.first as Map)['reason']?.toString() ?? '';
-      }
-      return error?['status']?.toString() ?? '';
-    } catch (_) {
-      return '';
-    }
-  }
-
-  String _errorMessage(http.Response response) {
-    final reason = _errorReason(response);
-
-    if (reason == 'quotaExceeded' || reason == 'dailyLimitExceeded') {
-      return 'Kuota YouTube API hari ini sudah habis. Coba lagi besok.';
-    }
-
-    if (response.statusCode == 429) {
-      return 'YouTube sedang membatasi permintaan sementara. Coba lagi beberapa saat.';
-    }
-
-    if (reason == 'keyInvalid' || reason == 'forbidden') {
-      return 'API key YouTube tidak valid atau dibatasi. Cek pengaturan key.';
-    }
-
-    return 'Gagal mencari lagu (kode ${response.statusCode}).';
-  }
+  String _errorMessage(http.Response response) =>
+      _apiErrors.errorMessage(response);
 
   /// YouTube API mengirim judul dengan HTML entity (&amp; &#39; &quot;).
-  static String _decodeHtml(String input) {
-    var text = input.replaceAllMapped(
-      RegExp(r'&#(\d+);'),
-      (match) {
-        final code = int.tryParse(match.group(1)!);
-
-        if (code == null || code > 0x10FFFF) {
-          return match.group(0)!;
-        }
-
-        return String.fromCharCode(code);
-      },
-    );
-
-    text = text.replaceAllMapped(
-      RegExp(r'&#x([0-9a-fA-F]+);'),
-      (match) {
-        final code = int.tryParse(match.group(1)!, radix: 16);
-
-        if (code == null || code > 0x10FFFF) {
-          return match.group(0)!;
-        }
-
-        return String.fromCharCode(code);
-      },
-    );
-
-    return text
-        .replaceAll('&quot;', '"')
-        .replaceAll('&apos;', "'")
-        .replaceAll('&lt;', '<')
-        .replaceAll('&gt;', '>')
-        .replaceAll('&amp;', '&');
-  }
+  static String _decodeHtml(String input) =>
+      YoutubeSearchResponseParser.decodeHtml(input);
 }

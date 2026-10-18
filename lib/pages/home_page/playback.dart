@@ -45,14 +45,13 @@ extension _HomePlayback on _HomePageState {
     double? restoreDurationSeconds,
     bool autoPlay = true,
   }) async {
-    final requestId = ++_playRequestId;
+    final requestId = _playbackSessionGuard.beginTrackChange();
 
     _youtubeAudioRetryVideoId = video.videoId;
     _youtubeAudioRetryCount = 0;
     if (_youtubeEmbedErrorVideoId.isNotEmpty) {
       _youtubeEmbedErrorVideoId = '';
     }
-    _isChangingTrack = true;
 
     _radio.markPlayed(video);
 
@@ -60,7 +59,6 @@ extension _HomePlayback on _HomePageState {
 
     _failureHandledFor = '';
 
-    _lastHandledEndedVideoId = '';
     final previous = _currentVideo;
 
     final sameVideo = previous?.videoId == video.videoId;
@@ -93,7 +91,7 @@ extension _HomePlayback on _HomePageState {
     // untuk track ini, pakai preset default dari Settings.
     try {
       final trackPreset = await _storage.loadEqualizerPresetForTrack(video.videoId);
-      if (requestId == _playRequestId) {
+      if (_playbackSessionGuard.isCurrentRequest(requestId)) {
         _equalizerPreset = trackPreset;
         await _youtubeController.setEqualizerPreset(trackPreset);
         if (mounted) setState(() {});
@@ -229,7 +227,7 @@ extension _HomePlayback on _HomePageState {
           // YouTube ketika direct audio stream gagal, karena itu membuat
           // sumber suara bercampur dan state player memicu auto-next palsu.
           debugPrint('YOUTUBE AUDIO RESOLVE FAILED: $audioError');
-          if (requestId == _playRequestId) {
+          if (_playbackSessionGuard.isCurrentRequest(requestId)) {
             _nativeStateNotifier.value = NativeYoutubeState(
               playbackState: NativePlaybackState.error,
               videoId: video.videoId,
@@ -263,7 +261,7 @@ extension _HomePlayback on _HomePageState {
       }
       _crossfadeFadingVideoId = '';
 
-      if (requestId != _playRequestId) {
+      if (!_playbackSessionGuard.isCurrentRequest(requestId)) {
         return;
       }
 
@@ -284,7 +282,7 @@ extension _HomePlayback on _HomePageState {
           // API native loadVideo memang autoplay. Hanya dipakai sebagai
           // safeguard bila caller meminta restore tanpa autoplay.
           await Future<void>.delayed(const Duration(milliseconds: 700));
-          if (requestId == _playRequestId) {
+          if (_playbackSessionGuard.isCurrentRequest(requestId)) {
             await _youtubeController.pauseVideo();
           }
         }
@@ -297,13 +295,13 @@ extension _HomePlayback on _HomePageState {
         }
       } else if (!autoPlay) {
         await Future<void>.delayed(const Duration(milliseconds: 700));
-        if (requestId == _playRequestId) {
+        if (_playbackSessionGuard.isCurrentRequest(requestId)) {
           await _youtubeController.pauseVideo();
         }
       }
     } catch (e) {
       debugPrint('PLAY VIDEO ERROR: $e');
-      if (requestId == _playRequestId && _currentVideo?.videoId == video.videoId) {
+      if (_playbackSessionGuard.isCurrentRequest(requestId) && _currentVideo?.videoId == video.videoId) {
         unawaited(AppHealthMonitor.instance.record(
           kind: 'PlaybackLoadFailure',
           error: e,
@@ -316,9 +314,7 @@ extension _HomePlayback on _HomePageState {
         );
       }
     } finally {
-      if (requestId == _playRequestId) {
-        _isChangingTrack = false;
-      }
+      _playbackSessionGuard.finishTrackChange(requestId);
     }
   }
 
@@ -409,7 +405,7 @@ extension _HomePlayback on _HomePageState {
     _playbackWatchdog?.cancel();
 
     _playbackWatchdog = Timer(const Duration(seconds: 15), () {
-      if (!mounted || requestId != _playRequestId) {
+      if (!mounted || !_playbackSessionGuard.isCurrentRequest(requestId)) {
         return;
       }
 

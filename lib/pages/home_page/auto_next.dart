@@ -10,17 +10,15 @@ extension _HomeAutoNext on _HomePageState {
       return;
     }
 
-    if (_isAutoNextProcessing) {
-      return;
-    }
-
     final currentVideo = _currentVideo;
 
     if (currentVideo == null || currentVideo.videoId != endedVideoId) {
       return;
     }
 
-    _isAutoNextProcessing = true;
+    if (!_playbackSessionGuard.tryBeginAutoNext()) {
+      return;
+    }
 
     try {
       // 0. TIMER TIDUR "SETELAH LAGU INI"
@@ -61,7 +59,7 @@ extension _HomeAutoNext on _HomePageState {
 
       // 3. PLAYLIST AKTIF / SHUFFLE
       // Timeout: kalau request jaringan menggantung, flag
-      // _isAutoNextProcessing tidak boleh nyangkut selamanya (itu yang
+      // Kunci auto-next tidak boleh nyangkut selamanya (itu yang
       // membuat auto-next mati total sampai app di-restart).
       await _next(fromAutoNext: true).timeout(
         const Duration(seconds: 45),
@@ -77,7 +75,7 @@ extension _HomeAutoNext on _HomePageState {
       debugPrint('AUTO NEXT ERROR: $e');
       debugPrint('$stackTrace');
     } finally {
-      _isAutoNextProcessing = false;
+      _playbackSessionGuard.finishAutoNext();
     }
   }
 }

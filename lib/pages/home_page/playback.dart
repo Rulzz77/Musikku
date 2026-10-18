@@ -237,9 +237,16 @@ extension _HomePlayback on _HomePageState {
                 milliseconds: ((video.durationSeconds ?? safeRestoreDuration) * 1000).round(),
               ),
             );
-            if (mounted) {
-              _toast('Lagu ini tidak bisa diputar sebagai audio. Coba lagu lain atau tekan Next.');
-            }
+            unawaited(AppHealthMonitor.instance.record(
+              kind: 'PlaybackLoadFailure',
+              error: 'Audio source could not be resolved for playback.',
+            ));
+            _showPlaybackRecoverySnack(
+              video,
+              'Lagu ini gagal dimuat sebagai audio.',
+              positionSeconds: safeRestorePosition,
+              durationSeconds: safeRestoreDuration,
+            );
           }
           return;
         }
@@ -296,8 +303,18 @@ extension _HomePlayback on _HomePageState {
       }
     } catch (e) {
       debugPrint('PLAY VIDEO ERROR: $e');
-
-      _toast('Gagal memutar lagu: $e');
+      if (requestId == _playRequestId && _currentVideo?.videoId == video.videoId) {
+        unawaited(AppHealthMonitor.instance.record(
+          kind: 'PlaybackLoadFailure',
+          error: e,
+        ));
+        _showPlaybackRecoverySnack(
+          video,
+          'Pemutaran gagal. Periksa koneksi, lalu coba lagi.',
+          positionSeconds: restorePosition ?? _nativeState.position.inMilliseconds / 1000.0,
+          durationSeconds: restoreDurationSeconds ?? _nativeState.duration.inMilliseconds / 1000.0,
+        );
+      }
     } finally {
       if (requestId == _playRequestId) {
         _isChangingTrack = false;
@@ -428,8 +445,69 @@ extension _HomePlayback on _HomePageState {
       await _youtubeController.pauseVideo();
     } catch (_) {}
 
-    if (mounted) {
-      _toast('Lagu gagal diputar. Coba putar ulang atau pilih Next secara manual.');
-    }
+    unawaited(AppHealthMonitor.instance.record(
+      kind: 'PlaybackFailure',
+      error: 'Playback watchdog timed out; state=${_nativeState.playbackState.name}.',
+    ));
+    _showPlaybackRecoverySnack(
+      video,
+      'Lagu gagal diputar. Coba lagi atau pilih lagu berikutnya.',
+      positionSeconds: _nativeState.position.inMilliseconds / 1000.0,
+      durationSeconds: _nativeState.duration.inMilliseconds / 1000.0,
+    );
+  }
+
+  void _showPlaybackRecoverySnack(
+    YoutubeSearchResult video,
+    String message, {
+    double? positionSeconds,
+    double? durationSeconds,
+  }) {
+    if (!mounted || _currentVideo?.videoId != video.videoId) return;
+
+    final rawPosition = positionSeconds ?? 0.0;
+    final rawDuration = durationSeconds ?? 0.0;
+    final safePosition = rawPosition.isFinite
+        ? rawPosition.clamp(0.0, 86400.0).toDouble()
+        : 0.0;
+    final safeDuration = rawDuration.isFinite
+        ? rawDuration.clamp(0.0, 86400.0).toDouble()
+        : 0.0;
+
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        duration: const Duration(seconds: 8),
+        action: SnackBarAction(
+          label: 'COBA LAGI',
+          onPressed: () {
+            if (!mounted || _currentVideo?.videoId != video.videoId) return;
+            unawaited(_retryFailedPlayback(
+              video,
+              positionSeconds: safePosition,
+              durationSeconds: safeDuration,
+            ));
+          },
+        ),
+      ),
+    );
+  }
+
+  Future<void> _retryFailedPlayback(
+    YoutubeSearchResult video, {
+    required double positionSeconds,
+    required double durationSeconds,
+  }) async {
+    if (!mounted || _currentVideo?.videoId != video.videoId) return;
+    _failureHandledFor = '';
+    await _playVideo(
+      video,
+      recordHistory: false,
+      restorePosition: positionSeconds,
+      restoreDurationSeconds: durationSeconds,
+      autoPlay: true,
+    );
   }
 }

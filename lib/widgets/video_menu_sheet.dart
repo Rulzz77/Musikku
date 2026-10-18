@@ -11,8 +11,10 @@ void showVideoMenuSheet(
   required bool isFavorite,
   required bool isLiked,
   required bool isDisliked,
+  required bool isChannelBlocked,
   required VoidCallback onLike,
   required VoidCallback onDislike,
+  required VoidCallback onToggleChannelBlock,
   required VoidCallback onOpenArtist,
   required VoidCallback onPlayNext,
   required VoidCallback onAddToQueue,
@@ -83,6 +85,27 @@ void showVideoMenuSheet(
                     onDislike();
                   },
                 ),
+                if (!video.isLocal && video.channelTitle.trim().isNotEmpty)
+                  ListTile(
+                    leading: Icon(
+                      isChannelBlocked ? Icons.check_circle_outline : Icons.block_rounded,
+                      color: isChannelBlocked ? Theme.of(sheetContext).colorScheme.primary : null,
+                    ),
+                    title: Text(
+                      isChannelBlocked
+                          ? 'Izinkan rekomendasi channel'
+                          : 'Jangan rekomendasikan channel',
+                    ),
+                    subtitle: Text(
+                      isChannelBlocked
+                          ? 'Channel ini akan bisa muncul lagi di Radio.'
+                          : 'Sembunyikan ${video.channelTitle} dari Radio berikutnya.',
+                    ),
+                    onTap: () {
+                      Navigator.pop(sheetContext);
+                      onToggleChannelBlock();
+                    },
+                  ),
                 ListTile(
                   leading: const Icon(Icons.person_outline),
                   title: const Text('Lihat artis / channel'),

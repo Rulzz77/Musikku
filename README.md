@@ -1,12 +1,31 @@
-# MusikKu
+# MusikKu 4.7.4 — Build 48
 
-**MusikKu 4.6.8 (Build 42)** — aplikasi musik Flutter untuk YouTube, musik lokal, playlist, radio, lirik, antrean, statistik, dan update APK melalui GitHub Releases.
+Source Flutter + Android. Build 48 focuses on playlist organization and safer queue editing.
 
-## Pembaruan rilis ini
-- Pencegahan popup update ganda dan permintaan cek update yang bersamaan.
-- Memperbaiki tes regresi yang salah menggunakan `tester.pageBack()` untuk modal bottom sheet Material.
-- Auto-update tidak menumpuk di atas modal/route lain.
-- APK update yang sudah diverifikasi disimpan secara persisten dan dipakai ulang tanpa mengunduh ulang.
-- Tes regresi update dijalankan oleh GitHub Actions sebelum build APK.
+## Perubahan Build 48
+- Menambahkan **Playlist pintar** yang dihitung dari data lokal: Mix Favorit, Baru Diputar, Paling Sering Diputar (saat statistik tersedia), dan Putar Lagi. Daftar dihitung ulang dari favorit, riwayat, katalog lagu yang dikenal, dan statistik pemutaran; tidak membuat salinan data persisten baru.
+- Menambahkan layar **Playlist MusikKu** di menu Koleksi. Pengguna dapat membuat, mengganti nama, menghapus playlist, menambahkan beberapa lagu dari favorit/riwayat/daftar yang sedang dimuat, memutar playlist/lagu, menghapus lagu, dan drag-and-drop urutan lagu. Urutan disimpan melalui storage playlist yang sudah ada.
+- Menambahkan **Undo** untuk penghapusan satu lagu dari antrean dan pengosongan antrean. Item dipulihkan pada posisi sebelumnya, menolak ID duplikat, dan tidak menghapus item baru yang ditambahkan setelah aksi awal.
+- Mempertahankan drag-and-drop antrean yang sudah tersedia, serta menguji pemulihan queue dan urutan playlist.
+- Metadata versi: `4.7.4+48`.
 
-Lihat `CHANGELOG.md` dan `VALIDATION-REPORT.md` untuk detail pemeriksaan.
+## Verifikasi sebelum rilis
+
+Jalankan di lingkungan yang memiliki Flutter SDK dan Android SDK:
+
+```bash
+flutter pub get
+flutter analyze
+flutter test
+flutter build apk --release
+```
+
+Uji perangkat yang disarankan: buka Koleksi → Playlist MusikKu; buat playlist, tambahkan lagu dari menu lagu, ubah urutan, tutup dan buka kembali aplikasi; uji Undo setelah menghapus satu lagu dari antrean; kosongkan antrean lalu Undo; tambahkan lagu baru sebelum Undo dan pastikan tidak hilang; pastikan playlist pintar kosong atau berisi lagu sesuai data yang tersedia.
+
+Laporan terpisah ada pada `CHANGELOG.md`, `FEATURE-AUDIT.md`, `VALIDATION-REPORT.md`, dan `UI-REGRESSION-AUDIT.md`.
+
+
+## Perbaikan Build 48
+- Memperbaiki import ambigu metadata versi di halaman Diagnostik.
+- Memperbaiki variabel tema di halaman Playlist MusikKu.
+- Menggunakan callback `onReorderItem` yang baru dan menguji ulang perpindahan indeks playlist.

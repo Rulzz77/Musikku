@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../app_info.dart';
+import 'app_health_page.dart';
 import '../services/app_settings.dart';
 import '../widgets/app_update_sheet.dart';
 
@@ -182,6 +183,20 @@ class AppSettingsPage extends StatelessWidget {
                   ),
                 ),
               ],
+            ),
+          ),
+          const SizedBox(height: 22),
+          _SectionLabel(icon: Icons.health_and_safety_outlined, title: 'Diagnostik & pemulihan'),
+          const SizedBox(height: 8),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.monitor_heart_outlined),
+              title: const Text('Diagnostik aplikasi', style: TextStyle(fontWeight: FontWeight.w800)),
+              subtitle: const Text('Lihat error pemutaran, salin laporan, atau hapus log lokal.'),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const AppHealthPage()),
+              ),
             ),
           ),
           const SizedBox(height: 22),

@@ -46,9 +46,11 @@ extension _HomeDataLoading on _HomePageState {
     final feedback = await Future.wait([
       _storage.loadLikedIds(),
       _storage.loadDislikedIds(),
+      _storage.loadBlockedChannelKeys(),
     ]);
     final likedIds = feedback[0];
     final dislikedIds = feedback[1];
+    final blockedChannelKeys = feedback[2];
     try {
       final prefs = await SharedPreferences.getInstance();
       _playerVolumePercent = (prefs.getInt(_playerVolumePrefKey) ?? 100)
@@ -112,6 +114,7 @@ extension _HomeDataLoading on _HomePageState {
       _equalizerPreset = equalizerPreset;
       _likedIds = likedIds;
       _dislikedIds = dislikedIds;
+      _blockedChannelKeys = blockedChannelKeys;
     });
 
     try {

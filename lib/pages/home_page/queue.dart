@@ -70,41 +70,33 @@ extension _HomeQueue on _HomePageState {
     String? currentArtist,
   }) {
     final stat = _listeningStatsById[video.videoId];
-    var score = 10.0;
+    final artistKey = SmartQueueScorer.normalizeArtist(video.channelTitle);
+    var artistPlayCount = 0;
+    var artistSkipCount = 0;
+    var artistHasLikedTrack = false;
 
-    if (_likedIds.contains(video.videoId)) {
-      score += 10.0;
-    }
-    if (_dislikedIds.contains(video.videoId)) {
-      score -= 100.0;
-    }
-
-    if (stat != null) {
-      score += (stat.playCount.clamp(0, 8) as num).toDouble() * 1.8;
-      score += (stat.listenedSeconds / 600.0).clamp(0.0, 4.0);
-      score -= (stat.skipCount.clamp(0, 6) as num).toDouble() * 4.5;
-
-      final lastPlayed = stat.lastPlayedAt;
-      if (lastPlayed != null) {
-        final hours = DateTime.now().difference(lastPlayed).inMinutes / 60.0;
-        if (hours < 24) {
-          score -= (24.0 - hours).clamp(0.0, 24.0) / 3.0;
+    if (artistKey.isNotEmpty) {
+      for (final entry in _listeningStatsById.entries) {
+        if (SmartQueueScorer.normalizeArtist(entry.value.artist) != artistKey) {
+          continue;
         }
+        artistPlayCount += entry.value.playCount;
+        artistSkipCount += entry.value.skipCount;
+        if (_likedIds.contains(entry.key)) artistHasLikedTrack = true;
       }
     }
 
-    // Variasi artis: Smart Shuffle sengaja memberi penalti ke artis yang sama
-    // dengan lagu aktif agar hasilnya tidak terasa seperti album yang berulang.
-    if (currentArtist != null &&
-        currentArtist.isNotEmpty &&
-        video.channelTitle.trim().toLowerCase() == currentArtist.trim().toLowerCase()) {
-      score -= 9.0;
-    }
-
-    // Sedikit jitter membuat urutannya tetap bervariasi tanpa kehilangan sinyal
-    // personalisasi. Ini bukan random murni.
-    score += _random.nextDouble() * 2.5;
-    return score;
+    return SmartQueueScorer.score(
+          video: video,
+          stat: stat,
+          isLiked: _likedIds.contains(video.videoId),
+          isDisliked: _dislikedIds.contains(video.videoId),
+          currentArtist: currentArtist,
+          artistPlayCount: artistPlayCount,
+          artistSkipCount: artistSkipCount,
+          artistHasLikedTrack: artistHasLikedTrack,
+        ) +
+        _random.nextDouble() * 2.5;
   }
 
   YoutubeSearchResult? _takeShuffleVideo() {
@@ -193,6 +185,35 @@ extension _HomeQueue on _HomePageState {
     _toast('"${video.title}" akan diputar berikutnya');
   }
 
+  Future<void> _toggleChannelBlock(YoutubeSearchResult video) async {
+    final keys = ChannelBlockFilter.keysFor(video);
+    if (keys.isEmpty) return;
+
+    final alreadyBlocked = keys.any(_blockedChannelKeys.contains);
+    setState(() {
+      if (alreadyBlocked) {
+        _blockedChannelKeys.removeAll(keys);
+      } else {
+        _blockedChannelKeys.addAll(keys);
+      }
+    });
+    await _storage.saveBlockedChannelKeys(_blockedChannelKeys);
+
+    // Refresh the recommendation pool so an updated block immediately affects
+    // the next Radio choice. The current song is not interrupted.
+    if (_radio.hasSeed) {
+      _radio.restart(_radio.seed);
+      unawaited(_radio.refill());
+    }
+
+    _toast(
+      alreadyBlocked
+          ? 'Rekomendasi channel diizinkan lagi'
+          : 'Channel disembunyikan dari rekomendasi Radio',
+      duration: const Duration(seconds: 2),
+    );
+  }
+
   void _showVideoMenu(YoutubeSearchResult video, {Playlist? fromPlaylist}) {
     showVideoMenuSheet(
       context,
@@ -200,8 +221,10 @@ extension _HomeQueue on _HomePageState {
       isFavorite: _isFavorite(video.videoId),
       isLiked: _likedIds.contains(video.videoId),
       isDisliked: _dislikedIds.contains(video.videoId),
+      isChannelBlocked: ChannelBlockFilter.isBlocked(video, _blockedChannelKeys),
       onLike: () => _toggleLike(video),
       onDislike: () => _toggleDislike(video),
+      onToggleChannelBlock: () => _toggleChannelBlock(video),
       onOpenArtist: () => _openArtist(video.channelTitle),
       onPlayNext: () => _playNext(video),
       onAddToQueue: () => _addToQueue(video),
@@ -232,6 +255,8 @@ extension _HomeQueueSheet on _HomePageState {
           final current = _currentVideo;
           final maxHeight = MediaQuery.sizeOf(context).height * 0.82;
 
+          final messenger = ScaffoldMessenger.of(context);
+
           Future<void> clearQueue() async {
             final confirm = await showDialog<bool>(
               context: context,
@@ -245,10 +270,60 @@ extension _HomeQueueSheet on _HomePageState {
               ),
             );
             if (confirm != true) return;
+            final previousItems = List<QueueItem>.from(_queueManager.items);
+            if (previousItems.isEmpty) return;
             _queueManager.clear();
             await _storage.saveQueue(_queueManager.items);
             if (mounted) setState(() {});
+            if (sheetContext.mounted) setSheetState(() {});
+            messenger.hideCurrentSnackBar();
+            messenger.showSnackBar(
+              SnackBar(
+                content: Text('${previousItems.length} lagu dihapus dari antrean'),
+                duration: const Duration(seconds: 6),
+                action: SnackBarAction(
+                  label: 'URUNGKAN',
+                  onPressed: () {
+                    // Restore missing entries at their former indexes without
+                    // deleting songs that may have been added after clearing.
+                    for (var i = 0; i < previousItems.length; i++) {
+                      _queueManager.restoreAtIndex(previousItems[i], i);
+                    }
+                    unawaited(_storage.saveQueue(_queueManager.items));
+                    if (mounted) setState(() {});
+                    if (sheetContext.mounted) setSheetState(() {});
+                  },
+                ),
+              ),
+            );
+          }
+
+          void removeFromQueueWithUndo(YoutubeSearchResult video) {
+            final removal = _queueManager.removeWithIndex(video.videoId);
+            if (removal == null) return;
+            unawaited(_storage.saveQueue(_queueManager.items));
+            if (mounted) setState(() {});
             setSheetState(() {});
+            messenger.hideCurrentSnackBar();
+            messenger.showSnackBar(
+              SnackBar(
+                content: Text('"${video.title}" dihapus dari antrean'),
+                duration: const Duration(seconds: 6),
+                action: SnackBarAction(
+                  label: 'URUNGKAN',
+                  onPressed: () {
+                    final restored = _queueManager.restoreAtIndex(
+                      removal.item,
+                      removal.index,
+                    );
+                    if (!restored) return;
+                    unawaited(_storage.saveQueue(_queueManager.items));
+                    if (mounted) setState(() {});
+                    if (sheetContext.mounted) setSheetState(() {});
+                  },
+                ),
+              ),
+            );
           }
 
           return SizedBox(
@@ -378,12 +453,7 @@ extension _HomeQueueSheet on _HomePageState {
                                     IconButton(
                                       tooltip: 'Hapus dari antrean',
                                       visualDensity: VisualDensity.compact,
-                                      onPressed: () {
-                                        _queueManager.remove(video.videoId);
-                                        unawaited(_storage.saveQueue(_queueManager.items));
-                                        if (mounted) setState(() {});
-                                        setSheetState(() {});
-                                      },
+                                      onPressed: () => removeFromQueueWithUndo(video),
                                       icon: const Icon(Icons.close_rounded, size: 20),
                                     ),
                                     ReorderableDragStartListener(index: index, child: Icon(Icons.drag_handle_rounded, color: scheme.onSurfaceVariant)),

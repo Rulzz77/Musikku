@@ -41,6 +41,7 @@ class StorageService {
   static const String _dataSaverModeKey = 'data_saver_mode_v1';
   static const String _likedKey = 'liked_v1';
   static const String _dislikedKey = 'disliked_v1';
+  static const String _blockedChannelKeysKey = 'blocked_channel_keys_v1';
 
   static const int maxHistory = 12;
   static const int maxRecentlyPlayed = 30;
@@ -55,6 +56,13 @@ class StorageService {
 
   Future<void> saveDislikedIds(Set<String> ids) async =>
       _saveIdSet(_dislikedKey, ids);
+
+  /// Identitas channel yang tidak ingin muncul pada rekomendasi Radio.
+  Future<Set<String>> loadBlockedChannelKeys() async =>
+      _loadIdSet(_blockedChannelKeysKey);
+
+  Future<void> saveBlockedChannelKeys(Set<String> keys) async =>
+      _saveIdSet(_blockedChannelKeysKey, keys);
 
   Future<void> saveFeedback({
     required String videoId,
@@ -700,6 +708,7 @@ class StorageService {
           ((prefs.getBool(_dataSaverKey) ?? false) ? 'saver' : 'off'),
       'likedIds': (await loadLikedIds()).toList(),
       'dislikedIds': (await loadDislikedIds()).toList(),
+      'blockedChannelKeys': (await loadBlockedChannelKeys()).toList(),
     };
     return jsonEncode(data);
   }
@@ -747,6 +756,12 @@ class StorageService {
     }
     if (decoded['likedIds'] is List) await _saveIdSet(_likedKey, Set<String>.from(decoded['likedIds'].map((e) => e.toString())));
     if (decoded['dislikedIds'] is List) await _saveIdSet(_dislikedKey, Set<String>.from(decoded['dislikedIds'].map((e) => e.toString())));
+    if (decoded['blockedChannelKeys'] is List) {
+      await _saveIdSet(
+        _blockedChannelKeysKey,
+        Set<String>.from(decoded['blockedChannelKeys'].map((e) => e.toString())),
+      );
+    }
   }
 
   Future<Set<String>> _loadIdSet(String key) async {

@@ -9,6 +9,65 @@ extension _HomePlaylists on _HomePageState {
     unawaited(_storage.savePlaylists(_playlists));
   }
 
+  void _openCustomPlaylistsPage() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => CustomPlaylistsPage(
+          playlists: _playlists,
+          availableSongs: <YoutubeSearchResult>[
+            ..._favorites,
+            ..._recentlyPlayed,
+            ..._searchResults,
+            ..._activeList,
+          ],
+          onChanged: () {
+            _savePlaylists();
+            final activeId = _activePlaylistId;
+            if (activeId != null) {
+              for (final playlist in _playlists) {
+                if (playlist.id == activeId) {
+                  _refreshActivePlaylist(playlist);
+                  break;
+                }
+              }
+            }
+            if (mounted) setState(() {});
+          },
+          onPlayPlaylist: _playCustomPlaylist,
+          onPlaySong: _playCustomPlaylistSong,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _playCustomPlaylist(Playlist playlist) async {
+    if (playlist.songs.isEmpty) {
+      _toast('Playlist ini masih kosong');
+      return;
+    }
+    await _playCustomPlaylistSong(playlist, playlist.songs.first);
+  }
+
+  Future<void> _playCustomPlaylistSong(
+    Playlist playlist,
+    YoutubeSearchResult video,
+  ) async {
+    if (playlist.songs.isEmpty ||
+        !playlist.songs.any((song) => song.videoId == video.videoId)) {
+      return;
+    }
+    _activeList = PlaybackSourcePolicy.sameSourceAs(
+      playlist.songs,
+      selected: video,
+    );
+    _activeSource = _ListSource.playlist;
+    _activePlaylistId = playlist.id;
+    if (_playerUiState.value.isShuffle) {
+      _prepareShufflePool(excludeCurrent: true, sourceVideo: video);
+    }
+    await _openYoutubeVideo(video);
+  }
+
   /// Buat playlist baru. Kalau [thenAdd] diisi, lagu itu langsung dimasukkan.
   Future<void> _createPlaylist({YoutubeSearchResult? thenAdd}) async {
     final name = await showPlaylistNameDialog(
@@ -95,14 +154,18 @@ extension _HomePlaylists on _HomePageState {
       return;
     }
 
-    final ids = playlist.songs.map((song) => song.videoId).toSet();
+    final current = _currentVideo;
+    final songsForCurrentSource = current == null
+        ? List<YoutubeSearchResult>.from(playlist.songs)
+        : PlaybackSourcePolicy.sameSourceAs(playlist.songs, selected: current);
+    final ids = songsForCurrentSource.map((song) => song.videoId).toSet();
     final known = _activeList.map((song) => song.videoId).toSet();
 
-    _activeList = List<YoutubeSearchResult>.from(playlist.songs);
+    _activeList = List<YoutubeSearchResult>.from(songsForCurrentSource);
 
     _shufflePool.removeWhere((song) => !ids.contains(song.videoId));
 
-    for (final song in playlist.songs) {
+    for (final song in songsForCurrentSource) {
       if (!known.contains(song.videoId) &&
           song.videoId != _currentVideo?.videoId) {
         _shufflePool.add(song);

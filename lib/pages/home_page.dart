@@ -16,11 +16,14 @@ import '../models/youtube_search_result.dart';
 import '../services/lyrics_service.dart';
 import '../services/music_style_matcher.dart';
 import '../services/app_settings.dart';
+import '../services/app_health_monitor.dart';
 import '../services/app_update_service.dart';
+import '../services/channel_block_filter.dart';
 import '../services/queue_manager.dart';
 import '../services/playback_source_policy.dart';
 import '../services/radio_service.dart';
 import '../services/storage_service.dart';
+import '../services/smart_queue_scorer.dart';
 import '../services/youtube_controller.dart';
 import '../services/youtube_search_service.dart';
 import '../widgets/youtube_hub.dart';
@@ -30,6 +33,7 @@ import '../widgets/app_update_sheet.dart';
 import '../widgets/playlist_widgets.dart';
 import '../widgets/video_menu_sheet.dart';
 import 'artist_page.dart';
+import 'custom_playlists_page.dart';
 
 part 'home_page/state_sync.dart';
 part 'home_page/audio_effects.dart';
@@ -138,6 +142,9 @@ class _HomePageState extends State<HomePage>
 
   Set<String> _dislikedIds = <String>{};
 
+  /// Channel yang dikecualikan dari rekomendasi Radio.
+  Set<String> _blockedChannelKeys = <String>{};
+
   /// Riwayat lagu yang benar-benar diputar, terpisah dari riwayat pencarian.
   List<YoutubeSearchResult> _recentlyPlayed = [];
 
@@ -234,6 +241,7 @@ class _HomePageState extends State<HomePage>
     _searchService,
     currentVideoId: () => _currentVideo?.videoId,
     blockedIds: () => _dislikedIds,
+    blockedChannelKeys: () => _blockedChannelKeys,
     onError: (message) {
       if (mounted) {
         _toast(message);

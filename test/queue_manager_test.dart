@@ -49,6 +49,31 @@ void main() {
       expect(queue.items.map((item) => item.id).toList(), ['a', 'b']);
     });
 
+    test('removeWithIndex and restoreAtIndex undo a removal in place', () {
+      final queue = QueueManager();
+      queue.add(song('a'));
+      queue.add(song('b'));
+      queue.add(song('c'));
+
+      final removal = queue.removeWithIndex('b')!;
+      expect(removal.index, 1);
+      expect(queue.items.map((item) => item.id).toList(), ['a', 'c']);
+      expect(queue.restoreAtIndex(removal.item, removal.index), isTrue);
+      expect(queue.items.map((item) => item.id).toList(), ['a', 'b', 'c']);
+      expect(queue.restoreAtIndex(removal.item, removal.index), isFalse);
+    });
+
+    test('undo keeps new queue entries and clamps a stale index', () {
+      final queue = QueueManager();
+      queue.add(song('a'));
+      queue.add(song('b'));
+      final removal = queue.removeWithIndex('a')!;
+      queue.add(song('c'));
+
+      expect(queue.restoreAtIndex(removal.item, 100), isTrue);
+      expect(queue.items.map((item) => item.id).toList(), ['b', 'c', 'a']);
+    });
+
     test('move and takeFirst preserve the visible order', () {
       final queue = QueueManager();
       queue.add(song('a'));

@@ -6,6 +6,8 @@ import 'package:google_sign_in/google_sign_in.dart';
 
 import '../app_info.dart';
 import '../models/youtube_search_result.dart';
+import '../models/listening_stat.dart';
+import '../services/smart_playlist_service.dart';
 import '../services/youtube_account_service.dart';
 import '../services/storage_service.dart';
 import '../services/youtube_search_service.dart';
@@ -58,6 +60,9 @@ class YoutubeHub extends StatefulWidget {
   final Map<String, double> watchDuration;
   final List<YoutubeSearchResult> recentlyPlayed;
   final List<YoutubeSearchResult> favorites;
+  final List<ListeningStat> listeningStats;
+  final int customPlaylistCount;
+  final VoidCallback? onOpenCustomPlaylists;
   final String? currentVideoId;
   final Future<void> Function(YoutubeSearchResult video)? onStartRadio;
   final Future<void> Function(YoutubeSearchResult video, List<YoutubeSearchResult> list) onPlayFromList;
@@ -76,6 +81,9 @@ class YoutubeHub extends StatefulWidget {
     this.watchDuration = const {},
     this.recentlyPlayed = const [],
     this.favorites = const [],
+    this.listeningStats = const [],
+    this.customPlaylistCount = 0,
+    this.onOpenCustomPlaylists,
     this.currentVideoId,
     this.onStartRadio,
     required this.onPlayFromList,
@@ -422,6 +430,7 @@ class _YoutubeHubState extends State<YoutubeHub> {
     }
 
     final recentlyPlayed = widget.recentlyPlayed.take(12).toList(growable: false);
+    final smartPlaylists = _buildSmartPlaylists();
 
     return [
       SliverToBoxAdapter(child: _modernWelcomeHeader()),
@@ -454,6 +463,21 @@ class _YoutubeHubState extends State<YoutubeHub> {
           ),
         ),
       ),
+      if (smartPlaylists.isNotEmpty) ...[
+        _sectionHeader('Playlist pintar', action: 'Lihat semua', onAction: _showSmartPlaylistPicker),
+        SliverToBoxAdapter(
+          child: SizedBox(
+            height: 88,
+            child: ListView.separated(
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 6),
+              scrollDirection: Axis.horizontal,
+              itemCount: smartPlaylists.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 9),
+              itemBuilder: (context, index) => _smartPlaylistCard(smartPlaylists[index]),
+            ),
+          ),
+        ),
+      ],
       if (recentlyPlayed.isNotEmpty) ...[
         _sectionHeader(
           'Lanjutkan mendengarkan',
@@ -495,6 +519,139 @@ class _YoutubeHubState extends State<YoutubeHub> {
         ),
       const SliverToBoxAdapter(child: SizedBox(height: 8)),
     ];
+  }
+
+  List<SmartPlaylist> _buildSmartPlaylists() {
+    final catalog = <YoutubeSearchResult>[
+      ..._trending,
+      ..._chipFeeds.values.expand((items) => items),
+      ..._searchResults,
+      ..._exploreResults,
+      ..._subscriptionFeed,
+      ..._liked,
+    ];
+    return SmartPlaylistService.build(
+      favorites: widget.favorites,
+      recentlyPlayed: widget.recentlyPlayed,
+      listeningStats: widget.listeningStats,
+      catalog: catalog,
+    );
+  }
+
+  void _playSmartPlaylist(SmartPlaylist playlist) {
+    if (playlist.songs.isEmpty) return;
+    unawaited(widget.onPlayFromList(playlist.songs.first, playlist.songs));
+  }
+
+  void _showSmartPlaylistPicker() {
+    final playlists = _buildSmartPlaylists();
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      useSafeArea: true,
+      builder: (sheetContext) {
+        final scheme = Theme.of(sheetContext).colorScheme;
+        if (playlists.isEmpty) {
+          return const Padding(
+            padding: EdgeInsets.fromLTRB(24, 8, 24, 32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.auto_awesome_rounded, size: 42),
+                SizedBox(height: 10),
+                Text('Playlist pintar belum tersedia', style: TextStyle(fontWeight: FontWeight.w800)),
+                SizedBox(height: 6),
+                Text('Simpan lagu ke favorit atau dengarkan beberapa lagu dulu.'),
+              ],
+            ),
+          );
+        }
+        return ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.72),
+          child: ListView(
+            shrinkWrap: true,
+            padding: const EdgeInsets.fromLTRB(12, 4, 12, 20),
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(8, 0, 8, 8),
+                child: Text('Playlist pintar', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+              ),
+              for (final playlist in playlists)
+                ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: scheme.primaryContainer,
+                    child: Icon(_smartPlaylistIcon(playlist.id), color: scheme.onPrimaryContainer),
+                  ),
+                  title: Text(playlist.title),
+                  subtitle: Text('${playlist.songs.length} lagu · ${playlist.subtitle}'),
+                  trailing: const Icon(Icons.play_arrow_rounded),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _playSmartPlaylist(playlist);
+                  },
+                  onLongPress: () {
+                    Navigator.pop(sheetContext);
+                    _showSongList(playlist.title, playlist.songs);
+                  },
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  IconData _smartPlaylistIcon(String id) {
+    return switch (id) {
+      'smart_favorites' => Icons.favorite_rounded,
+      'smart_recent' => Icons.history_rounded,
+      'smart_most_played' => Icons.trending_up_rounded,
+      _ => Icons.replay_rounded,
+    };
+  }
+
+  Widget _smartPlaylistCard(SmartPlaylist playlist) {
+    final scheme = Theme.of(context).colorScheme;
+    final first = playlist.songs.first;
+    return SizedBox(
+      width: 186,
+      child: Material(
+        color: scheme.surfaceContainerLow,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.36)),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => _playSmartPlaylist(playlist),
+          onLongPress: () => _showSongList(playlist.title, playlist.songs),
+          child: Padding(
+            padding: const EdgeInsets.all(11),
+            child: Row(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: UnifiedArtwork(track: first, width: 60, height: 60, fit: BoxFit.cover, iconSize: 24),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(playlist.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900)),
+                      const SizedBox(height: 4),
+                      Text('${playlist.songs.length} lagu', style: TextStyle(fontSize: 10.5, color: scheme.onSurfaceVariant)),
+                    ],
+                  ),
+                ),
+                Icon(Icons.play_circle_fill_rounded, color: scheme.primary, size: 27),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   void _playFavoritesMix() {
@@ -2344,6 +2501,18 @@ class _YoutubeHubState extends State<YoutubeHub> {
           _showPlaylistPicker,
         ),
       ],
+      spacedCard(
+        'Playlist MusikKu',
+        '${widget.customPlaylistCount} playlist buatan sendiri · bisa diurutkan dan diedit',
+        Icons.queue_music_rounded,
+        widget.onOpenCustomPlaylists ?? () {},
+      ),
+      spacedCard(
+        'Playlist pintar',
+        'Mix favorit, riwayat, dan lagu yang sering diputar',
+        Icons.auto_awesome_rounded,
+        _showSmartPlaylistPicker,
+      ),
       SliverToBoxAdapter(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 18, 14, 9),
@@ -2634,7 +2803,9 @@ class _YoutubeHubState extends State<YoutubeHub> {
                 subtitle: Text(video.channelTitle, maxLines: 1, overflow: TextOverflow.ellipsis),
                 onTap: () {
                   Navigator.pop(context);
-                  unawaited(widget.onPlay(video));
+                  // Preserve list context so Next/Previous use the selected
+                  // collection rather than treating the song as an isolated tap.
+                  unawaited(widget.onPlayFromList(video, songs));
                 },
               );
             },

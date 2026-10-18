@@ -3,6 +3,14 @@ import 'dart:math';
 import '../models/queue_item.dart';
 import '../models/youtube_search_result.dart';
 
+/// Informasi yang dibutuhkan untuk mengembalikan item antrean ke posisi semula.
+class QueueRemoval {
+  const QueueRemoval({required this.item, required this.index});
+
+  final QueueItem item;
+  final int index;
+}
+
 class QueueManager {
   final List<QueueItem> _queue = [];
 
@@ -77,22 +85,23 @@ class QueueManager {
     );
   }
 
-  bool remove(
-    String videoId,
-  ) {
-    final index =
-        _queue.indexWhere(
-      (item) => item.id == videoId,
-    );
+  /// Menghapus item sekaligus menyimpan posisi supaya dapat di-undo.
+  QueueRemoval? removeWithIndex(String videoId) {
+    final index = _queue.indexWhere((item) => item.id == videoId);
+    if (index < 0) return null;
+    return QueueRemoval(item: _queue.removeAt(index), index: index);
+  }
 
-    if (index == -1) {
-      return false;
-    }
-
-    _queue.removeAt(index);
-
+  /// Memulihkan item di posisi sebelumnya tanpa menghapus item lain yang
+  /// mungkin ditambahkan setelah penghapusan. Menolak ID kosong/duplikat.
+  bool restoreAtIndex(QueueItem item, int index) {
+    if (item.id.isEmpty || contains(item.id)) return false;
+    final safeIndex = index.clamp(0, _queue.length).toInt();
+    _queue.insert(safeIndex, item);
     return true;
   }
+
+  bool remove(String videoId) => removeWithIndex(videoId) != null;
 
   void clear() {
     _queue.clear();

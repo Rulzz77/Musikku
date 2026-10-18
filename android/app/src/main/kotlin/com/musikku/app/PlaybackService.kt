@@ -148,17 +148,57 @@ class PlaybackService : MediaBrowserServiceCompat() {
     // sendiri tepat setelah mulai.
     // ========================================================
 
+    private var lastNoisyEventAtMs = 0L
+
     private val noisyReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == AudioManager.ACTION_AUDIO_BECOMING_NOISY &&
-                currentPlaying
-            ) {
-                MusikKuLogger.d(TAG, "AUDIO BECOMING NOISY -> pause")
+            if (intent?.action != AudioManager.ACTION_AUDIO_BECOMING_NOISY) return
+
+            val now = SystemClock.elapsedRealtime()
+            val backendActuallyPlaying = localPlayer?.isPlaying == true
+            if (!currentPlaying && !backendActuallyPlaying) return
+            // Some devices emit duplicate route-change broadcasts. Debounce them
+            // so one unplug action produces one pause + one diagnostic event.
+            if (lastNoisyEventAtMs > 0L && now - lastNoisyEventAtMs < 900L) return
+            lastNoisyEventAtMs = now
+
+            // Capture the position before switching state to paused.
+            currentPositionMs = effectivePositionMs()
+            MusikKuLogger.d(TAG, "AUDIO BECOMING NOISY -> pause and persist")
+            AppHealthMonitor.get(applicationContext).record(
+                "AudioRouteChange",
+                "Output audio berubah atau headset terputus; pemutaran dijeda untuk mencegah audio keluar dari speaker.",
+            )
+
+            try {
                 if (isAudioPlayerSource()) {
                     localPlayer?.pause()
                 } else {
                     YoutubePlatformView.instance?.pause()
                 }
+            } catch (error: Exception) {
+                AppHealthMonitor.get(applicationContext).record(
+                    "AudioRoutePauseFailure",
+                    "Gagal menjeda pemutaran setelah perubahan output audio.",
+                    error,
+                )
+                MusikKuLogger.e(TAG, "AUDIO ROUTE PAUSE FAILED", error)
+            }
+
+            currentPlaying = false
+            positionClockBaseElapsedMs = SystemClock.elapsedRealtime()
+            persistPlaybackSnapshot()
+            updateMediaSession()
+            syncWakeLock()
+            scheduleSnapshotPersistence()
+
+            if (foregroundStarted) {
+                val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                manager.notify(NOTIFICATION_ID, createNotification())
+                notificationTitle = currentTitle
+                notificationArtist = currentArtist
+                notificationPlaying = currentPlaying
+                notificationDurationMs = currentDurationMs
             }
         }
     }

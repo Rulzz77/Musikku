@@ -1013,6 +1013,50 @@ class MainActivity : AudioServiceActivity() {
                 }
 
 
+                "getAudioOutputDevices" -> {
+                    val audioManager = getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        val outputs = audioManager.getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS).map { device ->
+                            val typeLabel = when (device.type) {
+                                1 -> "Earpiece"
+                                2 -> "Speaker bawaan"
+                                3 -> "Headset kabel (mikrofon)"
+                                4 -> "Headphone kabel"
+                                5 -> "Line analog"
+                                6 -> "Line digital"
+                                7 -> "Bluetooth hands-free"
+                                8 -> "Bluetooth audio"
+                                9, 10, 29 -> "HDMI"
+                                11, 12 -> "USB audio"
+                                13, 28 -> "Dock audio"
+                                14, 16 -> "FM audio"
+                                17 -> "TV tuner"
+                                18 -> "Telephony audio"
+                                19 -> "Aux audio"
+                                20 -> "IP audio"
+                                21 -> "Bus audio"
+                                22 -> "Headset USB"
+                                23 -> "Alat bantu dengar"
+                                24 -> "Speaker aman"
+                                25 -> "Remote submix"
+                                26 -> "Bluetooth LE headset"
+                                27 -> "Bluetooth LE speaker"
+                                30 -> "Bluetooth LE broadcast"
+                                else -> "Output audio lain"
+                            }
+                            mapOf(
+                                "id" to device.id,
+                                "typeCode" to device.type,
+                                "type" to typeLabel,
+                                "productName" to device.productName?.toString().orEmpty(),
+                            )
+                        }
+                        result.success(mapOf("supported" to true, "devices" to outputs))
+                    } else {
+                        result.success(mapOf("supported" to false, "devices" to emptyList<Map<String, Any>>()))
+                    }
+                }
+
                 "getHealthEvents" -> {
                     result.success(healthMonitor.events())
                 }

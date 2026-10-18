@@ -1,9 +1,10 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 
 import '../models/youtube_search_result.dart';
+import 'channel_block_filter.dart';
 import 'music_style_matcher.dart';
 import 'youtube_search_service.dart';
 
@@ -14,12 +15,15 @@ class RadioService {
     this._searchService, {
     required this.currentVideoId,
     Set<String> Function()? blockedIds,
+    Set<String> Function()? blockedChannelKeys,
     this.onError,
-  }) : _blockedIds = blockedIds ?? (() => <String>{});
+  })  : _blockedIds = blockedIds ?? (() => <String>{}),
+        _blockedChannelKeys = blockedChannelKeys ?? (() => <String>{});
 
   final YoutubeSearchService _searchService;
   final String? Function() currentVideoId;
   final Set<String> Function() _blockedIds;
+  final Set<String> Function() _blockedChannelKeys;
   final void Function(String message)? onError;
 
   final math.Random _random = math.Random();
@@ -125,6 +129,7 @@ class RadioService {
     final targetStyle = MusicStyleMatcher.styleFromText(_seed);
     _pool.removeWhere((video) =>
         _blockedIds().contains(video.videoId) ||
+        ChannelBlockFilter.isBlocked(video, _blockedChannelKeys()) ||
         !MusicStyleMatcher.isCompatible(video: video, targetStyle: targetStyle));
 
     if (_pool.isEmpty) {
@@ -173,6 +178,7 @@ class RadioService {
     final targetStyle = MusicStyleMatcher.styleFromText(_seed);
     _pool.removeWhere((video) =>
         _blockedIds().contains(video.videoId) ||
+        ChannelBlockFilter.isBlocked(video, _blockedChannelKeys()) ||
         !MusicStyleMatcher.isCompatible(video: video, targetStyle: targetStyle));
 
     if (_pool.isEmpty) {
@@ -525,6 +531,7 @@ class RadioService {
               video.videoId == currentId ||
               _playedIds.contains(video.videoId) ||
               _blockedIds().contains(video.videoId) ||
+              ChannelBlockFilter.isBlocked(video, _blockedChannelKeys()) ||
               knownIds.contains(video.videoId)) {
             continue;
           }

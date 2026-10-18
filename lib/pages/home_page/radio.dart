@@ -189,6 +189,7 @@ extension _HomeRadio on _HomePageState {
       final candidates = _activeList.where((video) {
         if (video.videoId == currentId) return false;
         if (_dislikedIds.contains(video.videoId)) return false;
+        if (ChannelBlockFilter.isBlocked(video, _blockedChannelKeys)) return false;
         if (YoutubeSearchService.isLikelyShortForm(video)) return false;
         if (YoutubeSearchService.isLikelyNonMusicVideo(video)) return false;
         if (video.isLive || video.isUpcoming) return false;
@@ -206,7 +207,7 @@ extension _HomeRadio on _HomePageState {
 
       if (verifiedCandidates.isNotEmpty) {
         final preferred = MusicStyleMatcher.prioritizeStyle(verifiedCandidates, targetStyle);
-        final styleCandidates = preferred.isNotEmpty ? preferred : candidates;
+        final styleCandidates = preferred.isNotEmpty ? preferred : verifiedCandidates;
         if (_playerUiState.value.isSmartShuffle) {
           styleCandidates.sort((a, b) => _smartShuffleScore(
                 b,
@@ -251,6 +252,7 @@ extension _HomeRadio on _HomePageState {
       ].where((video) {
         return video.videoId != currentId &&
             !_dislikedIds.contains(video.videoId) &&
+            !ChannelBlockFilter.isBlocked(video, _blockedChannelKeys) &&
             !YoutubeSearchService.isLikelyShortForm(video) &&
             !YoutubeSearchService.isLikelyNonMusicVideo(video) &&
             !video.isLive &&
@@ -266,7 +268,7 @@ extension _HomeRadio on _HomePageState {
       if (verifiedLocal.isNotEmpty) {
         final preferred = MusicStyleMatcher.prioritizeStyle(verifiedLocal, targetStyle);
         next = await _pickNonShort(
-          preferred.isNotEmpty ? preferred : local,
+          preferred.isNotEmpty ? preferred : verifiedLocal,
           random: true,
         );
       }

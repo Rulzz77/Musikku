@@ -15,6 +15,21 @@ class Playlist {
   bool contains(String videoId) =>
       songs.any((song) => song.videoId == videoId);
 
+  /// Moves a song from [oldIndex] to its final destination [newIndex].
+  ///
+  /// This matches ReorderableListView.onReorderItem, which already adjusts
+  /// the destination index for the removed item. Returns false for invalid
+  /// indexes or when no movement is needed.
+  bool moveSong(int oldIndex, int newIndex) {
+    if (oldIndex < 0 || oldIndex >= songs.length) return false;
+    if (newIndex < 0 || newIndex >= songs.length || newIndex == oldIndex) {
+      return false;
+    }
+    final song = songs.removeAt(oldIndex);
+    songs.insert(newIndex, song);
+    return true;
+  }
+
   Map<String, dynamic> toJson() {
     return {
       'id': id,

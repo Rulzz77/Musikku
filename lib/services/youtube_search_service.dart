@@ -1217,8 +1217,10 @@ class YoutubeSearchService {
 
       return isShort;
     } catch (_) {
-      // Gagal cek (offline / timeout) jangan menghentikan autoplay.
-      return false;
+      // Fail closed: kalau status Shorts tidak bisa diverifikasi, jangan
+      // tandai sebagai video biasa dan simpan hasil negatif ke cache.
+      // Pemanggil radio akan melewati kandidat ini lalu mencoba kandidat lain.
+      return true;
     } finally {
       client.close();
     }

@@ -191,6 +191,7 @@ extension _HomeRadio on _HomePageState {
         if (_dislikedIds.contains(video.videoId)) return false;
         if (YoutubeSearchService.isLikelyShortForm(video)) return false;
         if (YoutubeSearchService.isLikelyNonMusicVideo(video)) return false;
+        if (video.isLive || video.isUpcoming) return false;
         if (!MusicStyleMatcher.isCompatible(
           video: video,
           targetStyle: targetStyle,
@@ -199,9 +200,12 @@ extension _HomeRadio on _HomePageState {
         }
         return RadioService.trackKeyFor(video).isNotEmpty;
       }).toList();
+      // Active search results may be stale or cached before Shorts filtering.
+      // Verify them again so fallback cannot re-introduce a Short into autoplay.
+      final verifiedCandidates = await _searchService.removeShorts(candidates);
 
-      if (candidates.isNotEmpty) {
-        final preferred = MusicStyleMatcher.prioritizeStyle(candidates, targetStyle);
+      if (verifiedCandidates.isNotEmpty) {
+        final preferred = MusicStyleMatcher.prioritizeStyle(verifiedCandidates, targetStyle);
         final styleCandidates = preferred.isNotEmpty ? preferred : candidates;
         if (_playerUiState.value.isSmartShuffle) {
           styleCandidates.sort((a, b) => _smartShuffleScore(
@@ -249,14 +253,18 @@ extension _HomeRadio on _HomePageState {
             !_dislikedIds.contains(video.videoId) &&
             !YoutubeSearchService.isLikelyShortForm(video) &&
             !YoutubeSearchService.isLikelyNonMusicVideo(video) &&
+            !video.isLive &&
+            !video.isUpcoming &&
             MusicStyleMatcher.isCompatible(
               video: video,
               targetStyle: targetStyle,
             );
       }).toList();
+      // Favorites/history are also possible stale sources; re-verify Shorts.
+      final verifiedLocal = await _searchService.removeShorts(local);
 
-      if (local.isNotEmpty) {
-        final preferred = MusicStyleMatcher.prioritizeStyle(local, targetStyle);
+      if (verifiedLocal.isNotEmpty) {
+        final preferred = MusicStyleMatcher.prioritizeStyle(verifiedLocal, targetStyle);
         next = await _pickNonShort(
           preferred.isNotEmpty ? preferred : local,
           random: true,

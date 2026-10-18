@@ -75,6 +75,7 @@ class AppUpdateService {
 
   final http.Client _client = http.Client();
   Future<AppUpdateCheckResult>? _inFlightCheck;
+  final Map<String, Future<File>> _inFlightDownloads = <String, Future<File>>{};
 
   /// Coalesce automatic, Settings, and Hub-triggered checks while one request
   /// is already running. This avoids duplicate GitHub calls and modal races.
@@ -256,10 +257,135 @@ class AppUpdateService {
     }
   }
 
+  /// A valid APK is kept in private application storage until a newer update
+  /// replaces it. This survives app restarts and in-place APK updates, unlike
+  /// the OS-managed temporary cache directory.
+  Future<Directory> _getUpdateDirectory() async {
+    final supportDirectory = await getApplicationSupportDirectory();
+    final directory = Directory('${supportDirectory.path}/apk_updates');
+    await directory.create(recursive: true);
+    return directory;
+  }
+
+  static String _cacheFileNameFor(AppUpdateRelease release) {
+    final safeVersion = release.version.replaceAll(RegExp(r'[^0-9A-Za-z._-]'), '_');
+    final rawAssetName = release.apkFileName.isNotEmpty
+        ? release.apkFileName
+        : 'app-release.apk';
+    final assetWithoutExtension = rawAssetName.replaceFirst(
+      RegExp(r'\.apk$', caseSensitive: false),
+      '',
+    );
+    final safeAssetName = assetWithoutExtension.replaceAll(
+      RegExp(r'[^0-9A-Za-z._-]'),
+      '_',
+    );
+    final identity = release.sha256Digest != null && release.sha256Digest!.length >= 12
+        ? release.sha256Digest!.substring(0, 12).toLowerCase()
+        : 'size${release.apkSize}';
+    return 'MusikKu-$safeVersion-$safeAssetName-$identity.apk';
+  }
+
+  /// Finds a complete, verified APK for the requested release without making
+  /// a network request. Invalid or incomplete cached files are removed.
+  Future<File?> findCachedApk(AppUpdateRelease release) async {
+    if (!release.hasApk || !_isAllowedReleaseAsset(release.apkUrl)) return null;
+    final directory = await _getUpdateDirectory();
+    final file = File('${directory.path}/${_cacheFileNameFor(release)}');
+    if (!await file.exists()) return null;
+
+    if (await isValidCachedApk(file, release)) {
+      await _removeOlderCachedApks(directory, file);
+      return file;
+    }
+
+    try {
+      await file.delete();
+      final marker = File('${file.path}.sha256');
+      if (await marker.exists()) await marker.delete();
+    } on FileSystemException {
+      // A failed cleanup must not make a bad cache candidate look valid.
+    }
+    return null;
+  }
+
+  /// Shared validation for both freshly downloaded and previously cached APKs.
+  /// Public to keep cache validation covered by a small, deterministic test.
+  static Future<bool> isValidCachedApk(
+    File file,
+    AppUpdateRelease release,
+  ) async {
+    try {
+      if (!await file.exists()) return false;
+      final length = await file.length();
+      if (length < 4 || length > _maxApkSizeBytes) return false;
+      if (release.apkSize > 0 && length != release.apkSize) return false;
+
+      final handle = await file.open(mode: FileMode.read);
+      final signature = await handle.read(4);
+      await handle.close();
+      if (signature.length < 4 ||
+          signature[0] != 0x50 ||
+          signature[1] != 0x4B) {
+        return false;
+      }
+
+      final actualDigest = await _sha256ForFile(file);
+      final remoteDigest = release.sha256Digest?.toLowerCase();
+      if (remoteDigest != null) {
+        if (actualDigest != remoteDigest) return false;
+      } else {
+        // GitHub may not provide an asset digest for older releases. Persist a
+        // local digest alongside the verified APK to detect later corruption.
+        final marker = File('${file.path}.sha256');
+        if (!await marker.exists()) return false;
+        final localDigest = (await marker.readAsString()).trim().toLowerCase();
+        if (!RegExp(r'^[0-9a-f]{64}$').hasMatch(localDigest) ||
+            actualDigest != localDigest) {
+          return false;
+        }
+      }
+      return true;
+    } on FileSystemException {
+      return false;
+    }
+  }
+
+  static Future<String> _sha256ForFile(File file) async {
+    final output = _DigestOutput();
+    final converter = sha256.startChunkedConversion(output);
+    await for (final chunk in file.openRead()) {
+      converter.add(chunk);
+    }
+    converter.close();
+    return output.digest?.toString().toLowerCase() ?? '';
+  }
+
+  static Future<void> _removeOlderCachedApks(
+    Directory directory,
+    File keep,
+  ) async {
+    if (!await directory.exists()) return;
+    await for (final entry in directory.list(followLinks: false)) {
+      if (entry is File &&
+          entry.path != keep.path &&
+          entry.path.toLowerCase().endsWith('.apk')) {
+        try {
+          await entry.delete();
+          final marker = File('${entry.path}.sha256');
+          if (await marker.exists()) await marker.delete();
+        } on FileSystemException {
+          // Best-effort storage cleanup; never delete the selected APK.
+        }
+      }
+    }
+  }
+
   Future<File> downloadAndVerify(
     AppUpdateRelease release, {
     required void Function(int receivedBytes, int totalBytes) onProgress,
-  }) async {
+    void Function(int cachedBytes)? onCacheHit,
+  }) {
     final url = release.apkUrl;
     if (url == null || !_isAllowedReleaseAsset(url)) {
       throw const AppUpdateException(
@@ -270,17 +396,45 @@ class AppUpdateService {
       throw const AppUpdateException('Ukuran APK melebihi batas keamanan 250 MB.');
     }
 
-    final tempDirectory = await getTemporaryDirectory();
-    final updateDirectory = Directory('${tempDirectory.path}/apk_updates');
-    await updateDirectory.create(recursive: true);
-    final safeVersion = release.version.replaceAll(RegExp(r'[^0-9A-Za-z._-]'), '_');
-    final file = File('${updateDirectory.path}/MusikKu-$safeVersion.apk');
-    if (await file.exists()) {
-      await file.delete();
+    // A tap or route race must not start a second transfer for the same asset.
+    final key = _cacheFileNameFor(release);
+    final active = _inFlightDownloads[key];
+    if (active != null) return active;
+
+    final request = _downloadAndVerifyInternal(
+      release,
+      onProgress: onProgress,
+      onCacheHit: onCacheHit,
+    );
+    _inFlightDownloads[key] = request;
+    return request.whenComplete(() {
+      if (identical(_inFlightDownloads[key], request)) {
+        _inFlightDownloads.remove(key);
+      }
+    });
+  }
+
+  Future<File> _downloadAndVerifyInternal(
+    AppUpdateRelease release, {
+    required void Function(int receivedBytes, int totalBytes) onProgress,
+    void Function(int cachedBytes)? onCacheHit,
+  }) async {
+    final cachedFile = await findCachedApk(release);
+    if (cachedFile != null) {
+      onCacheHit?.call(await cachedFile.length());
+      return cachedFile;
     }
 
-    final response = await _sendVerifiedAssetRequest(url);
+    final url = release.apkUrl!;
+    final updateDirectory = await _getUpdateDirectory();
+    final file = File('${updateDirectory.path}/${_cacheFileNameFor(release)}');
+    final partialFile = File('${file.path}.part');
+    final digestFile = File('${file.path}.sha256');
+    final partialDigestFile = File('${digestFile.path}.part');
+    if (await partialFile.exists()) await partialFile.delete();
+    if (await partialDigestFile.exists()) await partialDigestFile.delete();
 
+    final response = await _sendVerifiedAssetRequest(url);
     if (response.statusCode != 200) {
       await response.stream.listen((_) {}).cancel();
       throw AppUpdateException('Download APK gagal (HTTP ${response.statusCode}).');
@@ -293,8 +447,9 @@ class AppUpdateService {
       await response.stream.listen((_) {}).cancel();
       throw const AppUpdateException('Ukuran APK melebihi batas keamanan 250 MB.');
     }
+
     var received = 0;
-    final sink = file.openWrite();
+    final sink = partialFile.openWrite();
     try {
       onProgress(0, totalBytes);
       await for (final chunk in response.stream.timeout(const Duration(seconds: 20))) {
@@ -313,44 +468,59 @@ class AppUpdateService {
       await sink.close();
     } catch (_) {
       await sink.close();
-      if (await file.exists()) await file.delete();
+      if (await partialFile.exists()) await partialFile.delete();
+      if (await partialDigestFile.exists()) await partialDigestFile.delete();
       rethrow;
     }
 
     if (received < 4 || (totalBytes > 0 && received != totalBytes)) {
-      if (await file.exists()) await file.delete();
+      if (await partialFile.exists()) await partialFile.delete();
+      if (await partialDigestFile.exists()) await partialDigestFile.delete();
       throw const AppUpdateException(
         'Ukuran APK yang terunduh tidak cocok. Coba download ulang.',
       );
     }
 
-    final randomAccess = await file.open(mode: FileMode.read);
-    final signature = await randomAccess.read(4);
-    await randomAccess.close();
+    final signatureHandle = await partialFile.open(mode: FileMode.read);
+    final signature = await signatureHandle.read(4);
+    await signatureHandle.close();
     if (signature.length < 4 || signature[0] != 0x50 || signature[1] != 0x4B) {
-      await file.delete();
+      await partialFile.delete();
+      if (await partialDigestFile.exists()) await partialDigestFile.delete();
       throw const AppUpdateException(
         'File dari GitHub bukan APK/ZIP yang valid. File dihapus demi keamanan.',
       );
     }
 
-    if (release.sha256Digest != null) {
-      final output = _DigestOutput();
-      final converter = sha256.startChunkedConversion(output);
-      await for (final chunk in file.openRead()) {
-        converter.add(chunk);
-      }
-      converter.close();
-      final actualDigest = output.digest?.toString().toLowerCase();
-      if (actualDigest == null || actualDigest != release.sha256Digest) {
-        await file.delete();
+    // Compute a local SHA-256 even if the GitHub API does not expose one, so
+    // the cached bytes can be checked on later attempts without downloading.
+    final actualDigest = await _sha256ForFile(partialFile);
+    if (release.sha256Digest != null &&
+        actualDigest != release.sha256Digest!.toLowerCase()) {
+      await partialFile.delete();
+      if (await partialDigestFile.exists()) await partialDigestFile.delete();
+      throw const AppUpdateException(
+        'Verifikasi SHA-256 gagal. APK tidak akan diinstal.',
+      );
+    }
+
+    // Rename only after verification, so an interrupted transfer never appears
+    // as a completed cache item. The cached APK lives in files/apk_updates and
+    // survives app restarts and normal in-place application updates.
+    if (await file.exists()) await file.delete();
+    final verifiedFile = await partialFile.rename(file.path);
+    if (release.sha256Digest == null) {
+      try {
+        await digestFile.writeAsString(actualDigest, flush: true);
+      } on FileSystemException {
+        if (await verifiedFile.exists()) await verifiedFile.delete();
         throw const AppUpdateException(
-          'Verifikasi SHA-256 gagal. APK tidak akan diinstal.',
+          'APK berhasil diunduh tetapi checksum cache tidak bisa disimpan. Coba lagi.',
         );
       }
     }
-
-    return file;
+    await _removeOlderCachedApks(updateDirectory, verifiedFile);
+    return verifiedFile;
   }
 
   Future<bool> canInstallPackages() async {

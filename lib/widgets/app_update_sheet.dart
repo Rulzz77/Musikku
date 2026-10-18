@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../app_info.dart';
@@ -75,11 +76,18 @@ class _AppUpdatePanelState extends State<AppUpdatePanel> {
   int _totalBytes = 0;
   String? _error;
   String? _message;
+  File? _cachedApkFile;
+  int? _cachedApkSize;
+  bool _usingCachedApk = false;
 
   @override
   void initState() {
     super.initState();
     _result = widget.initialResult;
+    final initialRelease = _result?.release;
+    if (initialRelease != null && _result?.updateAvailable == true) {
+      unawaited(_refreshCachedApk(initialRelease));
+    }
     if (_result == null) {
       unawaited(_checkForUpdate());
     }
@@ -94,12 +102,37 @@ class _AppUpdatePanelState extends State<AppUpdatePanel> {
     try {
       final result = await AppUpdateService.instance.checkForUpdate();
       if (!mounted) return;
-      setState(() => _result = result);
+      setState(() {
+        _result = result;
+        _cachedApkFile = null;
+        _cachedApkSize = null;
+      });
+      if (result.updateAvailable && result.release != null) {
+        unawaited(_refreshCachedApk(result.release!));
+      }
     } catch (error) {
       if (!mounted) return;
       setState(() => _error = error.toString());
     } finally {
       if (mounted) setState(() => _checking = false);
+    }
+  }
+
+  Future<void> _refreshCachedApk(AppUpdateRelease release) async {
+    try {
+      final file = await AppUpdateService.instance.findCachedApk(release);
+      final size = file == null ? null : await file.length();
+      if (!mounted ||
+          _result?.release?.version != release.version ||
+          _result?.release?.apkFileName != release.apkFileName) {
+        return;
+      }
+      setState(() {
+        _cachedApkFile = file;
+        _cachedApkSize = size;
+      });
+    } catch (_) {
+      // Failure to inspect cache should not block a normal verified download.
     }
   }
 
@@ -128,16 +161,32 @@ class _AppUpdatePanelState extends State<AppUpdatePanel> {
 
       setState(() {
         _downloading = true;
-        _downloadedBytes = 0;
-        _totalBytes = release.apkSize;
-        _message = 'Menyiapkan unduhan APK…';
+        _usingCachedApk = _cachedApkFile != null;
+        _downloadedBytes = _usingCachedApk ? (_cachedApkSize ?? 0) : 0;
+        _totalBytes = release.apkSize > 0 ? release.apkSize : (_cachedApkSize ?? 0);
+        _message = _usingCachedApk
+            ? 'Memverifikasi APK yang sudah tersimpan…'
+            : 'Menyiapkan unduhan APK…';
       });
 
       final file = await AppUpdateService.instance.downloadAndVerify(
         release,
+        onCacheHit: (cachedBytes) {
+          if (!mounted) return;
+          setState(() {
+            _usingCachedApk = true;
+            _cachedApkSize = cachedBytes;
+            _downloadedBytes = cachedBytes;
+            if (_totalBytes <= 0) _totalBytes = cachedBytes;
+            _message = 'APK pembaruan sudah tersimpan. Tidak mengunduh ulang.';
+          });
+        },
         onProgress: (received, total) {
           if (!mounted) return;
           setState(() {
+            _usingCachedApk = false;
+            _cachedApkFile = null;
+            _cachedApkSize = null;
             _downloadedBytes = received;
             if (total > 0) _totalBytes = total;
             _message = total > 0
@@ -146,6 +195,12 @@ class _AppUpdatePanelState extends State<AppUpdatePanel> {
           });
         },
       );
+      if (mounted) {
+        setState(() {
+          _cachedApkFile = file;
+          _cachedApkSize = file.lengthSync();
+        });
+      }
 
       await AppUpdateService.instance.installApk(file.path);
       if (!mounted) return;
@@ -337,6 +392,15 @@ class _AppUpdatePanelState extends State<AppUpdatePanel> {
                 ),
               ],
               const SizedBox(height: 16),
+              if (_cachedApkFile != null && !_downloading) ...[
+                _StatusPanel(
+                  icon: Icons.offline_pin_rounded,
+                  color: colors.primary,
+                  title: 'APK sudah tersimpan',
+                  message: 'File ${_formatBytes(_cachedApkSize ?? 0)} sudah ada di perangkat. Tekan tombol di bawah untuk membuka installer tanpa mengunduh ulang.',
+                ),
+                const SizedBox(height: 12),
+              ],
               if (_downloading) ...[
                 LinearProgressIndicator(value: progress),
                 const SizedBox(height: 8),
@@ -351,15 +415,17 @@ class _AppUpdatePanelState extends State<AppUpdatePanel> {
                 child: FilledButton.icon(
                   onPressed: _downloading ? null : _downloadAndInstall,
                   icon: Icon(_downloading
-                      ? Icons.downloading_rounded
-                      : _message?.startsWith('Aktifkan') == true
+                      ? (_usingCachedApk ? Icons.verified_rounded : Icons.downloading_rounded)
+                      : _message?.startsWith('Aktifkan') == true || _cachedApkFile != null
                           ? Icons.install_mobile_rounded
                           : Icons.download_rounded),
                   label: Text(_downloading
-                      ? 'Mengunduh…'
+                      ? (_usingCachedApk ? 'Menyiapkan APK tersimpan…' : 'Mengunduh…')
                       : _message?.startsWith('Aktifkan') == true
                           ? 'Periksa izin & lanjutkan'
-                          : 'Unduh & instal pembaruan'),
+                          : _cachedApkFile != null
+                              ? 'Instal APK tersimpan'
+                              : 'Unduh & instal pembaruan'),
                 ),
               ),
             ] else ...[

@@ -258,8 +258,9 @@ class MainActivity : AudioServiceActivity() {
             }
         }
 
-        // APK updater mandiri: izin instalasi dan FileProvider dibatasi hanya
-        // pada folder cache/apk_updates yang digunakan oleh AppUpdateService.
+        // APK updater mandiri: izin instalasi dan FileProvider dibatasi pada
+        // folder apk_updates privat di files/ (cache persisten) dan cache/
+        // (untuk mendukung APK lama yang masih memakai lokasi sebelumnya).
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             "musikku/app_update",
@@ -299,10 +300,17 @@ class MainActivity : AudioServiceActivity() {
                         val rawPath = call.argument<String>("path")
                             ?: throw IllegalArgumentException("Path APK tidak tersedia")
                         val apkFile = File(rawPath).canonicalFile
-                        val allowedDir = File(cacheDir, "apk_updates").canonicalFile
-                        if (!apkFile.path.startsWith(allowedDir.path + File.separator) ||
-                            !apkFile.isFile || apkFile.length() < 4L
-                        ) {
+                        // New updater cache lives in persistent app-private files so a
+                        // verified APK can be reused after app restarts/updates. Keep the
+                        // legacy cache path accepted for APKs downloaded by older builds.
+                        val allowedDirs = listOf(
+                            File(filesDir, "apk_updates").canonicalFile,
+                            File(cacheDir, "apk_updates").canonicalFile,
+                        )
+                        val isInUpdaterDirectory = allowedDirs.any { directory ->
+                            apkFile.path.startsWith(directory.path + File.separator)
+                        }
+                        if (!isInUpdaterDirectory || !apkFile.isFile || apkFile.length() < 4L) {
                             throw IllegalArgumentException("File APK tidak valid atau berada di luar folder updater")
                         }
 

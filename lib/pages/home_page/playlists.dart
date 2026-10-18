@@ -14,6 +14,7 @@ extension _HomePlaylists on _HomePageState {
       MaterialPageRoute<void>(
         builder: (_) => CustomPlaylistsPage(
           playlists: _playlists,
+          playerUiState: _playerUiState,
           availableSongs: <YoutubeSearchResult>[
             ..._favorites,
             ..._recentlyPlayed,

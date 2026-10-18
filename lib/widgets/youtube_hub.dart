@@ -12,7 +12,6 @@ import '../services/youtube_account_service.dart';
 import '../services/storage_service.dart';
 import '../services/youtube_search_service.dart';
 import '../services/youtube_controller.dart';
-import '../services/subscription_notification_service.dart';
 import '../services/search_suggest_service.dart';
 import '../services/app_settings.dart';
 import '../pages/youtube_search_page.dart';
@@ -167,9 +166,6 @@ class _YoutubeHubState extends State<YoutubeHub> {
   final Map<int, List<YoutubeSearchResult>> _chipFeeds = {};
   bool _chipLoading = false;
 
-  /// Siaran langsung dari channel yang di-subscribe.
-  List<YoutubeSearchResult> _liveNow = const [];
-  List<YoutubeSearchResult> _upcomingLive = const [];
   List<YoutubeSearchResult> _playlistItems = const [];
   YoutubePlaylistSummary? _selectedPlaylist;
 
@@ -215,9 +211,11 @@ class _YoutubeHubState extends State<YoutubeHub> {
     widget.controller?._onBack = _handleControllerBack;
     widget.controller?._onOpenChannel = _handleControllerOpenChannel;
     _user = _account.user;
-    unawaited(SubscriptionNotificationService.instance.loadUnread());
-    // Cek video baru + siapa yang sedang live tiap 10 menit (hanya 1 unit
-    // kuota per channel, jadi aman).
+    // Matikan worker notifikasi subscription versi lama setelah pembaruan.
+    // Notifikasi kontrol pemutar Android tetap terpisah agar audio background aman.
+    unawaited(NativeYoutubeController.configureBackgroundWatch(enabled: false));
+    // Feed subscription masih disegarkan secara ringan; notif unggahan/live
+    // sengaja dimatikan.
     _subscriptionTimer = Timer.periodic(const Duration(minutes: 10), (_) {
       // Pada Super hemat kita hanya refresh di beberapa interval supaya request
       // background tidak terlalu sering.
@@ -241,9 +239,9 @@ class _YoutubeHubState extends State<YoutubeHub> {
     super.dispose();
   }
 
-  /// Saat app dibuka hanya memuat riwayat lokal. Google Sign-In TIDAK
-  /// disentuh sama sekali sampai pengguna menekan tombol Masuk / ikon akun,
-  /// jadi tidak ada popup login di awal.
+  /// Pulihkan sesi Google secara silent saat aplikasi dibuka kembali.
+  /// Tidak membuka pemilih akun; kalau sesi tidak bisa dipulihkan, pengguna
+  /// tetap bisa masuk manual dari ikon akun.
   Future<void> _restore() async {
     final history = await _storage.loadHistory();
     final rememberedEmail = await _account.rememberedAccountEmail();
@@ -253,14 +251,21 @@ class _YoutubeHubState extends State<YoutubeHub> {
         _rememberedAccountEmail = rememberedEmail ?? '';
       });
     }
-    // Video trending dimuat paralel dengan pemulihan sesi dan tidak butuh login.
     unawaited(_loadHome());
-    // Jangan memanggil lightweight authentication saat hub pertama dibuat.
-    // Pada google_sign_in 7.x, Android boleh menampilkan UI minimal sehingga
-    // restore otomatis di startup terasa seperti aplikasi selalu meminta login.
-    // Restore sekarang dilakukan oleh aksi login/account pengguna.
+    try {
+      await _account.tryRestoreSession();
+    } catch (e) {
+      debugPrint('SILENT GOOGLE SESSION RESTORE ERROR: $e');
+    }
+    if (!mounted) return;
+    final restoredUser = _account.user;
+    setState(() {
+      _user = restoredUser;
+      if (restoredUser != null && restoredUser.email.isNotEmpty) {
+        _rememberedAccountEmail = restoredUser.email;
+      }
+    });
     if (_account.isSignedIn) {
-      setState(() => _user = _account.user);
       unawaited(_run(_refreshAccount));
     }
   }
@@ -809,20 +814,6 @@ class _YoutubeHubState extends State<YoutubeHub> {
             onPressed: _openSearch,
             icon: const Icon(Icons.search_rounded, size: 22),
           ),
-          ValueListenableBuilder<Set<String>>(
-            valueListenable: SubscriptionNotificationService.instance.unreadIds,
-            builder: (context, ids, _) => IconButton(
-              tooltip: 'Notifikasi',
-              visualDensity: VisualDensity.compact,
-              constraints: const BoxConstraints.tightFor(width: 36, height: 40),
-              onPressed: _showNotifications,
-              icon: Badge(
-                isLabelVisible: _user != null && ids.isNotEmpty,
-                label: Text(ids.length > 99 ? '99+' : '${ids.length}'),
-                child: Icon(_liveNow.isNotEmpty ? Icons.notifications_active_rounded : Icons.notifications_none_rounded, size: 22),
-              ),
-            ),
-          ),
           IconButton(
             tooltip: _user == null ? 'Hubungkan YouTube' : 'Akun YouTube',
             visualDensity: VisualDensity.compact,
@@ -1104,6 +1095,7 @@ class _YoutubeHubState extends State<YoutubeHub> {
           suggestService: _suggestService,
           initialQuery: _query,
           history: _searchHistory,
+          onDeleteHistory: _deleteSearchHistory,
         ),
       ),
     );
@@ -1114,6 +1106,17 @@ class _YoutubeHubState extends State<YoutubeHub> {
     });
     _searchController.text = picked.query.trim();
     await _search();
+  }
+
+  Future<void> _deleteSearchHistory(String? query) async {
+    final updated = query == null
+        ? <String>[]
+        : _searchHistory
+            .where((item) => item.toLowerCase() != query.toLowerCase())
+            .toList(growable: false);
+    await _storage.saveHistory(updated);
+    if (!mounted) return;
+    setState(() => _searchHistory = updated);
   }
 
   void _clearSearch() {
@@ -1128,136 +1131,6 @@ class _YoutubeHubState extends State<YoutubeHub> {
       _searchChannels = const [];
     });
     unawaited(_loadHome());
-  }
-
-  Future<void> _showNotifications() async {
-    if (_user == null) {
-      await _login();
-      return;
-    }
-    final service = SubscriptionNotificationService.instance;
-    final unread = Set<String>.from(service.unreadIds.value);
-    final live = _liveNow;
-    final upcoming = _upcomingLive;
-    final items = _subscriptionFeed.where((v) => !v.isLive).toList(growable: false);
-    unawaited(service.markAllRead());
-    if (!mounted) return;
-    final scheme = Theme.of(context).colorScheme;
-
-    Widget thumb(YoutubeSearchResult video) => ClipRRect(
-          borderRadius: BorderRadius.circular(6),
-          child: SizedBox(
-            width: 96,
-            height: 54,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                Image.network(
-                  video.coverUrl,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, _, _) => ColoredBox(color: scheme.surfaceContainerHighest),
-                ),
-                if (video.liveStatus.isNotEmpty)
-                  Positioned(left: 4, bottom: 4, child: LiveBadge(video: video)),
-              ],
-            ),
-          ),
-        );
-
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (sheetContext) => DraggableScrollableSheet(
-        expand: false,
-        initialChildSize: 0.7,
-        maxChildSize: 0.92,
-        builder: (context, controller) => ListView(
-          controller: controller,
-          padding: const EdgeInsets.only(bottom: 24),
-          children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
-              child: Text('Notifikasi', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
-            ),
-            // Dropdown siaran langsung: terbuka otomatis kalau ada yang live.
-            Theme(
-              data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-              child: ExpansionTile(
-                initiallyExpanded: live.isNotEmpty,
-                tilePadding: const EdgeInsets.symmetric(horizontal: 16),
-                leading: Icon(
-                  Icons.sensors_rounded,
-                  color: live.isNotEmpty ? const Color(0xFFE53935) : scheme.onSurfaceVariant,
-                ),
-                title: Text(
-                  live.isEmpty ? 'Siaran langsung' : 'Sedang live (${live.length})',
-                  style: const TextStyle(fontWeight: FontWeight.w800),
-                ),
-                subtitle: Text(
-                  live.isEmpty && upcoming.isEmpty
-                      ? 'Belum ada yang live'
-                      : upcoming.isEmpty
-                          ? 'Channel yang kamu subscribe'
-                          : '${upcoming.length} dijadwalkan',
-                ),
-                children: [
-                  if (live.isEmpty && upcoming.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.fromLTRB(16, 4, 16, 14),
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text('Tidak ada siaran langsung dari channel yang kamu subscribe.'),
-                      ),
-                    ),
-                  for (final video in [...live, ...upcoming])
-                    ListTile(
-                      leading: thumb(video),
-                      title: Text(video.title, maxLines: 2, overflow: TextOverflow.ellipsis),
-                      subtitle: Text(
-                        '${video.channelTitle} • ${liveMetaLine(video, (n) => _formatViews(n))}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      onTap: () {
-                        Navigator.pop(sheetContext);
-                        unawaited(widget.onPlay(video));
-                      },
-                    ),
-                ],
-              ),
-            ),
-            const Padding(
-              padding: EdgeInsets.fromLTRB(16, 10, 16, 4),
-              child: Text('Musik baru', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
-            ),
-            if (items.isEmpty)
-              const Padding(
-                padding: EdgeInsets.all(24),
-                child: Center(child: Text('Belum ada notifikasi.')),
-              )
-            else
-              for (final video in items)
-                ListTile(
-                  leading: thumb(video),
-                  title: Text(video.title, maxLines: 2, overflow: TextOverflow.ellipsis),
-                  subtitle: Text(video.channelTitle, maxLines: 1, overflow: TextOverflow.ellipsis),
-                  trailing: unread.contains(video.videoId)
-                      ? Container(
-                          width: 10,
-                          height: 10,
-                          decoration: BoxDecoration(color: scheme.primary, shape: BoxShape.circle),
-                        )
-                      : null,
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    unawaited(widget.onPlay(video));
-                  },
-                ),
-          ],
-        ),
-      ),
-    );
   }
 
   int _searchRequestId = 0;
@@ -1420,22 +1293,7 @@ class _YoutubeHubState extends State<YoutubeHub> {
       _liked = liked;
       _playlists = playlists;
     });
-    unawaited(_syncBackgroundWatch(subscriptions));
     await _applyFeed(feed);
-  }
-
-  /// Kirim daftar channel ke worker native supaya notifikasi live / video baru
-  /// tetap muncul saat aplikasi ditutup.
-  Future<void> _syncBackgroundWatch(List<YoutubeChannelSummary> channels) {
-    return NativeYoutubeController.configureBackgroundWatch(
-      enabled: true,
-      apiKey: const String.fromEnvironment('YOUTUBE_API_KEY'),
-      channels: [
-        for (final c in channels)
-          if (c.uploadsPlaylistId.isNotEmpty)
-            {'id': c.id, 'title': c.title, 'uploads': c.uploadsPlaylistId},
-      ],
-    );
   }
 
   /// Hanya menyegarkan feed + status live (tanpa memuat ulang playlist/likes).
@@ -1450,8 +1308,8 @@ class _YoutubeHubState extends State<YoutubeHub> {
     }
   }
 
-  /// Memisahkan video biasa, yang sedang live, dan yang dijadwalkan; lalu
-  /// kirim notifikasi sistem untuk video baru dan live baru.
+  /// Memisahkan video biasa, yang sedang live, dan yang dijadwalkan untuk feed.
+  /// Fungsi ini hanya memperbarui tampilan dan tidak mengirim notifikasi.
   Future<void> _applyFeed(List<YoutubeSearchResult> feed) async {
     final musicFeed = feed
         .where((video) => YoutubeSearchService.isMusicCatalogItem(
@@ -1460,20 +1318,10 @@ class _YoutubeHubState extends State<YoutubeHub> {
             ))
         .toList(growable: false);
     final live = musicFeed.where((v) => v.isLive).toList(growable: false);
-    final upcoming = musicFeed.where((v) => v.isUpcoming).toList(growable: false);
     final regular = musicFeed.where((v) => !v.isLive && !v.isUpcoming).toList(growable: false);
-    final notifications = SubscriptionNotificationService.instance;
-    try {
-      await notifications.syncAndNotify(regular);
-      await notifications.notifyLive(live);
-    } catch (e) {
-      debugPrint('YOUTUBE NOTIFY ERROR: $e');
-    }
     if (!mounted) return;
     setState(() {
       _subscriptionFeed = [...live, ...regular].take(30).toList(growable: false);
-      _liveNow = live;
-      _upcomingLive = upcoming;
     });
   }
 
@@ -1533,8 +1381,6 @@ class _YoutubeHubState extends State<YoutubeHub> {
         _selectedPlaylist = null;
         _playlistItems = const [];
         _subscriptionFeed = const [];
-        _liveNow = const [];
-        _upcomingLive = const [];
         _rememberedAccountEmail = '';
       });
     });
@@ -1910,21 +1756,6 @@ class _YoutubeHubState extends State<YoutubeHub> {
               visualDensity: VisualDensity.compact,
               onPressed: _showDataSaverSheet,
               icon: const Icon(Icons.tune_rounded),
-            ),
-            ValueListenableBuilder<Set<String>>(
-              valueListenable: SubscriptionNotificationService.instance.unreadIds,
-              builder: (context, ids, _) => IconButton(
-                tooltip: 'Notifikasi',
-                visualDensity: VisualDensity.compact,
-                onPressed: _showNotifications,
-                icon: Badge(
-                  isLabelVisible: _user != null && ids.isNotEmpty,
-                  label: Text(ids.length > 99 ? '99+' : '${ids.length}'),
-                  child: Icon(
-                    _liveNow.isNotEmpty ? Icons.notifications_rounded : Icons.notifications_none_rounded,
-                  ),
-                ),
-              ),
             ),
             IconButton(
               tooltip: _user == null ? 'Hubungkan YouTube' : 'Akun YouTube',
@@ -2794,13 +2625,29 @@ class _YoutubeHubState extends State<YoutubeHub> {
                 );
               }
               final video = songs[index - 1];
+              final isCurrent = widget.currentVideoId == video.videoId;
               return ListTile(
+                selected: isCurrent,
+                selectedTileColor: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.45),
                 leading: ClipRRect(
                   borderRadius: BorderRadius.circular(6),
-                  child: UnifiedArtwork(track: video, width: 96, height: 54, fit: BoxFit.cover, iconSize: 24),
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      UnifiedArtwork(track: video, width: 96, height: 54, fit: BoxFit.cover, iconSize: 24),
+                      if (isCurrent)
+                        Container(
+                          width: 96,
+                          height: 54,
+                          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.38),
+                          child: const Icon(Icons.graphic_eq_rounded, color: Colors.white),
+                        ),
+                    ],
+                  ),
                 ),
-                title: Text(video.title, maxLines: 2, overflow: TextOverflow.ellipsis),
-                subtitle: Text(video.channelTitle, maxLines: 1, overflow: TextOverflow.ellipsis),
+                title: Text(video.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: isCurrent ? TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w900) : null),
+                subtitle: Text(isCurrent ? 'SEDANG DIPUTAR • ${video.channelTitle}' : video.channelTitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: isCurrent ? TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w700) : null),
+                trailing: isCurrent ? Icon(Icons.graphic_eq_rounded, color: Theme.of(context).colorScheme.primary) : null,
                 onTap: () {
                   Navigator.pop(context);
                   // Preserve list context so Next/Previous use the selected

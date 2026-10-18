@@ -485,7 +485,7 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
             child: _subscribed
                 ? FilledButton.tonalIcon(
                     onPressed: _busy ? null : _toggleSubscribe,
-                    icon: const Icon(Icons.notifications_none_rounded, size: 19),
+                    icon: const Icon(Icons.check_circle_rounded, size: 19),
                     label: const Text('Subscribed'),
                   )
                 : FilledButton(

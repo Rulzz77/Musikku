@@ -89,6 +89,17 @@ class SubscriptionWatchWorker(
                 workManager.cancelUniqueWork(WORK_PERIODIC)
                 workManager.cancelUniqueWork(WORK_NOW)
                 p.edit().clear().apply()
+                // Bersihkan hanya notifikasi unggahan/live lama milik worker ini;
+                // jangan menyentuh notifikasi media playback yang memakai channel lain.
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                    manager.activeNotifications
+                        .filter { active ->
+                            val channelId = active.notification.channelId
+                            channelId == CHANNEL_LIVE || channelId == CHANNEL_VIDEOS
+                        }
+                        .forEach { active -> manager.cancel(active.tag, active.id) }
+                }
                 MusikKuLogger.d(TAG, "WATCH DIMATIKAN")
                 return
             }

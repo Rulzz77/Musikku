@@ -1,8 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show ValueListenable;
 
 import '../models/playlist.dart';
+import '../models/player_ui_state.dart';
 import '../models/youtube_search_result.dart';
 import '../widgets/playlist_widgets.dart' show showPlaylistNameDialog;
 import '../widgets/unified_artwork.dart';
@@ -14,6 +16,7 @@ class CustomPlaylistsPage extends StatefulWidget {
   const CustomPlaylistsPage({
     super.key,
     required this.playlists,
+    required this.playerUiState,
     this.availableSongs = const [],
     required this.onChanged,
     required this.onPlayPlaylist,
@@ -21,6 +24,7 @@ class CustomPlaylistsPage extends StatefulWidget {
   });
 
   final List<Playlist> playlists;
+  final ValueListenable<PlayerUiState> playerUiState;
   final List<YoutubeSearchResult> availableSongs;
   final VoidCallback onChanged;
   final Future<void> Function(Playlist playlist) onPlayPlaylist;
@@ -427,32 +431,62 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
                 _reorderSongs(playlist, oldIndex, newIndex),
             itemBuilder: (context, index) {
               final song = playlist.songs[index];
-              return Card(
+              return ValueListenableBuilder<PlayerUiState>(
                 key: ValueKey<String>('${playlist.id}:${song.videoId}'),
-                margin: const EdgeInsets.symmetric(vertical: 3),
-                child: ListTile(
-                  onTap: () => unawaited(_playSongAndReturn(playlist, song)),
-                  leading: ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: UnifiedArtwork(track: song, width: 52, height: 52, fit: BoxFit.cover),
-                  ),
-                  title: Text(song.title, maxLines: 2, overflow: TextOverflow.ellipsis),
-                  subtitle: Text(song.channelTitle, maxLines: 1, overflow: TextOverflow.ellipsis),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        tooltip: 'Hapus dari playlist',
-                        onPressed: () => unawaited(_removeSong(playlist, song)),
-                        icon: const Icon(Icons.remove_circle_outline_rounded),
+                valueListenable: widget.playerUiState,
+                builder: (context, playerState, _) {
+                  final isCurrent = playerState.video?.videoId == song.videoId;
+                  return Card(
+                    margin: const EdgeInsets.symmetric(vertical: 3),
+                    color: isCurrent ? scheme.primaryContainer.withValues(alpha: 0.72) : null,
+                    child: ListTile(
+                      onTap: () => unawaited(_playSongAndReturn(playlist, song)),
+                      leading: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            UnifiedArtwork(track: song, width: 52, height: 52, fit: BoxFit.cover),
+                            if (isCurrent)
+                              Container(
+                                width: 52,
+                                height: 52,
+                                color: scheme.primary.withValues(alpha: 0.42),
+                                child: const Icon(Icons.graphic_eq_rounded, color: Colors.white, size: 24),
+                              ),
+                          ],
+                        ),
                       ),
-                      ReorderableDragStartListener(
-                        index: index,
-                        child: Icon(Icons.drag_handle_rounded, color: scheme.onSurfaceVariant),
+                      title: Text(
+                        song.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: isCurrent ? TextStyle(color: scheme.primary, fontWeight: FontWeight.w900) : null,
                       ),
-                    ],
-                  ),
-                ),
+                      subtitle: Text(
+                        isCurrent ? 'SEDANG DIPUTAR · ${song.channelTitle}' : song.channelTitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: isCurrent ? TextStyle(color: scheme.primary, fontWeight: FontWeight.w700) : null,
+                      ),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (isCurrent) Icon(Icons.graphic_eq_rounded, color: scheme.primary, size: 20),
+                          IconButton(
+                            tooltip: 'Hapus dari playlist',
+                            onPressed: () => unawaited(_removeSong(playlist, song)),
+                            icon: const Icon(Icons.remove_circle_outline_rounded),
+                          ),
+                          ReorderableDragStartListener(
+                            index: index,
+                            child: Icon(Icons.drag_handle_rounded, color: scheme.onSurfaceVariant),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
               );
             },
           ),

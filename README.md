@@ -1,4 +1,4 @@
-# MusikKu 4.7.5 — Build 49
+# MusikKu 4.7.8 — Build 51
 
 Source Flutter + Android. Build 49 focuses on playlist organization and safer queue editing.
 
@@ -32,3 +32,16 @@ Laporan terpisah ada pada `CHANGELOG.md`, `FEATURE-AUDIT.md`, `VALIDATION-REPORT
 
 
 Build 49 adds a manual 5-band EQ interface, centered synced lyrics, and cleanup of a duplicate crossfade UI state update. See CHANGELOG.md and FEATURE-AUDIT.md for limits and validation status.
+
+
+## Perubahan Build 51
+- Pemulihan sesi akun Google secara diam-diam saat aplikasi dibuka kembali.
+- Lagu aktif ditandai di playlist MusikKu dan daftar koleksi.
+- Notifikasi unggahan/live subscription dihapus; notifikasi kontrol media Android tetap dipakai untuk playback di latar belakang.
+- Riwayat pencarian bisa dihapus satu per satu atau sekaligus.
+- Metadata versi: `4.7.8+52`.
+
+CI tetap perlu menjalankan `flutter analyze`, `flutter test`, dan `flutter build apk --release`; pemeriksaan tersebut belum tersedia di lingkungan penyusunan ZIP ini.
+
+
+Build 52 hotfix: explicit import for `ValueListenable` in the custom playlist page.

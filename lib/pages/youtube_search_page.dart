@@ -19,10 +19,12 @@ class YoutubeSearchPage extends StatefulWidget {
   final String initialQuery;
   final List<String> history;
   final SearchSuggestService suggestService;
+  final Future<void> Function(String? query) onDeleteHistory;
 
   const YoutubeSearchPage({
     super.key,
     required this.suggestService,
+    required this.onDeleteHistory,
     this.initialQuery = '',
     this.history = const [],
   });
@@ -36,6 +38,7 @@ class _YoutubeSearchPageState extends State<YoutubeSearchPage> {
   final _focus = FocusNode();
   Timer? _debounce;
   List<String> _suggestions = const [];
+  late List<String> _history;
   int _requestId = 0;
   int _mode = 0;
 
@@ -47,6 +50,7 @@ class _YoutubeSearchPageState extends State<YoutubeSearchPage> {
   void initState() {
     super.initState();
     _controller = TextEditingController(text: widget.initialQuery);
+    _history = List<String>.from(widget.history);
     _controller.selection = TextSelection(
       baseOffset: 0,
       extentOffset: _controller.text.length,
@@ -108,7 +112,7 @@ class _YoutubeSearchPageState extends State<YoutubeSearchPage> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final typing = _controller.text.trim().isNotEmpty;
-    final items = typing ? _suggestions : widget.history;
+    final items = typing ? _suggestions : _history;
 
     return Scaffold(
       appBar: AppBar(
@@ -179,14 +183,21 @@ class _YoutubeSearchPageState extends State<YoutubeSearchPage> {
               },
             ),
           ),
-          if (!typing && widget.history.isNotEmpty)
+          if (!typing && _history.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              padding: const EdgeInsets.fromLTRB(16, 0, 10, 8),
               child: Row(
                 children: [
                   Icon(Icons.history_rounded, size: 17, color: scheme.onSurfaceVariant),
                   const SizedBox(width: 8),
-                  Text('Pencarian terakhir', style: TextStyle(fontWeight: FontWeight.w800, color: scheme.onSurfaceVariant)),
+                  Expanded(child: Text('Pencarian terakhir', style: TextStyle(fontWeight: FontWeight.w800, color: scheme.onSurfaceVariant))),
+                  TextButton(
+                    onPressed: () async {
+                      setState(() => _history.clear());
+                      await widget.onDeleteHistory(null);
+                    },
+                    child: const Text('Hapus semua'),
+                  ),
                 ],
               ),
             ),
@@ -218,11 +229,20 @@ class _YoutubeSearchPageState extends State<YoutubeSearchPage> {
                       child: Icon(typing ? Icons.search_rounded : Icons.history_rounded, size: 18, color: scheme.onPrimaryContainer),
                     ),
                     title: Text(text, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
-                    trailing: IconButton(
-                      tooltip: 'Isi pencarian',
-                      icon: Icon(Icons.north_west_rounded, size: 18, color: scheme.onSurfaceVariant),
-                      onPressed: () => _setSuggestion(text),
-                    ),
+                    trailing: typing
+                        ? IconButton(
+                            tooltip: 'Isi pencarian',
+                            icon: Icon(Icons.north_west_rounded, size: 18, color: scheme.onSurfaceVariant),
+                            onPressed: () => _setSuggestion(text),
+                          )
+                        : IconButton(
+                            tooltip: 'Hapus dari riwayat',
+                            icon: Icon(Icons.close_rounded, size: 19, color: scheme.onSurfaceVariant),
+                            onPressed: () async {
+                              setState(() => _history.removeWhere((item) => item.toLowerCase() == text.toLowerCase()));
+                              await widget.onDeleteHistory(text);
+                            },
+                          ),
                     onTap: () => _submit(text),
                   ),
                 );

@@ -1,7 +1,7 @@
 name: flutter_application_5
 description: "MusikKu - pemutar musik Android."
 publish_to: 'none'
-version: 4.8.4+58
+version: 4.8.5+59
 
 environment:
   sdk: ^3.13.4

@@ -1735,15 +1735,15 @@ class _YoutubeHubState extends State<YoutubeHub> {
         padding: EdgeInsets.fromLTRB(14, MediaQuery.paddingOf(context).top + 4, 10, 4),
         child: Row(
           children: [
-            Container(
-              width: 32,
-              height: 23,
-              decoration: BoxDecoration(
-                color: scheme.primary,
-                borderRadius: BorderRadius.circular(7),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(9),
+              child: Image.asset(
+                'assets/icon/app_icon.png',
+                width: 32,
+                height: 32,
+                fit: BoxFit.cover,
+                semanticLabel: 'Logo MusikKu',
               ),
-              alignment: Alignment.center,
-              child: const Icon(Icons.play_arrow_rounded, size: 21, color: Colors.white),
             ),
             const SizedBox(width: 9),
             Expanded(

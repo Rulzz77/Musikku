@@ -7,21 +7,49 @@ import '../services/app_update_service.dart';
 class AppUpdateSheet {
   const AppUpdateSheet._();
 
+  // Protect all entry points (automatic launch check + Settings + Hub button)
+  // from stacking multiple update sheets on top of each other.
+  static bool _isShowing = false;
+
+  // A launch check can race when two HomePage states are created close together.
+  // Remember automatic prompts by release version for this process as a second
+  // guard, even if a competing check finishes after the first sheet was closed.
+  static final Set<String> _automaticPromptedVersions = <String>{};
+
   static Future<void> show(
     BuildContext context, {
     AppUpdateCheckResult? initialResult,
     bool automaticPrompt = false,
-  }) {
-    return showModalBottomSheet<void>(
-      context: context,
-      useSafeArea: true,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (context) => AppUpdatePanel(
-        initialResult: initialResult,
-        automaticPrompt: automaticPrompt,
-      ),
-    );
+  }) async {
+    if (_isShowing) return;
+
+    final promptVersion = automaticPrompt ? initialResult?.release?.version : null;
+    if (promptVersion != null &&
+        !_automaticPromptedVersions.add(promptVersion)) {
+      return;
+    }
+
+    _isShowing = true;
+    try {
+      await showModalBottomSheet<void>(
+        context: context,
+        useSafeArea: true,
+        isScrollControlled: true,
+        showDragHandle: true,
+        builder: (context) => AppUpdatePanel(
+          initialResult: initialResult,
+          automaticPrompt: automaticPrompt,
+        ),
+      );
+    } catch (_) {
+      // Allow a retry if Navigator/route setup prevented the sheet from opening.
+      if (promptVersion != null) {
+        _automaticPromptedVersions.remove(promptVersion);
+      }
+      rethrow;
+    } finally {
+      _isShowing = false;
+    }
   }
 }
 

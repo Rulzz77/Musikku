@@ -68,6 +68,11 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage>
     with WidgetsBindingObserver {
+  // Only one HomePage state may run the automatic launch check at a time.
+  // This closes a small race where two nearly simultaneous States could both
+  // read the same SharedPreferences flag before either write completed.
+  static bool _launchUpdateCheckInProgress = false;
+
   // ============================================================
   // SERVICES
   // ============================================================
@@ -334,20 +339,38 @@ class _HomePageState extends State<HomePage>
     // Jangan menutupi pemutaran pertama. Cek setelah UI utama stabil dan diam-diam
     // abaikan error jaringan atau repository yang belum punya Release.
     await Future<void>.delayed(const Duration(seconds: 5));
-    if (!mounted || _youtubeWatchVideo != null || _youtubeSystemPipMode) {
-      return;
-    }
+    if (_launchUpdateCheckInProgress) return;
+    _launchUpdateCheckInProgress = true;
 
     try {
+      if (!mounted ||
+          ModalRoute.of(context)?.isCurrent != true ||
+          _youtubeWatchVideo != null ||
+          _youtubeSystemPipMode) {
+        return;
+      }
+
       final result = await AppUpdateService.instance.checkForUpdate();
       final release = result.release;
-      if (!mounted || !result.updateAvailable || release == null) return;
+      if (!mounted ||
+          ModalRoute.of(context)?.isCurrent != true ||
+          !result.updateAvailable ||
+          release == null) {
+        return;
+      }
 
       final preferences = await SharedPreferences.getInstance();
       final promptKey = 'musikku_update_prompted_${release.version}';
       if (preferences.getBool(promptKey) == true) return;
       await preferences.setBool(promptKey, true);
       if (!mounted) return;
+      // A dialog/sheet could have opened while the GitHub request was running.
+      // Do not stack the update prompt on another route; allow the next launch
+      // to prompt again if this automatic presentation was deferred.
+      if (ModalRoute.of(context)?.isCurrent != true) {
+        await preferences.remove(promptKey);
+        return;
+      }
 
       await AppUpdateSheet.show(
         context,
@@ -357,6 +380,8 @@ class _HomePageState extends State<HomePage>
     } catch (error) {
       // Auto-check tidak boleh mengganggu pengguna saat jaringan/API bermasalah.
       debugPrint('AUTO UPDATE CHECK: $error');
+    } finally {
+      _launchUpdateCheckInProgress = false;
     }
   }
 

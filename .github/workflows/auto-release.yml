@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - 'lib/**'
+      - 'test/**'
       - 'android/**'
       - 'pubspec.yaml'
       - 'pubspec.lock'
@@ -40,7 +41,7 @@ jobs:
           VERSION_SPEC="$(sed -n 's/^version:[[:space:]]*//p' pubspec.yaml | head -n 1 | tr -d "\r'\"")"
 
           if [[ -z "$VERSION_SPEC" || "$VERSION_SPEC" != *+* ]]; then
-            echo "::error::Version pubspec.yaml harus berformat contoh 4.6.3+37"
+            echo "::error::Version pubspec.yaml harus berformat contoh 4.6.5+39"
             exit 1
           fi
 
@@ -118,6 +119,9 @@ jobs:
 
       - name: Install Flutter dependencies
         run: flutter pub get
+
+      - name: Run regression tests
+        run: flutter test --reporter expanded
 
       - name: Build split APKs and compatibility universal APK
         env:

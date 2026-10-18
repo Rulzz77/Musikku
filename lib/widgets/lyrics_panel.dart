@@ -15,6 +15,7 @@ class LyricsPanel extends StatefulWidget {
     required this.synced,
     this.nativeState,
     required this.onSeek,
+    this.expandToAvailableHeight = false,
   });
 
   final List<LyricLine> lyrics;
@@ -22,6 +23,10 @@ class LyricsPanel extends StatefulWidget {
   final bool synced;
   final ValueListenable<NativeYoutubeState>? nativeState;
   final Future<void> Function(Duration position) onSeek;
+
+  /// Fill a bounded parent (for example, the full lyrics bottom sheet) instead
+  /// of leaving an unused dark area below the fixed-height lyric list.
+  final bool expandToAvailableHeight;
 
   @override
   State<LyricsPanel> createState() => _LyricsPanelState();
@@ -65,62 +70,75 @@ class _LyricsPanelState extends State<LyricsPanel> {
   Widget _body(BuildContext context, Duration position) {
     final scheme = Theme.of(context).colorScheme;
     if (widget.loading) {
-      return const SizedBox(
-        height: 180,
-        child: Center(child: CircularProgressIndicator()),
-      );
+      const loadingState = Center(child: CircularProgressIndicator());
+      return widget.expandToAvailableHeight
+          ? const Expanded(child: loadingState)
+          : const SizedBox(height: 180, child: loadingState);
     }
     if (widget.lyrics.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 18),
-        child: Text(
-          'Lirik belum tersedia untuk lagu ini.',
-          style: TextStyle(color: scheme.onSurfaceVariant),
+      final emptyState = Center(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 18),
+          child: Text(
+            'Lirik belum tersedia untuk lagu ini.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: scheme.onSurfaceVariant),
+          ),
         ),
       );
+      return widget.expandToAvailableHeight
+          ? Expanded(child: emptyState)
+          : Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 18),
+              child: Align(alignment: Alignment.centerLeft, child: emptyState),
+            );
     }
 
     final current = widget.synced ? _currentIndex(position) : -1;
     if (current >= 0) _ensureVisible(current);
 
-    return SizedBox(
-      height: 300,
-      child: ListView.builder(
-        controller: _scroll,
-        padding: const EdgeInsets.fromLTRB(12, 4, 12, 18),
-        itemCount: widget.lyrics.length,
-        itemBuilder: (context, index) {
-          final line = widget.lyrics[index];
-          final active = index == current;
-          return InkWell(
-            borderRadius: BorderRadius.circular(12),
-            onTap: widget.synced ? () => widget.onSeek(line.time) : null,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
-              margin: const EdgeInsets.symmetric(vertical: 2),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(
+    final lyricList = ListView.builder(
+      controller: _scroll,
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 18),
+      itemCount: widget.lyrics.length,
+      itemBuilder: (context, index) {
+        final line = widget.lyrics[index];
+        final active = index == current;
+        return InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: widget.synced ? () => widget.onSeek(line.time) : null,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            margin: const EdgeInsets.symmetric(vertical: 2),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: active
+                  ? scheme.primaryContainer.withValues(alpha: 0.72)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              line.text,
+              style: TextStyle(
+                fontSize: active ? 18 : 15,
+                height: 1.28,
+                fontWeight: active ? FontWeight.w900 : FontWeight.w600,
                 color: active
-                    ? scheme.primaryContainer.withValues(alpha: 0.72)
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                line.text,
-                style: TextStyle(
-                  fontSize: active ? 18 : 15,
-                  height: 1.28,
-                  fontWeight: active ? FontWeight.w900 : FontWeight.w600,
-                  color: active
-                      ? scheme.onPrimaryContainer
-                      : scheme.onSurfaceVariant,
-                ),
+                    ? scheme.onPrimaryContainer
+                    : scheme.onSurfaceVariant,
               ),
             ),
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
+
+    // The watch-page version remains a compact fixed-height card. The modal
+    // player version expands the list to occupy the entire sheet height, so
+    // the unused bottom region no longer looks like a separate black block.
+    return widget.expandToAvailableHeight
+        ? Expanded(child: lyricList)
+        : SizedBox(height: 300, child: lyricList);
   }
 
   @override
@@ -132,7 +150,9 @@ class _LyricsPanelState extends State<LyricsPanel> {
   @override
   Widget build(BuildContext context) {
     return Card(
-      margin: const EdgeInsets.fromLTRB(14, 8, 14, 8),
+      margin: widget.expandToAvailableHeight
+          ? EdgeInsets.zero
+          : const EdgeInsets.fromLTRB(14, 8, 14, 8),
       clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

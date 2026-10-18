@@ -438,17 +438,21 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
       isScrollControlled: true,
       constraints: const BoxConstraints(maxWidth: 640),
       builder: (sheetContext) => FractionallySizedBox(
-        heightFactor: 0.78,
-        child: ValueListenableBuilder<PlayerUiState>(
-          valueListenable: widget.playerUiState,
-          builder: (context, ui, _) => SingleChildScrollView(
-            padding: const EdgeInsets.only(bottom: 20),
-            child: LyricsPanel(
+        heightFactor: 0.82,
+        child: Padding(
+          // Keep the lyrics card inside the sheet and let it fill the available
+          // height; a shrink-wrapped SingleChildScrollView left a dark empty
+          // block below the lyrics on tall screens.
+          padding: const EdgeInsets.fromLTRB(12, 4, 12, 10),
+          child: ValueListenableBuilder<PlayerUiState>(
+            valueListenable: widget.playerUiState,
+            builder: (context, ui, _) => LyricsPanel(
               lyrics: ui.video?.videoId == widget.video.videoId ? ui.lyrics : const [],
               loading: ui.video?.videoId == widget.video.videoId && ui.lyricsLoading,
               synced: ui.video?.videoId == widget.video.videoId && ui.lyricsSynced,
               nativeState: widget.nativeState,
               onSeek: widget.onSeek,
+              expandToAvailableHeight: true,
             ),
           ),
         ),

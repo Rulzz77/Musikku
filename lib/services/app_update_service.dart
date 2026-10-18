@@ -74,8 +74,22 @@ class AppUpdateService {
       MethodChannel('musikku/app_update');
 
   final http.Client _client = http.Client();
+  Future<AppUpdateCheckResult>? _inFlightCheck;
 
-  Future<AppUpdateCheckResult> checkForUpdate() async {
+  /// Coalesce automatic, Settings, and Hub-triggered checks while one request
+  /// is already running. This avoids duplicate GitHub calls and modal races.
+  Future<AppUpdateCheckResult> checkForUpdate() {
+    final active = _inFlightCheck;
+    if (active != null) return active;
+
+    final request = _performCheckForUpdate();
+    _inFlightCheck = request;
+    return request.whenComplete(() {
+      if (identical(_inFlightCheck, request)) _inFlightCheck = null;
+    });
+  }
+
+  Future<AppUpdateCheckResult> _performCheckForUpdate() async {
     final response = await _client
         .get(
           Uri.parse(_latestReleaseApi),

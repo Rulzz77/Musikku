@@ -108,5 +108,8 @@ extension _HomePlaylists on _HomePageState {
         _shufflePool.add(song);
       }
     }
+    if (_playerUiState.value.isShuffle) {
+      _prepareShufflePool(excludeCurrent: true, sourceVideo: _currentVideo);
+    }
   }
 }

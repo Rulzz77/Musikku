@@ -117,5 +117,8 @@ extension _HomeFavorites on _HomePageState {
         _shufflePool.add(video);
       }
     }
+    if (_playerUiState.value.isShuffle) {
+      _prepareShufflePool(excludeCurrent: true, sourceVideo: _currentVideo);
+    }
   }
 }

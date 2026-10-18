@@ -44,16 +44,7 @@ extension _HomeAutoNext on _HomePageState {
 
       // 2. QUEUE (prioritas di atas hasil pencarian / shuffle)
       if (_queueManager.isNotEmpty) {
-        final nextItem = !isShuffle
-            ? _queueManager.takeFirst()
-            : _playerUiState.value.isSmartShuffle
-                ? _queueManager.takeSmart(
-                    score: (video) => _smartShuffleScore(
-                      video,
-                      currentArtist: _currentVideo?.channelTitle,
-                    ),
-                  )
-                : _queueManager.takeRandom();
+        final nextItem = _takeQueueItemForCurrentMode(shuffle: isShuffle);
 
         if (nextItem != null) {
           unawaited(_storage.flushPendingWrites());

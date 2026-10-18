@@ -58,6 +58,17 @@ extension _HomeRadio on _HomePageState {
     YoutubeSearchResult current, {
     required bool fromAutoNext,
   }) async {
+    // Device-local playback has no YouTube radio continuation. This guard also
+    // covers a restored local track whose playlist context is empty after app
+    // restart, so Next/auto-next cannot jump into remote YouTube audio.
+    if (current.isLocal) {
+      await _stopPlayback();
+      if (!fromAutoNext) {
+        _toast('Tidak ada lagu lokal berikutnya. Pilih lagu lain dari Musik Lokal.');
+      }
+      return;
+    }
+
     final seed = _radioSeedFor(current);
 
     if (seed.isEmpty) {
@@ -134,6 +145,16 @@ extension _HomeRadio on _HomePageState {
   }
 
   Future<void> _nextFromRadio({required bool fromAutoNext}) async {
+    // Radio catalogues are YouTube-only. Do not allow a stale radio seed to
+    // switch a currently playing local file into a YouTube track.
+    if (_currentVideo?.isLocal == true) {
+      await _stopPlayback();
+      if (!fromAutoNext) {
+        _toast('Shuffle/Radio lokal selesai. Pilih playlist musik lokal untuk lanjut.');
+      }
+      return;
+    }
+
     YoutubeSearchResult? next;
 
     // Cari kandidat radio sampai beberapa halaman. Setelah filter Shorts,

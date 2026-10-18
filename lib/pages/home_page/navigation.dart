@@ -23,17 +23,43 @@ extension _HomeNavigation on _HomePageState {
     List<YoutubeSearchResult> list,
   ) async {
     if (!mounted || list.isEmpty) return;
-    _activeSource = _ListSource.local;
+
+    // This callback is shared by the YouTube hub (history, Mix, discovery)
+    // and the local-music page. Filter mixed history/favorites to the source
+    // of the selected track so Shuffle/Next cannot jump between local files
+    // and YouTube tracks in one session.
+    _activeList = PlaybackSourcePolicy.sameSourceAs(list, selected: video);
+    _activeSource = video.isLocal ? _ListSource.local : _ListSource.collection;
     _activePlaylistId = null;
-    _activeList = List<YoutubeSearchResult>.from(list);
     if (_playerUiState.value.isShuffle) {
-      _prepareShufflePool(excludeCurrent: true);
+      _prepareShufflePool(excludeCurrent: true, sourceVideo: video);
     }
     await _openYoutubeVideo(video);
   }
 
   Future<void> _openYoutubeVideo(YoutubeSearchResult video) async {
     if (!mounted) return;
+
+    // Direct taps from the hub do not provide a list context. Never keep a
+    // stale local list when a YouTube result is tapped (or vice versa). If the
+    // existing list is mixed, normalize it to the selected track's source.
+    final activeContainsVideo =
+        _activeList.any((item) => item.videoId == video.videoId);
+    final activeListIsSourcePure =
+        _activeList.every((item) => item.isLocal == video.isLocal);
+    if (!activeContainsVideo || !activeListIsSourcePure) {
+      _activeList = PlaybackSourcePolicy.sameSourceAs(
+        activeContainsVideo ? _activeList : const <YoutubeSearchResult>[],
+        selected: video,
+      );
+      _activeSource = video.isLocal ? _ListSource.local : _ListSource.collection;
+      _activePlaylistId = null;
+      _shufflePool = [];
+      if (_playerUiState.value.isShuffle) {
+        _prepareShufflePool(excludeCurrent: true, sourceVideo: video);
+      }
+    }
+
     final sameSong = _currentVideo?.videoId == video.videoId &&
         !_restoredNeedsLoad &&
         _nativeState.playbackState != NativePlaybackState.error &&

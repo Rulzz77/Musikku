@@ -2,44 +2,49 @@
 
 # 🎧 MusikKu
 
-**Temukan musik. Impor playlist. Putar dengan MusikKu.**
+**Musik favoritmu, dalam satu tempat.**
 
-![Version](https://img.shields.io/badge/version-4.5.0-1DB954?style=for-the-badge)
-![Build](https://img.shields.io/badge/build-32-6C63FF?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-4.6.3-D94B70?style=for-the-badge)
+![Build](https://img.shields.io/badge/build-36-6C63FF?style=for-the-badge)
 ![Platform](https://img.shields.io/badge/platform-Android-3DDC84?style=for-the-badge)
 ![Flutter](https://img.shields.io/badge/Flutter-Dart-02569B?style=for-the-badge)
 
 </div>
 
-MusikKu adalah pemutar musik Android berbasis Flutter dengan pencarian musik, koleksi lokal, antrean, radio, lirik, dan impor playlist Spotify melalui file ekspor akun.
+MusikKu adalah aplikasi musik Android untuk menjelajahi musik, mengelola favorit dan playlist, mendengarkan radio, serta memutar audio dari YouTube dan perangkat.
 
-## ✨ Fitur
+## ✨ Fitur utama
 
-- 🔎 **Discovery musik** — cari lagu dan temukan versi yang tersedia di katalog MusikKu.
-- 🎼 **Player & antrean** — kontrol playback, antrean lagu, lirik, timer tidur, dan efek audio.
-- 📁 **Musik lokal** — telusuri dan putar file audio di perangkat.
-- 💚 **Impor playlist Spotify** — impor metadata playlist dari `Playlist*.json` tanpa Spotify API, OAuth, Client ID, atau Premium.
-- 🎨 **Personalisasi** — tema aplikasi dan pengaturan pemutaran.
+- 🔎 **Jelajahi musik** — cari lagu, telusuri genre, dan temukan musik baru.
+- 🎛️ **Pemutar musik** — mini-player, antrean, shuffle, repeat, lirik, timer tidur, dan efek audio.
+- 💗 **Koleksi personal** — favorit, riwayat dengar, playlist, dan statistik.
+- 📁 **Musik lokal** — pindai serta putar file audio yang tersimpan di perangkat.
+- 📻 **Radio otomatis** — lanjutkan mendengarkan dengan lagu yang serupa.
+- 🎨 **Tampilan fleksibel** — tema sistem, terang, gelap, dan AMOLED.
+- 🔄 **Pembaruan aplikasi** — cek rilis baru dari dalam aplikasi.
 
-## 📥 Impor playlist Spotify
+## 🎵 Navigasi
 
-Unduh **Account data** dari [halaman privasi Spotify](https://www.spotify.com/account/privacy/), ekstrak ZIP, lalu pilih file `Playlist*.json` melalui menu **Impor Spotify** di MusikKu. Metadata playlist disimpan lokal; file audio Spotify tidak ikut diimpor. Lihat [SPOTIFY_SETUP.md](SPOTIFY_SETUP.md) untuk catatan format dan batasan.
+**Beranda · Mix · Jelajahi · Langganan · Koleksi**
 
 ## 🧰 Teknologi
 
-- Flutter / Dart
-- Native Android Kotlin
-- SharedPreferences untuk data koleksi lokal
-- GitHub Actions untuk build dan GitHub Release otomatis
+Flutter / Dart · Native Android Kotlin · SharedPreferences · GitHub Actions
 
 ## 📌 Catatan
 
-- MusikKu adalah proyek independen dan tidak berafiliasi dengan Spotify atau YouTube.
-- Cover dan metadata visual tidak selalu tersedia dalam file ekspor Spotify.
-- Hasil pencarian lagu harus dicocokkan dengan benar sebelum diputar.
-- Status build dan pengujian mengikuti hasil CI terbaru.
+MusikKu adalah proyek independen. Ketersediaan hasil pencarian dan pemutaran bergantung pada layanan serta koneksi yang tersedia.
+
+## 📦 Pembaruan APK
+
+GitHub Releases menyediakan APK universal untuk kompatibilitas updater lama dan APK split per arsitektur untuk unduhan lebih kecil. Updater versi baru memilih APK yang cocok dengan ABI perangkat secara otomatis.
 
 
-## Pembaruan APK
+### Playback source safety (4.6.3)
 
-GitHub Releases menyediakan APK universal untuk kompatibilitas updater versi lama dan APK split per arsitektur. Mulai MusikKu 4.5.1, updater otomatis memilih `app-arm64-v8a-release.apk`, `app-armeabi-v7a-release.apk`, atau `app-x86_64-release.apk` sesuai ABI perangkat. Jika deteksi ABI tidak tersedia, updater memakai `app-release.apk` universal.
+Shuffle keeps the current session within one source type: YouTube tracks shuffle with YouTube tracks, and device-local files shuffle with local files. If the queue contains items from both sources, Shuffle selects only matching items and leaves the others queued. Normal queue playback may still mix sources when the user explicitly chooses that queue order.
+
+
+### Source-safe Shuffle (4.6.3)
+
+Shuffle keeps YouTube tracks and local files in separate playback sessions. Mixed history/Mix lists are normalized to the selected track source; source-incompatible queue entries remain queued during Shuffle. Normal playback queue order remains explicit-user controlled.

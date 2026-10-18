@@ -114,6 +114,50 @@ class QueueManager {
     return _queue.first;
   }
 
+  /// Ambil lagu pertama yang cocok dengan predicate tanpa mengganggu item lain.
+  /// Dipakai agar Shuffle tidak mencampur sumber YouTube dan file lokal.
+  QueueItem? takeFirstMatching(
+    bool Function(YoutubeSearchResult video) matches,
+  ) {
+    final index = _queue.indexWhere((item) => matches(item.video));
+    if (index < 0) return null;
+    return _queue.removeAt(index);
+  }
+
+  /// Ambil secara acak hanya dari sumber yang cocok; item sumber lain tetap
+  /// berada di antrean dan tidak ikut teracak ke sesi pemutaran ini.
+  QueueItem? takeRandomMatching(
+    bool Function(YoutubeSearchResult video) matches,
+  ) {
+    final matchingIndexes = <int>[];
+    for (var i = 0; i < _queue.length; i++) {
+      if (matches(_queue[i].video)) matchingIndexes.add(i);
+    }
+    if (matchingIndexes.isEmpty) return null;
+    final index = matchingIndexes[_random.nextInt(matchingIndexes.length)];
+    return _queue.removeAt(index);
+  }
+
+  /// Smart Shuffle terbatas pada item yang kompatibel. Kandidat yang tak cocok
+  /// tidak ikut dinilai dan tidak dihapus dari antrean.
+  QueueItem? takeSmartMatching({
+    required bool Function(YoutubeSearchResult video) matches,
+    required double Function(YoutubeSearchResult) score,
+  }) {
+    final scored = _queue
+        .where((item) => matches(item.video))
+        .map((item) => (item: item, score: score(item.video)))
+        .toList()
+      ..sort((a, b) => b.score.compareTo(a.score));
+
+    if (scored.isEmpty) return null;
+    final topCount = scored.length < 5 ? scored.length : 5;
+    final candidates = scored.take(topCount).toList();
+    final selected = candidates[_random.nextInt(candidates.length)].item;
+    _queue.removeWhere((item) => item.id == selected.id);
+    return selected;
+  }
+
   QueueItem? takeSmart({required double Function(YoutubeSearchResult) score}) {
     if (_queue.isEmpty) {
       return null;

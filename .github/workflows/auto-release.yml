@@ -40,7 +40,7 @@ jobs:
           VERSION_SPEC="$(sed -n 's/^version:[[:space:]]*//p' pubspec.yaml | head -n 1 | tr -d "\r'\"")"
 
           if [[ -z "$VERSION_SPEC" || "$VERSION_SPEC" != *+* ]]; then
-            echo "::error::Version pubspec.yaml harus berformat contoh 4.6.2+36"
+            echo "::error::Version pubspec.yaml harus berformat contoh 4.6.3+37"
             exit 1
           fi
 

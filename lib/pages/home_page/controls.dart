@@ -30,7 +30,7 @@ extension _HomeControls on _HomePageState {
     }
 
     unawaited(_persistPlaybackModes());
-    _toast(next ? 'Shuffle aktif' : 'Shuffle dimatikan');
+    _toast(next ? 'Shuffle aktif · sumber musik tetap terpisah' : 'Shuffle dimatikan');
     if (mounted) setState(() {});
   }
 
@@ -48,7 +48,7 @@ extension _HomeControls on _HomePageState {
     }
 
     unawaited(_persistPlaybackModes());
-    _toast(next ? 'Smart Shuffle aktif' : 'Smart Shuffle dimatikan');
+    _toast(next ? 'Smart Shuffle aktif · sumber musik tetap terpisah' : 'Smart Shuffle dimatikan');
     if (mounted) setState(() {});
   }
 
@@ -195,6 +195,16 @@ extension _HomeControls on _HomePageState {
       return;
     }
 
+    // Dalam sesi Shuffle, Previous juga harus menghormati batas sumber.
+    // Abaikan entri history dari sesi sumber lain agar file lokal tidak meloncat
+    // ke YouTube (atau sebaliknya) hanya karena riwayat pemutaran lama.
+    if (_playerUiState.value.isShuffle) {
+      while (_playHistory.isNotEmpty &&
+          _playHistory.last.isLocal != current.isLocal) {
+        _playHistory.removeLast();
+      }
+    }
+
     // Kembali ke lagu yang tadi diputar (berlaku juga untuk shuffle).
     if (_playHistory.isNotEmpty) {
       final previous = _playHistory.removeLast();
@@ -250,16 +260,7 @@ extension _HomeControls on _HomePageState {
     // Tombol Next manual juga mengambil dari antrean dulu
     // (auto-next sudah menangani antrean sendiri).
     if (!fromAutoNext && _queueManager.isNotEmpty) {
-      final nextItem = !isShuffle
-          ? _queueManager.takeFirst()
-          : _playerUiState.value.isSmartShuffle
-              ? _queueManager.takeSmart(
-                  score: (video) => _smartShuffleScore(
-                    video,
-                    currentArtist: _currentVideo?.channelTitle,
-                  ),
-                )
-              : _queueManager.takeRandom();
+      final nextItem = _takeQueueItemForCurrentMode(shuffle: isShuffle);
 
       if (nextItem != null) {
         unawaited(_storage.saveQueue(_queueManager.items));
@@ -276,7 +277,8 @@ extension _HomeControls on _HomePageState {
     // Lagu dari pencarian: lanjut ke upload terbaru yang masih sesuai konteks
     // pencarian (DJ -> DJ, pop -> pop, jadul -> jadul). Bukan urutan populer.
     // Favorit & "Terakhir diputar" tetap playlist.
-    if ((_activeSource == _ListSource.search ||
+    if (!current.isLocal &&
+        (_activeSource == _ListSource.search ||
             _activeSource == _ListSource.radio) &&
         _radio.hasSeed) {
       await _nextFromRadio(fromAutoNext: fromAutoNext);

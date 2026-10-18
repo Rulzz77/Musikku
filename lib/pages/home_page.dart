@@ -18,6 +18,7 @@ import '../services/music_style_matcher.dart';
 import '../services/app_settings.dart';
 import '../services/app_update_service.dart';
 import '../services/queue_manager.dart';
+import '../services/playback_source_policy.dart';
 import '../services/radio_service.dart';
 import '../services/storage_service.dart';
 import '../services/youtube_controller.dart';
@@ -51,7 +52,7 @@ const String _loopModePrefKey = 'playback_loop_mode_v1';
 const String _playerVolumePrefKey = 'player_volume_percent_v1';
 
 /// Daftar lagu yang sedang menjadi "playlist" untuk next / previous / shuffle.
-enum _ListSource { none, search, favorites, radio, playlist, local }
+enum _ListSource { none, search, favorites, radio, playlist, local, collection }
 
 class HomePage extends StatefulWidget {
   const HomePage({

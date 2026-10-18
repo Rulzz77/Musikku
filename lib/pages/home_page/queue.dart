@@ -8,8 +8,9 @@ extension _HomeQueue on _HomePageState {
   String? get _shuffleMusicStyle {
     if (_activeSource == _ListSource.favorites ||
         _activeSource == _ListSource.playlist ||
-        _activeSource == _ListSource.local) {
-      return null; // Hormati urutan playlist/favorit buatan pengguna.
+        _activeSource == _ListSource.local ||
+        _activeSource == _ListSource.collection) {
+      return null; // Jangan memaksakan filter genre pada playlist/koleksi yang sudah dipilih.
     }
 
     final query = _activeSource == _ListSource.radio && _radio.hasSeed
@@ -21,20 +22,47 @@ extension _HomeQueue on _HomePageState {
     );
   }
 
-  void _prepareShufflePool({bool excludeCurrent = true}) {
+  void _prepareShufflePool({
+    bool excludeCurrent = true,
+    YoutubeSearchResult? sourceVideo,
+  }) {
     final style = _shuffleMusicStyle;
-    _shufflePool = _activeList
-        .where((video) => MusicStyleMatcher.isCompatible(
-              video: video,
-              targetStyle: style,
-            ))
-        .toList();
+    final reference = sourceVideo ?? _currentVideo;
+    final bool? localSource = reference?.isLocal;
+    _shufflePool = _activeList.where((video) {
+      if (localSource != null && video.isLocal != localSource) return false;
+      return MusicStyleMatcher.isCompatible(video: video, targetStyle: style);
+    }).toList();
 
-    if (excludeCurrent && _currentVideo != null) {
-      _shufflePool.removeWhere(
-        (video) => video.videoId == _currentVideo!.videoId,
+    final excludedId = sourceVideo?.videoId ?? _currentVideo?.videoId;
+    if (excludeCurrent && excludedId != null && excludedId.isNotEmpty) {
+      _shufflePool.removeWhere((video) => video.videoId == excludedId);
+    }
+  }
+
+  /// Queue boleh berisi sumber campuran karena item dapat ditambahkan manual.
+  /// Saat Shuffle aktif, hanya ambil item dari sumber yang sedang diputar;
+  /// item dari sumber lain tetap menunggu di antrean.
+  QueueItem? _takeQueueItemForCurrentMode({required bool shuffle}) {
+    if (_queueManager.isEmpty) return null;
+    if (!shuffle) return _queueManager.takeFirst();
+
+    final current = _currentVideo;
+    if (current == null) return _queueManager.takeRandom();
+
+    bool matchesSource(YoutubeSearchResult video) =>
+        video.isLocal == current.isLocal;
+
+    if (_playerUiState.value.isSmartShuffle) {
+      return _queueManager.takeSmartMatching(
+        matches: matchesSource,
+        score: (video) => _smartShuffleScore(
+          video,
+          currentArtist: current.channelTitle,
+        ),
       );
     }
+    return _queueManager.takeRandomMatching(matchesSource);
   }
 
   double _smartShuffleScore(
@@ -81,10 +109,12 @@ extension _HomeQueue on _HomePageState {
 
   YoutubeSearchResult? _takeShuffleVideo() {
     final style = _shuffleMusicStyle;
-    _shufflePool.removeWhere((video) => !MusicStyleMatcher.isCompatible(
-          video: video,
-          targetStyle: style,
-        ));
+    final current = _currentVideo;
+    _shufflePool.removeWhere((video) {
+      // Secondary guard: a stale/mixed pool must never switch local ↔ YouTube.
+      if (current != null && video.isLocal != current.isLocal) return true;
+      return !MusicStyleMatcher.isCompatible(video: video, targetStyle: style);
+    });
     if (_shufflePool.isEmpty) {
       return null;
     }

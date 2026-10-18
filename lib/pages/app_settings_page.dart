@@ -155,7 +155,7 @@ class AppSettingsPage extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 22),
-          _SectionLabel(icon: Icons.tune_rounded, title: 'Pemutar dan tampilan video'),
+          _SectionLabel(icon: Icons.tune_rounded, title: 'Pemutar musik & tampilan'),
           const SizedBox(height: 8),
           Card(
             child: Column(

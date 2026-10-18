@@ -18,7 +18,6 @@ import '../pages/youtube_channel_page.dart';
 import '../pages/stats_page.dart';
 import '../pages/app_settings_page.dart';
 import '../pages/local_music_page.dart';
-import '../pages/spotify_library_page.dart';
 import 'channel_avatar.dart';
 import 'live_badge.dart';
 import 'data_usage_card.dart';
@@ -428,8 +427,41 @@ class _YoutubeHubState extends State<YoutubeHub> {
       SliverToBoxAdapter(child: _modernWelcomeHeader()),
       SliverToBoxAdapter(child: _featuredMusicBanner()),
       _chipRow(),
+      _sectionHeader('Akses cepat'),
+      SliverToBoxAdapter(
+        child: SizedBox(
+          height: 86,
+          child: ListView.separated(
+            padding: const EdgeInsets.fromLTRB(14, 0, 14, 5),
+            scrollDirection: Axis.horizontal,
+            itemCount: 4,
+            separatorBuilder: (_, _) => const SizedBox(width: 9),
+            itemBuilder: (context, index) {
+              final actions = <({String title, String subtitle, IconData icon, VoidCallback onTap})>[
+                (title: 'Mix favorit', subtitle: '${widget.favorites.length} lagu tersimpan', icon: Icons.auto_awesome_rounded, onTap: _playFavoritesMix),
+                (title: 'Musik lokal', subtitle: 'File di perangkat', icon: Icons.folder_music_rounded, onTap: _openLocalMusic),
+                (title: 'Riwayat', subtitle: '${widget.recentlyPlayed.length} lagu terakhir', icon: Icons.history_rounded, onTap: _openRecentHistory),
+                (title: 'Radio', subtitle: 'Temukan lagu serupa', icon: Icons.radio_rounded, onTap: _startRadioFromCollection),
+              ];
+              final action = actions[index];
+              return _homeQuickActionCard(
+                title: action.title,
+                subtitle: action.subtitle,
+                icon: action.icon,
+                onTap: action.onTap,
+              );
+            },
+          ),
+        ),
+      ),
       if (recentlyPlayed.isNotEmpty) ...[
-        _sectionHeader('Putar lagi'),
+        _sectionHeader(
+          'Lanjutkan mendengarkan',
+          action: recentlyPlayed.length > 1 ? 'Putar semua' : null,
+          onAction: recentlyPlayed.length > 1
+              ? () => unawaited(widget.onPlayFromList(recentlyPlayed.first, recentlyPlayed))
+              : null,
+        ),
         SliverToBoxAdapter(
           child: SizedBox(
             height: 204,
@@ -463,6 +495,90 @@ class _YoutubeHubState extends State<YoutubeHub> {
         ),
       const SliverToBoxAdapter(child: SizedBox(height: 8)),
     ];
+  }
+
+  void _playFavoritesMix() {
+    final songs = List<YoutubeSearchResult>.from(widget.favorites);
+    if (songs.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Belum ada lagu favorit. Simpan lagu dulu untuk membuat Mix Favorit.')),
+      );
+      return;
+    }
+    songs.shuffle(_feedRandom);
+    unawaited(widget.onPlayFromList(songs.first, songs));
+  }
+
+  void _openRecentHistory() {
+    if (widget.recentlyPlayed.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Riwayat masih kosong. Putar lagu dulu, nanti muncul di sini.')),
+      );
+      return;
+    }
+    _showSongList('Riwayat dengar MusikKu', widget.recentlyPlayed);
+  }
+
+  void _openFavoritesList() {
+    if (widget.favorites.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Belum ada favorit. Tambahkan lagu ke favorit untuk menemukannya di sini.')),
+      );
+      return;
+    }
+    _showSongList('Favorit MusikKu', widget.favorites);
+  }
+
+  Widget _homeQuickActionCard({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+    return SizedBox(
+      width: 158,
+      child: Material(
+        color: scheme.surfaceContainerLow,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.36)),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+            child: Row(
+              children: [
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: scheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(13),
+                  ),
+                  alignment: Alignment.center,
+                  child: Icon(icon, color: scheme.onPrimaryContainer, size: 21),
+                ),
+                const SizedBox(width: 9),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w900)),
+                      const SizedBox(height: 3),
+                      Text(subtitle, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 9.2, height: 1.15, color: scheme.onSurfaceVariant)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _modernWelcomeHeader() {
@@ -619,7 +735,7 @@ class _YoutubeHubState extends State<YoutubeHub> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
                           decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.11), borderRadius: BorderRadius.circular(999), border: Border.all(color: Colors.white.withValues(alpha: 0.16))),
-                          child: const Text('YOUR DAILY SOUNDTRACK', style: TextStyle(color: Color(0xFFFFDCE5), fontSize: 8.5, fontWeight: FontWeight.w900, letterSpacing: 1.05)),
+                          child: const Text('MUSIK UNTUK HARI INI', style: TextStyle(color: Color(0xFFFFDCE5), fontSize: 8.5, fontWeight: FontWeight.w900, letterSpacing: 1.05)),
                         ),
                         const SizedBox(height: 12),
                         Text(
@@ -1434,7 +1550,7 @@ class _YoutubeHubState extends State<YoutubeHub> {
                   children: [
                     const Icon(Icons.explore_rounded, size: 44),
                     const SizedBox(height: 10),
-                    const Text('Sampel belum tersedia', style: TextStyle(fontWeight: FontWeight.w800)),
+                    const Text('Mix belum tersedia', style: TextStyle(fontWeight: FontWeight.w800)),
                     const SizedBox(height: 6),
                     Text(_feedError.isNotEmpty ? _feedError : 'Muat rekomendasi musik terlebih dahulu.', textAlign: TextAlign.center, style: TextStyle(color: scheme.onSurfaceVariant)),
                     const SizedBox(height: 12),
@@ -1994,7 +2110,7 @@ class _YoutubeHubState extends State<YoutubeHub> {
   List<Widget> _subscriptionsView() {
     return <Widget>[
       _sectionHeader(
-        _subscriptions.isEmpty ? 'Subscription' : 'Subscription • ${_subscriptions.length} channel',
+        _subscriptions.isEmpty ? 'Langganan' : 'Langganan • ${_subscriptions.length} channel',
         action: _subscriptions.length > 1 ? 'Semua' : null,
         onAction: _openAllSubscriptions,
       ),
@@ -2228,39 +2344,59 @@ class _YoutubeHubState extends State<YoutubeHub> {
           _showPlaylistPicker,
         ),
       ],
-      spacedCard(
-        'Impor Spotify',
-        'Impor playlist dari file ekspor akun — tanpa Premium atau login API',
-        Icons.library_music_rounded,
-        _openSpotifyLibrary,
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 18, 14, 9),
+          child: Row(
+            children: [
+              const Expanded(child: Text('Pintasan koleksi', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: -0.35))),
+              Text('Akses cepat', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11, fontWeight: FontWeight.w700)),
+            ],
+          ),
+        ),
       ),
-      spacedCard(
-        'Riwayat dengar',
-        '${widget.recentlyPlayed.length} lagu didengarkan di MusikKu',
-        Icons.history_rounded,
-        () => _showSongList('Riwayat dengar MusikKu', widget.recentlyPlayed),
-      ),
-      spacedCard(
-        'Favorit MusikKu',
-        '${widget.favorites.length} video tersimpan lokal',
-        Icons.favorite_border_rounded,
-        () => _showSongList('Favorit MusikKu', widget.favorites),
-      ),
-      spacedCard(
-        'Radio otomatis',
-        'Lanjutkan pemutaran dengan video sejenis',
-        Icons.radio_rounded,
-        _startRadioFromCollection,
-      ),
-      spacedCard(
-        'Musik di perangkat',
-        'Pindai dan putar file audio lokal tanpa mengunggahnya',
-        Icons.folder_open_rounded,
-        _openLocalMusic,
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          child: GridView.count(
+            crossAxisCount: 2,
+            crossAxisSpacing: 10,
+            mainAxisSpacing: 10,
+            childAspectRatio: 1.28,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            children: [
+              _libraryQuickTile(
+                title: 'Riwayat dengar',
+                subtitle: '${widget.recentlyPlayed.length} lagu terakhir',
+                icon: Icons.history_rounded,
+                onTap: _openRecentHistory,
+              ),
+              _libraryQuickTile(
+                title: 'Favorit MusikKu',
+                subtitle: '${widget.favorites.length} lagu tersimpan',
+                icon: Icons.favorite_rounded,
+                onTap: _openFavoritesList,
+              ),
+              _libraryQuickTile(
+                title: 'Musik lokal',
+                subtitle: 'File di perangkat',
+                icon: Icons.folder_music_rounded,
+                onTap: _openLocalMusic,
+              ),
+              _libraryQuickTile(
+                title: 'Radio otomatis',
+                subtitle: 'Putar lagu serupa',
+                icon: Icons.radio_rounded,
+                onTap: _startRadioFromCollection,
+              ),
+            ],
+          ),
+        ),
       ),
       spacedCard(
         'Statistik mendengarkan',
-        'Ringkasan aktivitas pemutaran',
+        'Ringkasan waktu dengar, lagu, dan kebiasaan musik',
         Icons.insights_outlined,
         () => Navigator.of(context).push(
           MaterialPageRoute<void>(builder: (_) => StatsPage(storage: _storage)),
@@ -2315,30 +2451,52 @@ class _YoutubeHubState extends State<YoutubeHub> {
     ];
   }
 
+  Widget _libraryQuickTile({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: scheme.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.38)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(color: scheme.primaryContainer, borderRadius: BorderRadius.circular(13)),
+                alignment: Alignment.center,
+                child: Icon(icon, color: scheme.onPrimaryContainer, size: 21),
+              ),
+              const SizedBox(height: 9),
+              Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900)),
+              const SizedBox(height: 3),
+              Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 10, color: scheme.onSurfaceVariant)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   void _openLocalMusic() {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => LocalMusicPage(
           onPlayFromList: widget.onPlayFromList,
           onAddToQueue: widget.onAddToQueue,
-        ),
-      ),
-    );
-  }
-
-  void _openSpotifyLibrary() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => SpotifyLibraryPage(
-          onSearchInMusikKu: (track) async {
-            if (!mounted) return;
-            _searchController.text = '${track.name} ${track.artistLabel} official audio';
-            setState(() {
-              _activeChip = -1;
-              _searchMode = 'music';
-            });
-            await _search();
-          },
         ),
       ),
     );
@@ -2578,9 +2736,9 @@ class _YoutubeHubState extends State<YoutubeHub> {
           if (_query.isNotEmpty || _section != _YoutubeSection.home)
             _topBar(title: switch (_section) {
               _YoutubeSection.home => appName,
-              _YoutubeSection.samples => 'Sampel',
+              _YoutubeSection.samples => 'Mix',
               _YoutubeSection.explore => 'Jelajahi',
-              _YoutubeSection.subscriptions => 'Subscription',
+              _YoutubeSection.subscriptions => 'Langganan',
               _YoutubeSection.library => 'Koleksi',
             }),
           if (_query.isNotEmpty)
@@ -2789,9 +2947,9 @@ class _YoutubeHubState extends State<YoutubeHub> {
                   label: 'Beranda',
                 ),
                 NavigationDestination(
-                  icon: Icon(Icons.play_circle_outline_rounded),
-                  selectedIcon: Icon(Icons.play_circle_fill_rounded),
-                  label: 'Sampel',
+                  icon: Icon(Icons.queue_music_rounded),
+                  selectedIcon: Icon(Icons.graphic_eq_rounded),
+                  label: 'Mix',
                 ),
                 NavigationDestination(
                   icon: Icon(Icons.explore_outlined),
@@ -2801,11 +2959,11 @@ class _YoutubeHubState extends State<YoutubeHub> {
                 NavigationDestination(
                   icon: Icon(Icons.subscriptions_outlined),
                   selectedIcon: Icon(Icons.subscriptions_rounded),
-                  label: 'Subscription',
+                  label: 'Langganan',
                 ),
                 NavigationDestination(
-                  icon: Icon(Icons.video_library_outlined),
-                  selectedIcon: Icon(Icons.video_library_rounded),
+                  icon: Icon(Icons.library_music_outlined),
+                  selectedIcon: Icon(Icons.library_music_rounded),
                   label: 'Koleksi',
                 ),
               ],

@@ -184,7 +184,7 @@ extension _HomeControls on _HomePageState {
       return;
     }
 
-    // Sudah lewat 3 detik → ulang lagu ini dari awal (seperti Spotify).
+    // Sudah lewat 3 detik → ulang lagu ini dari awal.
     if (_nativeState.position > const Duration(seconds: 3)) {
       try {
         await _youtubeController.seekTo(seconds: 0);

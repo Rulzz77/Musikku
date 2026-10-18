@@ -506,12 +506,15 @@ class YoutubeAccountService {
       write: false,
     );
     final enriched = await _enrichViewCounts(_playlistItemsToTracks(playlist));
-    return enriched
+    final musicOnly = enriched
         .where((video) => YoutubeSearchService.isMusicCatalogItem(
               video,
               requireCategoryId: true,
             ))
         .toList(growable: false);
+    // Judul yang tidak memuat #Shorts tetap bisa berupa video pendek. Cek
+    // URL Shorts untuk upload channel, bukan hanya mengandalkan kata kunci.
+    return YoutubeSearchService().removeShorts(musicOnly);
   }
 
   Future<List<YoutubeSearchResult>> likedVideos({int maxResults = 50}) async {
@@ -537,12 +540,13 @@ class YoutubeAccountService {
       write: false,
     );
     final enriched = await _enrichViewCounts(_playlistItemsToTracks(data));
-    return enriched
+    final musicOnly = enriched
         .where((video) => YoutubeSearchService.isMusicCatalogItem(
               video,
               requireCategoryId: true,
             ))
         .toList(growable: false);
+    return YoutubeSearchService().removeShorts(musicOnly);
   }
 
   Future<List<YoutubePlaylistSummary>> playlists({int maxResults = 50}) async {
@@ -618,12 +622,13 @@ class YoutubeAccountService {
       write: false,
     );
     final enriched = await _enrichViewCounts(_playlistItemsToTracks(data));
-    return enriched
+    final musicOnly = enriched
         .where((video) => YoutubeSearchService.isMusicCatalogItem(
               video,
               requireCategoryId: true,
             ))
         .toList(growable: false);
+    return YoutubeSearchService().removeShorts(musicOnly);
   }
 
   Future<String> createPlaylist(
@@ -822,6 +827,10 @@ class YoutubeAccountService {
               requireCategoryId: true,
             ))
         .toList(growable: false);
+    // Subscription feed used to stop at title/category heuristics, so unnamed
+    // Shorts from subscribed channels leaked into Home and Langganan. Verify
+    // the remaining candidates in bounded concurrent batches before sorting.
+    enriched = await YoutubeSearchService().removeShorts(enriched);
     enriched.sort((a, b) {
       // Yang sedang live selalu di atas, sisanya terbaru dulu.
       if (a.isLive != b.isLive) return a.isLive ? -1 : 1;
@@ -848,12 +857,13 @@ class YoutubeAccountService {
       pages++;
       if (page.items.isNotEmpty) {
         final detailed = await _enrichViewCounts(page.items);
-        found.addAll(detailed.where((video) =>
+        final musicOnly = detailed.where((video) =>
             video.liveStatus.isNotEmpty &&
             YoutubeSearchService.isMusicCatalogItem(
               video,
               requireCategoryId: true,
-            )));
+            )).toList(growable: false);
+        found.addAll(await YoutubeSearchService().removeShorts(musicOnly));
       }
     } while (token != null && pages < maxPages);
     return (items: found, nextPageToken: token);

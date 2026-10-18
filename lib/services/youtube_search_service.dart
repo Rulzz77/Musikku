@@ -1226,7 +1226,13 @@ class YoutubeSearchService {
     }
   }
 
-  /// Buang semua Shorts dari [videos]. Dicek paralel, maksimal 8 sekaligus.
+  /// Buang semua Shorts dari [videos]. Maksimum 12 URL diverifikasi paralel.
+  ///
+  /// Shorts yang jelas dari judul dibuang langsung. Video berdurasi lebih dari
+  /// 3 menit tidak perlu melakukan request jaringan karena batas Shorts saat ini
+  /// adalah 3 menit; video berdurasi <= 3 menit (atau durasinya belum diketahui)
+  /// diverifikasi melalui URL Shorts. Ini mengurangi request saat memuat feed
+  /// subscription tanpa meloloskan Shorts pendek yang judulnya tidak bertanda.
   Future<List<YoutubeSearchResult>> removeShorts(
     List<YoutubeSearchResult> videos,
   ) async {
@@ -1235,13 +1241,30 @@ class YoutubeSearchService {
     }
 
     final flags = List<bool>.filled(videos.length, false);
+    final candidates = <int>[];
 
-    for (var start = 0; start < videos.length; start += 8) {
-      final end = math.min(start + 8, videos.length);
+    for (var i = 0; i < videos.length; i++) {
+      final video = videos[i];
+      if (isLikelyShortForm(video)) {
+        flags[i] = true;
+        continue;
+      }
+      final duration = video.durationSeconds;
+      if (duration != null && duration > 180) {
+        // Lebih dari 3 menit tidak bisa diklasifikasikan sebagai Shorts.
+        continue;
+      }
+      candidates.add(i);
+    }
 
+    for (var start = 0; start < candidates.length; start += 12) {
+      final end = math.min(start + 12, candidates.length);
       await Future.wait([
-        for (var i = start; i < end; i++)
-          isShortVideo(videos[i].videoId).then((value) => flags[i] = value),
+        for (var position = start; position < end; position++)
+          (() async {
+            final index = candidates[position];
+            flags[index] = await isShortVideo(videos[index].videoId);
+          })(),
       ]);
     }
 

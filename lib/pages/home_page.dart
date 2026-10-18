@@ -344,9 +344,13 @@ class _HomePageState extends State<HomePage>
   // ============================================================
 
   Future<void> _checkForAppUpdateOnLaunch() async {
+    // Hormati opt-out: jika dimatikan, jangan menghubungi GitHub saat startup.
+    if (!widget.settings.autoUpdateEnabled.value) return;
+
     // Jangan menutupi pemutaran pertama. Cek setelah UI utama stabil dan diam-diam
     // abaikan error jaringan atau repository yang belum punya Release.
     await Future<void>.delayed(const Duration(seconds: 5));
+    if (!widget.settings.autoUpdateEnabled.value) return;
     if (_launchUpdateCheckInProgress) return;
     _launchUpdateCheckInProgress = true;
 
@@ -358,17 +362,24 @@ class _HomePageState extends State<HomePage>
         return;
       }
 
+      if (!widget.settings.autoUpdateEnabled.value) return;
       final result = await AppUpdateService.instance.checkForUpdate();
       final release = result.release;
       if (!mounted ||
           ModalRoute.of(context)?.isCurrent != true ||
+          !widget.settings.autoUpdateEnabled.value ||
           !result.updateAvailable ||
           release == null) {
         return;
       }
 
       final preferences = await SharedPreferences.getInstance();
-      final promptKey = 'musikku_update_prompted_${release.version}';
+      final autoInstall = widget.settings.autoInstallUpdates.value;
+      // Keep normal and auto-install prompt tracking separate: enabling the
+      // opt-in auto-install mode should not be blocked by an older normal prompt.
+      final promptKey = autoInstall
+          ? 'musikku_auto_install_prompted_${release.version}'
+          : 'musikku_update_prompted_${release.version}';
       if (preferences.getBool(promptKey) == true) return;
       await preferences.setBool(promptKey, true);
       if (!mounted) return;
@@ -384,6 +395,7 @@ class _HomePageState extends State<HomePage>
         context,
         initialResult: result,
         automaticPrompt: true,
+        automaticInstall: widget.settings.autoInstallUpdates.value,
       );
     } catch (error) {
       // Auto-check tidak boleh mengganggu pengguna saat jaringan/API bermasalah.

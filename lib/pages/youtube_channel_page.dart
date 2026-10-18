@@ -139,12 +139,13 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
       if (uploads.isNotEmpty) {
         final page = await _account.playlistItemsPage(uploads, maxResults: _pageSize);
         token = page.nextPageToken;
-        videos = (await _account.withViewCounts(page.items))
+        final musicOnly = (await _account.withViewCounts(page.items))
             .where((video) => YoutubeSearchService.isMusicCatalogItem(
                   video,
                   requireCategoryId: true,
                 ))
             .toList(growable: false);
+        videos = await YoutubeSearchService().removeShorts(musicOnly);
       }
       if (!mounted) return;
       setState(() {
@@ -229,12 +230,13 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
           _oldestComplete = true;
         }
         final first = _oldestPool.take(_pageSize).toList(growable: false);
-        final withStats = (await _account.withViewCounts(first))
+        final musicOnly = (await _account.withViewCounts(first))
             .where((video) => YoutubeSearchService.isMusicCatalogItem(
                   video,
                   requireCategoryId: true,
                 ))
             .toList(growable: false);
+        final withStats = await YoutubeSearchService().removeShorts(musicOnly);
         if (!mounted || requestId != _sortRequestId) return;
         setState(() {
           _videos = withStats;
@@ -242,12 +244,13 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
         });
       } else {
         final page = await _account.playlistItemsPage(_uploadsId, maxResults: _pageSize);
-        final withStats = (await _account.withViewCounts(page.items))
+        final musicOnly = (await _account.withViewCounts(page.items))
             .where((video) => YoutubeSearchService.isMusicCatalogItem(
                   video,
                   requireCategoryId: true,
                 ))
             .toList(growable: false);
+        final withStats = await YoutubeSearchService().removeShorts(musicOnly);
         if (!mounted || requestId != _sortRequestId) return;
         setState(() {
           _videos = withStats;
@@ -275,12 +278,13 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
       List<YoutubeSearchResult> more;
       if (_oldestFirst) {
         final next = _oldestPool.skip(_oldestShown).take(_pageSize).toList(growable: false);
-        more = (await _account.withViewCounts(next))
+        final musicOnly = (await _account.withViewCounts(next))
             .where((video) => YoutubeSearchService.isMusicCatalogItem(
                   video,
                   requireCategoryId: true,
                 ))
             .toList(growable: false);
+        more = await YoutubeSearchService().removeShorts(musicOnly);
         if (!mounted || requestId != _sortRequestId) return;
         setState(() {
           _videos = [..._videos, ...more];
@@ -292,12 +296,13 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
           pageToken: _nextToken,
           maxResults: _pageSize,
         );
-        more = (await _account.withViewCounts(page.items))
+        final musicOnly = (await _account.withViewCounts(page.items))
             .where((video) => YoutubeSearchService.isMusicCatalogItem(
                   video,
                   requireCategoryId: true,
                 ))
             .toList(growable: false);
+        more = await YoutubeSearchService().removeShorts(musicOnly);
         if (!mounted || requestId != _sortRequestId) return;
         setState(() {
           _videos = [..._videos, ...more];

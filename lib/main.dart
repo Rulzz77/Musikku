@@ -10,31 +10,39 @@ import 'theme/app_colors.dart';
 import 'services/app_health_monitor.dart';
 
 Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  // Avoid writing playback identifiers, request URLs, or API error details to
-  // production logcat through the many debugPrint diagnostics in the app.
-  if (!kDebugMode) {
-    debugPrint = (String? message, {int? wrapWidth}) {};
-  }
+  // This singleton has no binding-dependent constructor side effects, so it
+  // is safe to prepare the error recorder before entering the guarded zone.
   final health = AppHealthMonitor.instance;
 
-  FlutterError.onError = (details) {
-    FlutterError.presentError(details);
-    unawaited(health.record(
-      kind: 'FlutterError',
-      error: details.exception,
-      stack: details.stack,
-    ));
-  };
-  PlatformDispatcher.instance.onError = (error, stack) {
-    unawaited(health.record(kind: 'Unhandled', error: error, stack: stack));
-    return true;
-  };
-
   await runZonedGuarded(() async {
+    // IMPORTANT: initialize Flutter and call runApp in the same Zone. Keeping
+    // ensureInitialized outside runZonedGuarded triggers Flutter's
+    // "Zone mismatch" diagnostic during startup.
+    WidgetsFlutterBinding.ensureInitialized();
+
+    // Avoid writing playback identifiers, request URLs, or API error details
+    // to production logcat through the many debugPrint diagnostics in the app.
+    if (!kDebugMode) {
+      debugPrint = (String? message, {int? wrapWidth}) {};
+    }
+
+    FlutterError.onError = (details) {
+      FlutterError.presentError(details);
+      unawaited(health.record(
+        kind: 'FlutterError',
+        error: details.exception,
+        stack: details.stack,
+      ));
+    };
+    PlatformDispatcher.instance.onError = (error, stack) {
+      unawaited(health.record(kind: 'Unhandled', error: error, stack: stack));
+      return true;
+    };
+
     final settings = AppSettingsController.instance;
     await settings.load();
 
+    // Keep runApp in this same guarded zone as ensureInitialized above.
     runApp(MusikKuApp(settings: settings));
   }, (error, stack) async {
     await health.record(kind: 'ZoneError', error: error, stack: stack);

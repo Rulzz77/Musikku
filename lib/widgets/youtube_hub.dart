@@ -774,7 +774,16 @@ class _YoutubeHubState extends State<YoutubeHub> {
               ],
             ),
             alignment: Alignment.center,
-            child: const Icon(Icons.graphic_eq_rounded, color: Colors.white, size: 27),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(13),
+              child: Image.asset(
+                'assets/icon/app_icon.png',
+                width: 46,
+                height: 46,
+                fit: BoxFit.cover,
+                semanticLabel: 'Logo MusikKu',
+              ),
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(

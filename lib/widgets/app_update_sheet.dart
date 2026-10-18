@@ -21,6 +21,7 @@ class AppUpdateSheet {
     BuildContext context, {
     AppUpdateCheckResult? initialResult,
     bool automaticPrompt = false,
+    bool automaticInstall = false,
   }) async {
     if (_isShowing) return;
 
@@ -40,6 +41,7 @@ class AppUpdateSheet {
         builder: (context) => AppUpdatePanel(
           initialResult: initialResult,
           automaticPrompt: automaticPrompt,
+          automaticInstall: automaticInstall,
         ),
       );
     } catch (_) {
@@ -59,16 +61,18 @@ class AppUpdatePanel extends StatefulWidget {
     super.key,
     this.initialResult,
     this.automaticPrompt = false,
+    this.automaticInstall = false,
   });
 
   final AppUpdateCheckResult? initialResult;
   final bool automaticPrompt;
+  final bool automaticInstall;
 
   @override
   State<AppUpdatePanel> createState() => _AppUpdatePanelState();
 }
 
-class _AppUpdatePanelState extends State<AppUpdatePanel> {
+class _AppUpdatePanelState extends State<AppUpdatePanel> with WidgetsBindingObserver {
   AppUpdateCheckResult? _result;
   bool _checking = false;
   bool _downloading = false;
@@ -79,10 +83,13 @@ class _AppUpdatePanelState extends State<AppUpdatePanel> {
   File? _cachedApkFile;
   int? _cachedApkSize;
   bool _usingCachedApk = false;
+  bool _awaitingInstallPermissionReturn = false;
+  bool _autoInstallStarted = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _result = widget.initialResult;
     final initialRelease = _result?.release;
     if (initialRelease != null && _result?.updateAvailable == true) {
@@ -90,6 +97,45 @@ class _AppUpdatePanelState extends State<AppUpdatePanel> {
     }
     if (_result == null) {
       unawaited(_checkForUpdate());
+    } else if (widget.automaticPrompt && widget.automaticInstall &&
+        _result?.updateAvailable == true && !_autoInstallStarted) {
+      _autoInstallStarted = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_downloadAndInstall());
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed || !_awaitingInstallPermissionReturn ||
+        !widget.automaticInstall) {
+      return;
+    }
+    _awaitingInstallPermissionReturn = false;
+    unawaited(_resumeAutomaticInstallAfterPermission());
+  }
+
+  Future<void> _resumeAutomaticInstallAfterPermission() async {
+    await Future<void>.delayed(const Duration(milliseconds: 350));
+    if (!mounted) return;
+    try {
+      final allowed = await AppUpdateService.instance.canInstallPackages();
+      if (!mounted) return;
+      if (allowed) {
+        await _downloadAndInstall();
+      } else {
+        setState(() => _message =
+            'Izin belum diaktifkan. Aktifkan izin pemasangan untuk MusikKu lalu tekan tombol instal.');
+      }
+    } catch (error) {
+      if (mounted) setState(() => _error = error.toString());
     }
   }
 
@@ -150,11 +196,13 @@ class _AppUpdatePanelState extends State<AppUpdatePanel> {
       // jika Android masih melarang pemasangan APK dari MusikKu.
       final canInstall = await AppUpdateService.instance.canInstallPackages();
       if (!canInstall) {
+        if (widget.automaticInstall) _awaitingInstallPermissionReturn = true;
         await AppUpdateService.instance.requestInstallPermission();
         if (!mounted) return;
         setState(() {
-          _message =
-              'Aktifkan “Izinkan dari sumber ini” untuk MusikKu. Setelah kembali ke aplikasi, tekan tombol instal lagi.';
+          _message = widget.automaticInstall
+              ? 'Aktifkan “Izinkan dari sumber ini” untuk MusikKu. Setelah kembali, MusikKu akan melanjutkan otomatis jika izin sudah aktif.'
+              : 'Aktifkan “Izinkan dari sumber ini” untuk MusikKu. Setelah kembali ke aplikasi, tekan tombol instal lagi.';
         });
         return;
       }
@@ -258,7 +306,9 @@ class _AppUpdatePanelState extends State<AppUpdatePanel> {
             if (widget.automaticPrompt &&
                 _result?.status == AppUpdateStatus.available) ...[
               Text(
-                'Versi baru ditemukan saat MusikKu dibuka.',
+                widget.automaticInstall
+                    ? 'Versi baru ditemukan. Pembaruan akan diunduh dan installer Android dibuka otomatis.'
+                    : 'Versi baru ditemukan saat MusikKu dibuka.',
                 style: TextStyle(color: colors.primary, fontSize: 12, fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 8),
@@ -449,7 +499,7 @@ class _AppUpdatePanelState extends State<AppUpdatePanel> {
             ],
             const SizedBox(height: 12),
             Text(
-              'Android tetap menampilkan konfirmasi instalasi. File APK diperiksa sebelum installer dibuka; update memerlukan tanda tangan aplikasi yang sama dengan versi terpasang.',
+              'Android tetap menampilkan konfirmasi instalasi dan pemeriksaan Play Protect. File APK diperiksa sebelum installer dibuka; update memerlukan tanda tangan aplikasi yang sama dengan versi terpasang.',
               style: TextStyle(color: colors.onSurfaceVariant, fontSize: 11, height: 1.35),
             ),
           ],

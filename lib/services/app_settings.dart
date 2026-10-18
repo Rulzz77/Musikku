@@ -42,6 +42,8 @@ class AppSettingsController {
   static const _showDataUsageKey = 'show_data_usage_player_v1';
   static const _hidePauseOverlayKey = 'hide_pause_overlay_v1';
   static const _cropBrandingKey = 'crop_video_branding_v1';
+  static const _autoUpdateEnabledKey = 'app_auto_update_enabled_v1';
+  static const _autoInstallUpdatesKey = 'app_auto_install_updates_v1';
 
   final ValueNotifier<AppThemeChoice> theme =
       ValueNotifier(AppThemeChoice.dark);
@@ -57,6 +59,14 @@ class AppSettingsController {
 
   /// Zoom video sedikit supaya judul/watermark di tepi ikut terpotong.
   final ValueNotifier<bool> cropVideoBranding = ValueNotifier(false);
+
+  /// Check GitHub Releases when the app opens. Defaults to true to preserve
+  /// the previous launch-check behavior while allowing the user to opt out.
+  final ValueNotifier<bool> autoUpdateEnabled = ValueNotifier(true);
+
+  /// Automatically download a verified update and open Android's installer UI.
+  /// Android/Play Protect still controls the final installation confirmation.
+  final ValueNotifier<bool> autoInstallUpdates = ValueNotifier(false);
 
   final Future<SharedPreferences> _prefsFuture =
       SharedPreferences.getInstance();
@@ -81,6 +91,8 @@ class AppSettingsController {
       showDataUsageOnPlayer.value = prefs.getBool(_showDataUsageKey) ?? true;
       hidePauseOverlay.value = prefs.getBool(_hidePauseOverlayKey) ?? true;
       cropVideoBranding.value = prefs.getBool(_cropBrandingKey) ?? false;
+      autoUpdateEnabled.value = prefs.getBool(_autoUpdateEnabledKey) ?? true;
+      autoInstallUpdates.value = prefs.getBool(_autoInstallUpdatesKey) ?? false;
     } catch (_) {
       // Default aman: dark + data saver mati.
     }
@@ -134,6 +146,18 @@ class AppSettingsController {
     showDataUsageOnPlayer.value = value;
     final prefs = await _prefsFuture;
     await prefs.setBool(_showDataUsageKey, value);
+  }
+
+  Future<void> setAutoUpdateEnabled(bool value) async {
+    autoUpdateEnabled.value = value;
+    final prefs = await _prefsFuture;
+    await prefs.setBool(_autoUpdateEnabledKey, value);
+  }
+
+  Future<void> setAutoInstallUpdates(bool value) async {
+    autoInstallUpdates.value = value;
+    final prefs = await _prefsFuture;
+    await prefs.setBool(_autoInstallUpdatesKey, value);
   }
 
   int get dataSaverLevel {

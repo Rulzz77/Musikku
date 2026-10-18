@@ -200,6 +200,58 @@ class AppSettingsPage extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 22),
+          _SectionLabel(icon: Icons.system_update_alt_rounded, title: 'Pembaruan aplikasi'),
+          const SizedBox(height: 8),
+          Card(
+            child: Column(
+              children: [
+                ValueListenableBuilder<bool>(
+                  valueListenable: settings.autoUpdateEnabled,
+                  builder: (context, enabled, _) => SwitchListTile(
+                    secondary: const Icon(Icons.update_rounded),
+                    title: const Text('Periksa pembaruan otomatis', style: TextStyle(fontWeight: FontWeight.w700)),
+                    subtitle: const Text('Periksa versi baru saat MusikKu dibuka dan beri tahu jika tersedia.'),
+                    value: enabled,
+                    onChanged: (next) => unawaited(settings.setAutoUpdateEnabled(next)),
+                  ),
+                ),
+                const Divider(height: 1, indent: 16, endIndent: 16),
+                ValueListenableBuilder<bool>(
+                  valueListenable: settings.autoUpdateEnabled,
+                  builder: (context, autoUpdateEnabled, _) =>
+                      ValueListenableBuilder<bool>(
+                    valueListenable: settings.autoInstallUpdates,
+                    builder: (context, enabled, _) => SwitchListTile(
+                      secondary: const Icon(Icons.downloading_rounded),
+                      title: const Text('Unduh & buka installer otomatis', style: TextStyle(fontWeight: FontWeight.w700)),
+                      subtitle: const Text('Jika update ditemukan, unduh APK terverifikasi dan buka installer Android. Perlu konfirmasi pemasangan dari Android.'),
+                      value: enabled,
+                      onChanged: autoUpdateEnabled
+                          ? (next) => unawaited(settings.setAutoInstallUpdates(next))
+                          : null,
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.shield_outlined, size: 17, color: scheme.onSurfaceVariant),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Pemasangan senyap dan melewati Google Play Protect tidak didukung. Android tetap mengatur izin, pemeriksaan keamanan, dan konfirmasi instalasi.',
+                          style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11, height: 1.35),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 22),
           _SectionLabel(icon: Icons.info_outline_rounded, title: 'Tentang aplikasi'),
           const SizedBox(height: 8),
           Card(

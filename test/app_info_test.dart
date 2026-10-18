@@ -2,9 +2,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_application_5/app_info.dart';
 
 void main() {
-  test('application identity and release version are synchronized', () {
+  test('app version and build metadata are populated', () {
     expect(appName, 'MusikKu');
-    expect(appVersion, '4.4.2');
-    expect(appBuildNumber, '31');
+    expect(appVersion, '4.5.0');
+    expect(appBuildNumber, '32');
   });
 }

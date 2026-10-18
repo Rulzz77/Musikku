@@ -40,7 +40,7 @@ jobs:
           VERSION_SPEC="$(sed -n 's/^version:[[:space:]]*//p' pubspec.yaml | head -n 1 | tr -d "\r'\"")"
 
           if [[ -z "$VERSION_SPEC" || "$VERSION_SPEC" != *+* ]]; then
-            echo "::error::Version pubspec.yaml harus berformat contoh 4.4.2+31"
+            echo "::error::Version pubspec.yaml harus berformat contoh 4.5.0+32"
             exit 1
           fi
 
@@ -119,13 +119,12 @@ jobs:
       - name: Install Flutter dependencies
         run: flutter pub get
 
-      - name: Build signed release APK
+      - name: Build split APKs and compatibility universal APK
         env:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
           # Web OAuth Client ID bukan rahasia; Variables direkomendasikan.
           # Fallback ke Secrets jika sebelumnya sudah disimpan sebagai secret.
           YOUTUBE_WEB_CLIENT_ID: ${{ vars.YOUTUBE_WEB_CLIENT_ID || secrets.YOUTUBE_WEB_CLIENT_ID }}
-          SPOTIFY_CLIENT_ID: ${{ vars.SPOTIFY_CLIENT_ID }}
         shell: bash
         run: |
           set -euo pipefail
@@ -136,49 +135,75 @@ jobs:
           fi
 
           if [[ -z "${YOUTUBE_WEB_CLIENT_ID:-}" ]]; then
-            echo "::error::YOUTUBE_WEB_CLIENT_ID belum diatur. Tambahkan sebagai Repository variable (disarankan) atau Repository secret."
+            echo "::error::YOUTUBE_WEB_CLIENT_ID belum diatur. Tambahkan sebagai Repository variable atau secret."
             exit 1
           fi
 
           if [[ "$YOUTUBE_WEB_CLIENT_ID" != *.apps.googleusercontent.com ]]; then
-            echo "::error::Format YOUTUBE_WEB_CLIENT_ID terlihat tidak benar. Gunakan OAuth Client ID bertipe Web application dari Google Cloud Console."
+            echo "::error::Format YOUTUBE_WEB_CLIENT_ID tidak benar. Gunakan Web OAuth Client ID."
             exit 1
           fi
 
-          if [[ -z "${SPOTIFY_CLIENT_ID:-}" ]]; then
-            echo "::error::GitHub Repository Variable SPOTIFY_CLIENT_ID belum diatur."
-            echo "Buat aplikasi Web API di Spotify Developer Dashboard dan simpan Client ID sebagai Variable SPOTIFY_CLIENT_ID."
-            exit 1
-          fi
+          APK_DIR="build/app/outputs/flutter-apk"
+          STASH="$RUNNER_TEMP/musikku-apk-assets"
+          mkdir -p "$STASH"
 
+          # Build per ABI first and stash the smaller downloads.
+          flutter build apk --release --split-per-abi \
+            --dart-define="YOUTUBE_API_KEY=${YOUTUBE_API_KEY}" \
+            --dart-define="YOUTUBE_WEB_CLIENT_ID=${YOUTUBE_WEB_CLIENT_ID}"
+
+          for NAME in app-arm64-v8a-release.apk app-armeabi-v7a-release.apk app-x86_64-release.apk; do
+            if [[ ! -s "$APK_DIR/$NAME" ]]; then
+              echo "::error::APK split tidak ditemukan: $APK_DIR/$NAME"
+              exit 1
+            fi
+            cp "$APK_DIR/$NAME" "$STASH/$NAME"
+          done
+
+          # Build app-release.apk as a universal fallback so updater versions
+          # installed before ABI-aware selection can still update safely.
           flutter build apk --release \
             --dart-define="YOUTUBE_API_KEY=${YOUTUBE_API_KEY}" \
-            --dart-define="YOUTUBE_WEB_CLIENT_ID=${YOUTUBE_WEB_CLIENT_ID}" \
-            --dart-define="SPOTIFY_CLIENT_ID=${SPOTIFY_CLIENT_ID}"
+            --dart-define="YOUTUBE_WEB_CLIENT_ID=${YOUTUBE_WEB_CLIENT_ID}"
 
-      - name: Verify APK output
-        id: apk_info
+          if [[ ! -s "$APK_DIR/app-release.apk" ]]; then
+            echo "::error::APK universal app-release.apk tidak ditemukan."
+            exit 1
+          fi
+          cp "$APK_DIR/app-release.apk" "$STASH/app-release.apk"
+
+          # Restore all four distributables into the one release output folder.
+          cp "$STASH"/*.apk "$APK_DIR/"
+
+      - name: Verify APK outputs and generate checksums
         shell: bash
         run: |
           set -euo pipefail
 
-          APK="build/app/outputs/flutter-apk/app-release.apk"
-          if [[ ! -s "$APK" ]]; then
-            echo "::error::APK tidak ditemukan atau kosong."
-            exit 1
-          fi
+          APK_DIR="build/app/outputs/flutter-apk"
+          APK_NAMES=(
+            "app-release.apk"
+            "app-arm64-v8a-release.apk"
+            "app-armeabi-v7a-release.apk"
+            "app-x86_64-release.apk"
+          )
 
-          APK_SIZE="$(stat -c%s "$APK")"
-          APK_SHA256="$(sha256sum "$APK" | awk '{print $1}')"
-          echo "size=$APK_SIZE" >> "$GITHUB_OUTPUT"
-          echo "sha256=$APK_SHA256" >> "$GITHUB_OUTPUT"
-          printf '%s  %s\n' "$APK_SHA256" "$(basename "$APK")" > "${APK}.sha256"
+          for NAME in "${APK_NAMES[@]}"; do
+            APK="$APK_DIR/$NAME"
+            if [[ ! -s "$APK" ]]; then
+              echo "::error::APK tidak ditemukan atau kosong: $APK"
+              exit 1
+            fi
+            SIZE="$(stat -c%s "$APK")"
+            SHA256="$(sha256sum "$APK" | awk '{print $1}')"
+            printf '%s  %s\n' "$SHA256" "$NAME" > "$APK_DIR/$NAME.sha256"
+            echo "$NAME: $SIZE bytes (SHA-256: $SHA256)"
+          done
 
-          echo "APK berhasil dibuat."
-          echo "Ukuran: $APK_SIZE bytes"
-          echo "SHA-256: $APK_SHA256"
+          echo "Universal APK dipakai oleh updater versi lama; updater baru memilih APK split sesuai ABI perangkat."
 
-      - name: Publish APK to GitHub Release
+      - name: Publish APKs to GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.release_state.outputs.tag }}
@@ -188,19 +213,29 @@ jobs:
         run: |
           set -euo pipefail
 
-          APK="build/app/outputs/flutter-apk/app-release.apk"
-          CHECKSUM="${APK}.sha256"
-          NOTES="$(printf 'Automated MusikKu release %s+%s.\n\nAPK dibangun otomatis oleh GitHub Actions dari branch main.\n\nSHA-256: %s' "$VERSION_NAME" "$BUILD_NUMBER" "${{ steps.apk_info.outputs.sha256 }}")"
+          APK_DIR="build/app/outputs/flutter-apk"
+          ASSETS=(
+            "$APK_DIR/app-release.apk"
+            "$APK_DIR/app-release.apk.sha256"
+            "$APK_DIR/app-arm64-v8a-release.apk"
+            "$APK_DIR/app-arm64-v8a-release.apk.sha256"
+            "$APK_DIR/app-armeabi-v7a-release.apk"
+            "$APK_DIR/app-armeabi-v7a-release.apk.sha256"
+            "$APK_DIR/app-x86_64-release.apk"
+            "$APK_DIR/app-x86_64-release.apk.sha256"
+          )
+          NOTES="$(printf 'MusikKu %s+%s.\n\nAPK berarsitektur untuk unduhan lebih kecil:\n- app-arm64-v8a-release.apk: sebagian besar HP Android modern\n- app-armeabi-v7a-release.apk: perangkat Android 32-bit\n- app-x86_64-release.apk: emulator/perangkat x86_64\n\nKompatibilitas: app-release.apk universal tetap disertakan untuk updater di versi lama. MusikKu 4.5.1+ akan memilih APK split yang cocok dengan ABI perangkat secara otomatis.\n\nSetiap APK memiliki file checksum SHA-256.' "$VERSION_NAME" "$BUILD_NUMBER")"
 
           if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Release $TAG sudah ada; mengganti asset APK dan checksum dengan hasil build terbaru."
-            gh release upload "$TAG" "$APK" "$CHECKSUM" --clobber
+            echo "Release $TAG sudah ada; mengganti APK dan checksum yang dihasilkan workflow."
+            gh release upload "$TAG" "${ASSETS[@]}" --clobber
+            gh release edit "$TAG" --notes "$NOTES"
           else
             echo "Membuat release baru: $TAG"
-            gh release create "$TAG" "$APK" "$CHECKSUM" \
+            gh release create "$TAG" "${ASSETS[@]}" \
               --title "MusikKu $VERSION_NAME" \
               --notes "$NOTES" \
               --target "$GITHUB_SHA"
           fi
 
-          echo "Publikasi APK dan checksum selesai."
+          echo "Publikasi APK universal + split selesai."

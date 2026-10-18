@@ -260,9 +260,9 @@ class _AppUpdatePanelState extends State<AppUpdatePanel> {
               _StatusPanel(
                 icon: Icons.file_download_off_outlined,
                 color: colors.error,
-                title: 'Rilis baru belum memiliki APK',
+                title: 'Rilis baru belum memiliki APK yang cocok',
                 message:
-                    'Versi ${release?.version ?? ''} lebih baru, tetapi tidak ada asset APK yang valid. Lampirkan app-release.apk ke release GitHub lalu periksa lagi.',
+                    'Versi ${release?.version ?? ''} lebih baru, tetapi release tidak menyediakan APK yang cocok untuk arsitektur perangkat ini atau APK universal app-release.apk.',
               ),
               const SizedBox(height: 12),
               OutlinedButton.icon(
@@ -278,6 +278,13 @@ class _AppUpdatePanelState extends State<AppUpdatePanel> {
                 message: release.title,
               ),
               const SizedBox(height: 12),
+              if (release.apkFileName.isNotEmpty) ...[
+                Text(
+                  'Paket untuk perangkat: ${release.apkFileName}',
+                  style: TextStyle(color: colors.onSurfaceVariant, fontSize: 12),
+                ),
+                const SizedBox(height: 3),
+              ],
               if (release.apkSize > 0)
                 Text(
                   'Ukuran APK: ${_formatBytes(release.apkSize)}',

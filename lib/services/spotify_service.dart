@@ -1,256 +1,139 @@
-import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
-import 'dart:math';
 
-import 'package:crypto/crypto.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:http/http.dart' as http;
-import 'package:url_launcher/url_launcher.dart';
 
-/// Read-only Spotify account integration for browsing playlists and their items.
-/// Spotify metadata is held in memory only; credentials are kept in encrypted storage.
+/// Local importer for the JSON account-data export downloaded from Spotify.
+/// It intentionally does not call Spotify's Web API or require OAuth/Premium.
 class SpotifyService {
   SpotifyService._();
 
   static final SpotifyService instance = SpotifyService._();
-
-  static const String clientId = String.fromEnvironment('SPOTIFY_CLIENT_ID');
-  // Register this exact loopback URI in Spotify Developer Dashboard.
-  // A fixed port avoids dashboard validation issues with a portless URI.
-  // This is a public client flow using Authorization Code + PKCE.
-  static const int callbackPort = 43821;
-  static const String registeredRedirectUri =
-      'http://127.0.0.1:43821/callback';
-  static const List<String> scopes = <String>[
-    'user-read-private',
-    'playlist-read-private',
-    'playlist-read-collaborative',
-  ];
-
-  static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
-  static const String _refreshTokenKey = 'spotify_refresh_token_v1';
-  static const String _clientIdKey = 'spotify_client_id_v1';
   static const String _importedPlaylistsKey = 'spotify_imported_playlists_v1';
 
-  String? _accessToken;
-  String? _refreshToken;
-  DateTime _accessTokenExpiresAt = DateTime.fromMillisecondsSinceEpoch(0);
-
-  bool get isConfigured => clientId.trim().isNotEmpty;
-  bool get isConnected => _refreshToken != null && _refreshToken!.isNotEmpty;
-
-  /// Restores a session only when the stored token belongs to the currently
-  /// configured client ID. Returns false when no session exists.
-  Future<bool> restoreSession() async {
-    if (!isConfigured) return false;
-    final savedClientId = await _secureStorage.read(key: _clientIdKey);
-    final savedRefreshToken = await _secureStorage.read(key: _refreshTokenKey);
-    if (savedRefreshToken == null || savedRefreshToken.isEmpty) return false;
-    if (savedClientId != clientId) {
-      await disconnect();
-      return false;
-    }
-    _refreshToken = savedRefreshToken;
-    await _refreshAccessToken();
-    return true;
-  }
-
-  Future<void> connect() async {
-    if (!isConfigured) {
-      throw const SpotifyIntegrationException(
-        'Spotify belum dikonfigurasi. Tambahkan SPOTIFY_CLIENT_ID di GitHub Repository Variables lalu build ulang APK.',
-      );
-    }
-
-    final verifier = _randomBase64Url(64);
-    final challenge = base64Url
-        .encode(sha256.convert(utf8.encode(verifier)).bytes)
-        .replaceAll('=', '');
-    final state = _randomBase64Url(24);
-
-    // Use the same fixed loopback port registered in Spotify Dashboard.
-    // If another process occupies it, ask the user to close the conflicting app
-    // and retry rather than silently sending a mismatched redirect URI.
-    final redirect = Uri.parse(registeredRedirectUri);
-    final server = await HttpServer.bind(
-      InternetAddress.loopbackIPv4,
-      callbackPort,
-    );
-    final authorizationUri = Uri.https(
-      'accounts.spotify.com',
-      '/authorize',
-      <String, String>{
-        'client_id': clientId,
-        'response_type': 'code',
-        'redirect_uri': redirect.toString(),
-        'code_challenge_method': 'S256',
-        'code_challenge': challenge,
-        'state': state,
-        'scope': scopes.join(' '),
-      },
-    );
-
-    final callbackCompleter = Completer<Uri>();
-    final serverSubscription = server.listen((request) async {
-      if (request.uri.path != '/callback') {
-        request.response.statusCode = HttpStatus.notFound;
-        await request.response.close();
-        return;
-      }
-      request.response.statusCode = HttpStatus.ok;
-      request.response.headers.contentType = ContentType.html;
-      request.response.headers.set('Cache-Control', 'no-store');
-      request.response.headers.set('Pragma', 'no-cache');
-      request.response.write(
-        '<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">'
-        '<title>Spotify - MusikKu</title></head><body style="font-family:Arial,sans-serif;padding:32px;line-height:1.5">'
-        '<h2>Spotify berhasil diarahkan kembali</h2>'
-        '<p>Kamu bisa kembali ke aplikasi MusikKu untuk melihat playlist.</p></body></html>',
-      );
-      await request.response.close();
-      if (!callbackCompleter.isCompleted) callbackCompleter.complete(request.uri);
-    });
-
-    late final Uri callbackUri;
+  /// Parses Spotify's account-data export JSON (for example Playlist1.json).
+  /// Supports Spotify's export shape and a playlist JSON object containing
+  /// track/items data. No network request is made.
+  static List<SpotifyImportedPlaylist> parseExportJson(String rawJson) {
+    final dynamic decoded;
     try {
-      final opened = await launchUrl(
-        authorizationUri,
-        mode: LaunchMode.externalApplication,
-      );
-      if (!opened) {
-        throw const SpotifyIntegrationException(
-          'Browser tidak bisa dibuka. Coba lagi atau periksa browser perangkat.',
+      decoded = jsonDecode(rawJson);
+    } on FormatException {
+      rethrow;
+    }
+
+    final List<dynamic> rawPlaylists;
+    if (decoded is Map) {
+      final root = Map<String, dynamic>.from(decoded);
+      final nested = _listField(root, const ['playlists', 'Playlists']);
+      if (nested != null) {
+        rawPlaylists = nested;
+      } else if (_looksLikePlaylist(root)) {
+        rawPlaylists = <dynamic>[root];
+      } else {
+        throw const FormatException(
+          'File JSON ini bukan ekspor playlist Spotify. Pilih file Playlist*.json dari arsip data Spotify.',
         );
       }
-      callbackUri = await callbackCompleter.future.timeout(
-        const Duration(minutes: 3),
-        onTimeout: () => throw const SpotifyIntegrationException(
-          'Login Spotify kedaluwarsa. Kembali ke MusikKu lalu coba hubungkan lagi.',
+    } else if (decoded is List) {
+      rawPlaylists = decoded;
+    } else {
+      throw const FormatException(
+        'Format file tidak dikenali. Pilih file JSON ekspor playlist Spotify.',
+      );
+    }
+
+    final imported = <SpotifyImportedPlaylist>[];
+    for (var i = 0; i < rawPlaylists.length; i++) {
+      final value = rawPlaylists[i];
+      if (value is! Map) continue;
+      final playlistJson = Map<String, dynamic>.from(value);
+      if (!_looksLikePlaylist(playlistJson)) continue;
+      final name = _firstString(playlistJson, const [
+            'name',
+            'playlistName',
+            'title',
+          ])
+          .trim();
+      if (name.isEmpty) continue;
+
+      final rawItems = _playlistItems(playlistJson);
+      final provisionalKey = '$name|$i|${jsonEncode(rawItems)}';
+      final rawPlaylistUri = _firstString(playlistJson, const [
+        'playlistUri',
+        'uri',
+      ]);
+      final providedId = _firstString(playlistJson, const ['id']);
+      final uriId = _entityId(rawPlaylistUri, 'playlist');
+      final providedIdLooksSpotify = RegExp(r'^[A-Za-z0-9]{22}$').hasMatch(providedId);
+      final realPlaylistId = uriId ?? (providedIdLooksSpotify ? providedId : null);
+      final playlistId = realPlaylistId ?? 'import-${_stableHash(provisionalKey)}';
+
+      final tracks = <SpotifyTrack>[];
+      for (var trackIndex = 0; trackIndex < rawItems.length; trackIndex++) {
+        final track = _parseTrack(rawItems[trackIndex], playlistId, trackIndex);
+        if (track != null) tracks.add(track);
+      }
+
+      final external = _mapField(playlistJson, 'external_urls');
+      final externalUrl = _stringValue(external?['spotify']);
+      final explicitUrl = _firstString(playlistJson, const ['spotifyUrl', 'url']);
+      final sourceUrl = _validSpotifyPlaylistUrl(externalUrl)
+          ? externalUrl
+          : _validSpotifyPlaylistUrl(explicitUrl)
+              ? explicitUrl
+              : realPlaylistId == null
+                  ? ''
+                  : 'https://open.spotify.com/playlist/$realPlaylistId';
+      final owner = _mapField(playlistJson, 'owner');
+      final description = _firstString(playlistJson, const ['description']);
+      final ownerName = _firstString(playlistJson, const ['ownerName']).isNotEmpty
+          ? _firstString(playlistJson, const ['ownerName'])
+          : _stringValue(owner?['display_name']);
+
+      imported.add(
+        SpotifyImportedPlaylist(
+          playlist: SpotifyPlaylist(
+            id: playlistId,
+            name: name,
+            description: description,
+            ownerName: ownerName.isEmpty ? 'Ekspor Spotify' : ownerName,
+            imageUrl: _playlistImage(playlistJson),
+            spotifyUrl: sourceUrl,
+            trackCount: tracks.length,
+          ),
+          tracks: List<SpotifyTrack>.unmodifiable(tracks),
+          importedAt: DateTime.now(),
         ),
       );
-    } finally {
-      await serverSubscription.cancel();
-      await server.close(force: true);
-    }
-    final usedRedirectUri = redirect.toString();
-    final returnedState = callbackUri.queryParameters['state'];
-    if (returnedState != state) {
-      throw const SpotifyIntegrationException(
-        'Verifikasi OAuth Spotify gagal. Silakan coba hubungkan ulang.',
-      );
-    }
-    final authError = callbackUri.queryParameters['error'];
-    if (authError != null) {
-      if (authError == 'access_denied') {
-        throw const SpotifyIntegrationException('Izin Spotify dibatalkan.');
-      }
-      throw SpotifyIntegrationException('Spotify menolak login: $authError');
-    }
-    final code = callbackUri.queryParameters['code'];
-    if (code == null || code.isEmpty) {
-      throw const SpotifyIntegrationException(
-        'Spotify tidak mengembalikan kode login. Periksa Redirect URI di Spotify Developer Dashboard.',
-      );
     }
 
-    final response = await http.post(
-      Uri.https('accounts.spotify.com', '/api/token'),
-      headers: const <String, String>{
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: <String, String>{
-        'client_id': clientId,
-        'grant_type': 'authorization_code',
-        'code': code,
-        'redirect_uri': usedRedirectUri,
-        'code_verifier': verifier,
-      },
+    if (imported.isEmpty) {
+      throw const FormatException(
+        'Tidak ada playlist yang dapat dibaca. Pilih file Playlist*.json dari ekspor data Spotify, bukan file riwayat streaming.',
+      );
+    }
+    return imported;
+  }
+
+  /// Parses a Spotify account-data JSON file and saves each playlist locally.
+  /// Existing playlists with the same stable ID are replaced by the new copy.
+  Future<int> importExportJson(String rawJson) async {
+    final playlists = parseExportJson(rawJson);
+    final prefs = await SharedPreferences.getInstance();
+    final existing = await loadImportedPlaylists();
+    // Insert in reverse so the playlist order in the export remains the order
+    // shown in the local collection after each item is placed at the top.
+    for (final imported in playlists.reversed) {
+      existing.removeWhere((item) => item.playlist.id == imported.playlist.id);
+      existing.insert(0, imported);
+    }
+    await prefs.setString(
+      _importedPlaylistsKey,
+      jsonEncode(existing.map((item) => item.toJson()).toList()),
     );
-    if (response.statusCode != 200) {
-      throw SpotifyIntegrationException(_tokenError(response));
-    }
-    await _acceptTokenResponse(response.body, persistRefreshToken: true);
+    return playlists.length;
   }
 
-  Future<void> disconnect() async {
-    _accessToken = null;
-    _refreshToken = null;
-    _accessTokenExpiresAt = DateTime.fromMillisecondsSinceEpoch(0);
-    await _secureStorage.delete(key: _refreshTokenKey);
-    await _secureStorage.delete(key: _clientIdKey);
-  }
-
-  Future<SpotifyProfile> getCurrentUser() async {
-    final json = await _getJson(Uri.https('api.spotify.com', '/v1/me'));
-    return SpotifyProfile(
-      id: _string(json['id']),
-      displayName: _string(json['display_name']).trim().isEmpty
-          ? 'Akun Spotify'
-          : _string(json['display_name']).trim(),
-    );
-  }
-
-  Future<List<SpotifyPlaylist>> getMyPlaylists() async {
-    final result = <SpotifyPlaylist>[];
-    var offset = 0;
-    while (offset <= 100000) {
-      final json = await _getJson(
-        Uri.https('api.spotify.com', '/v1/me/playlists', <String, String>{
-          'limit': '50',
-          'offset': '$offset',
-        }),
-      );
-      final rows = json['items'];
-      if (rows is! List || rows.isEmpty) break;
-      for (final value in rows) {
-        if (value is Map<String, dynamic>) {
-          result.add(SpotifyPlaylist.fromJson(value));
-        } else if (value is Map) {
-          result.add(SpotifyPlaylist.fromJson(Map<String, dynamic>.from(value)));
-        }
-      }
-      final total = _int(json['total']);
-      offset += rows.length;
-      if (rows.length < 50 || (total > 0 && offset >= total)) break;
-    }
-    return result;
-  }
-
-  Future<List<SpotifyTrack>> getPlaylistItems(String playlistId) async {
-    if (playlistId.trim().isEmpty) return const <SpotifyTrack>[];
-    final tracks = <SpotifyTrack>[];
-    var offset = 0;
-    while (offset <= 100000) {
-      final json = await _getJson(
-        Uri.https('api.spotify.com', '/v1/playlists/$playlistId/items', <String, String>{
-          'limit': '50',
-          'offset': '$offset',
-          'additional_types': 'track',
-        }),
-      );
-      final rows = json['items'];
-      if (rows is! List || rows.isEmpty) break;
-      for (final row in rows) {
-        if (row is! Map) continue;
-        // Spotify's 2026 API response uses `item`; support `track` defensively
-        // for older responses while following the current `/items` endpoint.
-        final rawItem = row['item'] ?? row['track'];
-        if (rawItem is! Map) continue;
-        final item = Map<String, dynamic>.from(rawItem);
-        if (_string(item['type']) != 'track' || _string(item['id']).isEmpty) continue;
-        tracks.add(SpotifyTrack.fromJson(item));
-      }
-      final total = _int(json['total']);
-      offset += rows.length;
-      if (rows.length < 50 || (total > 0 && offset >= total)) break;
-    }
-    return tracks;
-  }
-
-  /// Playlist yang diimpor adalah data lokal milik pengguna di MusikKu.
-  /// Data bisa dilihat tanpa membuka/memutar Spotify dan bisa dihapus kapan saja.
   Future<List<SpotifyImportedPlaylist>> loadImportedPlaylists() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -270,8 +153,6 @@ class SpotifyService {
     }
   }
 
-  /// Mengimpor metadata playlist dan lagu ke library lokal MusikKu.
-  /// Jika playlist sudah pernah diimpor, data lama diganti dengan snapshot terbaru.
   Future<void> importPlaylist(
     SpotifyPlaylist playlist,
     List<SpotifyTrack> tracks,
@@ -303,131 +184,155 @@ class SpotifyService {
     );
   }
 
-  Future<Map<String, dynamic>> _getJson(Uri uri) async {
-    await _ensureAccessToken();
-    var response = await http.get(uri, headers: <String, String>{
-      'Authorization': 'Bearer $_accessToken',
-      'Accept': 'application/json',
-    });
-    if (response.statusCode == 401 && _refreshToken != null) {
-      await _refreshAccessToken();
-      response = await http.get(uri, headers: <String, String>{
-        'Authorization': 'Bearer $_accessToken',
-        'Accept': 'application/json',
-      });
-    }
-    if (response.statusCode != 200) {
-      throw SpotifyIntegrationException(_apiError(response));
-    }
-    final decoded = jsonDecode(response.body);
-    if (decoded is! Map) {
-      throw const SpotifyIntegrationException('Respons Spotify tidak valid.');
-    }
-    return Map<String, dynamic>.from(decoded);
+  static bool _looksLikePlaylist(Map<String, dynamic> value) {
+    final hasName = _firstString(value, const ['name', 'playlistName', 'title']).trim().isNotEmpty;
+    final tracksPage = _mapField(value, 'tracks');
+    final hasItems = _listField(value, const ['items', 'tracks', 'playlistItems']) != null ||
+        (tracksPage != null && tracksPage['items'] is List);
+    return hasName && hasItems;
   }
 
-  Future<void> _ensureAccessToken() async {
-    if (_accessToken != null && DateTime.now().isBefore(_accessTokenExpiresAt)) return;
-    if (_refreshToken == null || _refreshToken!.isEmpty) {
-      _refreshToken = await _secureStorage.read(key: _refreshTokenKey);
+  static List<dynamic> _playlistItems(Map<String, dynamic> playlist) {
+    final items = _listField(playlist, const ['items', 'playlistItems']);
+    if (items != null) return items;
+    final tracks = playlist['tracks'];
+    if (tracks is List) return tracks;
+    if (tracks is Map && tracks['items'] is List) {
+      return tracks['items'] as List<dynamic>;
     }
-    if (_refreshToken == null || _refreshToken!.isEmpty) {
-      throw const SpotifyIntegrationException('Hubungkan akun Spotify terlebih dahulu.');
-    }
-    await _refreshAccessToken();
+    return const <dynamic>[];
   }
 
-  Future<void> _refreshAccessToken() async {
-    final refreshToken = _refreshToken;
-    if (refreshToken == null || refreshToken.isEmpty) {
-      throw const SpotifyIntegrationException('Sesi Spotify berakhir. Hubungkan akun lagi.');
+  static SpotifyTrack? _parseTrack(Object? raw, String playlistId, int index) {
+    if (raw is! Map) return null;
+    final entry = Map<String, dynamic>.from(raw);
+    final candidate = entry['track'] ?? entry['item'] ?? entry['localTrack'] ?? entry;
+    if (candidate is! Map) return null;
+    final track = Map<String, dynamic>.from(candidate);
+
+    final name = _firstString(track, const [
+      'trackName',
+      'name',
+      'title',
+      'track_name',
+    ]).trim();
+    if (name.isEmpty) return null;
+
+    final artists = <String>[];
+    final exportedArtist = _firstString(track, const ['artistName', 'artist', 'artist_name']).trim();
+    if (exportedArtist.isNotEmpty) {
+      artists.add(exportedArtist);
+    } else {
+      final rawArtists = track['artists'] ?? track['artistNames'];
+      if (rawArtists is List) {
+        for (final artist in rawArtists) {
+          final artistName = artist is Map
+              ? _stringValue(artist['name'] ?? artist['artistName'])
+              : _stringValue(artist);
+          if (artistName.trim().isNotEmpty) artists.add(artistName.trim());
+        }
+      } else if (rawArtists is String && rawArtists.trim().isNotEmpty) {
+        artists.add(rawArtists.trim());
+      }
     }
-    final response = await http.post(
-      Uri.https('accounts.spotify.com', '/api/token'),
-      headers: const <String, String>{
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: <String, String>{
-        'client_id': clientId,
-        'grant_type': 'refresh_token',
-        'refresh_token': refreshToken,
-      },
+
+    final album = _mapField(track, 'album');
+    final albumName = _firstString(track, const ['albumName', 'album_name']).isNotEmpty
+        ? _firstString(track, const ['albumName', 'album_name'])
+        : _stringValue(album?['name']);
+    final rawUri = _firstString(track, const ['trackUri', 'uri']);
+    final external = _mapField(track, 'external_urls');
+    final externalUrl = _stringValue(external?['spotify']);
+    final providedId = _firstString(track, const ['id']);
+    final uriId = _entityId(rawUri, 'track');
+    final candidateId = uriId ?? (RegExp(r'^[A-Za-z0-9]{22}$').hasMatch(providedId) ? providedId : null);
+    final id = candidateId ?? 'local-${_stableHash('$playlistId|$index|$name|${artists.join(',')}|$albumName')}';
+    final spotifyUrl = _validSpotifyTrackUrl(externalUrl)
+        ? externalUrl
+        : _validSpotifyTrackUrl(_firstString(track, const ['spotifyUrl', 'url']))
+            ? _firstString(track, const ['spotifyUrl', 'url'])
+            : candidateId == null
+                ? ''
+                : 'https://open.spotify.com/track/$candidateId';
+
+    return SpotifyTrack(
+      id: id,
+      name: name,
+      artists: List<String>.unmodifiable(artists),
+      albumName: albumName,
+      imageUrl: _albumImage(track),
+      spotifyUrl: spotifyUrl,
+      isExplicit: track['explicit'] == true || track['isExplicit'] == true,
     );
-    if (response.statusCode != 200) {
-      await disconnect();
-      throw SpotifyIntegrationException(_tokenError(response));
-    }
-    await _acceptTokenResponse(response.body, persistRefreshToken: true);
   }
 
-  Future<void> _acceptTokenResponse(
-    String body, {
-    required bool persistRefreshToken,
-  }) async {
-    final decoded = jsonDecode(body);
-    if (decoded is! Map) {
-      throw const SpotifyIntegrationException('Respons token Spotify tidak valid.');
+  static String _playlistImage(Map<String, dynamic> playlist) {
+    final images = playlist['images'];
+    if (images is List && images.isNotEmpty && images.first is Map) {
+      return _stringValue((images.first as Map)['url']);
     }
-    final json = Map<String, dynamic>.from(decoded);
-    final accessToken = _string(json['access_token']);
-    if (accessToken.isEmpty) {
-      throw const SpotifyIntegrationException('Spotify tidak memberikan access token.');
-    }
-    _accessToken = accessToken;
-    final refreshToken = _string(json['refresh_token']);
-    if (refreshToken.isNotEmpty) _refreshToken = refreshToken;
-    final expiresIn = _int(json['expires_in']);
-    _accessTokenExpiresAt = DateTime.now().add(
-      Duration(seconds: max(30, expiresIn - 60)),
-    );
-
-    if (persistRefreshToken && _refreshToken != null) {
-      await _secureStorage.write(key: _refreshTokenKey, value: _refreshToken);
-      await _secureStorage.write(key: _clientIdKey, value: clientId);
-    }
+    return _firstString(playlist, const ['imageUrl', 'coverArt']);
   }
 
-  String _tokenError(http.Response response) {
-    if (response.statusCode == 400 || response.statusCode == 401) {
-      return 'Token Spotify ditolak (${response.statusCode}). Cek Client ID dan Redirect URI.';
+  static String _albumImage(Map<String, dynamic> track) {
+    final album = _mapField(track, 'album');
+    final images = album?['images'];
+    if (images is List && images.isNotEmpty && images.first is Map) {
+      return _stringValue((images.first as Map)['url']);
     }
-    return 'Gagal menghubungi layanan login Spotify (${response.statusCode}).';
+    return _firstString(track, const ['imageUrl', 'coverArt']);
   }
 
-  String _apiError(http.Response response) {
-    switch (response.statusCode) {
-      case 401:
-        return 'Sesi Spotify tidak valid. Hubungkan ulang akun Spotify.';
-      case 403:
-        return 'Spotify menolak akses. Cek izin playlist, status akun developer Premium, dan daftar pengguna aplikasi Spotify.';
-      case 429:
-        return 'Batas permintaan Spotify tercapai. Tunggu sebentar lalu coba lagi.';
-      default:
-        return 'Gagal memuat data Spotify (${response.statusCode}). Coba lagi nanti.';
+  static List<dynamic>? _listField(Map<String, dynamic> map, List<String> keys) {
+    for (final key in keys) {
+      final value = map[key];
+      if (value is List) return value;
     }
+    return null;
   }
 
-  String _randomBase64Url(int byteCount) {
-    final random = Random.secure();
-    final bytes = List<int>.generate(byteCount, (_) => random.nextInt(256));
-    return base64Url.encode(bytes).replaceAll('=', '');
+  static Map? _mapField(Map<String, dynamic> map, String key) {
+    final value = map[key];
+    return value is Map ? value : null;
   }
 
-  static String _string(Object? value) => value is String ? value : '';
-  static int _int(Object? value) => value is num ? value.toInt() : int.tryParse('$value') ?? 0;
-}
+  static String _firstString(Map<String, dynamic> map, List<String> keys) {
+    for (final key in keys) {
+      final value = map[key];
+      if (value is String && value.trim().isNotEmpty) return value.trim();
+    }
+    return '';
+  }
 
-class SpotifyIntegrationException implements Exception {
-  final String message;
-  const SpotifyIntegrationException(this.message);
-  @override
-  String toString() => message;
-}
+  static String _stringValue(Object? value) => value is String ? value : '';
 
-class SpotifyProfile {
-  final String id;
-  final String displayName;
-  const SpotifyProfile({required this.id, required this.displayName});
+  static String? _entityId(String value, String type) {
+    final raw = value.trim();
+    final uriMatch = RegExp('^spotify:${RegExp.escape(type)}:([A-Za-z0-9]+)\$').firstMatch(raw);
+    if (uriMatch != null) return uriMatch.group(1);
+    final urlMatch = RegExp('(?:open\\.spotify\\.com)/$type/([A-Za-z0-9]+)').firstMatch(raw);
+    if (urlMatch != null) return urlMatch.group(1);
+    return null;
+  }
+
+  static bool _validSpotifyPlaylistUrl(String value) {
+    final uri = Uri.tryParse(value);
+    return uri != null && uri.scheme == 'https' && uri.host == 'open.spotify.com' && uri.pathSegments.length >= 2 && uri.pathSegments.first == 'playlist';
+  }
+
+  static bool _validSpotifyTrackUrl(String value) {
+    final uri = Uri.tryParse(value);
+    return uri != null && uri.scheme == 'https' && uri.host == 'open.spotify.com' && uri.pathSegments.length >= 2 && uri.pathSegments.first == 'track';
+  }
+
+  static String _stableHash(String input) {
+    var hash = 0x811c9dc5;
+    for (final unit in input.codeUnits) {
+      hash ^= unit;
+      hash = (hash * 0x01000193) & 0xffffffff;
+    }
+    return hash.toRadixString(16).padLeft(8, '0');
+  }
 }
 
 class SpotifyPlaylist {
@@ -465,7 +370,7 @@ class SpotifyPlaylist {
     final images = json['images'];
     var imageUrl = '';
     if (images is List && images.isNotEmpty && images.first is Map) {
-      imageUrl = _value((images.first as Map)['url']);
+      imageUrl = SpotifyService._stringValue((images.first as Map)['url']);
     }
     final external = json['external_urls'];
     final owner = json['owner'];
@@ -473,16 +378,22 @@ class SpotifyPlaylist {
     final oldTracks = json['tracks'];
     final itemCount = items is Map ? items['total'] : null;
     final oldCount = oldTracks is Map ? oldTracks['total'] : null;
-    final id = _value(json['id']);
+    final id = json['id'] is String ? json['id'] as String : '';
+    final externalUrl = external is Map ? SpotifyService._stringValue(external['spotify']) : '';
+    final syntheticId = id.startsWith('import-');
     return SpotifyPlaylist(
       id: id,
-      name: _value(json['name']).isEmpty ? 'Playlist tanpa judul' : _value(json['name']),
-      description: _value(json['description']),
-      ownerName: owner is Map ? _value(owner['display_name']) : '',
+      name: json['name'] is String && (json['name'] as String).isNotEmpty
+          ? json['name'] as String
+          : 'Playlist tanpa judul',
+      description: json['description'] is String ? json['description'] as String : '',
+      ownerName: owner is Map ? SpotifyService._stringValue(owner['display_name']) : '',
       imageUrl: imageUrl,
-      spotifyUrl: external is Map && _value(external['spotify']).isNotEmpty
-          ? _value(external['spotify'])
-          : 'https://open.spotify.com/playlist/$id',
+      spotifyUrl: externalUrl.isNotEmpty
+          ? externalUrl
+          : syntheticId
+              ? ''
+              : 'https://open.spotify.com/playlist/$id',
       trackCount: itemCount is num ? itemCount.toInt() : oldCount is num ? oldCount.toInt() : 0,
     );
   }
@@ -527,30 +438,33 @@ class SpotifyTrack {
   factory SpotifyTrack.fromJson(Map<String, dynamic> json) {
     final artistsJson = json['artists'];
     final artists = artistsJson is List
-        ? artistsJson.whereType<Map>().map((item) => _value(item['name'])).where((name) => name.isNotEmpty).toList(growable: false)
+        ? artistsJson.whereType<Map>().map((item) => SpotifyService._stringValue(item['name'])).where((name) => name.isNotEmpty).toList(growable: false)
         : const <String>[];
     final album = json['album'];
     final images = album is Map ? album['images'] : null;
     var imageUrl = '';
     if (images is List && images.isNotEmpty && images.first is Map) {
-      imageUrl = _value((images.first as Map)['url']);
+      imageUrl = SpotifyService._stringValue((images.first as Map)['url']);
     }
     final external = json['external_urls'];
-    final id = _value(json['id']);
+    final id = json['id'] is String ? json['id'] as String : '';
+    final externalUrl = external is Map ? SpotifyService._stringValue(external['spotify']) : '';
     return SpotifyTrack(
       id: id,
-      name: _value(json['name']).isEmpty ? 'Lagu tanpa judul' : _value(json['name']),
+      name: json['name'] is String && (json['name'] as String).isNotEmpty
+          ? json['name'] as String
+          : 'Lagu tanpa judul',
       artists: artists,
-      albumName: album is Map ? _value(album['name']) : '',
+      albumName: album is Map ? SpotifyService._stringValue(album['name']) : '',
       imageUrl: imageUrl,
-      spotifyUrl: external is Map && _value(external['spotify']).isNotEmpty
-          ? _value(external['spotify'])
-          : 'https://open.spotify.com/track/$id',
+      spotifyUrl: externalUrl.isNotEmpty
+          ? externalUrl
+          : id.startsWith('local-')
+              ? ''
+              : 'https://open.spotify.com/track/$id',
       isExplicit: json['explicit'] == true,
     );
   }
-
-  static String _value(Object? value) => value is String ? value : '';
 }
 
 class SpotifyImportedPlaylist {
@@ -598,5 +512,3 @@ class SpotifyImportedPlaylist {
     );
   }
 }
-
-String _value(Object? value) => value is String ? value : '';

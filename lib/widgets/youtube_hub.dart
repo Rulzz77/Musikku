@@ -2229,8 +2229,8 @@ class _YoutubeHubState extends State<YoutubeHub> {
         ),
       ],
       spacedCard(
-        'Spotify Library',
-        'Hubungkan Spotify untuk melihat playlist dan daftar lagumu',
+        'Impor Spotify',
+        'Impor playlist dari file ekspor akun — tanpa Premium atau login API',
         Icons.library_music_rounded,
         _openSpotifyLibrary,
       ),

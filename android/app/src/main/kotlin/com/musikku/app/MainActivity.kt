@@ -265,6 +265,11 @@ class MainActivity : AudioServiceActivity() {
             "musikku/app_update",
         ).setMethodCallHandler { call, result ->
             when (call.method) {
+                "getSupportedAbis" -> {
+                    // Android returns the device's preferred supported ABIs first.
+                    result.success(Build.SUPPORTED_ABIS.toList())
+                }
+
                 "canInstallPackages" -> {
                     val allowed = Build.VERSION.SDK_INT < Build.VERSION_CODES.O ||
                         packageManager.canRequestPackageInstalls()

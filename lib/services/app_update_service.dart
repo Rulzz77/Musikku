@@ -24,6 +24,7 @@ class AppUpdateRelease {
     required this.notes,
     required this.releasePageUrl,
     required this.apkUrl,
+    required this.apkFileName,
     required this.apkSize,
     required this.sha256Digest,
     required this.publishedAt,
@@ -35,6 +36,7 @@ class AppUpdateRelease {
   final String notes;
   final String releasePageUrl;
   final String? apkUrl;
+  final String apkFileName;
   final int apkSize;
   final String? sha256Digest;
   final DateTime? publishedAt;
@@ -130,13 +132,24 @@ class AppUpdateService {
         return name.endsWith('.apk') ||
             contentType == 'application/vnd.android.package-archive';
       }).toList();
-      if (apkAssets.isNotEmpty) {
-        apkAsset = apkAssets.firstWhere(
-          (asset) =>
-              (asset['name'] as String? ?? '').toLowerCase() == 'app-release.apk',
-          orElse: () => apkAssets.first,
-        );
+
+      // New releases include split APKs to reduce download size. Prefer the
+      // split matching this device's ABI; keep app-release.apk as a universal
+      // fallback for older installs and devices where ABI detection fails.
+      final supportedAbis = await _getSupportedAbis();
+      for (final abi in supportedAbis) {
+        final expectedName = 'app-${abi.toLowerCase()}-release.apk';
+        for (final asset in apkAssets) {
+          final assetName = (asset['name'] as String? ?? '').toLowerCase();
+          if (assetName == expectedName) {
+            apkAsset = asset;
+            break;
+          }
+        }
+        if (apkAsset != null) break;
       }
+
+      apkAsset ??= _firstAssetNamed(apkAssets, 'app-release.apk');
     }
 
     final rawHtmlUrl = (decoded['html_url'] as String? ?? '').trim();
@@ -167,6 +180,7 @@ class AppUpdateService {
       notes: notes,
       releasePageUrl: htmlUrl,
       apkUrl: safeApkUrl,
+      apkFileName: (apkAsset?['name'] as String? ?? '').trim(),
       apkSize: size,
       sha256Digest: sha256Digest,
       publishedAt: DateTime.tryParse(publishedAtRaw ?? '')?.toLocal(),
@@ -194,6 +208,38 @@ class AppUpdateService {
       currentVersion: appVersion,
       release: release,
     );
+  }
+
+  static Map<String, dynamic>? _firstAssetNamed(
+    List<Map<String, dynamic>> assets,
+    String expectedName,
+  ) {
+    for (final asset in assets) {
+      if ((asset['name'] as String? ?? '').toLowerCase() ==
+          expectedName.toLowerCase()) {
+        return asset;
+      }
+    }
+    return null;
+  }
+
+  Future<List<String>> _getSupportedAbis() async {
+    try {
+      final values = await _installerChannel.invokeMethod<List<dynamic>>(
+        'getSupportedAbis',
+      );
+      return values
+              ?.whereType<String>()
+              .map((abi) => abi.trim().toLowerCase())
+              .where((abi) => abi.isNotEmpty)
+              .toList(growable: false) ??
+          const <String>[];
+    } on PlatformException {
+      // Existing/older native bridge: use universal app-release.apk fallback.
+      return const <String>[];
+    } on MissingPluginException {
+      return const <String>[];
+    }
   }
 
   Future<File> downloadAndVerify(

@@ -53,8 +53,9 @@ class YoutubeMusicPolicy {
 
   static bool isLikelyShortForm(YoutubeSearchResult video) {
     final title = video.title.toLowerCase();
+    final description = video.description.toLowerCase();
     final channel = video.channelTitle.toLowerCase();
-    final combined = '$title $channel';
+    final combined = '$title $description $channel';
 
     // Menangkap label yang umum dipakai pada Shorts / short-form uploads.
     return RegExp(

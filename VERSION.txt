@@ -1,3 +1,4 @@
-MusikKu 4.8.13
-Android build/versionCode: 67
-Source package: fixes music-channel subscription filtering so non-official cover uploads can appear even when YouTube category is not Music (category 10). Analyzer/build/tests require Flutter SDK verification.
+MusikKu
+Version: 4.8.15
+Build: 69
+Full pubspec version: 4.8.15+69

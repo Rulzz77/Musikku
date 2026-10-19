@@ -1,4 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart' as crypto;
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -8,6 +11,7 @@ import 'youtube_library_api.dart';
 import 'youtube_account_http_client.dart';
 import 'youtube_account_response_parser.dart';
 import 'youtube_search_service.dart';
+import 'disk_cache.dart';
 
 export '../models/youtube_account_models.dart';
 export 'youtube_library_api.dart';
@@ -23,6 +27,17 @@ class YoutubeAccountService implements YoutubeLibraryApi {
   static const _base = 'https://www.googleapis.com/youtube/v3';
   static const _sessionOkKey = 'youtube_session_ok';
   static const _explicitSignOutKey = 'youtube_user_explicitly_signed_out';
+
+  static const DiskCache _uploadPageCache = DiskCache(
+    namespace: 'yt_upload_pages_v1',
+    maxEntries: 250,
+    ttl: Duration(minutes: 30),
+  );
+  static const DiskCache _enrichedVideoCache = DiskCache(
+    namespace: 'yt_enriched_video_batches_v1',
+    maxEntries: 80,
+    ttl: Duration(hours: 6),
+  );
 
   /// Dipakai untuk data publik (channel, video, playlist upload) saat pengguna
   /// belum login, jadi halaman channel bisa dibuka tanpa akun Google.
@@ -482,7 +497,31 @@ class YoutubeAccountService implements YoutubeLibraryApi {
     String playlistId, {
     String? pageToken,
     int maxResults = 50,
+    bool forceRefresh = false,
   }) async {
+    final cacheScope = _user?.id ?? _user?.email ?? 'public';
+    final rawCacheKey = '$cacheScope|$playlistId|${pageToken ?? 'first'}|$maxResults';
+    final cacheKey = 'upload:${crypto.sha256.convert(utf8.encode(rawCacheKey))}';
+    if (!forceRefresh) {
+      final cached = await _uploadPageCache.get(
+        cacheKey,
+        maxAge: const Duration(minutes: 30),
+      );
+      if (cached is Map && cached['items'] is List) {
+        final rawItems = cached['items'] as List;
+        final items = rawItems
+            .whereType<Map>()
+            .map((item) => YoutubeSearchResult.fromJson(Map<String, dynamic>.from(item)))
+            .where((item) => item.videoId.isNotEmpty)
+            .toList(growable: false);
+        final rawToken = cached['nextPageToken']?.toString();
+        return (
+          items: items,
+          nextPageToken: (rawToken == null || rawToken.isEmpty) ? null : rawToken,
+        );
+      }
+    }
+
     final data = await _get(
       'playlistItems',
       <String, String>{
@@ -494,10 +533,15 @@ class YoutubeAccountService implements YoutubeLibraryApi {
       write: false,
     );
     final token = data['nextPageToken']?.toString();
-    return (
+    final result = (
       items: YoutubeAccountResponseParser.playlistItemsToTracks(data),
       nextPageToken: (token == null || token.isEmpty) ? null : token,
     );
+    await _uploadPageCache.put(cacheKey, <String, dynamic>{
+      'items': result.items.map((item) => item.toJson()).toList(growable: false),
+      'nextPageToken': result.nextPageToken,
+    });
+    return result;
   }
 
   /// Tambahkan jumlah penonton ke daftar video (maks. 50 per panggilan).
@@ -649,37 +693,76 @@ class YoutubeAccountService implements YoutubeLibraryApi {
     return const {};
   }
 
-  Future<List<YoutubeSearchResult>> _enrichViewCounts(List<YoutubeSearchResult> source) async {
+  Future<List<YoutubeSearchResult>> _enrichViewCounts(
+    List<YoutubeSearchResult> source,
+  ) async {
     if (source.isEmpty) return source;
-    final ids = source.map((e) => e.videoId).where((e) => e.isNotEmpty).toList();
-    final data = await _get(
-      'videos',
-      <String, String>{
-        'part': 'snippet,statistics,contentDetails,liveStreamingDetails',
-        'id': ids.join(','),
-      },
-      write: false,
-    );
-    final details = <String, YoutubeSearchResult>{};
-    final items = data['items'];
-    if (items is List) {
+
+    final detailsById = <String, YoutubeSearchResult>{};
+    // videos.list accepts up to 50 IDs per call. Cache each batch in one local
+    // write instead of performing hundreds of small SharedPreferences writes.
+    for (var i = 0; i < source.length; i += 50) {
+      final end = (i + 50 < source.length) ? i + 50 : source.length;
+      final chunk = source.sublist(i, end);
+      final sortedIds = chunk.map((e) => e.videoId).toList()..sort();
+      final batchKey = 'ids:${crypto.sha256.convert(utf8.encode(sortedIds.join(',')))}';
+      final cached = await _enrichedVideoCache.get(
+        batchKey,
+        maxAge: const Duration(hours: 6),
+      );
+      if (cached is List) {
+        for (final item in cached) {
+          if (item is! Map) continue;
+          try {
+            final detail = YoutubeSearchResult.fromJson(
+              Map<String, dynamic>.from(item),
+            );
+            if (detail.videoId.isNotEmpty) detailsById[detail.videoId] = detail;
+          } catch (_) {}
+        }
+        if (cached.isNotEmpty || chunk.isEmpty) continue;
+      }
+
+      final data = await _get(
+        'videos',
+        <String, String>{
+          'part': 'snippet,statistics,contentDetails,liveStreamingDetails',
+          'id': chunk.map((e) => e.videoId).join(','),
+        },
+        write: false,
+      );
+      final items = data['items'];
+      if (items is! List) continue;
+      final batchDetails = <YoutubeSearchResult>[];
       for (final item in items) {
         if (item is! Map) continue;
-        final video = YoutubeSearchResult.fromVideoResource(Map<String, dynamic>.from(item));
-        if (video != null) details[video.videoId] = video;
+        final detail = YoutubeSearchResult.fromVideoResource(
+          Map<String, dynamic>.from(item),
+        );
+        if (detail == null || detail.videoId.isEmpty) continue;
+        detailsById[detail.videoId] = detail;
+        batchDetails.add(detail);
+      }
+      if (batchDetails.isNotEmpty) {
+        await _enrichedVideoCache.put(
+          batchKey,
+          batchDetails.map((detail) => detail.toJson()).toList(growable: false),
+        );
       }
     }
-    return source.map((e) {
-      final d = details[e.videoId];
-      if (d == null) return e;
-      return e.copyWith(
-        viewCount: d.viewCount,
-        durationSeconds: d.durationSeconds,
-        liveStatus: d.liveStatus,
-        concurrentViewers: d.concurrentViewers,
-        liveStartTime: d.liveStartTime,
-        channelId: d.channelId.isNotEmpty ? d.channelId : e.channelId,
-        categoryId: d.categoryId.isNotEmpty ? d.categoryId : e.categoryId,
+
+    return source.map((video) {
+      final detail = detailsById[video.videoId];
+      if (detail == null) return video;
+      return video.copyWith(
+        viewCount: detail.viewCount ?? video.viewCount,
+        durationSeconds: detail.durationSeconds ?? video.durationSeconds,
+        liveStatus: detail.liveStatus.isNotEmpty ? detail.liveStatus : video.liveStatus,
+        concurrentViewers: detail.concurrentViewers ?? video.concurrentViewers,
+        liveStartTime: detail.liveStartTime ?? video.liveStartTime,
+        channelId: detail.channelId.isNotEmpty ? detail.channelId : video.channelId,
+        categoryId: detail.categoryId.isNotEmpty ? detail.categoryId : video.categoryId,
+        description: detail.description.isNotEmpty ? detail.description : video.description,
       );
     }).toList(growable: false);
   }
@@ -701,10 +784,12 @@ class YoutubeAccountService implements YoutubeLibraryApi {
         .toList(growable: false);
     if (targets.isEmpty) return const [];
 
-    // Bound concurrency to avoid opening hundreds of HTTP requests at once.
+    // Keep concurrency low. Per-channel upload pages are cached for 30 minutes,
+    // so reopening the subscription feed does not hit every channel again.
     final lists = <List<YoutubeSearchResult>>[];
-    for (var start = 0; start < targets.length; start += 10) {
-      final end = (start + 10 < targets.length) ? start + 10 : targets.length;
+    const batchSize = 4;
+    for (var start = 0; start < targets.length; start += batchSize) {
+      final end = (start + batchSize < targets.length) ? start + batchSize : targets.length;
       final batch = targets.sublist(start, end);
       final batchLists = await Future.wait(batch.map((c) async {
         try {

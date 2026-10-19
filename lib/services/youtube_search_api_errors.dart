@@ -26,11 +26,13 @@ class YoutubeSearchApiErrors {
     final reason = errorReason(response);
 
     if (reason == 'quotaExceeded' || reason == 'dailyLimitExceeded') {
-      return 'Kuota YouTube API hari ini sudah habis. Coba lagi besok.';
+      return 'Kuota YouTube API untuk kategori request ini sudah habis. Request dihentikan sampai reset kuota waktu Pasifik.';
     }
 
-    if (response.statusCode == 429) {
-      return 'YouTube sedang membatasi permintaan sementara. Coba lagi beberapa saat.';
+    if (response.statusCode == 429 ||
+        reason == 'rateLimitExceeded' ||
+        reason == 'userRateLimitExceeded') {
+      return 'YouTube sedang membatasi permintaan. MusikKu menahan request sementara agar tidak mengulang terlalu cepat.';
     }
 
     if (reason == 'keyInvalid' || reason == 'forbidden') {

@@ -1,9 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
-import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:http/http.dart' as http;
 
 import '../models/youtube_search_result.dart';
@@ -13,6 +11,7 @@ import 'youtube_search_query.dart';
 import 'youtube_music_policy.dart';
 import 'youtube_search_response_parser.dart';
 import 'youtube_search_api_errors.dart';
+import 'youtube_api_request_guard.dart';
 
 export 'youtube_search_query.dart' show SmartSearchIntent;
 
@@ -76,14 +75,18 @@ class YoutubeSearchService {
 
   static const YoutubeSearchApiErrors _apiErrors = YoutubeSearchApiErrors();
 
-  // Satu request search = 100 unit dari kuota harian 10.000 unit.
-  // Cache membuat pencarian yang sama tidak menghabiskan kuota lagi.
+  // search.list memakai 1 unit per panggilan di bucket terpisah yang defaultnya
+  // 100 panggilan/hari. Endpoint data lain memakai bucket umum 10.000 unit/hari.
+  // Cache dan deduplikasi mengurangi request berulang; lihat dokumentasi Google.
+
   static const int _cacheLimit = 20;
   static const Duration _cacheTtl = Duration(minutes: 30);
   static const Duration _radioCacheTtl = Duration(minutes: 10);
 
   final Map<String, _CacheEntry> _cache = {};
   final Map<String, _ChannelCacheEntry> _channelCache = {};
+  static final Map<String, Future<http.Response>> _inFlightHttp =
+      <String, Future<http.Response>>{};
 
   /// Cache di HP: pencarian yang sama tidak menghabiskan kuota lagi
   /// walaupun aplikasi sudah ditutup dan dibuka ulang.
@@ -309,11 +312,12 @@ class YoutubeSearchService {
   // cari "pop" -> video pop terbaru; cari "lagu jadul" -> upload terbaru yang
   // masih memakai konteks "lagu jadul".
   //
-  // 1 halaman search = 100 unit kuota (+1 unit statistik view dan +1 unit
-  // cek durasi untuk radio normal), sehingga hasilnya sengaja di-cache.
+  // Setiap halaman search.list memakai 1 panggilan pada bucket 100/hari yang
+  // terpisah. videos.list memakai bucket umum dan dapat mengembalikan detail
+  // sampai 50 video per panggilan; hasil radio sengaja di-cache.
 
-  // Shorts bisa sampai 3 menit, jadi batas bawah durasi saja tidak cukup;
-  // pengecekan URL /shorts/ (lihat isShortVideo) yang jadi penentu utama.
+  // Shorts bisa sampai 3 menit, sementara Data API tidak memberi flag isShort.
+  // Filter lokal memakai label metadata dan durasi untuk membatasi kandidat.
   static const int _radioMinSeconds = 61;
   static const int _radioMaxSeconds = 30 * 60;
 
@@ -745,47 +749,75 @@ class YoutubeSearchService {
   Future<http.Response> _getWithRetry(
     Uri uri, {
     Duration timeout = const Duration(seconds: 15),
+  }) {
+    // Coalesce identical concurrent calls (for example a rebuild that triggers
+    // the same query twice before the first response reaches the cache).
+    final key = uri.toString();
+    final active = _inFlightHttp[key];
+    if (active != null) return active;
+
+    late final Future<http.Response> request;
+    request = _performGetWithRetry(uri, timeout: timeout).whenComplete(() {
+      if (identical(_inFlightHttp[key], request)) {
+        _inFlightHttp.remove(key);
+      }
+    });
+    _inFlightHttp[key] = request;
+    return request;
+  }
+
+  Future<http.Response> _performGetWithRetry(
+    Uri uri, {
+    required Duration timeout,
   }) async {
+    final scope = uri.path.endsWith('/search') ? 'search' : 'data';
     Object? lastError;
 
-    for (var attempt = 0; attempt < 3; attempt++) {
+    // Two attempts are enough for transient gateway errors; quota/rate-limit
+    // errors are never retried in a tight loop.
+    for (var attempt = 0; attempt < 2; attempt++) {
       try {
+        await YoutubeApiRequestGuard.beforeRequest(scope);
         final response = await http.get(uri).timeout(timeout);
-
-        if (response.statusCode != 429) {
-          return response;
-        }
-
-        // 429 dari search.list bisa bersifat sementara. Jangan melakukan
-        // retry agresif; hormati Retry-After bila server mengirimkannya.
-        final reason = _errorReason(response);
-        final quotaLimited = reason == 'quotaExceeded' ||
-            reason == 'dailyLimitExceeded';
-        if (quotaLimited || attempt == 2) {
-          return response;
-        }
-
-        final retryAfterSeconds =
-            int.tryParse(response.headers['retry-after'] ?? '');
-        final waitMs = retryAfterSeconds != null
-            ? (retryAfterSeconds * 1000).clamp(500, 8000)
-            : (750 * (1 << attempt)).clamp(750, 6000);
-
-        await Future<void>.delayed(Duration(milliseconds: waitMs));
-        continue;
-      } catch (e) {
-        lastError = e;
-        if (attempt == 2) break;
-        await Future<void>.delayed(
-          Duration(milliseconds: 500 * (attempt + 1)),
+        YoutubeApiRequestGuard.observeResponse(
+          scope: scope,
+          statusCode: response.statusCode,
+          body: response.body,
+          headers: response.headers,
         );
+
+        final reason = _errorReason(response);
+        final isRateOrQuota = response.statusCode == 429 ||
+            reason == 'quotaExceeded' ||
+            reason == 'dailyLimitExceeded' ||
+            reason == 'rateLimitExceeded' ||
+            reason == 'userRateLimitExceeded';
+        if (isRateOrQuota) return response;
+        if (response.statusCode == 500 ||
+            response.statusCode == 502 ||
+            response.statusCode == 503 ||
+            response.statusCode == 504) {
+          if (attempt == 0) {
+            await Future<void>.delayed(const Duration(seconds: 1));
+            continue;
+          }
+        }
+        return response;
+      } on YoutubeApiLimitException {
+        rethrow;
+      } catch (error) {
+        lastError = error;
+        if (attempt == 0) {
+          await Future<void>.delayed(const Duration(milliseconds: 600));
+          continue;
+        }
       }
     }
 
     throw YoutubeSearchException(
       lastError == null
           ? 'Tidak bisa terhubung ke internet. Coba lagi.'
-          : 'Tidak bisa terhubung ke internet. Coba lagi.',
+          : 'Koneksi ke YouTube gagal setelah satu percobaan ulang. Coba lagi nanti.',
     );
   }
 
@@ -938,171 +970,28 @@ class YoutubeSearchService {
       YoutubeMusicPolicy.isLikelyMusicChannelProfile(title, description);
 
   // ============================================================
-  // DETEKSI YOUTUBE SHORTS (akurat)
+  // DETEKSI SHORTS TANPA SCRAPING HALAMAN YOUTUBE
   // ============================================================
-  //
-  // youtube.com/shorts/<id> membalas 200 kalau video itu Short, dan
-  // redirect (3xx) ke /watch kalau video biasa. Ini jauh lebih akurat
-  // daripada menebak dari judul atau durasi (Shorts bisa sampai 3 menit).
+  // YouTube Data API tidak menyediakan field resmi isShort. Versi lama
+  // mengirim HEAD/GET ke youtube.com/shorts/<id> bagi hampir setiap kandidat;
+  // ini menambah trafik di luar API resmi dan dapat memicu 403/429.
+  // Sekarang filter memakai metadata yang sudah dimiliki aplikasi (judul,
+  // deskripsi, dan nama channel), tanpa request tambahan ke halaman HTML.
 
-  static final Map<String, bool> _shortCache = <String, bool>{};
+  /// Kompatibilitas untuk pemanggil lama. ID saja tidak cukup untuk menentukan
+  /// Short melalui Data API resmi; pakai [isLikelyShortForm] pada metadata video.
+  @Deprecated('Gunakan isLikelyShortForm(YoutubeSearchResult); ID tidak memberi status Shorts resmi.')
+  Future<bool> isShortVideo(String videoId) async => false;
 
-  Future<String> _readResponsePrefix(
-    http.StreamedResponse response, {
-    int maxBytes = 65536,
-  }) async {
-    final bytes = BytesBuilder(copy: false);
-    final iterator = StreamIterator<List<int>>(
-      response.stream.timeout(const Duration(seconds: 3)),
-    );
-    try {
-      while (bytes.length < maxBytes && await iterator.moveNext()) {
-        final chunk = iterator.current;
-        final remaining = maxBytes - bytes.length;
-        bytes.add(chunk.length > remaining ? chunk.sublist(0, remaining) : chunk);
-      }
-    } finally {
-      await iterator.cancel();
-    }
-    return utf8.decode(bytes.takeBytes(), allowMalformed: true);
-  }
-
-  Future<bool> isShortVideo(String videoId) async {
-    final id = videoId.trim();
-    if (id.isEmpty) return false;
-
-    final known = _shortCache[id];
-    if (known != null) return known;
-
-    final client = http.Client();
-    try {
-      final url = Uri.parse('https://www.youtube.com/shorts/$id');
-      final userAgent =
-          'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 '
-          '(KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36';
-      final headRequest = http.Request('HEAD', url)
-        ..followRedirects = false
-        ..headers['User-Agent'] = userAgent;
-      final head = await client
-          .send(headRequest)
-          .timeout(const Duration(seconds: 4));
-      var classification = YoutubeMusicPolicy.classifyShortsProbeStatus(
-        head.statusCode,
-        location: head.headers['location'],
-      );
-      final headSubscription = head.stream.listen((_) {});
-      await headSubscription.cancel();
-
-      // An explicit 3xx target is a stronger signal than duration or title
-      // heuristics, so cache and use the route YouTube actually declared.
-      if (classification != null) {
-        _cacheShortClassification(id, classification);
-        return classification;
-      }
-
-      // A 200 response alone is not enough on every YouTube edge server: some
-      // respond with a generic page for ordinary videos too. Check the page's
-      // canonical route. A 405 from HEAD also uses this bounded GET fallback.
-      if (head.statusCode == 200 || head.statusCode == 405) {
-        final pageRequest = http.Request('GET', url)
-          ..followRedirects = false
-          ..headers['Range'] = 'bytes=0-65535'
-          ..headers['Accept-Encoding'] = 'identity'
-          ..headers['User-Agent'] = userAgent;
-        final page = await client
-            .send(pageRequest)
-            .timeout(const Duration(seconds: 5));
-        final pageStatus = YoutubeMusicPolicy.classifyShortsProbeStatus(
-          page.statusCode,
-          location: page.headers['location'],
-        );
-        if (pageStatus != null) {
-          final subscription = page.stream.listen((_) {});
-          await subscription.cancel();
-          _cacheShortClassification(id, pageStatus);
-          return pageStatus;
-        }
-        if (page.statusCode == 200) {
-          final html = await _readResponsePrefix(page);
-          classification = YoutubeMusicPolicy.classifyShortsPageHtml(html);
-          if (classification != null) {
-            _cacheShortClassification(id, classification);
-            return classification;
-          }
-        } else {
-          final subscription = page.stream.listen((_) {});
-          await subscription.cancel();
-        }
-      }
-
-      // Ambiguous response (403/429/5xx, blocked HEAD+GET, or missing route
-      // metadata): omit this candidate for now, but don't poison the cache.
-      // YouTube's public Data API has no official isShort field to fall back to.
-      debugPrint('SHORTS CHECK AMBIGUOUS for $id (status ${head.statusCode}); not cached');
-      return true;
-    } catch (error) {
-      // Fail closed for this request, but don't cache network errors: a later
-      // successful request can still classify an ordinary music video.
-      debugPrint('SHORTS CHECK FAILED for $id (not cached): $error');
-      return true;
-    } finally {
-      client.close();
-    }
-  }
-
-  static void _cacheShortClassification(String id, bool isShort) {
-    _shortCache[id] = isShort;
-    if (_shortCache.length > 2000) {
-      _shortCache.remove(_shortCache.keys.first);
-    }
-  }
-
-  /// Buang semua Shorts dari [videos]. Maksimum 12 URL diverifikasi paralel.
-  ///
-  /// Shorts yang jelas dari judul dibuang langsung. Video berdurasi lebih dari
-  /// 3 menit tidak perlu melakukan request jaringan karena batas Shorts saat ini
-  /// adalah 3 menit; video berdurasi <= 3 menit (atau durasinya belum diketahui)
-  /// diverifikasi melalui URL Shorts. Ini mengurangi request saat memuat feed
-  /// subscription tanpa meloloskan Shorts pendek yang judulnya tidak bertanda.
+  /// Buang kandidat yang metadata-nya secara jelas menandai Shorts.
+  /// Fungsi ini sengaja tidak membuat request jaringan per video.
   Future<List<YoutubeSearchResult>> removeShorts(
     List<YoutubeSearchResult> videos,
   ) async {
-    if (videos.isEmpty) {
-      return videos;
-    }
-
-    final flags = List<bool>.filled(videos.length, false);
-    final candidates = <int>[];
-
-    for (var i = 0; i < videos.length; i++) {
-      final video = videos[i];
-      if (isLikelyShortForm(video)) {
-        flags[i] = true;
-        continue;
-      }
-      final duration = video.durationSeconds;
-      if (duration != null && duration > 180) {
-        // Lebih dari 3 menit tidak bisa diklasifikasikan sebagai Shorts.
-        continue;
-      }
-      candidates.add(i);
-    }
-
-    for (var start = 0; start < candidates.length; start += 12) {
-      final end = math.min(start + 12, candidates.length);
-      await Future.wait([
-        for (var position = start; position < end; position++)
-          (() async {
-            final index = candidates[position];
-            flags[index] = await isShortVideo(videos[index].videoId);
-          })(),
-      ]);
-    }
-
-    return [
-      for (var i = 0; i < videos.length; i++)
-        if (!flags[i]) videos[i],
-    ];
+    if (videos.isEmpty) return videos;
+    return videos
+        .where((video) => !isLikelyShortForm(video))
+        .toList(growable: false);
   }
 
 

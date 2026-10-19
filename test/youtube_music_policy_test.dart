@@ -264,4 +264,18 @@ void main() {
     });
   });
 
+
+  test('detects Shorts marker in video description without network probing', () {
+    expect(
+      YoutubeMusicPolicy.isLikelyShortForm(
+        video(
+          title: 'Sisa Rasa - Cover',
+          description: 'Lagu akustik #Shorts',
+          categoryId: '24',
+        ),
+      ),
+      isTrue,
+    );
+  });
+
 }

@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'youtube_api_request_guard.dart';
+
 /// Mengambil foto profil channel untuk kartu video.
 ///
 /// Permintaan dikumpulkan sebentar lalu dikirim sekaligus (maks. 50 channel
@@ -98,7 +100,14 @@ class ChannelAvatarService extends ChangeNotifier {
     try {
       final uri = Uri.parse('https://www.googleapis.com/youtube/v3/$path')
           .replace(queryParameters: {...params, 'key': _apiKey});
+      await YoutubeApiRequestGuard.beforeRequest('data');
       final response = await http.get(uri).timeout(const Duration(seconds: 12));
+      YoutubeApiRequestGuard.observeResponse(
+        scope: 'data',
+        statusCode: response.statusCode,
+        body: response.body,
+        headers: response.headers,
+      );
       if (response.statusCode != 200) {
         debugPrint('CHANNEL AVATAR $path HTTP ${response.statusCode}');
         return null;
@@ -120,7 +129,12 @@ class ChannelAvatarService extends ChangeNotifier {
         'maxResults': '50',
       });
       if (response == null) {
-        // Gagal: boleh dicoba lagi nanti.
+        // Jangan jadwalkan ulang selama guard sedang menahan request karena
+        // rate limit/kuota. Item tetap pending dan dapat dicoba saat pemicu baru datang.
+        if (YoutubeApiRequestGuard.isCoolingDown('data')) {
+          _pendingVideos.addAll(chunk);
+          continue;
+        }
         for (final id in chunk) {
           final count = (_failCount['v:$id'] ?? 0) + 1;
           _failCount['v:$id'] = count;
@@ -188,7 +202,12 @@ class ChannelAvatarService extends ChangeNotifier {
         'maxResults': '50',
       });
       if (response == null) {
-        // Gagal jaringan/kuota: jadwalkan ulang, jangan dianggap selesai.
+        // Jangan membuat loop retry saat API sedang cooldown karena limit.
+        if (YoutubeApiRequestGuard.isCoolingDown('data')) {
+          _pending.addAll(chunk);
+          continue;
+        }
+        // Gagal jaringan sementara: boleh dicoba ulang secara terbatas.
         for (final id in chunk) {
           final count = (_failCount[id] ?? 0) + 1;
           _failCount[id] = count;

@@ -126,7 +126,11 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
     final result = <YoutubeSearchResult>[];
     final seen = <String>{};
     for (final video in [..._trending, ...widget.recentlyPlayed]) {
-      if (video.videoId.isNotEmpty && !video.isLive && !video.isUpcoming && seen.add(video.videoId)) {
+      if (video.videoId.isNotEmpty &&
+          !video.isLive &&
+          !video.isUpcoming &&
+          YoutubeSearchService.isMusicCandidate(video) &&
+          seen.add(video.videoId)) {
         result.add(video);
       }
     }
@@ -283,7 +287,8 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
 
   List<Widget> _exploreView() {
     final scheme = Theme.of(context).colorScheme;
-    final shownResults = _exploreCategory == 'Sedang tren' ? _trending : _exploreResults;
+    final exploreSource = _exploreCategory == 'Sedang tren' ? _trending : _exploreResults;
+    final shownResults = exploreSource.where((video) => YoutubeSearchService.isMusicCandidate(video)).toList(growable: false);
     final shownLoading = _exploreCategory == 'Sedang tren' ? _feedLoading : _exploreLoading;
     final shownError = _exploreCategory == 'Sedang tren' ? _feedError : _exploreError;
     return [

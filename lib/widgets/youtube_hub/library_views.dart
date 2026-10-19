@@ -224,12 +224,6 @@ extension _YoutubeHubLibraryViews on _YoutubeHubState {
                   visualDensity: VisualDensity.compact,
                   icon: const Icon(Icons.system_update_alt_rounded),
                 ),
-                IconButton(
-                  tooltip: 'Pengaturan MusikKu',
-                  onPressed: _showAppSettings,
-                  visualDensity: VisualDensity.compact,
-                  icon: const Icon(Icons.tune_rounded),
-                ),
               ],
             ),
           ),
@@ -320,12 +314,6 @@ extension _YoutubeHubLibraryViews on _YoutubeHubState {
         () => Navigator.of(context).push(
           MaterialPageRoute<void>(builder: (_) => StatsPage(storage: _storage)),
         ),
-      ),
-      spacedCard(
-        'Hemat data',
-        'Atur request tambahan dan penyegaran feed',
-        Icons.data_saver_on_outlined,
-        _showDataSaverSheet,
       ),
       spacedCard(
         'Pengaturan MusikKu',
@@ -524,6 +512,15 @@ extension _YoutubeHubLibraryViews on _YoutubeHubState {
   }
 
   void _showSongList(String title, List<YoutubeSearchResult> songs) {
+    final musicSongs = songs
+        .where(YoutubeSearchService.isMusicCandidate)
+        .toList(growable: false);
+    if (musicSongs.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Belum ada lagu yang cocok dengan filter musik.')),
+      );
+      return;
+    }
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -534,7 +531,7 @@ extension _YoutubeHubLibraryViews on _YoutubeHubState {
         builder: (_, controller) => SafeArea(
           child: ListView.builder(
             controller: controller,
-            itemCount: songs.length + 1,
+            itemCount: musicSongs.length + 1,
             itemBuilder: (context, index) {
               if (index == 0) {
                 return Padding(
@@ -542,7 +539,7 @@ extension _YoutubeHubLibraryViews on _YoutubeHubState {
                   child: Text(title, style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w900)),
                 );
               }
-              final video = songs[index - 1];
+              final video = musicSongs[index - 1];
               final isCurrent = widget.currentVideoId == video.videoId;
               return ListTile(
                 selected: isCurrent,
@@ -570,7 +567,7 @@ extension _YoutubeHubLibraryViews on _YoutubeHubState {
                   Navigator.pop(context);
                   // Preserve list context so Next/Previous use the selected
                   // collection rather than treating the song as an isolated tap.
-                  unawaited(widget.onPlayFromList(video, songs));
+                  unawaited(widget.onPlayFromList(video, musicSongs));
                 },
               );
             },

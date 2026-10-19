@@ -9,6 +9,7 @@ void main() {
     String channelTitle = 'Penyanyi Resmi',
     String categoryId = '10',
     String sourceType = 'youtube',
+    double? durationSeconds,
   }) {
     return YoutubeSearchResult(
       videoId: 'video-test-001',
@@ -18,6 +19,7 @@ void main() {
       thumbnailUrl: '',
       categoryId: categoryId,
       sourceType: sourceType,
+      durationSeconds: durationSeconds,
     );
   }
 
@@ -110,6 +112,21 @@ void main() {
           video(title: 'Review gadget terbaru', categoryId: '24'),
           channelTitle: 'Tech Review Indonesia',
           channelDescription: 'Review gadget dan berita teknologi.',
+        ),
+        isFalse,
+      );
+    });
+
+    test('rejects a short non-music upload even on a subscribed channel', () {
+      expect(
+        YoutubeMusicPolicy.isMusicChannelUpload(
+          video(
+            title: 'Momen tidak biasa',
+            categoryId: '10',
+            durationSeconds: 110,
+          ),
+          channelTitle: 'Random Creator',
+          channelDescription: 'Konten sehari-hari dan hiburan.',
         ),
         isFalse,
       );
@@ -211,6 +228,98 @@ void main() {
       expect(
         YoutubeMusicPolicy.isMusicCatalogItem(
           video(categoryId: '', sourceType: 'local'),
+          requireCategoryId: true,
+        ),
+        isTrue,
+      );
+    });
+
+    test('rejects a short video with no music signals even if category says Music', () {
+      expect(
+        YoutubeMusicPolicy.isMusicCatalogItem(
+          video(
+            title: 'Kucing jatuh lalu kabur',
+            channelTitle: 'Random Viral Channel',
+            categoryId: '10',
+            durationSeconds: 125,
+          ),
+          requireCategoryId: true,
+        ),
+        isFalse,
+      );
+    });
+
+    test('does not accept a generic short merely because the channel says Music', () {
+      expect(
+        YoutubeMusicPolicy.isMusicCatalogItem(
+          video(
+            title: 'Momen tidak biasa',
+            channelTitle: 'Music Channel Official',
+            categoryId: '10',
+            durationSeconds: 110,
+          ),
+          requireCategoryId: true,
+        ),
+        isFalse,
+      );
+    });
+
+
+    test('rejects a non-music short even when title mentions an instrument', () {
+      expect(
+        YoutubeMusicPolicy.isMusicCatalogItem(
+          video(
+            title: 'Guitar prank fails',
+            channelTitle: 'Random Viral Channel',
+            categoryId: '10',
+            durationSeconds: 95,
+          ),
+          requireCategoryId: true,
+        ),
+        isFalse,
+      );
+    });
+
+    test('does not accept a generic short only because subscribed channel profile says music', () {
+      expect(
+        YoutubeMusicPolicy.isLikelyNonMusicShort(
+          video(
+            title: 'Momen tidak biasa',
+            channelTitle: 'Music Channel Official',
+            categoryId: '10',
+            durationSeconds: 110,
+          ),
+          channelTitle: 'Music Channel Official',
+          channelDescription: 'Channel musik dan hiburan sehari-hari.',
+        ),
+        isTrue,
+      );
+    });
+
+    test('keeps a short official audio track with clear music signals', () {
+      expect(
+        YoutubeMusicPolicy.isMusicCatalogItem(
+          video(
+            title: 'Sisa Rasa (Official Audio)',
+            channelTitle: 'Mahalini',
+            categoryId: '10',
+            durationSeconds: 150,
+          ),
+          requireCategoryId: true,
+        ),
+        isTrue,
+      );
+    });
+
+    test('keeps a short Art Track title when the channel is YouTube Topic', () {
+      expect(
+        YoutubeMusicPolicy.isMusicCatalogItem(
+          video(
+            title: 'Ariana Grande - 7 rings',
+            channelTitle: 'Ariana Grande - Topic',
+            categoryId: '10',
+            durationSeconds: 170,
+          ),
           requireCategoryId: true,
         ),
         isTrue,

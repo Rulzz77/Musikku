@@ -146,10 +146,10 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
     // Build a YouTube-like vertical feed, alternating subscription uploads and
     // popular videos. Dedupe IDs so one video isn't shown twice.
     final subscriptionVideos = _subscriptionFeed
-        .where((video) => !video.isLive && !video.isUpcoming)
+        .where((video) => !video.isLive && !video.isUpcoming && YoutubeSearchService.isMusicCandidate(video))
         .toList(growable: false);
     final popularVideos = _trending
-        .where((video) => !video.isLive && !video.isUpcoming)
+        .where((video) => !video.isLive && !video.isUpcoming && YoutubeSearchService.isMusicCatalogItem(video))
         .toList(growable: false);
     final feed = <YoutubeSearchResult>[];
     final seenIds = <String>{};
@@ -168,7 +168,10 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
       if (index < popularVideos.length) addUnique(popularVideos[index]);
     }
 
-    final recentlyPlayed = widget.recentlyPlayed.take(12).toList(growable: false);
+    final recentlyPlayed = widget.recentlyPlayed
+        .where((video) => YoutubeSearchService.isMusicCandidate(video))
+        .take(12)
+        .toList(growable: false);
     final smartPlaylists = _buildSmartPlaylists();
 
     return [
@@ -268,10 +271,10 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
       ..._exploreResults,
       ..._subscriptionFeed,
       ..._liked,
-    ];
+    ].where(YoutubeSearchService.isMusicCandidate).toList(growable: false);
     return SmartPlaylistService.build(
-      favorites: widget.favorites,
-      recentlyPlayed: widget.recentlyPlayed,
+      favorites: widget.favorites.where(YoutubeSearchService.isMusicCandidate).toList(growable: false),
+      recentlyPlayed: widget.recentlyPlayed.where(YoutubeSearchService.isMusicCandidate).toList(growable: false),
       listeningStats: widget.listeningStats,
       catalog: catalog,
     );
@@ -394,7 +397,9 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
   }
 
   void _playFavoritesMix() {
-    final songs = List<YoutubeSearchResult>.from(widget.favorites);
+    final songs = widget.favorites
+        .where(YoutubeSearchService.isMusicCandidate)
+        .toList(growable: false);
     if (songs.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Belum ada lagu favorit. Simpan lagu dulu untuk membuat Mix Favorit.')),
@@ -406,23 +411,29 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
   }
 
   void _openRecentHistory() {
-    if (widget.recentlyPlayed.isEmpty) {
+    final songs = widget.recentlyPlayed
+        .where(YoutubeSearchService.isMusicCandidate)
+        .toList(growable: false);
+    if (songs.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Riwayat masih kosong. Putar lagu dulu, nanti muncul di sini.')),
+        const SnackBar(content: Text('Belum ada riwayat lagu yang cocok dengan filter musik.')),
       );
       return;
     }
-    _showSongList('Riwayat dengar MusikKu', widget.recentlyPlayed);
+    _showSongList('Riwayat dengar MusikKu', songs);
   }
 
   void _openFavoritesList() {
-    if (widget.favorites.isEmpty) {
+    final songs = widget.favorites
+        .where(YoutubeSearchService.isMusicCandidate)
+        .toList(growable: false);
+    if (songs.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Belum ada favorit. Tambahkan lagu ke favorit untuk menemukannya di sini.')),
+        const SnackBar(content: Text('Belum ada favorit yang cocok dengan filter musik.')),
       );
       return;
     }
-    _showSongList('Favorit MusikKu', widget.favorites);
+    _showSongList('Favorit MusikKu', songs);
   }
 
   Widget _homeQuickActionCard({
@@ -700,132 +711,6 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Future<void> _showDataSaverSheet() async {
-    await showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      useSafeArea: true,
-      isScrollControlled: true,
-      builder: (sheetContext) => ValueListenableBuilder<DataSaverMode>(
-        valueListenable: widget.settings.dataSaverMode,
-        builder: (context, mode, _) {
-          final scheme = Theme.of(context).colorScheme;
-          final state = _account.isSignedIn ? 'Akun tersambung' : 'Tanpa login';
-          return ConstrainedBox(
-            constraints: BoxConstraints(
-              maxHeight: MediaQuery.of(context).size.height * 0.88,
-            ),
-            child: SingleChildScrollView(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(18, 2, 18, 22),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Hemat data',
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Atur seberapa agresif MusikKu mengurangi request tambahan. Playback YouTube tetap ditentukan player.',
-                      style: TextStyle(
-                        color: scheme.onSurfaceVariant,
-                        fontSize: 12,
-                        height: 1.35,
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    const DataUsageCard(),
-                    RadioGroup<DataSaverMode>(
-                      groupValue: mode,
-                      onChanged: (value) {
-                        if (value == null) return;
-                        unawaited(widget.settings.setDataSaverMode(value));
-                      },
-                      child: Column(
-                        children: [
-                          for (final choice in DataSaverMode.values)
-                            RadioListTile<DataSaverMode>(
-                              value: choice,
-                              contentPadding: EdgeInsets.zero,
-                              title: Text(
-                                choice.label,
-                                style: const TextStyle(fontWeight: FontWeight.w800),
-                              ),
-                              subtitle: Text(choice.description),
-                            ),
-                        ],
-                      ),
-                    ),
-                    const Divider(height: 16),
-                    ValueListenableBuilder<bool>(
-                      valueListenable: widget.settings.prefetchWifiOnly,
-                      builder: (context, wifiOnly, _) => SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text(
-                          'Prefetch hanya saat Wi-Fi',
-                          style: TextStyle(fontWeight: FontWeight.w800),
-                        ),
-                        subtitle: Text(
-                          wifiOnly
-                              ? 'Request tambahan tidak diprioritaskan saat seluler.'
-                              : 'Request tambahan boleh berjalan di seluler.',
-                        ),
-                        value: wifiOnly,
-                        onChanged: (value) =>
-                            unawaited(widget.settings.setPrefetchWifiOnly(value)),
-                      ),
-                    ),
-                    ValueListenableBuilder<int>(
-                      valueListenable: widget.settings.bufferAlertSeconds,
-                      builder: (context, seconds, _) => Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const SizedBox(height: 8),
-                          Text(
-                            'Peringatan buffer rendah • $seconds dtk',
-                            style: const TextStyle(fontWeight: FontWeight.w800),
-                          ),
-                          Slider(
-                            value: seconds.toDouble(),
-                            min: 3,
-                            max: 30,
-                            divisions: 9,
-                            label: '$seconds dtk',
-                            onChanged: (value) => unawaited(
-                              widget.settings.setBufferAlertSeconds(value.round()),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        Icon(Icons.verified_user_outlined, size: 17, color: scheme.primary),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            '$state • data tambahan ditunda sampai dibutuhkan.',
-                            style: TextStyle(
-                              color: scheme.onSurfaceVariant,
-                              fontSize: 11.5,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        },
       ),
     );
   }

@@ -79,12 +79,6 @@ extension _YoutubeHubVideoComponents on _YoutubeHubState {
               icon: const Icon(Icons.search_rounded),
             ),
             IconButton(
-              tooltip: 'Hemat data',
-              visualDensity: VisualDensity.compact,
-              onPressed: _showDataSaverSheet,
-              icon: const Icon(Icons.tune_rounded),
-            ),
-            IconButton(
               tooltip: _user == null ? 'Hubungkan YouTube' : 'Akun YouTube',
               visualDensity: VisualDensity.compact,
               onPressed: _user == null ? _login : _showAccountSheet,

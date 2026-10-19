@@ -1,4 +1,4 @@
 MusikKu
-Version: 4.8.15
-Build: 69
-Full pubspec version: 4.8.15+69
+Version: 4.8.16
+Build: 70
+Full pubspec version: 4.8.16+70

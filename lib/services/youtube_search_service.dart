@@ -122,12 +122,12 @@ class YoutubeSearchService {
     }
 
     final intent = interpretSearch(keyword);
-    // V2: hasil cache lama belum membawa durasi.
+    // V6: invalidasi cache agar hasil lama melewati filter katalog musik terbaru.
     final safeFilter = switch (filter) {
       'music' => 'music',
       _ => 'music',
     };
-    final cacheKey = 'smartV5|${intent.apiQuery.toLowerCase()}|${intent.latest ? 'date' : 'relevance'}|$safeFilter';
+    final cacheKey = 'smartV6|${intent.apiQuery.toLowerCase()}|${intent.latest ? 'date' : 'relevance'}|$safeFilter';
     final cached = _cache[cacheKey];
 
     if (cached != null &&
@@ -204,6 +204,7 @@ class YoutubeSearchService {
         YoutubeSearchResult(
           videoId: videoId,
           title: _decodeHtml(snippet['title']?.toString() ?? 'Tanpa judul'),
+          description: _decodeHtml(snippet['description']?.toString() ?? ''),
           channelTitle: _decodeHtml(
             snippet['channelTitle']?.toString() ?? 'Unknown',
           ),
@@ -217,9 +218,8 @@ class YoutubeSearchService {
 
     // Lengkapi durasi, jumlah tonton, dan status live (1 unit kuota).
     results = await _withDetails(results);
-    // Audio-only catalog: omit active/upcoming broadcasts and known Shorts.
-    // These are frequent causes of unavailable/unstable direct audio streams
-    // and should not appear as normal songs in the queue.
+    // Katalog audio saja: buang siaran aktif, video sangat pendek, Shorts yang
+    // terdeteksi dari metadata, dan video pendek yang tidak punya sinyal musik.
     results = results.where((video) {
       if (video.isLive || video.isUpcoming) return false;
       final seconds = video.durationSeconds;
@@ -570,7 +570,7 @@ class YoutubeSearchService {
     final musicCategoryId = categoryId == null || categoryId.trim().isEmpty
         ? '10'
         : categoryId.trim();
-    final cacheKey = 'mostPopularMusicV2|$musicCategoryId';
+    final cacheKey = 'mostPopularMusicV3|$musicCategoryId';
     if (!force) {
       final cached = _cache[cacheKey];
       if (cached != null &&
@@ -623,7 +623,7 @@ class YoutubeSearchService {
       );
     }
 
-    const cacheKey = 'recentMusicV3';
+    const cacheKey = 'recentMusicV4';
     if (!force) {
       final cached = _cache[cacheKey];
       if (cached != null &&
@@ -722,6 +722,7 @@ class YoutubeSearchService {
         final d = merged[video.videoId];
         if (d == null) return video;
         return video.copyWith(
+          description: d.description.isNotEmpty ? d.description : video.description,
           viewCount: d.viewCount,
           durationSeconds: d.durationSeconds,
           liveStatus: d.liveStatus,
@@ -736,7 +737,8 @@ class YoutubeSearchService {
     }
   }
 
-  /// Resource videos.list -> model, tanpa Shorts (<= 60 detik).
+  /// Resource videos.list -> model; buang durasi sangat pendek di parser.
+  /// Penyaringan Shorts tanpa hashtag dan video pendek non-musik ada di policy.
   List<YoutubeSearchResult> _parseVideoResources(List items) =>
       YoutubeSearchResponseParser.parseVideoResources(items);
 

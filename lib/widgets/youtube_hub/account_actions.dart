@@ -400,7 +400,9 @@ extension _YoutubeHubAccountActions on _YoutubeHubState {
       if (!stillCurrent) return;
       setState(() {
         _selectedPlaylist = playlist;
-        _playlistItems = videos;
+        _playlistItems = videos
+            .where(YoutubeSearchService.isMusicCandidate)
+            .toList(growable: false);
       });
     });
   }

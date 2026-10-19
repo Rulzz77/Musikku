@@ -170,9 +170,94 @@ class YoutubeMusicPolicy {
   }
 
   static bool isMusicCandidate(YoutubeSearchResult video) {
+    if (video.isLocal) return true;
     return !isLikelyShortForm(video) &&
         !isLikelyNonMusicVideo(video) &&
+        !isLikelyNonMusicShort(video) &&
         !isLikelyAiGeneratedMusic(video);
+  }
+
+  /// Shorts tidak selalu diberi hashtag #Shorts di metadata YouTube.
+  /// Untuk video berdurasi sampai 3 menit, kategori YouTube "Music" saja
+  /// tidak cukup: upload pendek tanpa penanda lagu/performer sering berupa
+  /// meme, tren, potongan lucu, atau video acak yang salah kategori.
+  /// Lagu pendek tetap boleh lolos bila judul/deskripsi/channel memberi sinyal
+  /// musik yang cukup kuat.
+  static bool isLikelyNonMusicShort(
+    YoutubeSearchResult video, {
+    String channelTitle = '',
+    String channelDescription = '',
+  }) {
+    if (video.isLocal) return false;
+    final duration = video.durationSeconds;
+    if (duration == null || duration <= 0 || duration > 180) return false;
+    final effectiveChannel = channelTitle.trim().isNotEmpty
+        ? channelTitle.trim()
+        : video.channelTitle;
+    final contextualVideo = effectiveChannel == video.channelTitle
+        ? video
+        : video.copyWith(channelTitle: effectiveChannel);
+    if (_hasExplicitNonMusicShortLabel(contextualVideo) ||
+        isLikelyShortForm(contextualVideo) ||
+        isLikelyNonMusicVideo(contextualVideo)) {
+      return true;
+    }
+    return !_hasStrongMusicSignal(
+      contextualVideo,
+      channelDescription: channelDescription,
+    );
+  }
+
+  /// Label non-musik yang sering muncul pada Shorts. Dipakai hanya untuk video
+  /// maksimal 3 menit agar tidak memblokir lagu berdurasi normal.
+  static bool _hasExplicitNonMusicShortLabel(YoutubeSearchResult video) {
+    return RegExp(
+      r'\b(?:comedy|komedi|skit|prank|iseng|meme|funny\s+moments?|momen\s+lucu|fail(?:s|ed)?|blooper(?:s)?|challenge|tantangan|story\s*time|storytime|unboxing|kecelakaan|accident|viral\s+moments?|random\s+moments?|cute\s+(?:cat|dog)|cat\s+video|dog\s+video|animal\s+video|pet\s+video|hewan\s+lucu|kucing\s+lucu|anjing\s+lucu)\b',
+      caseSensitive: false,
+    ).hasMatch(video.title);
+  }
+
+  static bool _hasStrongMusicSignal(
+    YoutubeSearchResult video, {
+    String channelDescription = '',
+  }) {
+    final title = video.title.toLowerCase();
+    final description = video.description.toLowerCase();
+    final trackLikeTitle = RegExp(r'\s(?:-|–|—|\|)\s').hasMatch(video.title);
+    final titleSignal = RegExp(
+      r'\b(?:music|musik|song|songs|lagu|official\s+audio|audio\s+resmi|official\s+music\s+video|music\s+video|official\s+lyrics?|lyrics?|lirik|single|album|track|remix|cover(?:\s+song|\s+version)?|karaoke|instrumental|acoustic|akustik|live\s+performance|live\s+session|medley|soundtrack|ost|dj\s+set|piano|guitar|gitar|violin|biola|vocal|vokal|singing|nyanyi|bernyanyi|singer|penyanyi|orchestra|orkestra|choir|paduan\s+suara)\b',
+      caseSensitive: false,
+    ).hasMatch(title);
+    if (titleSignal ||
+        (trackLikeTitle && RegExp(r'\bofficial\s+(?:music\s+)?video\b').hasMatch(title))) {
+      return true;
+    }
+
+    // Deskripsi dihitung hanya jika menerangkan rilis/performa lagu. Kata
+    // "background music" saja tidak cukup untuk meloloskan klip non-musik.
+    final descriptionSignal = RegExp(
+      r'\b(?:official\s+audio|audio\s+resmi|official\s+music\s+video|music\s+video|official\s+lyrics?|lyrics?|lirik|cover(?:\s+(?:song|version|lagu|by|of))?|versi\s+cover|cover\s+akustik|performed\s+by|sung\s+by|vocals?\s+by|singing\s+by|dinyanyikan\s+oleh|dibawakan\s+oleh|karaoke|instrumental\s+version|acoustic\s+version|live\s+performance|remix|medley|new\s+single|official\s+release)\b',
+      caseSensitive: false,
+    ).hasMatch(description);
+    if (descriptionSignal) return true;
+
+    // Art Track dan rilis resmi sering memakai format "Artis - Judul" tanpa
+    // kata music/lagu. Izinkan jika format judul dan channel sama-sama memberi
+    // sinyal kuat bahwa ini sebuah rilis musik.
+    if (trackLikeTitle) {
+      final channel = video.channelTitle.toLowerCase();
+      final knownMusicChannel = RegExp(
+        r'\b(?:topic|vevo|official|records?|recordings?|music|musik|audio|label|band|singer|artist)\b',
+        caseSensitive: false,
+      ).hasMatch(channel) ||
+          isLikelyMusicChannelProfile(video.channelTitle, channelDescription);
+      if (knownMusicChannel) return true;
+    }
+
+    // Nama/deskripsi channel saja tidak cukup untuk meloloskan klip pendek.
+    // Judul atau deskripsi video tetap harus menunjukkan lagu/performa, atau
+    // memakai format "Artis - Judul" dari channel musik yang teridentifikasi.
+    return false;
   }
 
   /// Detects a channel profile that is likely focused on music. This is used
@@ -196,7 +281,14 @@ class YoutubeMusicPolicy {
     String channelDescription = '',
   }) {
     if (video.isLocal) return true;
-    if (isLikelyShortForm(video)) return false;
+    if (isLikelyShortForm(video) ||
+        isLikelyNonMusicShort(
+          video,
+          channelTitle: channelTitle,
+          channelDescription: channelDescription,
+        )) {
+      return false;
+    }
 
     final title = video.title.toLowerCase();
     final videoDescription = video.description.toLowerCase();
@@ -245,6 +337,8 @@ class YoutubeMusicPolicy {
     final category = video.categoryId.trim();
     if (category.isNotEmpty && category != '10') return false;
     if (requireCategoryId && category != '10') return false;
-    return !isLikelyShortForm(video) && !isLikelyNonMusicVideo(video);
+    return !isLikelyShortForm(video) &&
+        !isLikelyNonMusicVideo(video) &&
+        !isLikelyNonMusicShort(video);
   }
 }

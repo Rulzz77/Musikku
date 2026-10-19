@@ -1,6 +1,8 @@
 class YoutubeSearchResult {
   final String videoId;
   final String title;
+  /// Deskripsi video YouTube; berguna untuk membedakan cover dari upload nonmusik.
+  final String description;
   final String channelTitle;
   final String thumbnailUrl;
   final int? viewCount;
@@ -33,8 +35,9 @@ class YoutubeSearchResult {
   /// ID channel pemilik video (untuk foto profil dan membuka channel).
   final String channelId;
 
-  /// Kategori YouTube (`10` = Music). Dipakai untuk memastikan data akun
-  /// seperti subscription dan playlist hanya menampilkan konten musik.
+  /// Kategori YouTube (`10` = Music). Ini adalah salah satu sinyal katalog;
+  /// filter subscription/halaman channel juga menerima cover non-official
+  /// meskipun YouTube mengategorikannya sebagai Entertainment/People & Blogs.
   final String categoryId;
 
   bool get isLive => liveStatus == 'live';
@@ -67,6 +70,7 @@ class YoutubeSearchResult {
   const YoutubeSearchResult({
     required this.videoId,
     required this.title,
+    this.description = '',
     required this.channelTitle,
     required this.thumbnailUrl,
     this.viewCount,
@@ -86,6 +90,7 @@ class YoutubeSearchResult {
   YoutubeSearchResult copyWith({
     String? videoId,
     String? title,
+    String? description,
     String? channelTitle,
     String? thumbnailUrl,
     int? viewCount,
@@ -104,6 +109,7 @@ class YoutubeSearchResult {
     return YoutubeSearchResult(
       videoId: videoId ?? this.videoId,
       title: title ?? this.title,
+      description: description ?? this.description,
       channelTitle: channelTitle ?? this.channelTitle,
       thumbnailUrl: thumbnailUrl ?? this.thumbnailUrl,
       viewCount: viewCount ?? this.viewCount,
@@ -125,6 +131,7 @@ class YoutubeSearchResult {
     return {
       'videoId': videoId,
       'title': title,
+      'description': description,
       'channelTitle': channelTitle,
       'thumbnailUrl': thumbnailUrl,
       'viewCount': viewCount,
@@ -149,6 +156,7 @@ class YoutubeSearchResult {
     return YoutubeSearchResult(
       videoId: videoId,
       title: json['title']?.toString() ?? 'Tanpa judul',
+      description: json['description']?.toString() ?? '',
       channelTitle: json['channelTitle']?.toString() ?? 'Unknown',
       thumbnailUrl: json['thumbnailUrl']?.toString() ?? '',
       viewCount: json['viewCount'] is num ? (json['viewCount'] as num).toInt() : null,
@@ -231,6 +239,7 @@ class YoutubeSearchResult {
     return YoutubeSearchResult(
       videoId: id,
       title: text(snippet['title']?.toString() ?? 'Tanpa judul'),
+      description: text(snippet['description']?.toString() ?? ''),
       channelTitle: text(snippet['channelTitle']?.toString() ?? 'Channel'),
       thumbnailUrl: thumb(snippet['thumbnails']),
       viewCount: int.tryParse(stats['viewCount']?.toString() ?? ''),

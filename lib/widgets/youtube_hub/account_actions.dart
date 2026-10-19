@@ -55,6 +55,7 @@ extension _YoutubeHubAccountActions on _YoutubeHubState {
       _liked = const [];
       _playlists = const [];
       _subscriptionFeed = const [];
+      _musicSubscriptionChannelIds = <String>{};
       _selectedPlaylist = null;
       _playlistItems = const [];
       _rememberedAccountEmail = email;
@@ -85,7 +86,9 @@ extension _YoutubeHubAccountActions on _YoutubeHubState {
       if (snapshot.likedVideos != null) _liked = snapshot.likedVideos!;
       if (snapshot.playlists != null) _playlists = snapshot.playlists!;
       if (snapshot.feed != null) {
-        _subscriptionFeed = _visibleSubscriptionFeed(snapshot.feed!);
+        final prepared = _prepareSubscriptionFeed(snapshot.feed!);
+        _subscriptionFeed = prepared.visibleFeed;
+        _musicSubscriptionChannelIds = prepared.musicChannelIds;
       }
     });
   }
@@ -101,20 +104,35 @@ extension _YoutubeHubAccountActions on _YoutubeHubState {
     await _refreshFeedOnly();
   }
 
-  List<YoutubeSearchResult> _visibleSubscriptionFeed(
-    List<YoutubeSearchResult> feed,
-  ) {
-    final musicFeed = feed
-        .where((video) => YoutubeSearchService.isMusicCatalogItem(
-              video,
-              requireCategoryId: true,
-            ))
-        .toList(growable: false);
+  ({List<YoutubeSearchResult> visibleFeed, Set<String> musicChannelIds})
+      _prepareSubscriptionFeed(List<YoutubeSearchResult> feed) {
+    final channelById = <String, YoutubeChannelSummary>{
+      for (final channel in _subscriptions) channel.id: channel,
+    };
+    final musicFeed = feed.where((video) {
+      final channel = channelById[video.channelId];
+      return YoutubeSearchService.isMusicChannelUpload(
+        video,
+        channelTitle: channel?.title ?? video.channelTitle,
+        channelDescription: channel?.description ?? '',
+      );
+    }).toList(growable: false);
+
+    // Simpan identitas dari SELURUH hasil feed yang sudah lolos filter sebelum
+    // membatasi daftar video yang dirender. Jika tidak, channel cover yang
+    // videonya bukan bagian dari 30 video terbaru yang tampil akan tersembunyi.
+    final musicChannelIds = musicFeed
+        .map((video) => video.channelId)
+        .where((id) => id.isNotEmpty)
+        .toSet();
     final live = musicFeed.where((video) => video.isLive).toList(growable: false);
     final regular = musicFeed
         .where((video) => !video.isLive && !video.isUpcoming)
         .toList(growable: false);
-    return [...live, ...regular].take(30).toList(growable: false);
+    return (
+      visibleFeed: [...live, ...regular].take(30).toList(growable: false),
+      musicChannelIds: musicChannelIds,
+    );
   }
 
   Future<void> _refreshAccount() async {
@@ -229,9 +247,12 @@ extension _YoutubeHubAccountActions on _YoutubeHubState {
             accountRefreshSequence == _accountRefreshSequence);
     if (!isCurrent()) return;
 
-    final visibleFeed = _visibleSubscriptionFeed(feed);
+    final prepared = _prepareSubscriptionFeed(feed);
     if (!isCurrent()) return;
-    setState(() => _subscriptionFeed = visibleFeed);
+    setState(() {
+      _subscriptionFeed = prepared.visibleFeed;
+      _musicSubscriptionChannelIds = prepared.musicChannelIds;
+    });
   }
 
   Future<void> _restoreAccountAfterUserAction() async {
@@ -332,6 +353,7 @@ extension _YoutubeHubAccountActions on _YoutubeHubState {
         _selectedPlaylist = null;
         _playlistItems = const [];
         _subscriptionFeed = const [];
+        _musicSubscriptionChannelIds = <String>{};
         _rememberedAccountEmail = '';
       });
     });

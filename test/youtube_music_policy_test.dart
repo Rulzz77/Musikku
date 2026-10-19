@@ -5,6 +5,7 @@ import 'package:flutter_application_5/services/youtube_music_policy.dart';
 void main() {
   YoutubeSearchResult video({
     String title = 'Contoh Lagu Resmi',
+    String description = '',
     String channelTitle = 'Penyanyi Resmi',
     String categoryId = '10',
     String sourceType = 'youtube',
@@ -12,12 +13,141 @@ void main() {
     return YoutubeSearchResult(
       videoId: 'video-test-001',
       title: title,
+      description: description,
       channelTitle: channelTitle,
       thumbnailUrl: '',
       categoryId: categoryId,
       sourceType: sourceType,
     );
   }
+
+  group('YoutubeMusicPolicy.isMusicChannelUpload', () {
+    test('accepts a cover when YouTube labels it Entertainment', () {
+      expect(
+        YoutubeMusicPolicy.isMusicChannelUpload(
+          video(title: 'Sisa Rasa - Mahalini (Cover by Naya)', categoryId: '24'),
+          channelTitle: 'Naya Acoustic',
+          channelDescription: 'Penyanyi independen, cover lagu akustik.',
+        ),
+        isTrue,
+      );
+    });
+
+    test('accepts ordinary song titles from a music-oriented channel even without category 10', () {
+      expect(
+        YoutubeMusicPolicy.isMusicChannelUpload(
+          video(title: 'Sisa Rasa', categoryId: '24'),
+          channelTitle: 'Naya Putri',
+          channelDescription: 'Vocalist and singer-songwriter sharing acoustic music.',
+        ),
+        isTrue,
+      );
+    });
+
+    test('accepts a cover whose song title contains an ambiguous common word', () {
+      expect(
+        YoutubeMusicPolicy.isMusicChannelUpload(
+          video(title: 'Talking to the Moon (Cover)', categoryId: '24'),
+          channelTitle: 'Rina Acoustic',
+          channelDescription: 'Penyanyi independen.',
+        ),
+        isTrue,
+      );
+    });
+
+    test('accepts cover uploads with missing category metadata', () {
+      expect(
+        YoutubeMusicPolicy.isMusicChannelUpload(
+          video(title: 'Tak Ingin Usai (Cover Lagu)', categoryId: ''),
+          channelTitle: 'Dina',
+        ),
+        isTrue,
+      );
+    });
+
+    test('uses video description to recognize a cover with a plain title', () {
+      expect(
+        YoutubeMusicPolicy.isMusicChannelUpload(
+          video(
+            title: 'Sisa Rasa',
+            description: 'Cover lagu akustik dinyanyikan oleh penyanyi independen.',
+            categoryId: '24',
+          ),
+          channelTitle: 'Naya',
+        ),
+        isTrue,
+      );
+    });
+
+    test('does not treat background-music credits alone as a cover signal', () {
+      expect(
+        YoutubeMusicPolicy.isMusicChannelUpload(
+          video(
+            title: 'Jalan-jalan ke Bandung',
+            description: 'Background music by an independent composer.',
+            categoryId: '24',
+          ),
+          channelTitle: 'Naya',
+        ),
+        isFalse,
+      );
+    });
+
+    test('rejects Shorts even when the title otherwise says cover', () {
+      expect(
+        YoutubeMusicPolicy.isMusicChannelUpload(
+          video(title: 'Perfect (Cover) #Shorts', categoryId: '24'),
+          channelTitle: 'Rina Acoustic',
+          channelDescription: 'Penyanyi dan cover lagu.',
+        ),
+        isFalse,
+      );
+    });
+
+    test('still rejects obviously non-music channel uploads', () {
+      expect(
+        YoutubeMusicPolicy.isMusicChannelUpload(
+          video(title: 'Review gadget terbaru', categoryId: '24'),
+          channelTitle: 'Tech Review Indonesia',
+          channelDescription: 'Review gadget dan berita teknologi.',
+        ),
+        isFalse,
+      );
+    });
+
+    test('does not require an official artist/channel marker', () {
+      expect(
+        YoutubeMusicPolicy.isMusicChannelUpload(
+          video(title: 'Perfect (Cover)', categoryId: '24'),
+          channelTitle: 'Rina Acoustic',
+          channelDescription: 'Nyanyian dan cover lagu dari rumah.',
+        ),
+        isTrue,
+      );
+    });
+  });
+
+  group('YoutubeMusicPolicy.isLikelyMusicChannelProfile', () {
+    test('recognizes profile signals for cover and independent music channels', () {
+      expect(
+        YoutubeMusicPolicy.isLikelyMusicChannelProfile(
+          'Rina Acoustic',
+          'Penyanyi independen yang membagikan cover lagu.',
+        ),
+        isTrue,
+      );
+    });
+
+    test('does not identify a generic news channel as music by profile alone', () {
+      expect(
+        YoutubeMusicPolicy.isLikelyMusicChannelProfile(
+          'Berita Hari Ini',
+          'Berita nasional dan laporan harian.',
+        ),
+        isFalse,
+      );
+    });
+  });
 
   group('YoutubeMusicPolicy.isMusicCatalogItem', () {
     test('accepts a music-category upload with ordinary song metadata', () {

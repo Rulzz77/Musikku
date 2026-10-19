@@ -67,6 +67,7 @@ class YoutubeSearchResponseParser {
         YoutubeSearchResult(
           videoId: videoId,
           title: decodeHtml(snippet['title']?.toString() ?? 'Tanpa judul'),
+          description: decodeHtml(snippet['description']?.toString() ?? ''),
           channelTitle: decodeHtml(
             snippet['channelTitle']?.toString() ?? 'Unknown',
           ),

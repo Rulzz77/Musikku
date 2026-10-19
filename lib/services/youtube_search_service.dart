@@ -923,6 +923,20 @@ class YoutubeSearchService {
         requireCategoryId: requireCategoryId,
       );
 
+  /// Inclusive channel/subscription filter for cover songs and non-official uploads.
+  static bool isMusicChannelUpload(
+    YoutubeSearchResult video, {
+    String channelTitle = '',
+    String channelDescription = '',
+  }) => YoutubeMusicPolicy.isMusicChannelUpload(
+        video,
+        channelTitle: channelTitle,
+        channelDescription: channelDescription,
+      );
+
+  static bool isLikelyMusicChannelProfile(String title, String description) =>
+      YoutubeMusicPolicy.isLikelyMusicChannelProfile(title, description);
+
   // ============================================================
   // DETEKSI YOUTUBE SHORTS (akurat)
   // ============================================================

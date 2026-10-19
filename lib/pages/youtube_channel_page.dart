@@ -103,6 +103,15 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
 
   bool get _subscribed => _subscriptionId != null;
 
+  bool _isMusicChannelUpload(YoutubeSearchResult video) =>
+      YoutubeSearchService.isMusicChannelUpload(
+        video,
+        channelTitle: _details?.title.isNotEmpty == true
+            ? _details!.title
+            : widget.title,
+        channelDescription: _details?.description ?? '',
+      );
+
   @override
   void initState() {
     super.initState();
@@ -140,10 +149,7 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
         final page = await _account.playlistItemsPage(uploads, maxResults: _pageSize);
         token = page.nextPageToken;
         final musicOnly = (await _account.withViewCounts(page.items))
-            .where((video) => YoutubeSearchService.isMusicCatalogItem(
-                  video,
-                  requireCategoryId: true,
-                ))
+            .where(_isMusicChannelUpload)
             .toList(growable: false);
         videos = await YoutubeSearchService().removeShorts(musicOnly);
       }
@@ -173,18 +179,19 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
       _liveError = '';
     });
     try {
-      final result = await _account.scanLiveVideos(_uploadsId, pageToken: _liveToken);
+      final result = await _account.scanLiveVideos(
+        _uploadsId,
+        pageToken: _liveToken,
+        channelTitle: _details?.title.isNotEmpty == true ? _details!.title : widget.title,
+        channelDescription: _details?.description ?? '',
+      );
       if (!mounted) return;
       final known = _liveItems.map((v) => v.videoId).toSet();
       setState(() {
         _liveItems = [
           ..._liveItems,
           ...result.items.where((video) =>
-              !known.contains(video.videoId) &&
-              YoutubeSearchService.isMusicCatalogItem(
-                video,
-                requireCategoryId: true,
-              )),
+              !known.contains(video.videoId) && _isMusicChannelUpload(video)),
         ];
         _liveToken = result.nextPageToken;
         _liveScanned = true;
@@ -231,10 +238,7 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
         }
         final first = _oldestPool.take(_pageSize).toList(growable: false);
         final musicOnly = (await _account.withViewCounts(first))
-            .where((video) => YoutubeSearchService.isMusicCatalogItem(
-                  video,
-                  requireCategoryId: true,
-                ))
+            .where(_isMusicChannelUpload)
             .toList(growable: false);
         final withStats = await YoutubeSearchService().removeShorts(musicOnly);
         if (!mounted || requestId != _sortRequestId) return;
@@ -245,10 +249,7 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
       } else {
         final page = await _account.playlistItemsPage(_uploadsId, maxResults: _pageSize);
         final musicOnly = (await _account.withViewCounts(page.items))
-            .where((video) => YoutubeSearchService.isMusicCatalogItem(
-                  video,
-                  requireCategoryId: true,
-                ))
+            .where(_isMusicChannelUpload)
             .toList(growable: false);
         final withStats = await YoutubeSearchService().removeShorts(musicOnly);
         if (!mounted || requestId != _sortRequestId) return;
@@ -279,10 +280,7 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
       if (_oldestFirst) {
         final next = _oldestPool.skip(_oldestShown).take(_pageSize).toList(growable: false);
         final musicOnly = (await _account.withViewCounts(next))
-            .where((video) => YoutubeSearchService.isMusicCatalogItem(
-                  video,
-                  requireCategoryId: true,
-                ))
+            .where(_isMusicChannelUpload)
             .toList(growable: false);
         more = await YoutubeSearchService().removeShorts(musicOnly);
         if (!mounted || requestId != _sortRequestId) return;
@@ -297,10 +295,7 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
           maxResults: _pageSize,
         );
         final musicOnly = (await _account.withViewCounts(page.items))
-            .where((video) => YoutubeSearchService.isMusicCatalogItem(
-                  video,
-                  requireCategoryId: true,
-                ))
+            .where(_isMusicChannelUpload)
             .toList(growable: false);
         more = await YoutubeSearchService().removeShorts(musicOnly);
         if (!mounted || requestId != _sortRequestId) return;
@@ -809,8 +804,32 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
       ];
     }
     if (_videos.isEmpty) {
-      return const [
-        SliverToBoxAdapter(child: Padding(padding: EdgeInsets.all(24), child: Text('Belum ada musik dari channel ini.'))),
+      return [
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Belum menemukan unggahan musik di halaman ini. Sebagian cover mungkin ada di unggahan yang lebih lama.',
+                  textAlign: TextAlign.center,
+                ),
+                if (_loadingMore) ...[
+                  const SizedBox(height: 12),
+                  const CircularProgressIndicator(),
+                ] else if (_hasMore) ...[
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: _loadMore,
+                    icon: const Icon(Icons.history_rounded),
+                    label: const Text('Periksa unggahan lainnya'),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
       ];
     }
     return [

@@ -174,10 +174,68 @@ class YoutubeMusicPolicy {
         !isLikelyAiGeneratedMusic(video);
   }
 
-  /// MusicKu's main catalogue filter. Search/trending endpoints already ask
-  /// YouTube for category 10; account uploads must provide category 10 after
-  /// videos.list enrichment, or they are omitted instead of leaking non-music.
-  /// AI-made tracks are not rejected here because they are still music.
+  /// Detects a channel profile that is likely focused on music. This is used
+  /// only for subscription/channel discovery; it is intentionally permissive
+  /// enough for independent artists and cover-song creators, not only official
+  /// artist channels.
+  static bool isLikelyMusicChannelProfile(String title, String description) {
+    final profile = '$title $description'.toLowerCase();
+    return RegExp(
+      r'\b(?:music|musik|cover|covers|song|songs|lagu|sing|singing|nyanyi|menyanyi|bernyanyi|singer|singers|penyanyi|vocalist|vocal|vokal|musician|musisi|band|guitarist|gitaris|pianist|drummer|composer|komposer|songwriter|penulis\s+lagu|karaoke|instrumental|acoustic|akustik|orchestra|orkestra|choir|paduan\s+suara|remix|lirik|lyrics|music\s+channel|channel\s+musik)\b',
+      caseSensitive: false,
+    ).hasMatch(profile);
+  }
+
+  /// Classifies a channel's upload without requiring its YouTube category to
+  /// be `10`. Independent singers and cover creators often use Entertainment
+  /// or People & Blogs for otherwise genuine musical performances.
+  static bool isMusicChannelUpload(
+    YoutubeSearchResult video, {
+    String channelTitle = '',
+    String channelDescription = '',
+  }) {
+    if (video.isLocal) return true;
+    if (isLikelyShortForm(video)) return false;
+
+    final title = video.title.toLowerCase();
+    final videoDescription = video.description.toLowerCase();
+    // These labels describe clearly non-music formats even when uploaded by a
+    // music channel. Keep this list title-based so channel names do not wrongly
+    // suppress their music uploads.
+    final clearlyNonMusic = RegExp(
+      r'\b(?:podcast|interview|wawancara|talk\s*show|talkshow|reaction|reaksi|review|tutorial|how\s+to|cara\s+membuat|vlog|daily\s+vlog|trailer|teaser|gameplay|gaming|livestream|live\s+stream|web\s*series|diskusi|unboxing|q\s*&\s*a|question\s+and\s+answer|news\s+update|breaking\s+news|news\s+report|daily\s+news|berita\s+terkini|berita\s+terbaru|laporan\s+berita)\b',
+      caseSensitive: false,
+    ).hasMatch(title);
+    if (clearlyNonMusic) return false;
+
+    // A clear song/performance marker wins over ambiguous words in song titles
+    // such as "Talking to the Moon" or "No News Is Good News".
+    final explicitMusicTitle = RegExp(
+      r'\b(?:covers?|covering|song|songs|lagu|music|musik|official\s+audio|audio\s+resmi|track|single|album|lyrics?|lirik|karaoke|instrumental|acoustic|akustik|remix|piano|guitar|gitar|bass|drums?|violin|biola|vocal|vokal|sing|singing|nyanyi|menyanyi|bernyanyi|singer|penyanyi|unplugged|medley|soundtrack|ost|orchestra|orkestra|choir|paduan\s+suara|music\s+video|official\s+music\s+video|live\s+performance|live\s+session)\b',
+      caseSensitive: false,
+    ).hasMatch(title);
+    final explicitMusicDescription = RegExp(
+      r'\b(?:covers?|covering|cover\s+(?:song|version|lagu|by|of)|versi\s+cover|cover\s+akustik|performed\s+by|sung\s+by|vocals?\s+by|singing\s+by|dinyanyikan\s+oleh|dibawakan\s+oleh|karaoke|instrumental\s+version|acoustic\s+version|official\s+audio|official\s+lyrics|music\s+video|live\s+performance|remix|medley)\b',
+      caseSensitive: false,
+    ).hasMatch(videoDescription);
+    if (explicitMusicTitle || explicitMusicDescription) return true;
+
+    // Category 10 is a strong positive signal, after explicit non-music formats
+    // have been removed.
+    if (video.categoryId.trim() == '10') return true;
+
+    // Generic song titles can be admitted when the channel identifies itself as
+    // a singer, cover artist, band, instrumentalist, or music channel.
+    return isLikelyMusicChannelProfile(
+      channelTitle.isNotEmpty ? channelTitle : video.channelTitle,
+      channelDescription,
+    );
+  }
+
+  /// MusicKu's strict catalogue filter. Search/trending endpoints generally
+  /// request YouTube category 10; this remains for generic search and lists
+  /// that should contain music-category videos only. Channel uploads use the
+  /// more inclusive [isMusicChannelUpload] policy above.
   static bool isMusicCatalogItem(
     YoutubeSearchResult video, {
     bool requireCategoryId = false,

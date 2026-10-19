@@ -5,14 +5,17 @@ part of '../youtube_hub.dart';
 
 extension _YoutubeHubLibraryViews on _YoutubeHubState {
   List<Widget> _subscriptionsView() {
-    // Tab Langganan khusus musik: tampilkan channel yang memang mengunggah
-    // musik pada feed terverifikasi, bukan semua channel non-musik di akun.
-    final musicChannelIds = _subscriptionFeed
-        .map((video) => video.channelId)
-        .where((id) => id.isNotEmpty)
-        .toSet();
+    // Tab Langganan khusus musik: tampilkan channel dengan upload musik yang
+    // lolos filter atau profil musik yang jelas (termasuk penyanyi cover).
+    // Channel non-musik tanpa sinyal musik tetap tidak ditampilkan.
+    final musicChannelIds = _musicSubscriptionChannelIds;
     final visibleSubscriptions = _subscriptions
-        .where((channel) => musicChannelIds.contains(channel.id))
+        .where((channel) =>
+            musicChannelIds.contains(channel.id) ||
+            YoutubeSearchService.isLikelyMusicChannelProfile(
+              channel.title,
+              channel.description,
+            ))
         .toList(growable: false);
     return <Widget>[
       _sectionHeader(
@@ -22,7 +25,7 @@ extension _YoutubeHubLibraryViews on _YoutubeHubState {
         SliverToBoxAdapter(child: _loginCard())
       else if (visibleSubscriptions.isEmpty)
         const SliverToBoxAdapter(
-          child: Padding(padding: EdgeInsets.all(18), child: Text('Belum ada channel langganan dengan unggahan musik terbaru.')),
+          child: Padding(padding: EdgeInsets.all(18), child: Text('Belum ada channel langganan dengan unggahan musik terbaru. Coba perbarui feed atau buka channel musik dari daftar langganan.')),
         )
       else ...[
         SliverToBoxAdapter(

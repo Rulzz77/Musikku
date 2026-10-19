@@ -172,6 +172,9 @@ class _YoutubeHubState extends State<YoutubeHub> {
   List<YoutubeChannelSummary> _subscriptions = const [];
   List<YoutubePlaylistSummary> _playlists = const [];
   List<YoutubeSearchResult> _subscriptionFeed = const [];
+  // Semua channel yang memiliki setidaknya satu unggahan musik pada feed
+  // langganan yang telah diperiksa. Tidak dibatasi oleh 30 video yang tampil.
+  Set<String> _musicSubscriptionChannelIds = <String>{};
   Timer? _subscriptionTimer;
 
   /// Video trending (semua kategori). Tampil di beranda TANPA perlu login.

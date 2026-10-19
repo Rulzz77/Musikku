@@ -385,6 +385,9 @@ class YoutubeAccountService implements YoutubeLibraryApi {
     final items = data['items'];
     if (items is! List || items.isEmpty) return const [];
     final first = Map<String, dynamic>.from(items.first as Map);
+    final channelSnippet = Map<String, dynamic>.from(first['snippet'] as Map? ?? const {});
+    final channelTitle = channelSnippet['title']?.toString() ?? '';
+    final channelDescription = channelSnippet['description']?.toString() ?? '';
     final content = Map<String, dynamic>.from(first['contentDetails'] as Map? ?? const {});
     final related = Map<String, dynamic>.from(content['relatedPlaylists'] as Map? ?? const {});
     final uploads = related['uploads']?.toString() ?? '';
@@ -400,9 +403,10 @@ class YoutubeAccountService implements YoutubeLibraryApi {
     );
     final enriched = await _enrichViewCounts(YoutubeAccountResponseParser.playlistItemsToTracks(playlist));
     final musicOnly = enriched
-        .where((video) => YoutubeSearchService.isMusicCatalogItem(
+        .where((video) => YoutubeSearchService.isMusicChannelUpload(
               video,
-              requireCategoryId: true,
+              channelTitle: channelTitle.isNotEmpty ? channelTitle : video.channelTitle,
+              channelDescription: channelDescription,
             ))
         .toList(growable: false);
     // Judul yang tidak memuat #Shorts tetap bisa berupa video pendek. Cek
@@ -687,7 +691,7 @@ class YoutubeAccountService implements YoutubeLibraryApi {
   Future<List<YoutubeSearchResult>> subscriptionFeed(
     List<YoutubeChannelSummary> channels, {
     int channelLimit = 200,
-    int perChannel = 3,
+    int perChannel = 5,
   }) async {
     // subscriptions() resolves at most 200 channels (4 pages x 50). Inspect
     // that same set here instead of silently limiting the music feed to 20.
@@ -708,7 +712,19 @@ class YoutubeAccountService implements YoutubeLibraryApi {
             c.uploadsPlaylistId,
             maxResults: perChannel.clamp(1, 50).toInt(),
           );
-          return page.items;
+          // Some playlistItems payloads omit videoOwnerChannelId. Preserve the
+          // owning subscription's identity so channel-profile music signals
+          // can still be applied to covers and independent uploads.
+          return page.items.map((video) {
+            if (video.channelId.isNotEmpty) return video;
+            return video.copyWith(
+              channelId: c.id,
+              channelTitle: video.channelTitle.trim().isEmpty ||
+                      video.channelTitle == 'Channel'
+                  ? c.title
+                  : video.channelTitle,
+            );
+          }).toList(growable: false);
         } catch (_) {
           return const <YoutubeSearchResult>[];
         }
@@ -730,12 +746,17 @@ class YoutubeAccountService implements YoutubeLibraryApi {
     } catch (_) {
       enriched = all;
     }
-    enriched = enriched
-        .where((video) => YoutubeSearchService.isMusicCatalogItem(
-              video,
-              requireCategoryId: true,
-            ))
-        .toList(growable: false);
+    final channelById = <String, YoutubeChannelSummary>{
+      for (final channel in targets) channel.id: channel,
+    };
+    enriched = enriched.where((video) {
+      final channel = channelById[video.channelId];
+      return YoutubeSearchService.isMusicChannelUpload(
+        video,
+        channelTitle: channel?.title ?? video.channelTitle,
+        channelDescription: channel?.description ?? '',
+      );
+    }).toList(growable: false);
     // Subscription feed used to stop at title/category heuristics, so unnamed
     // Shorts from subscribed channels leaked into Home and Langganan. Verify
     // the remaining candidates in bounded concurrent batches before sorting.
@@ -756,6 +777,8 @@ class YoutubeAccountService implements YoutubeLibraryApi {
     String uploadsPlaylistId, {
     String? pageToken,
     int maxPages = 4,
+    String channelTitle = '',
+    String channelDescription = '',
   }) async {
     final found = <YoutubeSearchResult>[];
     String? token = pageToken;
@@ -768,9 +791,10 @@ class YoutubeAccountService implements YoutubeLibraryApi {
         final detailed = await _enrichViewCounts(page.items);
         final musicOnly = detailed.where((video) =>
             video.liveStatus.isNotEmpty &&
-            YoutubeSearchService.isMusicCatalogItem(
+            YoutubeSearchService.isMusicChannelUpload(
               video,
-              requireCategoryId: true,
+              channelTitle: channelTitle.isNotEmpty ? channelTitle : video.channelTitle,
+              channelDescription: channelDescription,
             )).toList(growable: false);
         found.addAll(await YoutubeSearchService().removeShorts(musicOnly));
       }

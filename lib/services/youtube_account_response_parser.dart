@@ -13,6 +13,7 @@ class YoutubeAccountResponseParser {
       return YoutubeSearchResult(
         videoId: videoId,
         title: snippet['title']?.toString() ?? 'Tanpa judul',
+        description: snippet['description']?.toString() ?? '',
         channelTitle: snippet['videoOwnerChannelTitle']?.toString() ??
             snippet['channelTitle']?.toString() ??
             'Channel',

@@ -3,6 +3,54 @@ import '../models/youtube_search_result.dart';
 /// Centralized policy for keeping the audio catalogue focused on music.
 /// Methods are pure so they can be tested without network access.
 class YoutubeMusicPolicy {
+  /// Classifies the status from GET/HEAD /shorts/{id} when redirects are not
+  /// followed. A 3xx response is a normal-route redirect. A 200 needs canonical
+  /// page metadata because some YouTube edge servers also serve ordinary video
+  /// pages with status 200. Other statuses are ambiguous.
+  static bool? classifyShortsProbeStatus(
+    int statusCode, {
+    String? location,
+  }) {
+    if (statusCode < 300 || statusCode >= 400) return null;
+    final redirect = location == null ? null : Uri.tryParse(location);
+    if (redirect == null) return null;
+    if (redirect.path == '/watch' || redirect.path.startsWith('/watch/')) {
+      return false;
+    }
+    if (redirect.path.startsWith('/shorts/')) return true;
+    return null;
+  }
+
+  /// Reads canonical/og URL hints from the first part of a YouTube page.
+  /// Returns null when the response has no clear video-route metadata.
+  static bool? classifyShortsPageHtml(String html) {
+    final links = RegExp(r'<link\b[^>]*>', caseSensitive: false);
+    final relPattern = RegExp(r'''\brel\s*=\s*["']([^"']+)["']''', caseSensitive: false);
+    final hrefPattern = RegExp(r'''\bhref\s*=\s*["']([^"']+)["']''', caseSensitive: false);
+
+    for (final match in links.allMatches(html)) {
+      final tag = match.group(0) ?? '';
+      final rel = relPattern.firstMatch(tag)?.group(1)?.toLowerCase() ?? '';
+      if (!rel.split(RegExp(r'\s+')).contains('canonical')) continue;
+      final href = hrefPattern.firstMatch(tag)?.group(1);
+      final uri = href == null ? null : Uri.tryParse(href);
+      if (uri == null) continue;
+      if (uri.path.startsWith('/shorts/')) return true;
+      if (uri.path == '/watch' || uri.path.startsWith('/watch/')) return false;
+    }
+
+    // YouTube can expose the canonical route inside escaped player config
+    // before the <link> element is present in a truncated response.
+    final normalized = html.replaceAll(r'\/', '/').toLowerCase();
+    if (RegExp(r'''"canonicalbaseurl"\s*:\s*"(?:https?://[^"]+)?/shorts/''').hasMatch(normalized)) {
+      return true;
+    }
+    if (RegExp(r'''"canonicalbaseurl"\s*:\s*"(?:https?://[^"]+)?/watch''').hasMatch(normalized)) {
+      return false;
+    }
+    return null;
+  }
+
   static bool isLikelyShortForm(YoutubeSearchResult video) {
     final title = video.title.toLowerCase();
     final channel = video.channelTitle.toLowerCase();
@@ -52,13 +100,17 @@ class YoutubeMusicPolicy {
       'webseries',
       'talking',
       'diskusi',
-      'pod',
     ];
 
+    // Match whole words/phrases, not arbitrary substrings. Generic substring
+    // checks incorrectly excluded artists such as Newsboys or names containing
+    // "pod" even when the upload was a real song.
+    final normalized = combined.replaceAll(RegExp(r'[^a-z0-9]+'), ' ').trim();
     for (final word in blocked) {
-      if (combined.contains(word)) {
-        return true;
-      }
+      final phrase = word.replaceAll(RegExp(r'[^a-z0-9]+'), ' ').trim();
+      if (phrase.isEmpty) continue;
+      final pattern = RegExp(r'(^|\s)' + RegExp.escape(phrase) + r'(\s|$)');
+      if (pattern.hasMatch(normalized)) return true;
     }
 
     return false;

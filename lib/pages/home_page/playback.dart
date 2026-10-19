@@ -113,7 +113,6 @@ extension _HomePlayback on _HomePageState {
       // Start a fresh listening-history candidate. It will only be committed
       // once native playback proves that at least ten seconds were heard.
       _historyTrackId = video.videoId;
-      _historyLastPositionSeconds = null;
       _historyListenedSeconds = 0.0;
       _historyRecordedForTrack = false;
 

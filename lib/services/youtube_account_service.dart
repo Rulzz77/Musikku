@@ -686,23 +686,35 @@ class YoutubeAccountService implements YoutubeLibraryApi {
   @override
   Future<List<YoutubeSearchResult>> subscriptionFeed(
     List<YoutubeChannelSummary> channels, {
-    int channelLimit = 20,
+    int channelLimit = 200,
     int perChannel = 3,
   }) async {
+    // subscriptions() resolves at most 200 channels (4 pages x 50). Inspect
+    // that same set here instead of silently limiting the music feed to 20.
     final targets = channels
         .where((c) => c.uploadsPlaylistId.isNotEmpty)
-        .take(channelLimit)
+        .take(channelLimit.clamp(1, 200).toInt())
         .toList(growable: false);
     if (targets.isEmpty) return const [];
 
-    final lists = await Future.wait(targets.map((c) async {
-      try {
-        final page = await playlistItemsPage(c.uploadsPlaylistId, maxResults: perChannel);
-        return page.items;
-      } catch (_) {
-        return const <YoutubeSearchResult>[];
-      }
-    }));
+    // Bound concurrency to avoid opening hundreds of HTTP requests at once.
+    final lists = <List<YoutubeSearchResult>>[];
+    for (var start = 0; start < targets.length; start += 10) {
+      final end = (start + 10 < targets.length) ? start + 10 : targets.length;
+      final batch = targets.sublist(start, end);
+      final batchLists = await Future.wait(batch.map((c) async {
+        try {
+          final page = await playlistItemsPage(
+            c.uploadsPlaylistId,
+            maxResults: perChannel.clamp(1, 50).toInt(),
+          );
+          return page.items;
+        } catch (_) {
+          return const <YoutubeSearchResult>[];
+        }
+      }));
+      lists.addAll(batchLists);
+    }
 
     final seen = <String>{};
     final all = <YoutubeSearchResult>[

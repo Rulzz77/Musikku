@@ -5,6 +5,7 @@ import android.net.TrafficStats
 import android.os.Handler
 import android.os.Looper
 import android.os.Process
+import android.os.SystemClock
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -18,6 +19,7 @@ object DataUsageTracker {
     private const val PREFS_NAME = "musikku_data_usage_v1"
     private const val KEY_LAST_RX = "last_rx_bytes"
     private const val KEY_LAST_TX = "last_tx_bytes"
+    private const val KEY_LAST_UPTIME = "last_uptime_millis"
     private const val KEY_TODAY_RX = "today_rx_bytes"
     private const val KEY_TODAY_TX = "today_tx_bytes"
     private const val KEY_TOTAL_RX = "total_rx_bytes"
@@ -33,6 +35,7 @@ object DataUsageTracker {
     private var initialized = false
     private var lastRxBytes = -1L
     private var lastTxBytes = -1L
+    private var lastUptimeMillis = -1L
     private var todayRxBytes = 0L
     private var todayTxBytes = 0L
     private var totalRxBytes = 0L
@@ -94,6 +97,7 @@ object DataUsageTracker {
         if (!initialized) {
             lastRxBytes = prefs.getLong(KEY_LAST_RX, -1L)
             lastTxBytes = prefs.getLong(KEY_LAST_TX, -1L)
+            lastUptimeMillis = prefs.getLong(KEY_LAST_UPTIME, -1L)
             todayRxBytes = prefs.getLong(KEY_TODAY_RX, 0L)
             todayTxBytes = prefs.getLong(KEY_TODAY_TX, 0L)
             totalRxBytes = prefs.getLong(KEY_TOTAL_RX, 0L)
@@ -109,16 +113,21 @@ object DataUsageTracker {
             localDate = dateNow
         }
 
-        // First read establishes a baseline; no historical traffic is guessed.
-        // If Android's counters decreased, the device probably rebooted, so use
-        // the current counter as the post-reboot delta while retaining saved totals.
+        // Use elapsed realtime to detect a reboot reliably. A post-reboot UID
+        // counter can already be larger than the old counter by the time MusikKu
+        // starts again; comparing byte counters alone would then miss that traffic.
+        // First read establishes a baseline; no traffic before the first sample is guessed.
+        val uptimeNow = SystemClock.elapsedRealtime()
+        val rebootDetected = lastUptimeMillis >= 0L && uptimeNow < lastUptimeMillis
         val deltaRx = when {
             lastRxBytes < 0L -> 0L
+            rebootDetected -> rx
             rx >= lastRxBytes -> rx - lastRxBytes
             else -> rx
         }
         val deltaTx = when {
             lastTxBytes < 0L -> 0L
+            rebootDetected -> tx
             tx >= lastTxBytes -> tx - lastTxBytes
             else -> tx
         }
@@ -129,12 +138,14 @@ object DataUsageTracker {
         totalTxBytes += deltaTx
         lastRxBytes = rx
         lastTxBytes = tx
+        lastUptimeMillis = uptimeNow
 
         val now = System.currentTimeMillis()
         if (forcePersist || now - lastPersistAtMillis >= PERSIST_INTERVAL_MS) {
             prefs.edit()
                 .putLong(KEY_LAST_RX, lastRxBytes)
                 .putLong(KEY_LAST_TX, lastTxBytes)
+                .putLong(KEY_LAST_UPTIME, lastUptimeMillis)
                 .putLong(KEY_TODAY_RX, todayRxBytes)
                 .putLong(KEY_TODAY_TX, todayTxBytes)
                 .putLong(KEY_TOTAL_RX, totalRxBytes)

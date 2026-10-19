@@ -75,6 +75,7 @@ extension _HomeUiLayout on _HomePageState {
                 onToggleSmartShuffle: _toggleSmartShuffle,
                 onCycleLoop: _cycleLoopMode,
                 onToggleFavorite: () => _toggleFavorite(watch),
+                onAddToPlaylist: () => _showAddToPlaylist(watch),
                 onOpenQueue: _showQueueSheet,
                 onOpenAudioSettings: _showAudioSettingsSheet,
                 onOpenSleepTimer: _showSleepTimerSheet,

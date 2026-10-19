@@ -177,90 +177,58 @@ extension _HomeStateSync on _HomePageState {
 
   void _recordListeningStats(NativeYoutubeState state) {
     final video = _currentVideo;
-    if (video == null || video.videoId.isEmpty || state.videoId.isNotEmpty && state.videoId != video.videoId) {
-      return;
-    }
-
-    if (!state.isPlaying && !state.isEnded) {
+    if (video == null ||
+        video.videoId.isEmpty ||
+        (state.videoId.isNotEmpty && state.videoId != video.videoId)) {
       return;
     }
 
     final position = state.position.inMilliseconds / 1000.0;
     final now = DateTime.now();
 
-    // Recent-history uses actual playback progress, not the user's selection.
-    // Count only small natural position deltas, so a seek does not fake ten
-    // seconds of listening. A failed stream never reaches this threshold.
-    if (state.isPlaying && state.videoId == video.videoId) {
-      if (_historyTrackId != video.videoId) {
-        _historyTrackId = video.videoId;
-        _historyLastPositionSeconds = null;
-        _historyListenedSeconds = 0.0;
-        _historyRecordedForTrack = false;
-      }
-      final previousHistoryPosition = _historyLastPositionSeconds;
-      if (previousHistoryPosition != null) {
-        final historyDelta = position - previousHistoryPosition;
-        if (historyDelta > 0 && historyDelta <= 3.0) {
-          _historyListenedSeconds += historyDelta;
-        }
-      }
-      _historyLastPositionSeconds = position;
-      if (_historyListenedSeconds >= 10.0 && !_historyRecordedForTrack) {
-        _historyRecordedForTrack = true;
-        _rememberRecentlyPlayed(video);
-      }
+    // Use one trusted measurement for both lifetime statistics and listening
+    // history. This prevents seeking, buffering, paused time, and stale native
+    // events from inflating either total.
+    final sample = _listeningPlaybackTracker.update(
+      videoId: video.videoId,
+      positionSeconds: position,
+      isPlaying: state.isPlaying,
+      isEnded: state.isEnded,
+      timestamp: now,
+    );
+
+    if (_historyTrackId != video.videoId || sample.newPlay) {
+      _historyTrackId = video.videoId;
+      _historyListenedSeconds = 0.0;
+      _historyRecordedForTrack = false;
+    }
+    if (sample.listenedSeconds > 0) {
+      _historyListenedSeconds += sample.listenedSeconds;
+    }
+    if (_historyListenedSeconds >= 10.0 && !_historyRecordedForTrack) {
+      _historyRecordedForTrack = true;
+      _rememberRecentlyPlayed(video);
     }
 
-    final isNewPlay = video.videoId != _statsLastVideoId || !_statsCountedCurrentPlay;
+    if (!sample.newPlay && sample.listenedSeconds <= 0) return;
 
-    // _statsLastPositionSeconds adalah posisi terakhir yang SUDAH dihitung,
-    // bukan posisi event terakhir. Kalau nilainya di-update pada setiap event,
-    // delta selalu sekitar 1 detik dan syarat delta >= 2 tidak pernah tercapai.
-    var delta = 0.0;
-    if (!isNewPlay &&
-        video.videoId == _statsLastVideoId &&
-        (state.isPlaying || state.isEnded) &&
-        position >= _statsLastPositionSeconds) {
-      delta = (position - _statsLastPositionSeconds).clamp(0.0, 15.0).toDouble();
-    } else if (isNewPlay) {
-      // Posisi awal lagu (termasuk resume/seek) bukan waktu dengar.
-      _statsLastPositionSeconds = position;
-    }
-
-    final shouldRecord = isNewPlay ||
-        (delta >= 2.0 &&
-            now.difference(_statsLastRecordAt) >= const Duration(seconds: 4)) ||
-        (state.isEnded && delta > 0);
-    if (shouldRecord) {
-      _statsLastRecordAt = now;
-      final existing = _listeningStatsById[video.videoId];
-      _listeningStatsById[video.videoId] = ListeningStat(
-        videoId: video.videoId,
-        title: video.title,
-        artist: video.channelTitle,
-        thumbnailUrl: video.coverUrl,
-        playCount: (existing?.playCount ?? 0) + (isNewPlay ? 1 : 0),
-        skipCount: existing?.skipCount ?? 0,
-        listenedSeconds: (existing?.listenedSeconds ?? 0) + delta,
-        lastPlayedAt: now,
-      );
-      unawaited(_storage.recordListening(
-        video: video,
-        deltaSeconds: delta,
-        newPlay: isNewPlay,
-      ));
-      _statsLastPositionSeconds = position;
-    }
-
-    if (state.isPlaying) {
-      _statsLastVideoId = video.videoId;
-      _statsCountedCurrentPlay = true;
-    } else if (state.isEnded) {
-      _statsLastVideoId = '';
-      _statsLastPositionSeconds = 0.0;
-      _statsCountedCurrentPlay = false;
-    }
+    final existing = _listeningStatsById[video.videoId];
+    _listeningStatsById[video.videoId] = ListeningStat(
+      videoId: video.videoId,
+      title: video.title,
+      artist: video.channelTitle,
+      thumbnailUrl: video.coverUrl,
+      playCount: (existing?.playCount ?? 0) + (sample.newPlay ? 1 : 0),
+      skipCount: existing?.skipCount ?? 0,
+      listenedSeconds:
+          (existing?.listenedSeconds ?? 0) + sample.listenedSeconds,
+      lastPlayedAt: now,
+    );
+    unawaited(_storage.recordListening(
+      video: video,
+      deltaSeconds: sample.listenedSeconds,
+      newPlay: sample.newPlay,
+    ));
   }
 
   Future<void> _savePlaybackProgress(NativeYoutubeState state) async {

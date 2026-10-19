@@ -14,6 +14,7 @@ import '../models/player_ui_state.dart';
 import '../models/queue_item.dart';
 import '../models/youtube_search_result.dart';
 import '../services/lyrics_service.dart';
+import '../services/listening_playback_tracker.dart';
 import '../services/music_style_matcher.dart';
 import '../services/app_settings.dart';
 import '../services/app_health_monitor.dart';
@@ -155,7 +156,6 @@ class _HomePageState extends State<HomePage>
   /// Track only enters listening history after real playback progress has
   /// accumulated. This prevents failed/queued selections from polluting history.
   String _historyTrackId = '';
-  double? _historyLastPositionSeconds;
   double _historyListenedSeconds = 0.0;
   bool _historyRecordedForTrack = false;
 
@@ -169,13 +169,8 @@ class _HomePageState extends State<HomePage>
   DateTime _lastWatchProgressUiAt =
       DateTime.fromMillisecondsSinceEpoch(0);
 
-  String _statsLastVideoId = '';
-
-  double _statsLastPositionSeconds = 0.0;
-
-  DateTime _statsLastRecordAt = DateTime.fromMillisecondsSinceEpoch(0);
-
-  bool _statsCountedCurrentPlay = false;
+  final ListeningPlaybackTracker _listeningPlaybackTracker =
+      ListeningPlaybackTracker();
 
   /// Playlist yang dipakai next / previous / shuffle.
   List<YoutubeSearchResult> _activeList = [];

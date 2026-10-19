@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
+import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:http/http.dart' as http;
 
 import '../models/youtube_search_result.dart';
@@ -931,50 +933,113 @@ class YoutubeSearchService {
 
   static final Map<String, bool> _shortCache = <String, bool>{};
 
+  Future<String> _readResponsePrefix(
+    http.StreamedResponse response, {
+    int maxBytes = 65536,
+  }) async {
+    final bytes = BytesBuilder(copy: false);
+    final iterator = StreamIterator<List<int>>(
+      response.stream.timeout(const Duration(seconds: 3)),
+    );
+    try {
+      while (bytes.length < maxBytes && await iterator.moveNext()) {
+        final chunk = iterator.current;
+        final remaining = maxBytes - bytes.length;
+        bytes.add(chunk.length > remaining ? chunk.sublist(0, remaining) : chunk);
+      }
+    } finally {
+      await iterator.cancel();
+    }
+    return utf8.decode(bytes.takeBytes(), allowMalformed: true);
+  }
+
   Future<bool> isShortVideo(String videoId) async {
     final id = videoId.trim();
-
-    if (id.isEmpty) {
-      return false;
-    }
+    if (id.isEmpty) return false;
 
     final known = _shortCache[id];
-
-    if (known != null) {
-      return known;
-    }
+    if (known != null) return known;
 
     final client = http.Client();
-
     try {
-      final request = http.Request(
-        'HEAD',
-        Uri.parse('https://www.youtube.com/shorts/$id'),
-      )
+      final url = Uri.parse('https://www.youtube.com/shorts/$id');
+      final userAgent =
+          'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 '
+          '(KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36';
+      final headRequest = http.Request('HEAD', url)
         ..followRedirects = false
-        ..headers['User-Agent'] =
-            'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 '
-                '(KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36';
+        ..headers['User-Agent'] = userAgent;
+      final head = await client
+          .send(headRequest)
+          .timeout(const Duration(seconds: 4));
+      var classification = YoutubeMusicPolicy.classifyShortsProbeStatus(
+        head.statusCode,
+        location: head.headers['location'],
+      );
+      final headSubscription = head.stream.listen((_) {});
+      await headSubscription.cancel();
 
-      final response =
-          await client.send(request).timeout(const Duration(seconds: 4));
-
-      final isShort = response.statusCode == 200;
-
-      _shortCache[id] = isShort;
-
-      if (_shortCache.length > 2000) {
-        _shortCache.remove(_shortCache.keys.first);
+      // An explicit 3xx target is a stronger signal than duration or title
+      // heuristics, so cache and use the route YouTube actually declared.
+      if (classification != null) {
+        _cacheShortClassification(id, classification);
+        return classification;
       }
 
-      return isShort;
-    } catch (_) {
-      // Fail closed: kalau status Shorts tidak bisa diverifikasi, jangan
-      // tandai sebagai video biasa dan simpan hasil negatif ke cache.
-      // Pemanggil radio akan melewati kandidat ini lalu mencoba kandidat lain.
+      // A 200 response alone is not enough on every YouTube edge server: some
+      // respond with a generic page for ordinary videos too. Check the page's
+      // canonical route. A 405 from HEAD also uses this bounded GET fallback.
+      if (head.statusCode == 200 || head.statusCode == 405) {
+        final pageRequest = http.Request('GET', url)
+          ..followRedirects = false
+          ..headers['Range'] = 'bytes=0-65535'
+          ..headers['Accept-Encoding'] = 'identity'
+          ..headers['User-Agent'] = userAgent;
+        final page = await client
+            .send(pageRequest)
+            .timeout(const Duration(seconds: 5));
+        final pageStatus = YoutubeMusicPolicy.classifyShortsProbeStatus(
+          page.statusCode,
+          location: page.headers['location'],
+        );
+        if (pageStatus != null) {
+          final subscription = page.stream.listen((_) {});
+          await subscription.cancel();
+          _cacheShortClassification(id, pageStatus);
+          return pageStatus;
+        }
+        if (page.statusCode == 200) {
+          final html = await _readResponsePrefix(page);
+          classification = YoutubeMusicPolicy.classifyShortsPageHtml(html);
+          if (classification != null) {
+            _cacheShortClassification(id, classification);
+            return classification;
+          }
+        } else {
+          final subscription = page.stream.listen((_) {});
+          await subscription.cancel();
+        }
+      }
+
+      // Ambiguous response (403/429/5xx, blocked HEAD+GET, or missing route
+      // metadata): omit this candidate for now, but don't poison the cache.
+      // YouTube's public Data API has no official isShort field to fall back to.
+      debugPrint('SHORTS CHECK AMBIGUOUS for $id (status ${head.statusCode}); not cached');
+      return true;
+    } catch (error) {
+      // Fail closed for this request, but don't cache network errors: a later
+      // successful request can still classify an ordinary music video.
+      debugPrint('SHORTS CHECK FAILED for $id (not cached): $error');
       return true;
     } finally {
       client.close();
+    }
+  }
+
+  static void _cacheShortClassification(String id, bool isShort) {
+    _shortCache[id] = isShort;
+    if (_shortCache.length > 2000) {
+      _shortCache.remove(_shortCache.keys.first);
     }
   }
 

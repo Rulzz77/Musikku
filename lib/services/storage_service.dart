@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/playlist.dart';
@@ -22,6 +24,7 @@ class StorageService {
   Future<void> _statsWriteChain = Future<void>.value();
   Timer? _statsFlushTimer;
   bool _statsDirty = false;
+  int _statsChangeGeneration = 0;
   static const String _favoritesKey = 'favorites_v2';
   static const String _playlistsKey = 'playlists_v1';
   static const String _historyKey = 'search_history_v2';
@@ -561,8 +564,18 @@ class StorageService {
 
     _statsLoadFuture = () async {
       final prefs = await _prefsFuture;
-      final raw = prefs.getString(_listeningStatsKey);
       final loaded = <String, ListeningStat>{};
+      String? raw;
+
+      // A local JSON file avoids silently discarding older songs when the
+      // history grows beyond SharedPreferences' small-key storage pattern.
+      try {
+        final file = await _listeningStatsFile();
+        if (await file.exists()) raw = await file.readAsString();
+      } catch (e) {
+        debugPrint('READ LISTENING STATS FILE ERROR: $e');
+      }
+      raw ??= prefs.getString(_listeningStatsKey);
 
       if (raw != null && raw.isNotEmpty) {
         try {
@@ -574,13 +587,70 @@ class StorageService {
                   Map<String, dynamic>.from(item),
                 );
                 if (stat.videoId.isNotEmpty) {
-                  loaded[stat.videoId] = stat;
+                  final previous = loaded[stat.videoId];
+                  if (previous == null) {
+                    loaded[stat.videoId] = stat;
+                  } else {
+                    // Merge duplicate video ids from imported/legacy data by
+                    // retaining the maximum of each counter independently.
+                    final previousDate = previous.lastPlayedAt;
+                    final statDate = stat.lastPlayedAt;
+                    final latest = previousDate == null
+                        ? statDate
+                        : statDate == null || previousDate.isAfter(statDate)
+                            ? previousDate
+                            : statDate;
+                    loaded[stat.videoId] = ListeningStat(
+                      videoId: stat.videoId,
+                      title: statDate != null &&
+                              (previousDate == null || statDate.isAfter(previousDate))
+                          ? stat.title
+                          : previous.title,
+                      artist: statDate != null &&
+                              (previousDate == null || statDate.isAfter(previousDate))
+                          ? stat.artist
+                          : previous.artist,
+                      thumbnailUrl: stat.thumbnailUrl.isNotEmpty
+                          ? stat.thumbnailUrl
+                          : previous.thumbnailUrl,
+                      playCount: stat.playCount > previous.playCount
+                          ? stat.playCount
+                          : previous.playCount,
+                      skipCount: stat.skipCount > previous.skipCount
+                          ? stat.skipCount
+                          : previous.skipCount,
+                      listenedSeconds: stat.listenedSeconds > previous.listenedSeconds
+                          ? stat.listenedSeconds
+                          : previous.listenedSeconds,
+                      lastPlayedAt: latest,
+                    );
+                  }
                 }
               }
             }
           }
         } catch (e) {
           debugPrint('LOAD LISTENING STATS ERROR: $e');
+          // If the file is corrupt, fall back to the legacy preferences copy.
+          if (raw != prefs.getString(_listeningStatsKey)) {
+            try {
+              final fallback = jsonDecode(
+                prefs.getString(_listeningStatsKey) ?? '[]',
+              );
+              if (fallback is List) {
+                for (final item in fallback) {
+                  if (item is Map) {
+                    final stat = ListeningStat.fromJson(
+                      Map<String, dynamic>.from(item),
+                    );
+                    if (stat.videoId.isNotEmpty) loaded[stat.videoId] = stat;
+                  }
+                }
+              }
+            } catch (fallbackError) {
+              debugPrint('LOAD LISTENING STATS FALLBACK ERROR: $fallbackError');
+            }
+          }
         }
       }
 
@@ -607,9 +677,15 @@ class StorageService {
     return result;
   }
 
+  Future<File> _listeningStatsFile() async {
+    final directory = await getApplicationSupportDirectory();
+    return File('${directory.path}/listening_stats_v1.json');
+  }
+
   Future<void> _writeStatsNow() async {
     if (!_statsDirty) return;
 
+    final generationAtStart = _statsChangeGeneration;
     final stats = _statsCache ?? <String, ListeningStat>{};
     final list = stats.values.toList();
     list.sort((a, b) {
@@ -618,25 +694,72 @@ class StorageService {
       return bd.compareTo(ad);
     });
 
+    final encoded = jsonEncode(list.map((e) => e.toJson()).toList());
+    var savedToFile = false;
+    try {
+      final file = await _listeningStatsFile();
+      await file.parent.create(recursive: true);
+      final temp = File('${file.path}.tmp');
+      await temp.writeAsString(encoded, flush: true);
+      await temp.rename(file.path);
+      savedToFile = true;
+    } catch (e) {
+      debugPrint('WRITE LISTENING STATS FILE ERROR: $e');
+    }
+
     final prefs = await _prefsFuture;
-    await prefs.setString(
-      _listeningStatsKey,
-      jsonEncode(list.take(200).map((e) => e.toJson()).toList()),
-    );
-    _statsDirty = false;
+    if (savedToFile) {
+      // Keep a small compatibility/recovery copy for older builds. The full
+      // history lives in the file and is never truncated to these 200 entries.
+      await prefs.setString(
+        _listeningStatsKey,
+        jsonEncode(list.take(200).map((e) => e.toJson()).toList()),
+      );
+    } else {
+      // Fallback for platforms where the app support directory is unavailable.
+      // Android builds use the file above, avoiding the former 200-track cap.
+      await prefs.setString(
+        _listeningStatsKey,
+        jsonEncode(list.take(200).map((e) => e.toJson()).toList()),
+      );
+    }
+    if (_statsChangeGeneration == generationAtStart) {
+      _statsDirty = false;
+    } else {
+      // A playback tick may arrive while the file is being written. Preserve
+      // that dirty state and make sure a second write is scheduled.
+      _statsDirty = true;
+      _scheduleStatsFlush();
+    }
+  }
+
+  void _enqueueStatsWrite() {
+    // Keep the chain usable after a transient platform/file error. The dirty
+    // flag remains set unless _writeStatsNow completed successfully, so a later
+    // playback event or explicit flush can retry persistence.
+    _statsWriteChain = _statsWriteChain
+        .then((_) => _writeStatsNow())
+        .catchError((Object error, StackTrace stackTrace) {
+      debugPrint('PERSIST LISTENING STATS ERROR: $error');
+      debugPrint('$stackTrace');
+    });
   }
 
   void _scheduleStatsFlush() {
-    _statsFlushTimer?.cancel();
+    // Do not push the flush deadline forward on every one-second playback
+    // event; otherwise a continuously playing track could postpone disk writes
+    // forever. The generation counter above handles writes racing new ticks.
+    if (_statsFlushTimer != null) return;
     _statsFlushTimer = Timer(const Duration(seconds: 3), () {
-      _statsWriteChain = _statsWriteChain.then((_) => _writeStatsNow());
+      _statsFlushTimer = null;
+      _enqueueStatsWrite();
     });
   }
 
   Future<void> flushPendingWrites() async {
     _statsFlushTimer?.cancel();
     _statsFlushTimer = null;
-    _statsWriteChain = _statsWriteChain.then((_) => _writeStatsNow());
+    _enqueueStatsWrite();
     await _statsWriteChain;
   }
 
@@ -661,6 +784,7 @@ class StorageService {
       lastPlayedAt: DateTime.now(),
     );
     _statsDirty = true;
+    _statsChangeGeneration++;
     _scheduleStatsFlush();
   }
 
@@ -680,6 +804,7 @@ class StorageService {
       lastPlayedAt: DateTime.now(),
     );
     _statsDirty = true;
+    _statsChangeGeneration++;
     _scheduleStatsFlush();
   }
 
@@ -729,11 +854,20 @@ class StorageService {
     if (decoded['queue'] is List) await write(_queueKey, decoded['queue']);
     if (decoded['recentlyPlayed'] is List) await write(_recentlyPlayedKey, decoded['recentlyPlayed']);
     if (decoded['watchProgress'] is Map) await write(_watchProgressKey, decoded['watchProgress']);
-    if (decoded['listeningStats'] is List) await write(_listeningStatsKey, decoded['listeningStats']);
+    if (decoded['listeningStats'] is List) {
+      await write(_listeningStatsKey, decoded['listeningStats']);
+      try {
+        final statsFile = await _listeningStatsFile();
+        if (await statsFile.exists()) await statsFile.delete();
+      } catch (e) {
+        debugPrint('CLEAR LISTENING STATS FILE DURING RESTORE ERROR: $e');
+      }
+    }
     _statsFlushTimer?.cancel();
     _statsFlushTimer = null;
     _statsCache = null;
     _statsDirty = false;
+    _statsChangeGeneration++;
     if (decoded['lastPlayed'] is Map) await prefs.setString(_lastPlayedKey, jsonEncode(decoded['lastPlayed']));
     if (decoded['lastPlaybackSnapshot'] is Map) {
       await prefs.setString(_lastPlaybackSnapshotKey, jsonEncode(decoded['lastPlaybackSnapshot']));

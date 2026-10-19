@@ -1,0 +1,3 @@
+MusikKu 4.8.12
+Android build/versionCode: 66
+Source package: compile-error fixes for youtube_music_policy.dart and youtube_search_service.dart; Flutter build and tests still require verification.

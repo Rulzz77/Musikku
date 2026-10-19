@@ -10,7 +10,7 @@ abstract interface class YoutubeLibraryApi {
   Future<List<YoutubePlaylistSummary>> playlists({int maxResults = 50});
   Future<List<YoutubeSearchResult>> subscriptionFeed(
     List<YoutubeChannelSummary> channels, {
-    int channelLimit = 20,
+    int channelLimit = 200,
     int perChannel = 3,
   });
   Future<List<YoutubeSearchResult>> playlistItems(

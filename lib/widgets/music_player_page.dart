@@ -28,6 +28,7 @@ class MusicPlayerPage extends StatefulWidget {
     required this.onToggleSmartShuffle,
     required this.onCycleLoop,
     required this.onToggleFavorite,
+    required this.onAddToPlaylist,
     required this.onOpenQueue,
     required this.onOpenAudioSettings,
     required this.onOpenSleepTimer,
@@ -47,6 +48,7 @@ class MusicPlayerPage extends StatefulWidget {
   final VoidCallback onToggleSmartShuffle;
   final VoidCallback onCycleLoop;
   final VoidCallback onToggleFavorite;
+  final VoidCallback onAddToPlaylist;
   final VoidCallback onOpenQueue;
   final VoidCallback onOpenAudioSettings;
   final VoidCallback onOpenSleepTimer;
@@ -257,6 +259,15 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                                   spacing: 7,
                                   runSpacing: 7,
                                   children: [
+                                    OutlinedButton.icon(
+                                      onPressed: widget.onAddToPlaylist,
+                                      icon: const Icon(Icons.playlist_add_rounded, size: 17),
+                                      label: const Text('Tambah ke playlist'),
+                                      style: OutlinedButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
+                                        visualDensity: VisualDensity.compact,
+                                      ),
+                                    ),
                                     OutlinedButton.icon(
                                       onPressed: _openLyrics,
                                       icon: const Icon(Icons.lyrics_rounded, size: 17),

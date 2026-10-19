@@ -24,8 +24,8 @@ object DataUsageTracker {
     private const val KEY_TOTAL_TX = "total_tx_bytes"
     private const val KEY_DATE = "local_date"
 
-    private const val SAMPLE_INTERVAL_MS = 3_000L
-    private const val PERSIST_INTERVAL_MS = 30_000L
+    private const val SAMPLE_INTERVAL_MS = 1_000L
+    private const val PERSIST_INTERVAL_MS = 5_000L
     private val lock = Any()
     private var started = false
     private var appContext: Context? = null

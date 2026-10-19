@@ -315,7 +315,7 @@ class StorageService {
   Future<int> loadCrossfadeSeconds() async {
     try {
       final prefs = await _prefsFuture;
-      return (prefs.getInt(_crossfadeSecondsKey) ?? 0).clamp(0, 6);
+      return (prefs.getInt(_crossfadeSecondsKey) ?? 0).clamp(0, 6).toInt();
     } catch (e) {
       debugPrint('LOAD CROSSFADE ERROR: $e');
       return 0;
@@ -325,7 +325,7 @@ class StorageService {
   Future<void> saveCrossfadeSeconds(int seconds) async {
     try {
       final prefs = await _prefsFuture;
-      await prefs.setInt(_crossfadeSecondsKey, seconds.clamp(0, 6));
+      await prefs.setInt(_crossfadeSecondsKey, seconds.clamp(0, 6).toInt());
     } catch (e) {
       debugPrint('SAVE CROSSFADE ERROR: $e');
     }

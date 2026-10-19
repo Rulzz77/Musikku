@@ -214,13 +214,25 @@ extension _HomeStateSync on _HomePageState {
 
     final isNewPlay = video.videoId != _statsLastVideoId || !_statsCountedCurrentPlay;
 
+    // _statsLastPositionSeconds adalah posisi terakhir yang SUDAH dihitung,
+    // bukan posisi event terakhir. Kalau nilainya di-update pada setiap event,
+    // delta selalu sekitar 1 detik dan syarat delta >= 2 tidak pernah tercapai.
     var delta = 0.0;
-    if (video.videoId == _statsLastVideoId && state.isPlaying && position >= _statsLastPositionSeconds) {
-      delta = position - _statsLastPositionSeconds;
-      delta = delta.clamp(0.0, 15.0);
+    if (!isNewPlay &&
+        video.videoId == _statsLastVideoId &&
+        (state.isPlaying || state.isEnded) &&
+        position >= _statsLastPositionSeconds) {
+      delta = (position - _statsLastPositionSeconds).clamp(0.0, 15.0).toDouble();
+    } else if (isNewPlay) {
+      // Posisi awal lagu (termasuk resume/seek) bukan waktu dengar.
+      _statsLastPositionSeconds = position;
     }
 
-    if (isNewPlay || (delta >= 2.0 && now.difference(_statsLastRecordAt) >= const Duration(seconds: 4))) {
+    final shouldRecord = isNewPlay ||
+        (delta >= 2.0 &&
+            now.difference(_statsLastRecordAt) >= const Duration(seconds: 4)) ||
+        (state.isEnded && delta > 0);
+    if (shouldRecord) {
       _statsLastRecordAt = now;
       final existing = _listeningStatsById[video.videoId];
       _listeningStatsById[video.videoId] = ListeningStat(
@@ -238,11 +250,11 @@ extension _HomeStateSync on _HomePageState {
         deltaSeconds: delta,
         newPlay: isNewPlay,
       ));
+      _statsLastPositionSeconds = position;
     }
 
     if (state.isPlaying) {
       _statsLastVideoId = video.videoId;
-      _statsLastPositionSeconds = position;
       _statsCountedCurrentPlay = true;
     } else if (state.isEnded) {
       _statsLastVideoId = '';
@@ -310,7 +322,7 @@ extension _HomeStateSync on _HomePageState {
     if (durationSeconds > 0.0) {
       final positionSeconds = state.isEnded
           ? durationSeconds
-          : _pendingSavedPosition.clamp(0.0, durationSeconds);
+          : _pendingSavedPosition.clamp(0.0, durationSeconds).toDouble();
       var progress = (positionSeconds / durationSeconds).clamp(0.0, 1.0).toDouble();
       if (state.isEnded || positionSeconds >= durationSeconds - 2.0) {
         progress = 1.0;

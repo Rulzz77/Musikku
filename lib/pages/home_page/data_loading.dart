@@ -168,7 +168,7 @@ extension _HomeDataLoading on _HomePageState {
     // Startup hanya memulihkan metadata + posisi. Jangan sentuh player native
     // dulu supaya tidak ada autoplay sekilas ketika aplikasi dibuka.
     _currentVideo = video;
-    _pendingSavedPosition = positionSeconds.clamp(0.0, 86400.0);
+    _pendingSavedPosition = positionSeconds.clamp(0.0, 86400.0).toDouble();
     _lastPositionSaveAt = DateTime.now();
     _restoredNeedsLoad = true;
 

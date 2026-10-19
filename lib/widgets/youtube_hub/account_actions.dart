@@ -362,21 +362,6 @@ extension _YoutubeHubAccountActions on _YoutubeHubState {
     _handleControllerOpenChannel(channel.id, channel.title, channel.thumbnailUrl);
   }
 
-  void _openAllSubscriptions() {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (routeContext) => YoutubeSubscriptionsPage(
-          channels: _subscriptions,
-          onOpen: (channel) {
-            // Tutup daftar dulu, lalu channel terbuka sebagai lapisan hub.
-            Navigator.of(routeContext).pop();
-            _openChannel(channel);
-          },
-        ),
-      ),
-    );
-  }
-
   Future<void> _openPlaylist(YoutubePlaylistSummary playlist) async {
     await _run(() async {
       final email = _account.user?.email.trim() ?? '';

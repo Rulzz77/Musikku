@@ -536,6 +536,67 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
     );
   }
 
+  Future<void> _addVideoToPlaylist(YoutubeSearchResult video) async {
+    if (!_account.isSignedIn) {
+      try {
+        await _account.signIn();
+      } catch (error) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Login YouTube diperlukan: ${describeLoginError(error)}')),
+          );
+        }
+        return;
+      }
+    }
+
+    try {
+      final playlists = await _account.playlists();
+      if (!mounted) return;
+      if (playlists.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Belum ada playlist YouTube. Buat playlist dulu di akun YouTube.')),
+        );
+        return;
+      }
+      final selected = await showModalBottomSheet<YoutubePlaylistSummary>(
+        context: context,
+        showDragHandle: true,
+        builder: (sheetContext) => SafeArea(
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              const ListTile(
+                title: Text('Tambahkan ke playlist'),
+                subtitle: Text('Pilih playlist YouTube tujuan'),
+              ),
+              for (final playlist in playlists)
+                ListTile(
+                  leading: const Icon(Icons.playlist_add_rounded),
+                  title: Text(playlist.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                  subtitle: Text('${playlist.itemCount} item • ${playlist.privacyStatus}'),
+                  onTap: () => Navigator.of(sheetContext).pop(playlist),
+                ),
+            ],
+          ),
+        ),
+      );
+      if (selected == null || !mounted) return;
+      await _account.addToPlaylist(selected.id, video.videoId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Ditambahkan ke playlist "${selected.title}".')),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal menambahkan ke playlist: ${describeLoginError(error)}')),
+        );
+      }
+    }
+  }
+
   Widget _videoCard(YoutubeSearchResult video, ColorScheme scheme) {
     final meta = <String>[];
     final liveLine = liveMetaLine(video, formatCount);
@@ -592,6 +653,14 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
               const SizedBox(height: 3),
               Text(meta.join(' • '), style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12)),
             ],
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: video.isLocal ? null : () => unawaited(_addVideoToPlaylist(video)),
+                icon: const Icon(Icons.playlist_add_rounded, size: 19),
+                label: const Text('Tambah ke playlist'),
+              ),
+            ),
           ],
         ),
       ),

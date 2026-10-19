@@ -258,7 +258,7 @@ class YoutubeLiveChatService {
     return LiveChatBatch(
       messages: messages,
       nextContinuation: next,
-      pollMillis: poll.clamp(1000, 15000),
+      pollMillis: poll.clamp(1000, 15000).toInt(),
     );
   }
 

@@ -5,17 +5,24 @@ part of '../youtube_hub.dart';
 
 extension _YoutubeHubLibraryViews on _YoutubeHubState {
   List<Widget> _subscriptionsView() {
+    // Tab Langganan khusus musik: tampilkan channel yang memang mengunggah
+    // musik pada feed terverifikasi, bukan semua channel non-musik di akun.
+    final musicChannelIds = _subscriptionFeed
+        .map((video) => video.channelId)
+        .where((id) => id.isNotEmpty)
+        .toSet();
+    final visibleSubscriptions = _subscriptions
+        .where((channel) => musicChannelIds.contains(channel.id))
+        .toList(growable: false);
     return <Widget>[
       _sectionHeader(
-        _subscriptions.isEmpty ? 'Langganan' : 'Langganan • ${_subscriptions.length} channel',
-        action: _subscriptions.length > 1 ? 'Semua' : null,
-        onAction: _openAllSubscriptions,
+        visibleSubscriptions.isEmpty ? 'Langganan musik' : 'Langganan musik • ${visibleSubscriptions.length} channel',
       ),
       if (_user == null)
         SliverToBoxAdapter(child: _loginCard())
-      else if (_subscriptions.isEmpty)
+      else if (visibleSubscriptions.isEmpty)
         const SliverToBoxAdapter(
-          child: Padding(padding: EdgeInsets.all(18), child: Text('Belum ada channel yang kamu subscribe.')),
+          child: Padding(padding: EdgeInsets.all(18), child: Text('Belum ada channel langganan dengan unggahan musik terbaru.')),
         )
       else ...[
         SliverToBoxAdapter(
@@ -24,10 +31,10 @@ extension _YoutubeHubLibraryViews on _YoutubeHubState {
             child: ListView.separated(
               padding: const EdgeInsets.fromLTRB(14, 2, 14, 4),
               scrollDirection: Axis.horizontal,
-              itemCount: _subscriptions.length,
+              itemCount: visibleSubscriptions.length,
               separatorBuilder: (_, _) => const SizedBox(width: 14),
               itemBuilder: (context, index) {
-                final channel = _subscriptions[index];
+                final channel = visibleSubscriptions[index];
                 return InkWell(
                   onTap: () => _openChannel(channel),
                   borderRadius: BorderRadius.circular(14),

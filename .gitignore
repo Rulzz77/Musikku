@@ -1,20 +1,23 @@
-# Dart / Flutter generated files
+# Flutter / Dart
 .dart_tool/
-.packages
-.pub-cache/
 .flutter-plugins
 .flutter-plugins-dependencies
+.packages
 build/
+coverage/
 
-# Android/Gradle generated and machine-local files
+# Android / Gradle
 android/.gradle/
+android/.kotlin/
 android/build/
+android/app/build/
 android/local.properties
 android/key.properties
-android/*.jks
-android/*.keystore
-android/app/build/
+android/app/*.jks
 
-# Local backup artifacts
-*.bak
-*.bak_*
+# Editor and OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db

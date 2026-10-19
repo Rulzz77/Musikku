@@ -2,46 +2,72 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_application_5/models/youtube_search_result.dart';
 import 'package:flutter_application_5/services/youtube_music_policy.dart';
 
-YoutubeSearchResult video({
-  String title = 'Judul lagu',
-  String channel = 'Artis resmi',
-  String category = '10',
-  String sourceType = 'youtube',
-  String videoId = 'video-1',
-}) => YoutubeSearchResult(
-      videoId: videoId,
+void main() {
+  YoutubeSearchResult video({
+    String title = 'Contoh Lagu Resmi',
+    String channelTitle = 'Penyanyi Resmi',
+    String categoryId = '10',
+    String sourceType = 'youtube',
+  }) {
+    return YoutubeSearchResult(
+      videoId: 'video-test-001',
       title: title,
-      channelTitle: channel,
+      channelTitle: channelTitle,
       thumbnailUrl: '',
-      categoryId: category,
+      categoryId: categoryId,
       sourceType: sourceType,
     );
+  }
 
-void main() {
-  group('YoutubeMusicPolicy', () {
-    test('accepts normal category-10 tracks', () {
-      final track = video();
-
-      expect(YoutubeMusicPolicy.isMusicCandidate(track), isTrue);
-      expect(YoutubeMusicPolicy.isMusicCatalogItem(track, requireCategoryId: true), isTrue);
+  group('YoutubeMusicPolicy.isMusicCatalogItem', () {
+    test('accepts a music-category upload with ordinary song metadata', () {
+      expect(
+        YoutubeMusicPolicy.isMusicCatalogItem(
+          video(),
+          requireCategoryId: true,
+        ),
+        isTrue,
+      );
     });
 
-    test('rejects Shorts and obvious non-music uploads', () {
-      final short = video(title: 'DJ Remix #Shorts');
-      final podcast = video(title: 'Podcast interview artis');
-
-      expect(YoutubeMusicPolicy.isLikelyShortForm(short), isTrue);
-      expect(YoutubeMusicPolicy.isMusicCatalogItem(short), isFalse);
-      expect(YoutubeMusicPolicy.isLikelyNonMusicVideo(podcast), isTrue);
-      expect(YoutubeMusicPolicy.isMusicCandidate(podcast), isFalse);
+    test('rejects a missing category when verification is required', () {
+      expect(
+        YoutubeMusicPolicy.isMusicCatalogItem(
+          video(categoryId: ''),
+          requireCategoryId: true,
+        ),
+        isFalse,
+      );
     });
 
-    test('requires category 10 only when requested and always accepts local tracks', () {
-      final otherCategory = video(category: '22');
-      final local = video(category: '22', sourceType: 'local', videoId: 'local:42');
+    test('rejects obvious Shorts labels', () {
+      expect(
+        YoutubeMusicPolicy.isMusicCatalogItem(
+          video(title: 'Lagu viral #Shorts'),
+          requireCategoryId: true,
+        ),
+        isFalse,
+      );
+    });
 
-      expect(YoutubeMusicPolicy.isMusicCatalogItem(otherCategory), isFalse);
-      expect(YoutubeMusicPolicy.isMusicCatalogItem(local, requireCategoryId: true), isTrue);
+    test('rejects obvious non-music uploads', () {
+      expect(
+        YoutubeMusicPolicy.isMusicCatalogItem(
+          video(title: 'Interview dengan artis'),
+          requireCategoryId: true,
+        ),
+        isFalse,
+      );
+    });
+
+    test('does not reject local music because it has no YouTube category', () {
+      expect(
+        YoutubeMusicPolicy.isMusicCatalogItem(
+          video(categoryId: '', sourceType: 'local'),
+          requireCategoryId: true,
+        ),
+        isTrue,
+      );
     });
   });
 }

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 
+import 'package:crypto/crypto.dart' show sha256;
 import 'package:http/http.dart' as http;
 
 import '../models/youtube_search_result.dart';
@@ -37,6 +38,13 @@ class _ChannelCacheEntry {
   final List<YoutubeChannelSearchResult> results;
 
   _ChannelCacheEntry(this.time, this.results);
+}
+
+class _VideoDetailCacheEntry {
+  final DateTime time;
+  final YoutubeSearchResult result;
+
+  _VideoDetailCacheEntry(this.time, this.result);
 }
 
 /// Satu halaman hasil lagu terbaru yang masih relevan dengan konteks pencarian untuk autoplay.
@@ -79,9 +87,14 @@ class YoutubeSearchService {
   // 100 panggilan/hari. Endpoint data lain memakai bucket umum 10.000 unit/hari.
   // Cache dan deduplikasi mengurangi request berulang; lihat dokumentasi Google.
 
-  static const int _cacheLimit = 20;
-  static const Duration _cacheTtl = Duration(minutes: 30);
-  static const Duration _radioCacheTtl = Duration(minutes: 10);
+  static const int _cacheLimit = 40;
+  static const Duration _cacheTtl = Duration(hours: 6);
+  // Radio kandidat tidak perlu diperbarui setiap beberapa menit. TTL yang lebih
+  // panjang mengurangi permintaan halaman yang sama saat lagu berpindah.
+  static const Duration _radioCacheTtl = Duration(hours: 6);
+  // Feed populer juga stabil; refresh manual yang terlalu cepat memakai cache.
+  static const Duration _feedTtl = Duration(hours: 6);
+  static const Duration _forcedFeedRefreshFloor = Duration(minutes: 2);
 
   final Map<String, _CacheEntry> _cache = {};
   final Map<String, _ChannelCacheEntry> _channelCache = {};
@@ -92,8 +105,8 @@ class YoutubeSearchService {
   /// walaupun aplikasi sudah ditutup dan dibuka ulang.
   static const DiskCache _disk = DiskCache(
     namespace: 'search',
-    maxEntries: 20,
-    ttl: Duration(hours: 12),
+    maxEntries: 80,
+    ttl: Duration(hours: 24),
   );
 
   // Pencarian channel bersifat opsional dan disimpan lintas sesi supaya query
@@ -103,6 +116,19 @@ class YoutubeSearchService {
     maxEntries: 30,
     ttl: Duration(hours: 12),
   );
+
+  // Detail metadata for video IDs reused across queries, radio, and the home
+  // feed. This cache shares snippets/statistics/durations locally so a new
+  // query that returns familiar songs does not need another videos.list call.
+  static const Duration _videoDetailTtl = Duration(hours: 24);
+  static const DiskCache _videoDetailDisk = DiskCache(
+    namespace: 'video_detail',
+    maxEntries: 250,
+    ttl: _videoDetailTtl,
+  );
+  static final Map<String, _VideoDetailCacheEntry> _videoDetailCache =
+      <String, _VideoDetailCacheEntry>{};
+  static Future<void> _videoDetailWriteQueue = Future<void>.value();
 
   static List<YoutubeSearchResult> _resultsFromJson(Object? raw) =>
       YoutubeSearchResponseParser.resultsFromJson(raw);
@@ -135,7 +161,7 @@ class YoutubeSearchService {
       'music' => 'music',
       _ => 'music',
     };
-    final cacheKey = 'smartV6|${intent.apiQuery.toLowerCase()}|${intent.latest ? 'date' : 'relevance'}|$safeFilter';
+    final cacheKey = 'smartV7|${intent.apiQuery.toLowerCase()}|${intent.latest ? 'date' : 'relevance'}|$safeFilter';
     final cached = _cache[cacheKey];
 
     if (cached != null &&
@@ -147,6 +173,11 @@ class YoutubeSearchService {
     final diskResults = _resultsFromJson(diskRaw);
     if (diskRaw is List && (diskRaw.isEmpty || diskResults.isNotEmpty)) {
       _cache[cacheKey] = _CacheEntry(DateTime.now(), diskResults);
+      for (final video in diskResults) {
+        if (video.durationSeconds != null || video.isLive || video.isUpcoming) {
+          _rememberVideoDetail(video);
+        }
+      }
       return diskResults;
     }
 
@@ -241,12 +272,12 @@ class YoutubeSearchService {
       _cache.remove(_cache.keys.first);
     }
 
-    if (results.isNotEmpty) {
-      unawaited(_disk.put(
-        'q|$cacheKey',
-        results.map((video) => video.toJson()).toList(),
-      ));
-    }
+    // Cache juga hasil kosong: typo atau query yang memang tidak punya hasil
+    // tidak boleh menghabiskan search.list lagi setelah aplikasi dibuka ulang.
+    unawaited(_disk.put(
+      'q|$cacheKey',
+      results.map((video) => video.toJson()).toList(),
+    ));
 
     return results;
   }
@@ -369,7 +400,7 @@ class YoutubeSearchService {
       );
     }
 
-    final cacheKey = 'radioPopularV36|${keyword.toLowerCase()}|${pageToken ?? ''}';
+    final cacheKey = 'radioPopularV37|${keyword.toLowerCase()}|${pageToken ?? ''}';
     final cached = _cache[cacheKey];
 
     if (cached != null &&
@@ -505,7 +536,7 @@ class YoutubeSearchService {
     // penyaring berlapis: query exclusion + heuristik judul/channel.
     results = _filterShortFormCandidates(results);
 
-    // Penentu utama: cek langsung ke YouTube apakah video ini Short.
+    // Filter Shorts memakai metadata lokal tanpa request tambahan ke halaman YouTube.
     results = await removeShorts(results);
     results = _filterNonMusicCandidates(results);
     results = _filterAiMusicCandidates(results);
@@ -543,7 +574,10 @@ class YoutubeSearchService {
   }
 
   Future<List<YoutubeSearchResult>> _searchPopularMusicFallback() async {
-    final cacheKey = 'radioPopularFallbackV37';
+    // Jangan membuat search.list kedua hanya untuk fallback radio. Gunakan
+    // katalog videos.list chart=mostPopular yang sudah dipakai feed beranda.
+    // Ini tidak mengonsumsi bucket search.list yang lebih kecil.
+    const cacheKey = 'radioPopularFallbackV38';
     final cached = _cache[cacheKey];
     if (cached != null &&
         DateTime.now().difference(cached.time) < _radioCacheTtl) {
@@ -558,44 +592,25 @@ class YoutubeSearchService {
       }
     }
 
-    final params = <String, String>{
-      'part': 'snippet',
-      'q': 'lagu Indonesia',
-      'type': 'video',
-      'maxResults': dataSaverLevel >= 2 ? '12' : (dataSaverLevel == 1 ? '20' : '50'),
-      'order': 'viewCount',
-      'regionCode': 'ID',
-      'relevanceLanguage': 'id',
-      'videoCategoryId': '10',
-      'key': _apiKey,
-    };
-
-    final data = await _getJson(
-      Uri.parse(_baseUrl).replace(queryParameters: params),
-    );
-
-    final items = data['items'];
-    if (items is! List) return const <YoutubeSearchResult>[];
-
-    var results = _parseItems(items);
-    results = await _ensureViewCounts(results);
-    results = await _filterByDuration(
-      results,
-      minSeconds: _radioMinSeconds,
-      maxSeconds: _radioMaxSeconds,
-    );
+    final popular = await mostPopular(categoryId: '10', maxResults: 50);
+    var results = popular.where((video) {
+      final seconds = video.durationSeconds;
+      return !video.isLive &&
+          !video.isUpcoming &&
+          (seconds == null || (seconds >= _radioMinSeconds && seconds <= _radioMaxSeconds));
+    }).toList(growable: false);
     results = _filterShortFormCandidates(results);
-    results = await removeShorts(results);
     results = _filterNonMusicCandidates(results);
     results = _filterAiMusicCandidates(results);
     results = _rankRadio(results);
 
     _cache[cacheKey] = _CacheEntry(DateTime.now(), results);
-    unawaited(_disk.put(cacheKey, results.map((video) => video.toJson()).toList()));
+    unawaited(_disk.put(
+      cacheKey,
+      results.map((video) => video.toJson()).toList(),
+    ));
     return results;
   }
-
-  static const Duration _feedTtl = Duration(minutes: 20);
 
   /// Musik yang sedang trending. Kategori 10 dipakai sebagai default agar
   /// beranda tidak menampilkan upload dari kategori video lain.
@@ -617,16 +632,23 @@ class YoutubeSearchService {
         ? '10'
         : categoryId.trim();
     final cacheKey = 'mostPopularMusicV3|$musicCategoryId';
-    if (!force) {
-      final cached = _cache[cacheKey];
-      if (cached != null &&
-          DateTime.now().difference(cached.time) < _feedTtl) {
+    final cached = _cache[cacheKey];
+    if (cached != null) {
+      final age = DateTime.now().difference(cached.time);
+      if (age < _feedTtl || (force && age < _forcedFeedRefreshFloor)) {
         return cached.results.take(maxResults).toList(growable: false);
       }
+    }
+    if (!force) {
       final diskHit = await _disk.get(cacheKey, maxAge: _feedTtl);
       final fromDisk = _resultsFromJson(diskHit);
       if (diskHit is List && (diskHit.isEmpty || fromDisk.isNotEmpty)) {
         _cache[cacheKey] = _CacheEntry(DateTime.now(), fromDisk);
+        for (final video in fromDisk) {
+          if (video.durationSeconds != null || video.isLive || video.isUpcoming) {
+            _rememberVideoDetail(video);
+          }
+        }
         return fromDisk.take(maxResults).toList(growable: false);
       }
     }
@@ -647,6 +669,11 @@ class YoutubeSearchService {
     );
     final items = data['items'];
     final parsed = _parseVideoResources(items is List ? items : const []);
+    for (final video in parsed) {
+      if (video.durationSeconds != null || video.isLive || video.isUpcoming) {
+        _rememberVideoDetail(video);
+      }
+    }
     final results = parsed.where(isMusicCatalogItem).toList(growable: false);
 
     _cache[cacheKey] = _CacheEntry(DateTime.now(), results);
@@ -654,7 +681,8 @@ class YoutubeSearchService {
     return results.take(maxResults).toList(growable: false);
   }
 
-  /// Lagu musik populer yang baru diunggah (beberapa hari terakhir).
+  /// Feed lagu baru menggunakan katalog videos.list yang sudah dicache.
+  /// Ini menghindari search.list berulang hanya untuk feed kategori tetap.
   Future<List<YoutubeSearchResult>> recentPopular({
     int maxResults = 30,
     bool force = false,
@@ -666,81 +694,111 @@ class YoutubeSearchService {
       );
     }
 
-    const cacheKey = 'recentMusicV4';
-    if (!force) {
-      final cached = _cache[cacheKey];
-      if (cached != null &&
-          DateTime.now().difference(cached.time) < _feedTtl) {
+    const cacheKey = 'recentMusicV5FromPopular';
+    final cached = _cache[cacheKey];
+    if (cached != null) {
+      final age = DateTime.now().difference(cached.time);
+      if (age < _feedTtl || (force && age < _forcedFeedRefreshFloor)) {
         return cached.results.take(maxResults).toList(growable: false);
       }
-      final diskHit = await _disk.get(cacheKey, maxAge: _feedTtl);
-      final fromDisk = _resultsFromJson(diskHit);
-      if (diskHit is List && (diskHit.isEmpty || fromDisk.isNotEmpty)) {
-        _cache[cacheKey] = _CacheEntry(DateTime.now(), fromDisk);
-        return fromDisk.take(maxResults).toList(growable: false);
-      }
+    }
+    final diskHit = await _disk.get(cacheKey, maxAge: _feedTtl);
+    final fromDisk = _resultsFromJson(diskHit);
+    if (!force && diskHit is List && (diskHit.isEmpty || fromDisk.isNotEmpty)) {
+      _cache[cacheKey] = _CacheEntry(DateTime.now(), fromDisk);
+      return fromDisk.take(maxResults).toList(growable: false);
     }
 
-    final since = DateTime.now().toUtc().subtract(const Duration(days: 3));
-    final searchData = await _getJson(
-      Uri.parse(_baseUrl).replace(queryParameters: {
-        'part': 'snippet',
-        'type': 'video',
-        'order': 'viewCount',
-        'publishedAfter': '${since.toIso8601String().split('.').first}Z',
-        'regionCode': 'ID',
-        'relevanceLanguage': 'id',
-        'videoCategoryId': '10',
-        'maxResults': '50',
-        'key': _apiKey,
-      }),
+    // search.list punya bucket harian 100 panggilan. Jangan pakai endpoint itu
+    // untuk feed kedua: ambil kandidat dari videos.list yang sudah dipakai
+    // beranda, lalu urutkan berdasarkan tanggal rilis. Jika kandidat 30 hari
+    // terakhir tidak tersedia, tampilkan katalog musik populer yang tersedia.
+    final popular = await mostPopular(
+      categoryId: '10',
+      maxResults: 50,
+      force: force,
     );
-    final found = searchData['items'];
-    final ids = <String>[];
-    if (found is List) {
-      for (final item in found) {
-        if (item is! Map) continue;
-        final id = item['id'];
-        final videoId = id is Map ? id['videoId']?.toString() ?? '' : '';
-        if (videoId.isNotEmpty) ids.add(videoId);
-      }
-    }
-    if (ids.isEmpty) {
-      _cache[cacheKey] = _CacheEntry(DateTime.now(), const <YoutubeSearchResult>[]);
-      unawaited(_disk.put(cacheKey, const <Map<String, dynamic>>[]));
-      return const [];
-    }
-
-    final detailData = await _getJson(
-      Uri.parse('https://www.googleapis.com/youtube/v3/videos').replace(
-        queryParameters: {
-          'part': 'snippet,statistics,contentDetails,liveStreamingDetails',
-          'id': ids.join(','),
-          'key': _apiKey,
-        },
-      ),
-    );
-    final items = detailData['items'];
-    final parsed = _parseVideoResources(items is List ? items : const []);
-    final results = parsed.where(isMusicCatalogItem).toList(growable: false)
-      ..sort((a, b) => (b.viewCount ?? 0).compareTo(a.viewCount ?? 0));
+    final now = DateTime.now().toUtc();
+    final cutoff = now.subtract(const Duration(days: 30));
+    final candidates = popular
+        .where((video) => !video.isLive && !video.isUpcoming)
+        .toList(growable: false);
+    final recent = candidates
+        .where((video) => video.publishedAt != null && video.publishedAt!.toUtc().isAfter(cutoff))
+        .toList(growable: false);
+    final results = List<YoutubeSearchResult>.from(recent.isNotEmpty ? recent : candidates)
+      ..sort((a, b) {
+        final ap = a.publishedAt?.millisecondsSinceEpoch ?? 0;
+        final bp = b.publishedAt?.millisecondsSinceEpoch ?? 0;
+        if (bp != ap) return bp.compareTo(ap);
+        return (b.viewCount ?? 0).compareTo(a.viewCount ?? 0);
+      });
 
     _cache[cacheKey] = _CacheEntry(DateTime.now(), results);
-    unawaited(_disk.put(cacheKey, results.map((v) => v.toJson()).toList()));
+    unawaited(_disk.put(
+      cacheKey,
+      results.map((video) => video.toJson()).toList(),
+    ));
     return results.take(maxResults).toList(growable: false);
   }
 
   /// Melengkapi hasil pencarian dengan durasi, jumlah tonton, dan status live
   /// lewat satu panggilan videos.list (1 unit per 50 video). Kalau gagal,
   /// daftar asli dikembalikan apa adanya.
+  static String _videoDetailDiskKey(String videoId) =>
+      'video|${sha256.convert(utf8.encode(videoId))}';
+
   Future<List<YoutubeSearchResult>> _withDetails(
     List<YoutubeSearchResult> videos,
   ) async {
     if (videos.isEmpty || _apiKey.isEmpty) return videos;
-    try {
-      final merged = <String, YoutubeSearchResult>{};
-      for (var i = 0; i < videos.length; i += 50) {
-        final chunk = videos.sublist(i, math.min(i + 50, videos.length));
+
+    final details = <String, YoutubeSearchResult>{};
+    final needDisk = <YoutubeSearchResult>[];
+    final now = DateTime.now();
+
+    for (final video in videos) {
+      if (video.videoId.isEmpty || video.isLocal) continue;
+      final entry = _videoDetailCache[video.videoId];
+      if (entry != null && now.difference(entry.time) < _videoDetailTtl) {
+        details[video.videoId] = entry.result;
+      } else {
+        if (entry != null) _videoDetailCache.remove(video.videoId);
+        needDisk.add(video);
+      }
+    }
+
+    // SharedPreferences lookups are parallelized, but API requests remain
+    // batched (up to 50 IDs per videos.list call).
+    final diskValues = await Future.wait(needDisk.map(
+      (video) => _videoDetailDisk.get(_videoDetailDiskKey(video.videoId)),
+    ));
+    final missingApi = <YoutubeSearchResult>[];
+    for (var i = 0; i < needDisk.length; i++) {
+      final video = needDisk[i];
+      final raw = diskValues[i];
+      if (raw is Map) {
+        try {
+          final cached = YoutubeSearchResult.fromJson(
+            Map<String, dynamic>.from(raw),
+          );
+          if (cached.videoId == video.videoId &&
+              (cached.durationSeconds != null || cached.isLive || cached.isUpcoming)) {
+            _videoDetailCache[cached.videoId] =
+                _VideoDetailCacheEntry(DateTime.now(), cached);
+            details[cached.videoId] = cached;
+            continue;
+          }
+        } catch (_) {
+          // Invalid cache entries are ignored and refreshed from the API.
+        }
+      }
+      missingApi.add(video);
+    }
+
+    for (var i = 0; i < missingApi.length; i += 50) {
+      final chunk = missingApi.sublist(i, math.min(i + 50, missingApi.length));
+      try {
         final data = await _getJson(
           Uri.parse('https://www.googleapis.com/youtube/v3/videos').replace(
             queryParameters: {
@@ -759,26 +817,52 @@ class YoutubeSearchService {
             pickThumbnail: _pickThumbnail,
             decode: _decodeHtml,
           );
-          if (detail != null) merged[detail.videoId] = detail;
+          if (detail == null) continue;
+          details[detail.videoId] = detail;
+          _rememberVideoDetail(detail);
         }
+      } catch (_) {
+        // Cached and search-snippet metadata are still usable if details fail.
       }
-      return videos.map((video) {
-        final d = merged[video.videoId];
-        if (d == null) return video;
-        return video.copyWith(
-          description: d.description.isNotEmpty ? d.description : video.description,
-          viewCount: d.viewCount,
-          durationSeconds: d.durationSeconds,
-          liveStatus: d.liveStatus,
-          concurrentViewers: d.concurrentViewers,
-          liveStartTime: d.liveStartTime,
-          channelId: d.channelId.isNotEmpty ? d.channelId : video.channelId,
-          categoryId: d.categoryId.isNotEmpty ? d.categoryId : video.categoryId,
-        );
-      }).toList(growable: false);
-    } catch (_) {
-      return videos;
     }
+
+    return videos.map((video) {
+      final detail = details[video.videoId];
+      if (detail == null) return video;
+      return video.copyWith(
+        description: detail.description.isNotEmpty
+            ? detail.description
+            : video.description,
+        viewCount: detail.viewCount ?? video.viewCount,
+        durationSeconds: detail.durationSeconds ?? video.durationSeconds,
+        publishedAt: detail.publishedAt ?? video.publishedAt,
+        liveStatus: detail.liveStatus.isNotEmpty
+            ? detail.liveStatus
+            : video.liveStatus,
+        concurrentViewers: detail.concurrentViewers ?? video.concurrentViewers,
+        liveStartTime: detail.liveStartTime ?? video.liveStartTime,
+        channelId: detail.channelId.isNotEmpty ? detail.channelId : video.channelId,
+        categoryId: detail.categoryId.isNotEmpty ? detail.categoryId : video.categoryId,
+      );
+    }).toList(growable: false);
+  }
+
+  static void _rememberVideoDetail(YoutubeSearchResult detail) {
+    if (detail.videoId.isEmpty ||
+        detail.isLocal ||
+        (detail.durationSeconds == null && !detail.isLive && !detail.isUpcoming)) {
+      return;
+    }
+    _videoDetailCache[detail.videoId] =
+        _VideoDetailCacheEntry(DateTime.now(), detail);
+    if (_videoDetailCache.length > 300) {
+      _videoDetailCache.remove(_videoDetailCache.keys.first);
+    }
+    // Serialize disk writes so concurrent feed responses don't race while
+    // updating DiskCache's bounded entry index.
+    _videoDetailWriteQueue = _videoDetailWriteQueue.then(
+      (_) => _videoDetailDisk.put(_videoDetailDiskKey(detail.videoId), detail.toJson()),
+    );
   }
 
   /// Resource videos.list -> model; buang durasi sangat pendek di parser.
@@ -885,43 +969,8 @@ class YoutubeSearchService {
   Future<List<YoutubeSearchResult>> _ensureViewCounts(
     List<YoutubeSearchResult> videos,
   ) async {
-    if (videos.isEmpty) return videos;
-
-    final missing = videos.where((v) => v.viewCount == null).toList();
-    if (missing.isEmpty || dataSaverLevel > 0) return videos;
-
-    try {
-      final data = await _getJson(
-        Uri.parse('https://www.googleapis.com/youtube/v3/videos').replace(
-          queryParameters: {
-            'part': 'statistics',
-            'id': missing.map((v) => v.videoId).join(','),
-            'key': _apiKey,
-          },
-        ),
-      );
-
-      final items = data['items'];
-      if (items is! List) return videos;
-
-      final views = <String, int>{};
-      for (final item in items) {
-        if (item is! Map) continue;
-        final id = item['id']?.toString() ?? '';
-        final stats = item['statistics'];
-        final raw = stats is Map ? stats['viewCount']?.toString() : null;
-        final count = raw == null ? null : int.tryParse(raw);
-        if (id.isNotEmpty && count != null) views[id] = count;
-      }
-
-      return videos.map((video) {
-        final count = views[video.videoId];
-        if (count == null && video.viewCount != null) return video;
-        return video.copyWith(viewCount: count ?? video.viewCount);
-      }).toList();
-    } catch (_) {
-      return videos;
-    }
+    if (videos.isEmpty || dataSaverLevel > 0) return videos;
+    return _withDetails(videos);
   }
 
   List<YoutubeSearchResult> _rankRadio(List<YoutubeSearchResult> videos) {
@@ -1064,12 +1113,32 @@ class YoutubeSearchService {
       return videos;
     }
 
+    // Hasil search yang sudah diperkaya _ensureViewCounts memiliki durasi.
+    // Filter secara lokal agar tidak membuat panggilan videos.list kedua.
+    final allHaveDuration = videos.every(
+      (video) => video.durationSeconds != null || video.isLive || video.isUpcoming,
+    );
+    if (allHaveDuration) {
+      return videos.where((video) {
+        final length = video.durationSeconds;
+        return !video.isLive &&
+            !video.isUpcoming &&
+            length != null &&
+            length >= minSeconds &&
+            length <= maxSeconds;
+      }).toList(growable: false);
+    }
+
     try {
       final data = await _getJson(
         Uri.parse('https://www.googleapis.com/youtube/v3/videos').replace(
           queryParameters: {
             'part': 'contentDetails',
-            'id': videos.map((video) => video.videoId).join(','),
+            'id': videos
+                .where((video) => video.durationSeconds == null)
+                .take(50)
+                .map((video) => video.videoId)
+                .join(','),
             'key': _apiKey,
           },
         ),
@@ -1081,7 +1150,11 @@ class YoutubeSearchService {
         return videos;
       }
 
-      final seconds = <String, int>{};
+      final seconds = <String, int>{
+        for (final video in videos)
+          if (video.durationSeconds != null)
+            video.videoId: video.durationSeconds!.round(),
+      };
 
       for (final item in items) {
         if (item is! Map) {

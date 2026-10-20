@@ -1,4 +1,2 @@
-MusikKu
-Version: 4.8.17
-Build: 71
-Full pubspec version: 4.8.17+71
+MusikKu 4.8.19+73
+Build 73

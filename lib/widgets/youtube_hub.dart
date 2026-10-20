@@ -167,6 +167,7 @@ class _YoutubeHubState extends State<YoutubeHub> {
 
   List<YoutubeSearchResult> _searchResults = const [];
   List<YoutubeChannelSearchResult> _searchChannels = const [];
+  bool _channelSearchLoading = false;
   List<YoutubeSearchResult> _liked = const [];
   List<YoutubeChannelSummary> _subscriptions = const [];
   List<YoutubePlaylistSummary> _playlists = const [];
@@ -428,6 +429,22 @@ class _YoutubeHubState extends State<YoutubeHub> {
                   ),
                 ),
               ],
+              if (_searchChannels.isEmpty && !_inlineLoading)
+                SliverToBoxAdapter(
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+                      child: TextButton.icon(
+                        onPressed: _channelSearchLoading ? null : _searchChannelsForCurrentQuery,
+                        icon: _channelSearchLoading
+                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                            : const Icon(Icons.person_search_rounded),
+                        label: Text(_channelSearchLoading ? 'Mencari channel…' : 'Cari channel terkait'),
+                      ),
+                    ),
+                  ),
+                ),
               _sectionHeader('Lagu untuk “$_query”'),
               if (_inlineLoading && _searchResults.isEmpty)
                 const SliverToBoxAdapter(

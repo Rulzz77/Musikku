@@ -1,5 +1,5 @@
 /// Informasi aplikasi yang ditampilkan pada splash/settings.
 /// Jaga agar [appVersion] dan [appBuildNumber] sama dengan pubspec.yaml.
 const String appName = 'MusikKu';
-const String appVersion = '4.8.16';
-const String appBuildNumber = '70';
+const String appVersion = '4.8.17';
+const String appBuildNumber = '71';

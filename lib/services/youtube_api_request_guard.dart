@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:shared_preferences/shared_preferences.dart';
+
 /// Global request pacing and back-off for documented YouTube Data API calls.
 ///
 /// This class does not bypass YouTube limits. It reduces request bursts and
@@ -16,15 +18,69 @@ class YoutubeApiLimitException implements Exception {
 class YoutubeApiRequestGuard {
   YoutubeApiRequestGuard._();
 
-  static const Duration _minimumSpacing = Duration(milliseconds: 100);
+  static const Duration _minimumSpacing = Duration(milliseconds: 500);
   static final Map<String, DateTime> _cooldowns = <String, DateTime>{};
   static final Map<String, String> _messages = <String, String>{};
   static final Map<String, DateTime> _nextRequestAt = <String, DateTime>{};
+  static final Set<String> _persistedCooldownLoaded = <String>{};
+  static final Map<String, Future<void>> _persistedCooldownLoads =
+      <String, Future<void>>{};
+  static String _persistKey(String scope) => 'youtube_api_cooldown_until_$scope';
+  static String _persistMessageKey(String scope) => 'youtube_api_cooldown_message_$scope';
+
+  static Future<void> _loadPersistedCooldown(String scope) {
+    if (_persistedCooldownLoaded.contains(scope)) return Future<void>.value();
+    final active = _persistedCooldownLoads[scope];
+    if (active != null) return active;
+
+    late final Future<void> loading;
+    loading = (() async {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final millis = prefs.getInt(_persistKey(scope));
+        final now = DateTime.now().toUtc();
+        if (millis != null) {
+          final until = DateTime.fromMillisecondsSinceEpoch(millis, isUtc: true);
+          if (until.isAfter(now)) {
+            _cooldowns[scope] = until;
+            _messages[scope] = prefs.getString(_persistMessageKey(scope)) ??
+                'YouTube sedang membatasi request kategori ini sementara.';
+          } else {
+            await prefs.remove(_persistKey(scope));
+            await prefs.remove(_persistMessageKey(scope));
+          }
+        }
+      } catch (_) {
+        // Cooldown in-memory tetap melindungi sesi saat penyimpanan tidak tersedia.
+      } finally {
+        _persistedCooldownLoaded.add(scope);
+        _persistedCooldownLoads.remove(scope);
+      }
+    })();
+    _persistedCooldownLoads[scope] = loading;
+    return loading;
+  }
+
+  static Future<void> _persistCooldown(String scope) async {
+    try {
+      final until = _cooldowns[scope];
+      if (until == null) return;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_persistKey(scope), until.millisecondsSinceEpoch);
+      await prefs.setString(
+        _persistMessageKey(scope),
+        _messages[scope] ?? 'YouTube sedang membatasi request kategori ini sementara.',
+      );
+    } catch (_) {
+      // Jangan membuat error penyimpanan mengganggu pemutaran musik.
+    }
+  }
 
   /// Checks a cooldown and reserves a paced request start for [scope].
   /// Use separate `search` and `data` scopes because search.list has its own
   /// daily bucket, while channels/videos/playlists use the general bucket.
   static Future<void> beforeRequest(String scope) async {
+    await _loadPersistedCooldown(scope);
     _throwIfCoolingDown(scope);
     final now = DateTime.now().toUtc();
     final next = _nextRequestAt[scope];
@@ -41,12 +97,21 @@ class YoutubeApiRequestGuard {
     if (!DateTime.now().toUtc().isBefore(until)) {
       _cooldowns.remove(scope);
       _messages.remove(scope);
+      unawaited(_clearPersistedCooldown(scope));
       return false;
     }
     return true;
   }
 
   static DateTime? cooldownUntil(String scope) => _cooldowns[scope];
+
+  static Future<void> _clearPersistedCooldown(String scope) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_persistKey(scope));
+      await prefs.remove(_persistMessageKey(scope));
+    } catch (_) {}
+  }
 
   /// Records only documented quota/rate-limit responses. Other 403 responses,
   /// such as comments being disabled, do not pause unrelated requests.
@@ -63,6 +128,7 @@ class YoutubeApiRequestGuard {
       _cooldowns[scope] = until;
       _messages[scope] =
           'Kuota YouTube untuk kategori request ini sudah habis. Request dihentikan sampai reset kuota sekitar ${until.toIso8601String()} (waktu Pasifik).';
+      unawaited(_persistCooldown(scope));
       return;
     }
 
@@ -92,6 +158,7 @@ class YoutubeApiRequestGuard {
         : until;
     _messages[scope] =
         'YouTube sedang membatasi request. MusikKu menghentikan request kategori ini sementara; coba lagi setelah ${_cooldowns[scope]!.toLocal()}.';
+    unawaited(_persistCooldown(scope));
   }
 
   static void _throwIfCoolingDown(String scope) {
@@ -147,5 +214,7 @@ class YoutubeApiRequestGuard {
     _cooldowns.clear();
     _messages.clear();
     _nextRequestAt.clear();
+    _persistedCooldownLoaded.clear();
+    _persistedCooldownLoads.clear();
   }
 }

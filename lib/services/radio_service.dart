@@ -501,7 +501,7 @@ class RadioService {
     final targetStyle = MusicStyleMatcher.styleFromText(seed);
 
     try {
-      for (var attempt = 0; attempt < 8; attempt++) {
+      for (var attempt = 0; attempt < 3; attempt++) {
         final page = await _searchService.searchLatest(
           seed,
           pageToken: _pageToken,

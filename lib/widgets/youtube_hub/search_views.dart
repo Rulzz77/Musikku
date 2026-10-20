@@ -25,6 +25,29 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
     await _search();
   }
 
+  Future<void> _searchChannelsForCurrentQuery() async {
+    final query = _query.trim();
+    if (!mounted || query.isEmpty || _channelSearchLoading) return;
+    final requestId = _searchRequestId;
+    setState(() => _channelSearchLoading = true);
+    try {
+      final channels = await _searchService.searchChannels(query);
+      if (!mounted || requestId != _searchRequestId || query != _query.trim()) return;
+      setState(() => _searchChannels = channels.take(8).toList(growable: false));
+    } catch (error) {
+      if (!mounted || requestId != _searchRequestId || query != _query.trim()) return;
+      setState(() {
+        _error = error is YoutubeSearchException
+            ? error.message
+            : 'Pencarian channel gagal. Coba lagi nanti.';
+      });
+    } finally {
+      if (mounted && requestId == _searchRequestId && query == _query.trim()) {
+        setState(() => _channelSearchLoading = false);
+      }
+    }
+  }
+
   Future<void> _deleteSearchHistory(String? query) async {
     final updated = query == null
         ? <String>[]
@@ -46,6 +69,7 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
       _searchMode = 'music';
       _searchResults = const [];
       _searchChannels = const [];
+      _channelSearchLoading = false;
     });
     unawaited(_loadHome());
   }
@@ -66,6 +90,7 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
         _searchMode = 'music';
         _searchResults = const [];
         _searchChannels = const [];
+        _channelSearchLoading = false;
         _section = _YoutubeSection.home;
         _loading = false;
       });
@@ -77,8 +102,11 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
       _query = query;
       if (!keepResults) {
         _searchResults = const [];
-        _searchChannels = const [];
       }
+      // Channel search is requested only when the user taps its button;
+      // do not spend a second search.list call for every song query.
+      _searchChannels = const [];
+      _channelSearchLoading = false;
       _section = _YoutubeSection.home;
       _loading = true;
       _error = '';
@@ -86,14 +114,6 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
 
     try {
       final videos = await _searchService.search(query, filter: _searchMode);
-      var channels = const <YoutubeChannelSearchResult>[];
-      if (widget.settings.dataSaverMode.value != DataSaverMode.superSaver) {
-        try {
-          channels = await _searchService.searchChannels(query);
-        } catch (_) {
-          // Hasil video tetap ditampilkan kalau pencarian channel sedang terkena rate limit.
-        }
-      }
       if (!mounted || requestId != _searchRequestId) return;
 
       final updatedHistory = List<String>.from(_searchHistory)
@@ -105,7 +125,6 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
 
       setState(() {
         _searchResults = videos.take(30).toList(growable: false);
-        _searchChannels = channels.take(8).toList(growable: false);
         _searchHistory = updatedHistory;
       });
       unawaited(_storage.saveHistory(updatedHistory));

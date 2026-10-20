@@ -96,6 +96,14 @@ class YoutubeSearchService {
     ttl: Duration(hours: 12),
   );
 
+  // Pencarian channel bersifat opsional dan disimpan lintas sesi supaya query
+  // yang sama tidak kembali menghabiskan bucket search.list setelah app dibuka ulang.
+  static const DiskCache _channelDisk = DiskCache(
+    namespace: 'channel_search',
+    maxEntries: 30,
+    ttl: Duration(hours: 12),
+  );
+
   static List<YoutubeSearchResult> _resultsFromJson(Object? raw) =>
       YoutubeSearchResponseParser.resultsFromJson(raw);
 
@@ -135,9 +143,9 @@ class YoutubeSearchService {
       return cached.results;
     }
 
-    final diskResults = _resultsFromJson(await _disk.get('q|$cacheKey'));
-
-    if (diskResults.isNotEmpty) {
+    final diskRaw = await _disk.get('q|$cacheKey');
+    final diskResults = _resultsFromJson(diskRaw);
+    if (diskRaw is List && (diskRaw.isEmpty || diskResults.isNotEmpty)) {
       _cache[cacheKey] = _CacheEntry(DateTime.now(), diskResults);
       return diskResults;
     }
@@ -254,6 +262,23 @@ class YoutubeSearchService {
       return cached.results;
     }
 
+    final diskHit = await _channelDisk.get('q|$cacheKey');
+    if (diskHit is List) {
+      final restored = diskHit
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .where((item) => (item['channelId']?.toString() ?? '').isNotEmpty)
+          .map((item) => YoutubeChannelSearchResult(
+                channelId: item['channelId'].toString(),
+                title: item['title']?.toString() ?? 'Channel',
+                description: item['description']?.toString() ?? '',
+                thumbnailUrl: item['thumbnailUrl']?.toString() ?? '',
+              ))
+          .toList(growable: false);
+      _channelCache[cacheKey] = _ChannelCacheEntry(DateTime.now(), restored);
+      return restored;
+    }
+
     final params = <String, String>{
       'part': 'snippet',
       'q': keyword,
@@ -295,6 +320,12 @@ class YoutubeSearchService {
     }
 
     _channelCache[cacheKey] = _ChannelCacheEntry(DateTime.now(), channels);
+    unawaited(_channelDisk.put('q|$cacheKey', channels.map((channel) => {
+          'channelId': channel.channelId,
+          'title': channel.title,
+          'description': channel.description,
+          'thumbnailUrl': channel.thumbnailUrl,
+        }).toList(growable: false)));
     if (_channelCache.length > _cacheLimit) {
       _channelCache.remove(_channelCache.keys.first);
     }
@@ -343,6 +374,9 @@ class YoutubeSearchService {
 
     if (cached != null &&
         DateTime.now().difference(cached.time) < _radioCacheTtl) {
+      if (cached.results.isEmpty) {
+        return RadioPage(results: const <YoutubeSearchResult>[], nextPageToken: cached.nextPageToken);
+      }
       final filteredCached = await removeShorts(
         _filterShortFormCandidates(_filterNonMusicCandidates(_filterAiMusicCandidates(cached.results))),
       );
@@ -360,8 +394,14 @@ class YoutubeSearchService {
     );
 
     if (diskHit is Map) {
-      final diskResults = _resultsFromJson(diskHit['results']);
+      final rawDiskResults = diskHit['results'];
+      final diskResults = _resultsFromJson(rawDiskResults);
       final diskToken = diskHit['next']?.toString();
+
+      if (rawDiskResults is List && rawDiskResults.isEmpty) {
+        _cache[cacheKey] = _CacheEntry(DateTime.now(), const <YoutubeSearchResult>[], diskToken);
+        return RadioPage(results: const <YoutubeSearchResult>[], nextPageToken: diskToken);
+      }
 
       if (diskResults.isNotEmpty) {
         final enriched = await _ensureViewCounts(diskResults);
@@ -490,12 +530,10 @@ class YoutubeSearchService {
 
     _cache[cacheKey] = _CacheEntry(DateTime.now(), results, token);
 
-    if (results.isNotEmpty) {
-      unawaited(_disk.put(cacheKey, {
-        'results': results.map((video) => video.toJson()).toList(),
-        'next': token,
-      }));
-    }
+    unawaited(_disk.put(cacheKey, {
+      'results': results.map((video) => video.toJson()).toList(),
+      'next': token,
+    }));
 
     if (_cache.length > _cacheLimit) {
       _cache.remove(_cache.keys.first);
@@ -505,12 +543,19 @@ class YoutubeSearchService {
   }
 
   Future<List<YoutubeSearchResult>> _searchPopularMusicFallback() async {
-    final cacheKey = 'radioPopularFallbackV36';
+    final cacheKey = 'radioPopularFallbackV37';
     final cached = _cache[cacheKey];
     if (cached != null &&
-        DateTime.now().difference(cached.time) < _radioCacheTtl &&
-        cached.results.isNotEmpty) {
+        DateTime.now().difference(cached.time) < _radioCacheTtl) {
       return cached.results;
+    }
+    final diskFallback = await _disk.get(cacheKey, maxAge: _radioCacheTtl);
+    if (diskFallback is List) {
+      final restored = _resultsFromJson(diskFallback);
+      if (diskFallback.isEmpty || restored.isNotEmpty) {
+        _cache[cacheKey] = _CacheEntry(DateTime.now(), restored);
+        return restored;
+      }
     }
 
     final params = <String, String>{
@@ -546,6 +591,7 @@ class YoutubeSearchService {
     results = _rankRadio(results);
 
     _cache[cacheKey] = _CacheEntry(DateTime.now(), results);
+    unawaited(_disk.put(cacheKey, results.map((video) => video.toJson()).toList()));
     return results;
   }
 
@@ -574,13 +620,12 @@ class YoutubeSearchService {
     if (!force) {
       final cached = _cache[cacheKey];
       if (cached != null &&
-          DateTime.now().difference(cached.time) < _feedTtl &&
-          cached.results.isNotEmpty) {
+          DateTime.now().difference(cached.time) < _feedTtl) {
         return cached.results.take(maxResults).toList(growable: false);
       }
       final diskHit = await _disk.get(cacheKey, maxAge: _feedTtl);
       final fromDisk = _resultsFromJson(diskHit);
-      if (fromDisk.isNotEmpty) {
+      if (diskHit is List && (diskHit.isEmpty || fromDisk.isNotEmpty)) {
         _cache[cacheKey] = _CacheEntry(DateTime.now(), fromDisk);
         return fromDisk.take(maxResults).toList(growable: false);
       }
@@ -604,10 +649,8 @@ class YoutubeSearchService {
     final parsed = _parseVideoResources(items is List ? items : const []);
     final results = parsed.where(isMusicCatalogItem).toList(growable: false);
 
-    if (results.isNotEmpty) {
-      _cache[cacheKey] = _CacheEntry(DateTime.now(), results);
-      unawaited(_disk.put(cacheKey, results.map((v) => v.toJson()).toList()));
-    }
+    _cache[cacheKey] = _CacheEntry(DateTime.now(), results);
+    unawaited(_disk.put(cacheKey, results.map((v) => v.toJson()).toList()));
     return results.take(maxResults).toList(growable: false);
   }
 
@@ -627,13 +670,12 @@ class YoutubeSearchService {
     if (!force) {
       final cached = _cache[cacheKey];
       if (cached != null &&
-          DateTime.now().difference(cached.time) < _feedTtl &&
-          cached.results.isNotEmpty) {
+          DateTime.now().difference(cached.time) < _feedTtl) {
         return cached.results.take(maxResults).toList(growable: false);
       }
       final diskHit = await _disk.get(cacheKey, maxAge: _feedTtl);
       final fromDisk = _resultsFromJson(diskHit);
-      if (fromDisk.isNotEmpty) {
+      if (diskHit is List && (diskHit.isEmpty || fromDisk.isNotEmpty)) {
         _cache[cacheKey] = _CacheEntry(DateTime.now(), fromDisk);
         return fromDisk.take(maxResults).toList(growable: false);
       }
@@ -663,7 +705,11 @@ class YoutubeSearchService {
         if (videoId.isNotEmpty) ids.add(videoId);
       }
     }
-    if (ids.isEmpty) return const [];
+    if (ids.isEmpty) {
+      _cache[cacheKey] = _CacheEntry(DateTime.now(), const <YoutubeSearchResult>[]);
+      unawaited(_disk.put(cacheKey, const <Map<String, dynamic>>[]));
+      return const [];
+    }
 
     final detailData = await _getJson(
       Uri.parse('https://www.googleapis.com/youtube/v3/videos').replace(
@@ -679,10 +725,8 @@ class YoutubeSearchService {
     final results = parsed.where(isMusicCatalogItem).toList(growable: false)
       ..sort((a, b) => (b.viewCount ?? 0).compareTo(a.viewCount ?? 0));
 
-    if (results.isNotEmpty) {
-      _cache[cacheKey] = _CacheEntry(DateTime.now(), results);
-      unawaited(_disk.put(cacheKey, results.map((v) => v.toJson()).toList()));
-    }
+    _cache[cacheKey] = _CacheEntry(DateTime.now(), results);
+    unawaited(_disk.put(cacheKey, results.map((v) => v.toJson()).toList()));
     return results.take(maxResults).toList(growable: false);
   }
 
@@ -805,8 +849,8 @@ class YoutubeSearchService {
           }
         }
         return response;
-      } on YoutubeApiLimitException {
-        rethrow;
+      } on YoutubeApiLimitException catch (error) {
+        throw YoutubeSearchException(error.message);
       } catch (error) {
         lastError = error;
         if (attempt == 0) {

@@ -22,16 +22,38 @@ extension _HomeQueue on _HomePageState {
     );
   }
 
+  String? get _shuffleMusicLanguage {
+    if (_activeSource == _ListSource.favorites ||
+        _activeSource == _ListSource.playlist ||
+        _activeSource == _ListSource.local ||
+        _activeSource == _ListSource.collection) {
+      return null;
+    }
+    final query = _activeSource == _ListSource.radio && _radio.hasSeed
+        ? _radio.seed
+        : _lastSearchQuery;
+    return MusicStyleMatcher.languageForContext(
+      query: query,
+      currentVideo: _currentVideo,
+    );
+  }
+
   void _prepareShufflePool({
     bool excludeCurrent = true,
     YoutubeSearchResult? sourceVideo,
   }) {
     final style = _shuffleMusicStyle;
+    final language = _shuffleMusicLanguage;
     final reference = sourceVideo ?? _currentVideo;
     final bool? localSource = reference?.isLocal;
     _shufflePool = _activeList.where((video) {
       if (localSource != null && video.isLocal != localSource) return false;
-      return MusicStyleMatcher.isCompatible(video: video, targetStyle: style);
+      return MusicStyleMatcher.isCompatible(
+        video: video,
+        targetStyle: style,
+        targetLanguage: language,
+        allowCrossLanguage: _activeSource == _ListSource.radio && !_radio.locksLanguage,
+      );
     }).toList();
 
     final excludedId = sourceVideo?.videoId ?? _currentVideo?.videoId;
@@ -101,11 +123,17 @@ extension _HomeQueue on _HomePageState {
 
   YoutubeSearchResult? _takeShuffleVideo() {
     final style = _shuffleMusicStyle;
+    final language = _shuffleMusicLanguage;
     final current = _currentVideo;
     _shufflePool.removeWhere((video) {
       // Secondary guard: a stale/mixed pool must never switch local ↔ YouTube.
       if (current != null && video.isLocal != current.isLocal) return true;
-      return !MusicStyleMatcher.isCompatible(video: video, targetStyle: style);
+      return !MusicStyleMatcher.isCompatible(
+        video: video,
+        targetStyle: style,
+        targetLanguage: language,
+        allowCrossLanguage: _activeSource == _ListSource.radio && !_radio.locksLanguage,
+      );
     });
     if (_shufflePool.isEmpty) {
       return null;
@@ -113,8 +141,26 @@ extension _HomeQueue on _HomePageState {
 
     // Kandidat yang label genrenya cocok didahulukan; lagu tanpa label genre
     // baru menjadi fallback setelah kandidat yang dikenali habis.
-    final preferred = MusicStyleMatcher.prioritizeStyle(_shufflePool, style);
-    final candidatesPool = preferred.isNotEmpty ? preferred : _shufflePool;
+    final bool radioMix = _activeSource == _ListSource.radio && !_radio.locksLanguage;
+    late final List<YoutubeSearchResult> candidatesPool;
+    if (radioMix) {
+      candidatesPool = MusicStyleMatcher.rankForRadio(
+        _shufflePool,
+        targetStyle: style,
+        targetLanguage: language,
+        allowCrossLanguage: true,
+      );
+    } else {
+      final languageCandidates = MusicStyleMatcher.prioritizeLanguage(_shufflePool, language);
+      final preferred = MusicStyleMatcher.prioritizeStyle(
+        languageCandidates,
+        style,
+        targetLanguage: language,
+      );
+      candidatesPool = preferred.isNotEmpty
+          ? preferred
+          : (languageCandidates.isNotEmpty ? languageCandidates : _shufflePool);
+    }
 
     if (!_playerUiState.value.isSmartShuffle) {
       final selected = candidatesPool[_random.nextInt(candidatesPool.length)];

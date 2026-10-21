@@ -29,6 +29,8 @@ class RadioService {
   final math.Random _random = math.Random();
 
   String _seed = '';
+  String? _preferredLanguage;
+  bool _lockLanguage = false;
   final List<YoutubeSearchResult> _pool = [];
   String? _pageToken;
   Future<void>? _fetch;
@@ -61,19 +63,29 @@ class RadioService {
 
   String get seed => _seed;
 
+  /// Explicit-language searches stay in that language. Track Radio can cross.
+  bool get locksLanguage => _lockLanguage;
+
   bool get isPoolEmpty => _pool.isEmpty;
 
   int get poolLength => _pool.length;
 
   /// Mulai (atau lanjutkan) radio dengan kata kunci [seed].
-  void start(String seed) {
+  void start(
+    String seed, {
+    String? preferredLanguage,
+    bool lockLanguage = false,
+  }) {
     final normalized = seed.trim();
 
     if (normalized.isEmpty) {
       return;
     }
 
-    if (normalized.toLowerCase() != _seed.toLowerCase()) {
+    final changed = normalized.toLowerCase() != _seed.toLowerCase() ||
+        preferredLanguage != _preferredLanguage ||
+        lockLanguage != _lockLanguage;
+    if (changed) {
       _fetchGeneration++;
       _seed = normalized;
       _pool.clear();
@@ -81,6 +93,9 @@ class RadioService {
       _fetch = null;
       _lastRefillStartedAt = null;
     }
+    _seed = normalized;
+    _preferredLanguage = preferredLanguage ?? MusicStyleMatcher.languageFromText(normalized);
+    _lockLanguage = lockLanguage;
 
     // Siapkan lagu berikutnya di belakang layar supaya Next terasa instan.
     if (_pool.isEmpty) {
@@ -90,7 +105,7 @@ class RadioService {
 
   /// Paksa radio mulai ulang dari seed yang sama. Dipakai sebagai fallback
   /// ketika semua hasil halaman/cache lama habis atau terlalu banyak terfilter.
-  void restart(String seed) {
+  void restart(String seed, {bool? lockLanguage}) {
     final normalized = seed.trim();
     if (normalized.isEmpty) {
       return;
@@ -98,6 +113,8 @@ class RadioService {
 
     _fetchGeneration++;
     _seed = normalized;
+    _preferredLanguage ??= MusicStyleMatcher.languageFromText(normalized);
+    if (lockLanguage != null) _lockLanguage = lockLanguage;
     _pool.clear();
     _pageToken = null;
     _fetch = null;
@@ -141,17 +158,27 @@ class RadioService {
   /// tetap acak tetapi juga menghindari judul/artist yang baru diputar.
   YoutubeSearchResult? takeSmart({required double Function(YoutubeSearchResult) score}) {
     final targetStyle = MusicStyleMatcher.styleFromText(_seed);
+    final targetLanguage = _preferredLanguage ?? MusicStyleMatcher.languageFromText(_seed);
     _pool.removeWhere((video) =>
         _blockedIds().contains(video.videoId) ||
         ChannelBlockFilter.isBlocked(video, _blockedChannelKeys()) ||
-        !MusicStyleMatcher.isCompatible(video: video, targetStyle: targetStyle));
+        !MusicStyleMatcher.isCompatible(
+          video: video,
+          targetStyle: targetStyle,
+          targetLanguage: targetLanguage,
+          allowCrossLanguage: !_lockLanguage,
+        ));
 
     if (_pool.isEmpty) {
       return null;
     }
 
-    final styleCandidates = MusicStyleMatcher.prioritizeStyle(_pool, targetStyle);
-    final candidatesPool = styleCandidates.isNotEmpty ? styleCandidates : _pool;
+    final candidatesPool = MusicStyleMatcher.rankForRadio(
+      _pool,
+      targetStyle: targetStyle,
+      targetLanguage: targetLanguage,
+      allowCrossLanguage: !_lockLanguage,
+    );
     final scored = candidatesPool
         .map((video) {
           final key = trackKeyFor(video);
@@ -168,79 +195,128 @@ class RadioService {
               artist == _recentSelectionArtists.last) {
             value -= 36.0;
           }
+          value += MusicStyleMatcher.radioSimilarityScore(
+                video: video,
+                targetStyle: targetStyle,
+                targetLanguage: targetLanguage,
+              ) * 0.35;
           value += _random.nextDouble() * 3.5;
           return (video: video, score: value);
         })
         .toList()
       ..sort((a, b) => b.score.compareTo(a.score));
 
-    final topCount = scored.length < 10 ? scored.length : 10;
+    final topCount = scored.length < 20 ? scored.length : 20;
     final candidates = scored.take(topCount).map((item) => item.video).toList();
 
-    // Dari kandidat bagus, pilih secara acak supaya urutan tidak selalu identik.
-    // Namun track/artist yang baru muncul tetap sudah diberi penalti.
+    // Pilih acak dari kumpulan kandidat bagus yang lebih beragam.
+    // Track/artist yang baru muncul tetap sudah diberi penalti.
     final selected = candidates[_random.nextInt(candidates.length)];
     _pool.removeWhere((video) => video.videoId == selected.videoId);
     _rememberSelection(selected);
     return selected;
   }
 
-  /// Ambil satu lagu dari pool. Shuffle biasa tetap acak, sedangkan mode normal
-  /// memakai pemilihan berbasis keragaman agar tidak selalu mengambil hasil
-  /// paling populer pertama.
+  /// Ambil satu lagu dari pool.
+  /// Radio biasa memilih secara acak berbobot: lagu dengan gaya yang cocok dan
+  /// cukup populer lebih mungkin terpilih, tetapi urutannya tidak dikunci ke
+  /// kandidat teratas. Shuffle aktif tetap memilih secara acak merata.
   YoutubeSearchResult? take({required bool random}) {
     final targetStyle = MusicStyleMatcher.styleFromText(_seed);
+    final targetLanguage = _preferredLanguage ?? MusicStyleMatcher.languageFromText(_seed);
     _pool.removeWhere((video) =>
         _blockedIds().contains(video.videoId) ||
         ChannelBlockFilter.isBlocked(video, _blockedChannelKeys()) ||
-        !MusicStyleMatcher.isCompatible(video: video, targetStyle: targetStyle));
+        !MusicStyleMatcher.isCompatible(
+          video: video,
+          targetStyle: targetStyle,
+          targetLanguage: targetLanguage,
+          allowCrossLanguage: !_lockLanguage,
+        ));
 
-    if (_pool.isEmpty) {
-      return null;
-    }
+    if (_pool.isEmpty) return null;
 
-    final styleCandidates = MusicStyleMatcher.prioritizeStyle(_pool, targetStyle);
-    final candidatesPool = styleCandidates.isNotEmpty ? styleCandidates : _pool;
+    final candidates = MusicStyleMatcher.rankForRadio(
+      _pool,
+      targetStyle: targetStyle,
+      targetLanguage: targetLanguage,
+      allowCrossLanguage: !_lockLanguage,
+    );
+    if (candidates.isEmpty) return null;
 
-    if (random) {
-      final eligible = candidatesPool
-          .where((video) => !_recentlySelected(video))
-          .toList();
-      final source = eligible.isNotEmpty ? eligible : candidatesPool;
-      final selected = source[_random.nextInt(source.length)];
-      _pool.removeWhere((video) => video.videoId == selected.videoId);
-      _rememberSelection(selected);
-      return selected;
-    }
-
+    // Utamakan lagu yang belum baru dipilih dan artis berbeda dari pilihan
+    // sebelumnya. Kalau kandidat terlalu sedikit, longgarkan aturan artis.
+    final fresh = candidates.where((video) => !_recentlySelected(video)).toList();
     final currentArtist = _recentSelectionArtists.isEmpty
         ? ''
         : _recentSelectionArtists.last;
-
-    // Kandidat utama: hindari judul yang baru diputar dan artist yang sama
-    // berturut-turut. Tetap batasi ke 12 teratas agar popularitas tetap punya
-    // pengaruh.
-    final diverse = candidatesPool.where((video) {
-      if (_recentlySelected(video)) return false;
+    final diverse = fresh.where((video) {
       final artist = _artistKey(video);
-      if (currentArtist.isNotEmpty && artist == currentArtist) return false;
-      return true;
-    }).take(12).toList();
-
-    final sameArtistAllowed = candidatesPool
-        .where((video) => !_recentlySelected(video))
-        .take(12)
-        .toList();
-
+      return currentArtist.isEmpty || artist.isEmpty || artist != currentArtist;
+    }).toList();
     final source = diverse.isNotEmpty
         ? diverse
-        : (sameArtistAllowed.isNotEmpty ? sameArtistAllowed : candidatesPool.take(12).toList());
+        : (fresh.isNotEmpty ? fresh : candidates);
 
-    final topCount = source.length < 5 ? source.length : 5;
-    final selected = source[_random.nextInt(topCount)];
+    final selected = random
+        ? source[_random.nextInt(source.length)]
+        : _weightedRadioPick(
+            source,
+            targetStyle: targetStyle,
+            targetLanguage: targetLanguage,
+          );
+
     _pool.removeWhere((video) => video.videoId == selected.videoId);
     _rememberSelection(selected);
     return selected;
+  }
+
+  /// Pengambilan acak berbobot, bukan sort lalu selalu memilih dari 5 lagu
+  /// teratas. Gaya yang sama mendapat bobot terbesar; subgenre terkait masih
+  /// berpeluang terpilih. Bahasa hanya bonus kecil selama bukan filter eksplisit.
+  YoutubeSearchResult _weightedRadioPick(
+    List<YoutubeSearchResult> candidates, {
+    required String? targetStyle,
+    required String? targetLanguage,
+  }) {
+    if (candidates.length == 1) return candidates.single;
+
+    final scored = candidates.map((video) {
+      var score = MusicStyleMatcher.radioSimilarityScore(
+        video: video,
+        targetStyle: targetStyle,
+        targetLanguage: targetLanguage,
+      );
+      final artist = _artistKey(video);
+      if (artist.isNotEmpty && _recentSelectionArtists.contains(artist)) {
+        score -= 8.0;
+      }
+      if (artist.isNotEmpty &&
+          _recentSelectionArtists.isNotEmpty &&
+          artist == _recentSelectionArtists.last) {
+        score -= 18.0;
+      }
+      // Jitter kecil membuat urutan kandidat dengan nilai serupa ikut berubah.
+      score += _random.nextDouble() * 6.0;
+      return (video: video, score: score);
+    }).toList();
+
+    final maxScore = scored
+        .map((item) => item.score)
+        .reduce((a, b) => a > b ? a : b);
+    final weights = scored.map((item) {
+      final relative = ((item.score - maxScore) / 12.0)
+          .clamp(-6.0, 0.0)
+          .toDouble();
+      return math.exp(relative);
+    }).toList();
+    final totalWeight = weights.fold<double>(0.0, (sum, weight) => sum + weight);
+    var roll = _random.nextDouble() * totalWeight;
+    for (var i = 0; i < scored.length; i++) {
+      roll -= weights[i];
+      if (roll <= 0) return scored[i].video;
+    }
+    return scored.last.video;
   }
 
   bool _recentlySelected(YoutubeSearchResult video) {
@@ -507,143 +583,167 @@ class RadioService {
 
   Future<void> _fetchPage(int generation) async {
     final seed = _seed;
-
-    if (_disposed || seed.isEmpty) {
-      return;
-    }
+    if (_disposed || seed.isEmpty) return;
 
     final targetStyle = MusicStyleMatcher.styleFromText(seed);
+    final targetLanguage = _preferredLanguage ?? MusicStyleMatcher.languageFromText(seed);
 
+    bool isCurrentRequest() =>
+        !_disposed && generation == _fetchGeneration && seed == _seed;
+
+    bool eligible(YoutubeSearchResult video, {bool enforceContext = true}) {
+      if (video.videoId.isEmpty ||
+          video.videoId == currentVideoId() ||
+          video.isLive ||
+          video.isUpcoming ||
+          _playedIds.contains(video.videoId) ||
+          _blockedIds().contains(video.videoId) ||
+          ChannelBlockFilter.isBlocked(video, _blockedChannelKeys()) ||
+          YoutubeSearchService.isLikelyShortForm(video) ||
+          YoutubeSearchService.isLikelyNonMusicVideo(video)) {
+        return false;
+      }
+
+      final candidateKeys = trackKeysFor(video);
+      if (candidateKeys.isEmpty || candidateKeys.any(_playedTrackKeys.contains)) {
+        return false;
+      }
+      if (_pool.any((pooled) =>
+          pooled.videoId == video.videoId ||
+          trackKeysFor(pooled).any(candidateKeys.contains))) {
+        return false;
+      }
+
+      if (!enforceContext) return true;
+      return MusicStyleMatcher.isCompatible(
+        video: video,
+        targetStyle: targetStyle,
+        targetLanguage: targetLanguage,
+        allowCrossLanguage: !_lockLanguage,
+      );
+    }
+
+    void addCandidates(
+      Iterable<YoutubeSearchResult> videos, {
+      bool enforceContext = true,
+    }) {
+      for (final video in videos) {
+        if (!eligible(video, enforceContext: enforceContext)) continue;
+        _pool.add(video);
+      }
+    }
+
+    // Prioritas pertama adalah katalog musik populer yang dapat digunakan ulang
+    // dari cache (videos.list, kuota umum), bukan Search API setiap kali Next.
+    // Jika kandidat satu bahasa/genre tersedia, antrean diisi dari sini dulu.
     try {
-      // Satu refill maksimal meminta satu halaman API. Jika seluruh kandidat
-      // tersaring, pemanggil boleh mencoba satu halaman lagi dengan token baru.
-      for (var attempt = 0; attempt < 1; attempt++) {
-        final page = await _searchService.searchLatest(
-          seed,
-          pageToken: _pageToken,
+      final popular = await _searchService.mostPopular(
+        categoryId: '10',
+        maxResults: 50,
+      );
+      if (!isCurrentRequest()) return;
+
+      final scoped = popular.where((video) => eligible(video)).toList();
+      final preferred = MusicStyleMatcher.rankForRadio(
+        scoped,
+        targetStyle: targetStyle,
+        targetLanguage: targetLanguage,
+        allowCrossLanguage: !_lockLanguage,
+      );
+      // Keep a generous candidate pool so subsequent Next presses can produce
+      // variety across languages without issuing a new search on each click.
+      addCandidates((preferred.isNotEmpty ? preferred : scoped).take(40));
+
+      // Kalau chart lokal tidak punya style yang cocok, coba genre/subgenre
+      // berdekatan dari chart yang sama; Radio boleh lintas bahasa.
+      if (_pool.isEmpty && targetStyle != null && !_lockLanguage) {
+        final relatedAcrossLanguages = popular.where((video) {
+          if (!eligible(video, enforceContext: false)) return false;
+          final candidateStyle = MusicStyleMatcher.styleFromVideo(video);
+          return candidateStyle == null ||
+              MusicStyleMatcher.isRelatedStyle(candidateStyle, targetStyle);
+        }).toList();
+        final relatedPreferred = MusicStyleMatcher.prioritizeStyle(
+          relatedAcrossLanguages,
+          targetStyle,
         );
+        addCandidates(
+          relatedPreferred.isNotEmpty ? relatedPreferred : relatedAcrossLanguages,
+          enforceContext: false,
+        );
+      }
 
-        // Seed sudah ganti (atau service sudah dibuang) selama menunggu.
-        if (_disposed ||
-            generation != _fetchGeneration ||
-            seed != _seed) {
-          return;
+      // Terakhir, bila katalog kategori Musik tidak punya kandidat yang cukup
+      // relevan, gunakan lagu populer lain supaya Next tidak langsung berhenti.
+      if (_pool.isEmpty) {
+        // Broad fallback may relax genre, but it must not bypass an explicit
+        // language request. Unknown language metadata is allowed as a fallback.
+        addCandidates(
+          popular.where((video) {
+            if (!eligible(video, enforceContext: false)) return false;
+            if (!_lockLanguage || targetLanguage == null) return true;
+            final language = MusicStyleMatcher.languageFromVideo(video);
+            return language == null || language == targetLanguage;
+          }),
+          enforceContext: false,
+        );
+      }
+
+      if (_pool.isNotEmpty) return;
+    } catch (e) {
+      // Katalog populer gagal/offline? Search API tetap tersedia sebagai fallback.
+      debugPrint('RADIO POPULAR CATALOG: $e');
+    }
+
+    if (!isCurrentRequest()) return;
+
+    // Fallback terakhir: satu halaman Search API. Tidak ada pengulangan halaman
+    // di satu tindakan Next; searchLatest punya cache hasil agar query yang sama
+    // dapat dipakai ulang selama masa cache.
+    try {
+      final page = await _searchService.searchLatest(seed, pageToken: _pageToken);
+      if (!isCurrentRequest()) return;
+      _pageToken = page.nextPageToken;
+
+      final newCandidates = page.results.where((video) => eligible(video)).toList();
+      final preferred = MusicStyleMatcher.rankForRadio(
+        newCandidates,
+        targetStyle: targetStyle,
+        targetLanguage: targetLanguage,
+        allowCrossLanguage: !_lockLanguage,
+      );
+      addCandidates(preferred.isNotEmpty ? preferred : newCandidates);
+
+      if (_pool.isEmpty && page.nextPageToken == null) {
+        // Ketika semua halaman telah habis, lupakan hanya bagian history yang
+        // paling lama agar radio dapat bersiklus kembali tanpa cepat mengulang.
+        final current = currentVideoId();
+        if (current != null) _playedIds.remove(current);
+        final keepIds = (_playedIds.length / 2).ceil();
+        if (_playedIds.length > keepIds) {
+          _playedIds.removeRange(0, _playedIds.length - keepIds);
         }
-
-        _pageToken = page.nextPageToken;
-
-        final currentId = currentVideoId();
-        final knownIds = _pool.map((video) => video.videoId).toSet();
-        final knownTrackKeys = <String>{};
-        for (final pooledVideo in _pool) {
-          knownTrackKeys.addAll(trackKeysFor(pooledVideo));
+        final keepKeys = (_playedTrackKeys.length / 2).ceil();
+        if (_playedTrackKeys.length > keepKeys) {
+          _playedTrackKeys.removeRange(0, _playedTrackKeys.length - keepKeys);
         }
-
-        for (final video in page.results) {
-          if (!MusicStyleMatcher.isCompatible(
-                video: video,
-                targetStyle: targetStyle,
-              ) ||
-              video.videoId == currentId ||
-              _playedIds.contains(video.videoId) ||
-              _blockedIds().contains(video.videoId) ||
-              ChannelBlockFilter.isBlocked(video, _blockedChannelKeys()) ||
-              knownIds.contains(video.videoId)) {
-            continue;
-          }
-
-          final candidateKeys = trackKeysFor(video);
-          if (candidateKeys.any(_playedTrackKeys.contains) ||
-              candidateKeys.any(knownTrackKeys.contains)) {
-            continue;
-          }
-
-          _pool.add(video);
-          knownIds.add(video.videoId);
-          knownTrackKeys.addAll(candidateKeys);
-        }
-
-        if (_pool.isNotEmpty) {
-          return;
-        }
-
-        if (page.nextPageToken == null) {
-          // Semua halaman yang tersedia sudah habis dan semua kandidat yang
-          // ditemukan sudah pernah diputar. Lepaskan sebagian ID PALING LAMA,
-          // bukan seluruh history, lalu mulai dari halaman pertama lagi.
-          // Dengan begitu radio tetap jalan tetapi tidak cepat mengulang.
-          _pageToken = null;
-
-          if (_pool.isEmpty && _playedIds.isNotEmpty) {
-            final current = currentId;
-            if (current != null) {
-              _playedIds.remove(current);
-            }
-
-            final keepIds = (_playedIds.length / 2).ceil();
-            if (_playedIds.length > keepIds) {
-              _playedIds.removeRange(0, _playedIds.length - keepIds);
-            }
-
-            if (_playedTrackKeys.isNotEmpty) {
-              final keepKeys = (_playedTrackKeys.length / 2).ceil();
-              if (_playedTrackKeys.length > keepKeys) {
-                _playedTrackKeys.removeRange(0, _playedTrackKeys.length - keepKeys);
-              }
-            }
-
-            if (current != null) {
-              _playedIds.add(current);
-            }
-          }
-        }
+        if (current != null && !_playedIds.contains(current)) _playedIds.add(current);
+        _pageToken = null;
       }
     } catch (e) {
-      // Ignore failures from a stale request just like stale successful
-      // responses. They must not reset the current page token or show errors
-      // for a newer radio context.
-      if (_disposed || generation != _fetchGeneration || seed != _seed) {
-        return;
-      }
-
+      if (!isCurrentRequest()) return;
       debugPrint('RADIO ERROR: $e');
-
-      // Token halaman bisa basi; mulai dari halaman pertama di percobaan
-      // berikutnya.
       _pageToken = null;
-
-      if (e is YoutubeSearchException) {
-        onError?.call(e.message);
-      }
+      if (e is YoutubeSearchException) onError?.call(e.message);
     }
   }
 
   /// Nama artis / kata kunci dari sebuah lagu, dipakai sebagai benih radio
   /// saat playlist favorit habis.
   static String seedFor(YoutubeSearchResult video) {
-    var channel = video.channelTitle.trim();
-
-    channel = channel
-        .replaceAll(RegExp(r'\s*[-|]\s*Topic$', caseSensitive: false), '')
-        .replaceAll(RegExp(r'\s*VEVO$', caseSensitive: false), '')
-        .replaceAll(
-          RegExp(
-            r'\s*(Official|Official Artist Channel)$',
-            caseSensitive: false,
-          ),
-          '',
-        )
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .trim();
-
-    // Untuk autoplay dari lagu tunggal, gunakan artis/channel sebagai seed,
-    // bukan judul lagu. Ini mencegah kasus "Pelanggaran" -> "Pelanggaran"
-    // versi vokalis lain.
-    if (channel.length >= 3) {
-      return '$channel lagu Indonesia';
-    }
-
-    return trackKeyFor(video);
+    // Recomendasi berasal dari genre dan bahasa yang terdeteksi. Jangan selalu
+    // mengunci ke channel artis yang sedang diputar.
+    return MusicStyleMatcher.recommendationSeedFor(video);
   }
 
 }

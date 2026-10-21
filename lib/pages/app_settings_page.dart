@@ -6,6 +6,7 @@ import '../app_info.dart';
 import 'app_health_page.dart';
 import '../services/app_settings.dart';
 import '../widgets/app_update_sheet.dart';
+import '../widgets/flow_components.dart';
 
 /// Pengaturan global aplikasi. Semua opsi terhubung langsung ke controller
 /// dan disimpan lewat SharedPreferences.
@@ -34,11 +35,18 @@ class AppSettingsPage extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Pengaturan MusikKu'),
+        title: const Text('Pengaturan'),
       ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
         children: [
+          const FlowPageHero(
+            icon: Icons.tune_rounded,
+            eyebrow: 'PERSONALISASI',
+            title: 'Atur MusikKu',
+            subtitle: 'Sesuaikan tampilan, penggunaan data, pemutar, dan perilaku aplikasi.',
+          ),
+          const SizedBox(height: 22),
           _SectionLabel(icon: Icons.palette_outlined, title: 'Tampilan'),
           const SizedBox(height: 8),
           Card(
@@ -80,7 +88,7 @@ class AppSettingsPage extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 22),
+          const SizedBox(height: 26),
           _SectionLabel(icon: Icons.network_check_rounded, title: 'Data dan jaringan'),
           const SizedBox(height: 8),
           Card(
@@ -155,7 +163,7 @@ class AppSettingsPage extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 22),
+          const SizedBox(height: 26),
           _SectionLabel(icon: Icons.tune_rounded, title: 'Pemutar musik & tampilan'),
           const SizedBox(height: 8),
           Card(
@@ -185,7 +193,7 @@ class AppSettingsPage extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 22),
+          const SizedBox(height: 26),
           _SectionLabel(icon: Icons.health_and_safety_outlined, title: 'Diagnostik & pemulihan'),
           const SizedBox(height: 8),
           Card(
@@ -199,7 +207,7 @@ class AppSettingsPage extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 22),
+          const SizedBox(height: 26),
           _SectionLabel(icon: Icons.system_update_alt_rounded, title: 'Pembaruan aplikasi'),
           const SizedBox(height: 8),
           Card(
@@ -251,7 +259,7 @@ class AppSettingsPage extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 22),
+          const SizedBox(height: 26),
           _SectionLabel(icon: Icons.info_outline_rounded, title: 'Tentang aplikasi'),
           const SizedBox(height: 8),
           Card(

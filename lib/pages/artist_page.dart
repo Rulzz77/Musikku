@@ -4,6 +4,7 @@ import '../models/youtube_search_result.dart';
 import '../services/youtube_search_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/unified_artwork.dart';
+import '../widgets/flow_components.dart';
 
 class ArtistPage extends StatefulWidget {
   const ArtistPage({
@@ -82,31 +83,40 @@ class _ArtistPageState extends State<ArtistPage> {
 
           return ListView.separated(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-            itemCount: songs.length,
-            separatorBuilder: (_, _) => const SizedBox(height: 8),
+            itemCount: songs.length + 1,
+            separatorBuilder: (_, _) => const SizedBox(height: 10),
             itemBuilder: (context, index) {
-              final video = songs[index];
+              if (index == 0) {
+                return FlowPageHero(
+                  icon: Icons.mic_external_on_rounded,
+                  eyebrow: 'ARTIST RADIO',
+                  title: widget.artist,
+                  subtitle: 'Lagu dari artis ini dan rilisan terkait. Pilih lagu untuk mulai mendengarkan.',
+                  trailing: Icon(Icons.graphic_eq_rounded, color: Theme.of(context).colorScheme.secondary, size: 24),
+                );
+              }
+              final video = songs[index - 1];
               return Card(
                 elevation: 0,
                 color: Theme.of(context).colorScheme.surfaceContainerHighest,
                 child: InkWell(
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(20),
                   onTap: () => widget.onPlay(video),
                   onLongPress: widget.onLongPress == null
                       ? null
                       : () => widget.onLongPress!(video),
                   child: Padding(
-                    padding: const EdgeInsets.all(8),
+                    padding: const EdgeInsets.all(10),
                     child: Row(
                       children: [
                         ClipRRect(
-                          borderRadius: BorderRadius.circular(10),
+                          borderRadius: BorderRadius.circular(14),
                           child: UnifiedArtwork(
                             track: video,
-                            width: 92,
-                            height: 58,
-                            cacheWidth: 276,
-                            borderRadius: BorderRadius.circular(10),
+                            width: 100,
+                            height: 66,
+                            cacheWidth: 300,
+                            borderRadius: BorderRadius.circular(14),
                           ),
                         ),
                         const SizedBox(width: 12),

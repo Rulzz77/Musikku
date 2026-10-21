@@ -313,35 +313,43 @@ class _AppUpdatePanelState extends State<AppUpdatePanel> with WidgetsBindingObse
               ),
               const SizedBox(height: 8),
             ],
-            Row(
-              children: [
-                Container(
-                  height: 48,
-                  width: 48,
-                  decoration: BoxDecoration(
-                    color: colors.primaryContainer,
-                    borderRadius: BorderRadius.circular(15),
-                  ),
-                  child: Icon(Icons.system_update_alt_rounded, color: colors.onPrimaryContainer),
+            Container(
+              padding: const EdgeInsets.all(15),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [colors.primary.withValues(alpha: 0.17), colors.surfaceContainerLow, colors.secondary.withValues(alpha: 0.08)],
                 ),
-                const SizedBox(width: 13),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Pembaruan MusikKu',
-                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        'Versi terpasang: $appVersion',
-                        style: TextStyle(color: colors.onSurfaceVariant, fontSize: 12),
-                      ),
-                    ],
+                borderRadius: BorderRadius.circular(23),
+                border: Border.all(color: colors.primary.withValues(alpha: 0.18)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    height: 50,
+                    width: 50,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(colors: [colors.primary, colors.secondary]),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Icon(Icons.system_update_alt_rounded, color: colors.onPrimary, size: 26),
                   ),
-                ),
-              ],
+                  const SizedBox(width: 13),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Pembaruan MusikKu', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: -0.4)),
+                        const SizedBox(height: 4),
+                        Text('Versi terpasang: $appVersion', style: TextStyle(color: colors.onSurfaceVariant, fontSize: 12)),
+                        const SizedBox(height: 6),
+                        Text('UPDATE CENTER', style: TextStyle(color: colors.secondary, fontSize: 9, letterSpacing: 1.2, fontWeight: FontWeight.w900)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 18),
             if (_checking) ...[

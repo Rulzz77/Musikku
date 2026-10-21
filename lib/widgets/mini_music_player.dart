@@ -50,8 +50,8 @@ class MiniMusicPlayer extends StatelessWidget {
           elevation: 9,
           shadowColor: Colors.black.withValues(alpha: 0.22),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(21),
-            side: BorderSide(color: scheme.primary.withValues(alpha: 0.16), width: 1.1),
+            borderRadius: BorderRadius.circular(22),
+            side: BorderSide(color: scheme.primary.withValues(alpha: 0.24), width: 1.1),
           ),
           clipBehavior: Clip.antiAlias,
           child: Stack(
@@ -59,7 +59,7 @@ class MiniMusicPlayer extends StatelessWidget {
               InkWell(
                 onTap: onOpen,
                 child: SizedBox(
-                  height: 76,
+                  height: 78,
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(11, 9, 6, 9),
                     child: Row(
@@ -67,8 +67,8 @@ class MiniMusicPlayer extends StatelessWidget {
                         ClipRRect(
                           borderRadius: BorderRadius.circular(12),
                           child: SizedBox(
-                            width: 54,
-                            height: 54,
+                            width: 56,
+                            height: 56,
                             child: video.coverUrl.isEmpty
                                 ? ColoredBox(
                                     color: scheme.surfaceContainerHighest,

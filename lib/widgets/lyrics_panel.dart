@@ -113,8 +113,22 @@ class _LyricsPanelState extends State<LyricsPanel> {
             margin: const EdgeInsets.symmetric(vertical: 2),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
-              color: Colors.transparent,
-              borderRadius: BorderRadius.circular(12),
+              gradient: active
+                  ? LinearGradient(
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                      colors: [
+                        scheme.primary.withValues(alpha: 0.04),
+                        scheme.primary.withValues(alpha: 0.16),
+                        scheme.secondary.withValues(alpha: 0.07),
+                      ],
+                    )
+                  : null,
+              color: active ? null : Colors.transparent,
+              borderRadius: BorderRadius.circular(17),
+              border: active
+                  ? Border.all(color: scheme.primary.withValues(alpha: 0.22))
+                  : Border.all(color: Colors.transparent),
             ),
             child: Text(
               line.text,
@@ -125,7 +139,7 @@ class _LyricsPanelState extends State<LyricsPanel> {
                 fontWeight: active ? FontWeight.w900 : FontWeight.w600,
                 color: active
                     ? scheme.primary
-                    : scheme.onSurfaceVariant.withValues(alpha: index < current ? 0.55 : 0.82),
+                    : scheme.onSurfaceVariant.withValues(alpha: index < current ? 0.50 : 0.82),
               ),
             ),
           ),
@@ -161,8 +175,16 @@ class _LyricsPanelState extends State<LyricsPanel> {
             padding: const EdgeInsets.fromLTRB(14, 12, 10, 6),
             child: Row(
               children: [
-                const Icon(Icons.lyrics_rounded, size: 20),
-                const SizedBox(width: 8),
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(colors: [Theme.of(context).colorScheme.primary.withValues(alpha: 0.18), Theme.of(context).colorScheme.secondary.withValues(alpha: 0.12)]),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(Icons.lyrics_rounded, size: 19, color: Theme.of(context).colorScheme.primary),
+                ),
+                const SizedBox(width: 10),
                 const Expanded(
                   child: Text(
                     'Lirik',

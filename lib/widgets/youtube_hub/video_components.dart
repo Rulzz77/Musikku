@@ -53,11 +53,11 @@ extension _YoutubeHubVideoComponents on _YoutubeHubState {
         child: Row(
           children: [
             ClipRRect(
-              borderRadius: BorderRadius.circular(9),
+              borderRadius: BorderRadius.circular(12),
               child: Image.asset(
                 'assets/icon/app_icon.png',
-                width: 32,
-                height: 32,
+                width: 36,
+                height: 36,
                 fit: BoxFit.cover,
                 semanticLabel: 'Logo MusikKu',
               ),
@@ -68,7 +68,7 @@ extension _YoutubeHubVideoComponents on _YoutubeHubState {
                 title ?? appName,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: -0.5),
+                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: -0.7),
               ),
             ),
             IconButton(
@@ -94,7 +94,7 @@ extension _YoutubeHubVideoComponents on _YoutubeHubState {
               width: 5,
               height: 23,
               decoration: BoxDecoration(
-                gradient: const LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFFFF7592), Color(0xFFD91F4D)]),
+                gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [scheme.primary, scheme.secondary]),
                 borderRadius: BorderRadius.circular(999),
               ),
             ),
@@ -122,8 +122,8 @@ extension _YoutubeHubVideoComponents on _YoutubeHubState {
       child: Material(
         color: isCurrent ? scheme.primaryContainer.withValues(alpha: 0.50) : scheme.surfaceContainerLow,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(21),
-          side: BorderSide(color: isCurrent ? scheme.primary.withValues(alpha: 0.36) : scheme.outlineVariant.withValues(alpha: 0.34), width: isCurrent ? 1.2 : 0.8),
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: isCurrent ? scheme.primary.withValues(alpha: 0.48) : scheme.outlineVariant.withValues(alpha: 0.28), width: isCurrent ? 1.35 : 0.7),
         ),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
@@ -134,8 +134,8 @@ extension _YoutubeHubVideoComponents on _YoutubeHubState {
             child: Row(
               children: [
                 SizedBox(
-                  width: 106,
-                  height: 78,
+                  width: 112,
+                  height: 80,
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(15),
                     child: Stack(
@@ -208,10 +208,10 @@ extension _YoutubeHubVideoComponents on _YoutubeHubState {
     final scheme = Theme.of(context).colorScheme;
     final isCurrent = widget.currentVideoId == video.videoId;
     return SizedBox(
-      width: 146,
+      width: 152,
       child: Material(
         color: scheme.surfaceContainerLow,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(19), side: BorderSide(color: isCurrent ? scheme.primary.withValues(alpha: 0.36) : scheme.outlineVariant.withValues(alpha: 0.30))),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: isCurrent ? scheme.primary.withValues(alpha: 0.42) : scheme.outlineVariant.withValues(alpha: 0.26))),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: () => unawaited(widget.onPlay(video)),

@@ -94,8 +94,8 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              scheme.primary.withValues(alpha: 0.085),
-              scheme.surface,
+              scheme.primary.withValues(alpha: 0.19),
+              scheme.secondary.withValues(alpha: 0.045),
               scheme.surface,
             ],
           ),
@@ -178,7 +178,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                                     width: artSize,
                                     height: artSize,
                                     decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(32),
+                                      borderRadius: BorderRadius.circular(30),
                                       color: scheme.surfaceContainerHighest,
                                       border: Border.all(
                                         color: scheme.primary.withValues(alpha: 0.22),
@@ -236,7 +236,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                                             style: theme.textTheme.titleMedium?.copyWith(
                                               color: scheme.onSurfaceVariant,
                                               fontSize: 14.5,
-                                              fontWeight: FontWeight.w500,
+                                              fontWeight: FontWeight.w600,
                                             ),
                                           ),
                                         ],

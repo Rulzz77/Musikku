@@ -1,5 +1,4 @@
-/// Informasi aplikasi yang ditampilkan pada splash/settings.
-/// Jaga agar [appVersion] dan [appBuildNumber] sama dengan pubspec.yaml.
+/// Identitas versi aplikasi MusikKu Flow. Samakan dengan pubspec.yaml.
 const String appName = 'MusikKu';
-const String appVersion = '4.8.27';
-const String appBuildNumber = '82';
+const String appVersion = '5.0.1';
+const String appBuildNumber = '85';

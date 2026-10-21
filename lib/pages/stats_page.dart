@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/listening_stat.dart';
 import '../services/storage_service.dart';
+import '../widgets/flow_components.dart';
 import '../theme/app_colors.dart';
 
 class StatsPage extends StatefulWidget {
@@ -246,14 +247,16 @@ class _StatsHero extends StatelessWidget {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            appGoldStrong.withValues(alpha: 0.17),
-            scheme.surfaceContainerHighest.withValues(alpha: 0.78),
+            scheme.primary.withValues(alpha: 0.22),
+            scheme.secondary.withValues(alpha: 0.10),
+            scheme.surfaceContainerLow,
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: appGoldStrong.withValues(alpha: 0.12)),
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(color: scheme.primary.withValues(alpha: 0.20)),
+        boxShadow: [BoxShadow(color: scheme.primary.withValues(alpha: 0.07), blurRadius: 26, offset: const Offset(0, 10))],
       ),
       child: Wrap(
         crossAxisAlignment: WrapCrossAlignment.center,
@@ -261,22 +264,22 @@ class _StatsHero extends StatelessWidget {
         runSpacing: 12,
         children: [
           Container(
-            width: 54,
-            height: 54,
+            width: 58,
+            height: 58,
             decoration: BoxDecoration(
               color: appGoldStrong.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(17),
+              borderRadius: BorderRadius.circular(19),
             ),
-            child: const Icon(Icons.insights_rounded, color: appGoldStrong),
+            child: Icon(Icons.insights_rounded, color: scheme.primary, size: 27),
           ),
           ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 480),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Ringkasan dengar',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                Text(
+                  'RINGKASAN PERSONAL',
+                  style: TextStyle(fontSize: 10, letterSpacing: 1.05, fontWeight: FontWeight.w900, color: scheme.secondary),
                 ),
                 const SizedBox(height: 3),
                 Text(
@@ -360,8 +363,9 @@ class _MetricCard extends StatelessWidget {
                       child: Text(
                         value,
                         style: const TextStyle(
-                          fontSize: 19,
-                          fontWeight: FontWeight.w800,
+                          fontSize: 20,
+                          letterSpacing: -0.4,
+                          fontWeight: FontWeight.w900,
                         ),
                       ),
                     ),
@@ -383,20 +387,7 @@ class _SectionHeader extends StatelessWidget {
   final IconData icon;
 
   @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Icon(icon, color: appGoldStrong, size: 19),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            title,
-            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
-          ),
-        ),
-      ],
-    );
-  }
+  Widget build(BuildContext context) => FlowSectionHeader(icon: icon, title: title);
 }
 
 class _RankTile extends StatelessWidget {

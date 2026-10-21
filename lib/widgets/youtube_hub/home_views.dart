@@ -495,7 +495,7 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
               gradient: const LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [Color(0xFFFF6584), Color(0xFFD91F4D), Color(0xFF7F214B)],
+                colors: [Color(0xFFB7A0FF), Color(0xFF6E49D8), Color(0xFF55DCCB)],
               ),
               borderRadius: BorderRadius.circular(17),
               boxShadow: [
@@ -524,7 +524,7 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
                   greeting.toUpperCase(),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: scheme.primary, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.2),
+                  style: TextStyle(color: scheme.secondary, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.35),
                 ),
                 const SizedBox(height: 3),
                 Text(
@@ -535,7 +535,7 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Suara yang pas buat harimu',
+                  'Temukan suara yang cocok buat harimu',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10.5, fontWeight: FontWeight.w500),
@@ -568,8 +568,8 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
           gradient: const LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFF1A101B), Color(0xFF57203E), Color(0xFFD42A54)],
-            stops: [0, 0.56, 1],
+            colors: [Color(0xFF17132A), Color(0xFF5140A8), Color(0xFF1B8F8B)],
+            stops: [0, 0.58, 1],
           ),
           borderRadius: BorderRadius.circular(28),
           boxShadow: [BoxShadow(color: scheme.primary.withValues(alpha: 0.19), blurRadius: 25, offset: const Offset(0, 11))],
@@ -589,7 +589,7 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
             Positioned(
               right: 76,
               bottom: -88,
-              child: Container(width: 150, height: 150, decoration: BoxDecoration(shape: BoxShape.circle, color: const Color(0xFFFFC0D0).withValues(alpha: 0.07))),
+              child: Container(width: 150, height: 150, decoration: BoxDecoration(shape: BoxShape.circle, color: const Color(0xFFB7A0FF).withValues(alpha: 0.10))),
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 21, 17, 19),
@@ -603,7 +603,7 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
                           decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.11), borderRadius: BorderRadius.circular(999), border: Border.all(color: Colors.white.withValues(alpha: 0.16))),
-                          child: const Text('MUSIK UNTUK HARI INI', style: TextStyle(color: Color(0xFFFFDCE5), fontSize: 8.5, fontWeight: FontWeight.w900, letterSpacing: 1.05)),
+                          child: const Text('MUSIK UNTUK HARI INI', style: TextStyle(color: Color(0xFFE9E0FF), fontSize: 8.5, fontWeight: FontWeight.w900, letterSpacing: 1.05)),
                         ),
                         const SizedBox(height: 12),
                         Text(
@@ -624,7 +624,7 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
                                 setState(() => _section = _YoutubeSection.explore);
                                 unawaited(_loadExploreCategory(_exploreCategory));
                               },
-                              style: FilledButton.styleFrom(backgroundColor: Colors.white, foregroundColor: const Color(0xFF84203F), padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
+                              style: FilledButton.styleFrom(backgroundColor: Colors.white, foregroundColor: const Color(0xFF34235E), padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
                               icon: const Icon(Icons.explore_rounded, size: 17),
                               label: const Text('Jelajahi musik', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11.5)),
                             ),
@@ -653,7 +653,7 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
                             height: 72,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
-                              gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFFFFD9E2), Color(0xFFFF7898), Color(0xFFB61F50)]),
+                              gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFFDAFDF7), Color(0xFF55DCCB), Color(0xFF6E49D8)]),
                               boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.20), blurRadius: 15, offset: const Offset(0, 7))],
                             ),
                             child: const Icon(Icons.graphic_eq_rounded, color: Colors.white, size: 38),

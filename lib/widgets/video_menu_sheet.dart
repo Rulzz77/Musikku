@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../models/youtube_search_result.dart';
 import '../theme/app_colors.dart';
+import 'unified_artwork.dart';
 
 /// Menu yang muncul saat kartu lagu ditekan lama.
 void showVideoMenuSheet(
@@ -38,14 +39,42 @@ void showVideoMenuSheet(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-                  child: Text(
-                    video.title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
+                  padding: const EdgeInsets.fromLTRB(18, 0, 18, 14),
+                  child: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          Theme.of(sheetContext).colorScheme.primary.withValues(alpha: 0.16),
+                          Theme.of(sheetContext).colorScheme.surfaceContainerLow,
+                          Theme.of(sheetContext).colorScheme.secondary.withValues(alpha: 0.08),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: Theme.of(sheetContext).colorScheme.outlineVariant.withValues(alpha: 0.55)),
+                    ),
+                    child: Row(
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(14),
+                          child: UnifiedArtwork(track: video, width: 70, height: 70, iconSize: 28),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(video.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 14, height: 1.2, fontWeight: FontWeight.w900)),
+                              const SizedBox(height: 5),
+                              Text(video.channelTitle.isEmpty ? 'Artis tidak diketahui' : video.channelTitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11.5, color: Theme.of(sheetContext).colorScheme.onSurfaceVariant)),
+                              const SizedBox(height: 7),
+                              Text('PILIH AKSI LAGU', style: TextStyle(fontSize: 9, letterSpacing: 1.0, fontWeight: FontWeight.w900, color: Theme.of(sheetContext).colorScheme.secondary)),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),

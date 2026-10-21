@@ -111,17 +111,24 @@ void showAddToPlaylistSheet(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Padding(
-                padding: EdgeInsets.fromLTRB(20, 0, 20, 8),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'Tambah ke playlist',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 42,
+                      height: 42,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(colors: [Theme.of(sheetContext).colorScheme.primary.withValues(alpha: 0.18), Theme.of(sheetContext).colorScheme.secondary.withValues(alpha: 0.12)]),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Icon(Icons.playlist_add_rounded, color: Theme.of(sheetContext).colorScheme.primary),
                     ),
-                  ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Text('Tambah ke playlist', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: -0.3)),
+                    ),
+                  ],
                 ),
               ),
               ListTile(

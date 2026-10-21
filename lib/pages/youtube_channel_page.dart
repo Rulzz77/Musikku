@@ -327,13 +327,29 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
     final url = _details?.bannerUrl ?? '';
     return AspectRatio(
       aspectRatio: 16 / 4.5,
-      child: url.isEmpty
-          ? ColoredBox(color: scheme.surfaceContainerHighest)
-          : Image.network(
-              url,
-              fit: BoxFit.cover,
-              errorBuilder: (_, _, _) => ColoredBox(color: scheme.surfaceContainerHighest),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (url.isEmpty)
+            DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(colors: [scheme.primaryContainer, scheme.surfaceContainerHighest, scheme.secondaryContainer]),
+              ),
+              child: Icon(Icons.graphic_eq_rounded, color: scheme.primary.withValues(alpha: 0.32), size: 42),
+            )
+          else
+            Image.network(url, fit: BoxFit.cover, errorBuilder: (_, _, _) => ColoredBox(color: scheme.surfaceContainerHighest)),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Colors.transparent, scheme.surface.withValues(alpha: 0.50)],
+              ),
             ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -354,10 +370,21 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
     }
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+      padding: const EdgeInsets.fromLTRB(14, 0, 14, 6),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(15, 15, 15, 14),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [scheme.primary.withValues(alpha: 0.12), scheme.surfaceContainerLow, scheme.secondary.withValues(alpha: 0.05)],
+          ),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.55)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
@@ -403,7 +430,8 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
               ),
             ),
           ],
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -425,18 +453,30 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
       const Text('Tentang'),
     ];
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-      child: Row(
-        children: [
-          for (var i = 0; i < labels.length; i++) ...[
-            ChoiceChip(
-              label: labels[i],
-              selected: _tab == i,
-              onSelected: (_) => _selectTab(i),
-            ),
-            const SizedBox(width: 8),
-          ],
-        ],
+      padding: const EdgeInsets.fromLTRB(14, 6, 14, 10),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(99),
+            border: Border.all(color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.5)),
+          ),
+          child: Row(
+            children: [
+              for (var i = 0; i < labels.length; i++) ...[
+                ChoiceChip(
+                  label: labels[i],
+                  selected: _tab == i,
+                  onSelected: (_) => _selectTab(i),
+                  showCheckmark: false,
+                ),
+                if (i != labels.length - 1) const SizedBox(width: 5),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -455,9 +495,9 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
       meta.add(_relativeTime(video.publishedAt!));
     }
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 18),
+      padding: const EdgeInsets.fromLTRB(14, 0, 14, 20),
       child: InkWell(
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(18),
         onTap: () {
           // Mode route lama: tutup halaman dulu. Mode lapisan (onClose != null):
           // halaman tetap ada di bawah halaman tonton.
@@ -470,7 +510,7 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
             AspectRatio(
               aspectRatio: 16 / 9,
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(18),
                 child: Stack(
                   fit: StackFit.expand,
                   children: [

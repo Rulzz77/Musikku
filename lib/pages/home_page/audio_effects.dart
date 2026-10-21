@@ -161,9 +161,30 @@ extension _HomeAudioSettingsUi on _HomePageState {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text('Efek audio', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: -0.4)),
-                const SizedBox(height: 4),
-                Text('Sesuaikan karakter suara untuk sesi mendengarkanmu.', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12.5)),
+                Container(
+                  padding: const EdgeInsets.all(15),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(colors: [scheme.primary.withValues(alpha: 0.18), scheme.secondary.withValues(alpha: 0.08), scheme.surfaceContainerLow]),
+                    borderRadius: BorderRadius.circular(22),
+                    border: Border.all(color: scheme.primary.withValues(alpha: 0.18)),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(gradient: LinearGradient(colors: [scheme.primary, scheme.secondary]), borderRadius: BorderRadius.circular(16)),
+                        child: Icon(Icons.graphic_eq_rounded, color: scheme.onPrimary, size: 26),
+                      ),
+                      const SizedBox(width: 13),
+                      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        const Text('Efek audio', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: -0.5)),
+                        const SizedBox(height: 4),
+                        Text('Sesuaikan karakter suara sesuai seleramu.', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12.5)),
+                      ])),
+                    ],
+                  ),
+                ),
                 const SizedBox(height: 22),
                 Row(
                   children: [
@@ -373,7 +394,7 @@ extension _HomeAudioSettingsUi on _HomePageState {
               children: [
                 Row(
                   children: [
-                    Container(width: 44, height: 44, alignment: Alignment.center, decoration: BoxDecoration(color: scheme.primaryContainer, borderRadius: BorderRadius.circular(14)), child: Icon(Icons.bedtime_rounded, color: scheme.primary, size: 24)),
+                    Container(width: 44, height: 44, alignment: Alignment.center, decoration: BoxDecoration(color: scheme.primaryContainer, borderRadius: BorderRadius.circular(17)), child: Icon(Icons.bedtime_rounded, color: scheme.primary, size: 24)),
                     const SizedBox(width: 12),
                     const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('Timer tidur', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900)), SizedBox(height: 3), Text('Atur kapan musik berhenti.') ])),
                   ],

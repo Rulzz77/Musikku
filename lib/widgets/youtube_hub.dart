@@ -98,7 +98,7 @@ class YoutubeHub extends StatefulWidget {
   State<YoutubeHub> createState() => _YoutubeHubState();
 }
 
-enum _YoutubeSection { home, samples, explore, library }
+enum _YoutubeSection { home, explore, samples, library }
 
 class _YoutubeHubState extends State<YoutubeHub> {
   final _searchController = TextEditingController();
@@ -260,7 +260,7 @@ class _YoutubeHubState extends State<YoutubeHub> {
           if (_query.isNotEmpty || _section != _YoutubeSection.home)
             _topBar(title: switch (_section) {
               _YoutubeSection.home => appName,
-              _YoutubeSection.samples => 'Mix',
+              _YoutubeSection.samples => 'Radio',
               _YoutubeSection.explore => 'Jelajahi',
               _YoutubeSection.library => 'Koleksi',
             }),
@@ -453,14 +453,14 @@ class _YoutubeHubState extends State<YoutubeHub> {
                   label: 'Beranda',
                 ),
                 NavigationDestination(
-                  icon: Icon(Icons.queue_music_rounded),
-                  selectedIcon: Icon(Icons.graphic_eq_rounded),
-                  label: 'Mix',
-                ),
-                NavigationDestination(
                   icon: Icon(Icons.explore_outlined),
                   selectedIcon: Icon(Icons.explore_rounded),
-                  label: 'Jelajahi',
+                  label: 'Jelajah',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.radio_outlined),
+                  selectedIcon: Icon(Icons.radio_rounded),
+                  label: 'Radio',
                 ),
                 NavigationDestination(
                   icon: Icon(Icons.library_music_outlined),

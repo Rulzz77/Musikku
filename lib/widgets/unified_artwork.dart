@@ -87,13 +87,16 @@ class _UnifiedArtworkState extends State<UnifiedArtwork> {
 
   Widget _fallback(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Container(
-      color: scheme.surfaceContainerHighest,
-      alignment: Alignment.center,
-      child: Icon(
-        Icons.music_note_rounded,
-        size: widget.iconSize,
-        color: scheme.onSurfaceVariant,
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [scheme.primary.withValues(alpha: 0.22), scheme.surfaceContainerHighest, scheme.secondary.withValues(alpha: 0.14)],
+        ),
+      ),
+      child: Center(
+        child: Icon(Icons.music_note_rounded, size: widget.iconSize, color: scheme.primary.withValues(alpha: 0.88)),
       ),
     );
   }

@@ -224,6 +224,14 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
 
   List<Widget> _samplesView() {
     final videos = _sampleVideos();
+    YoutubeSearchResult? seedVideo;
+    for (final video in videos) {
+      if (video.videoId == widget.currentVideoId) {
+        seedVideo = video;
+        break;
+      }
+    }
+    final radioSeed = seedVideo ?? (videos.isEmpty ? null : videos.first);
     final scheme = Theme.of(context).colorScheme;
     return [
       SliverToBoxAdapter(
@@ -232,9 +240,9 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Temukan musik berikutnya', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900, letterSpacing: -0.7)),
+              Text('Radio untuk selera kamu', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900, letterSpacing: -0.7)),
               const SizedBox(height: 6),
-              Text('Kartu pilihan dari musik populer dan yang pernah kamu dengarkan. Ketuk untuk memutar, atau buka menu untuk menyimpan ke koleksi.', style: TextStyle(color: scheme.onSurfaceVariant, height: 1.35)),
+              Text('Mulai dari satu lagu, lalu lanjutkan ke rekomendasi yang diacak tetapi tetap nyambung. Bahasa boleh berganti kalau gaya musiknya cocok.', style: TextStyle(color: scheme.onSurfaceVariant, height: 1.4)),
               const SizedBox(height: 12),
               Wrap(
                 spacing: 8,
@@ -246,9 +254,16 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
                     label: const Text('Putar mix'),
                   ),
                   OutlinedButton.icon(
+                    onPressed: radioSeed == null || widget.onStartRadio == null
+                        ? null
+                        : () => unawaited(widget.onStartRadio!(radioSeed)),
+                    icon: const Icon(Icons.radio_rounded, size: 18),
+                    label: const Text('Mulai radio'),
+                  ),
+                  OutlinedButton.icon(
                     onPressed: _feedLoading ? null : () => unawaited(_loadHome(force: true)),
                     icon: const Icon(Icons.refresh_rounded, size: 18),
-                    label: const Text('Muat ulang'),
+                    label: const Text('Segarkan'),
                   ),
                 ],
               ),
@@ -269,7 +284,7 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
                   children: [
                     const Icon(Icons.explore_rounded, size: 44),
                     const SizedBox(height: 10),
-                    const Text('Mix belum tersedia', style: TextStyle(fontWeight: FontWeight.w800)),
+                    const Text('Radio belum tersedia', style: TextStyle(fontWeight: FontWeight.w800)),
                     const SizedBox(height: 6),
                     Text(_feedError.isNotEmpty ? _feedError : 'Muat rekomendasi musik terlebih dahulu.', textAlign: TextAlign.center, style: TextStyle(color: scheme.onSurfaceVariant)),
                     const SizedBox(height: 12),

@@ -167,15 +167,18 @@ class _LocalMusicPageState extends State<LocalMusicPage> {
                                     end: Alignment.bottomRight,
                                     colors: [scheme.primaryContainer.withValues(alpha: 0.75), scheme.surfaceContainerLow],
                                   ),
-                                  borderRadius: BorderRadius.circular(24),
-                                  border: Border.all(color: scheme.primary.withValues(alpha: 0.16)),
+                                  borderRadius: BorderRadius.circular(28),
+                                  border: Border.all(color: scheme.primary.withValues(alpha: 0.20)),
+                                  boxShadow: [BoxShadow(color: scheme.primary.withValues(alpha: 0.06), blurRadius: 24, offset: const Offset(0, 8))],
                                 ),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
+                                    Text('YOUR DEVICE LIBRARY', style: TextStyle(color: scheme.secondary, fontSize: 9.5, letterSpacing: 1.25, fontWeight: FontWeight.w900)),
+                                    const SizedBox(height: 9),
                                     Row(
                                       children: [
-                                        Container(width: 48, height: 48, decoration: BoxDecoration(color: scheme.primary.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(16)), child: Icon(Icons.folder_open_rounded, color: scheme.primary, size: 26)),
+                                        Container(width: 52, height: 52, decoration: BoxDecoration(color: scheme.primary.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(16)), child: Icon(Icons.folder_open_rounded, color: scheme.primary, size: 26)),
                                         const SizedBox(width: 12),
                                         Expanded(
                                           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -184,6 +187,16 @@ class _LocalMusicPageState extends State<LocalMusicPage> {
                                             Text('File audio lokal tetap berada di perangkatmu.', style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant)),
                                           ]),
                                         ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 12),
+                                    Wrap(
+                                      spacing: 7,
+                                      runSpacing: 7,
+                                      children: [
+                                        _LibraryPill(icon: Icons.library_music_rounded, label: '${_songs.length} lagu'),
+                                        _LibraryPill(icon: Icons.person_rounded, label: '${_songs.map((item) => item.artist.trim()).where((item) => item.isNotEmpty).toSet().length} artis'),
+                                        const _LibraryPill(icon: Icons.phone_android_rounded, label: 'Lokal · privat'),
                                       ],
                                     ),
                                     const SizedBox(height: 15),
@@ -255,6 +268,31 @@ class _LocalMusicPageState extends State<LocalMusicPage> {
                         ],
                       ),
                     ),
+    );
+  }
+}
+
+
+class _LibraryPill extends StatelessWidget {
+  const _LibraryPill({required this.icon, required this.label});
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: scheme.surface.withValues(alpha: 0.70),
+        borderRadius: BorderRadius.circular(99),
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.6)),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, size: 14, color: scheme.primary),
+        const SizedBox(width: 6),
+        Text(label, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: scheme.onSurfaceVariant)),
+      ]),
     );
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/youtube_search_result.dart';
+import 'flow_components.dart';
 
 /// Membangun satu kartu lagu. Diberikan oleh halaman induk supaya aksi
 /// (putar, antrean, favorit) tetap diurus di sana.
@@ -25,14 +26,8 @@ class RecentSongsList extends StatelessWidget {
       itemBuilder: (context, index) {
         if (index == 0) {
           return const Padding(
-            padding: EdgeInsets.fromLTRB(20, 0, 20, 4),
-            child: Text(
-              'Terakhir diputar',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
+            padding: EdgeInsets.fromLTRB(16, 8, 16, 10),
+            child: FlowSectionHeader(icon: Icons.history_rounded, title: 'Terakhir diputar'),
           );
         }
 
@@ -63,23 +58,11 @@ class SearchHistoryList extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 90),
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 8, 0),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Pencarian terakhir',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ),
-              TextButton(
-                onPressed: onClearAll,
-                child: const Text('Hapus semua'),
-              ),
-            ],
+          padding: const EdgeInsets.fromLTRB(16, 8, 8, 10),
+          child: FlowSectionHeader(
+            icon: Icons.manage_search_rounded,
+            title: 'Pencarian terakhir',
+            trailing: TextButton(onPressed: onClearAll, child: const Text('Hapus')),
           ),
         ),
         for (final query in queries)
@@ -118,7 +101,7 @@ class FavoriteSongsList extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.favorite_border, size: 60, color: Theme.of(context).colorScheme.onSurfaceVariant),
+            Icon(Icons.favorite_rounded, size: 52, color: Theme.of(context).colorScheme.primary),
             const SizedBox(height: 12),
             Text(
               'Belum ada lagu favorit',
@@ -140,24 +123,15 @@ class FavoriteSongsList extends StatelessWidget {
       itemBuilder: (context, index) {
         if (index == 0) {
           return Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 12, 0),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Favorit (${songs.length})',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-                TextButton.icon(
-                  onPressed: onPlayAll,
-                  icon: const Icon(Icons.play_arrow),
-                  label: const Text('Putar semua'),
-                ),
-              ],
+            padding: const EdgeInsets.fromLTRB(16, 8, 8, 10),
+            child: FlowSectionHeader(
+              icon: Icons.favorite_rounded,
+              title: 'Favorit (${songs.length})',
+              trailing: TextButton.icon(
+                onPressed: onPlayAll,
+                icon: const Icon(Icons.play_arrow_rounded),
+                label: const Text('Putar semua'),
+              ),
             ),
           );
         }

@@ -47,17 +47,17 @@ extension _YoutubeHubLibraryViews on _YoutubeHubState {
           child: Container(
             padding: const EdgeInsets.fromLTRB(14, 16, 8, 16),
             decoration: BoxDecoration(
-              gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [scheme.primary.withValues(alpha: 0.13), scheme.surfaceContainerHighest.withValues(alpha: 0.76)]),
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: scheme.primary.withValues(alpha: 0.15)),
+              gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [scheme.primary.withValues(alpha: 0.19), scheme.secondary.withValues(alpha: 0.08), scheme.surfaceContainerHighest.withValues(alpha: 0.72)]),
+              borderRadius: BorderRadius.circular(26),
+              border: Border.all(color: scheme.primary.withValues(alpha: 0.20)),
             ),
             child: Row(children: [
               Container(width: 50, height: 50, decoration: BoxDecoration(color: scheme.surface.withValues(alpha: 0.82), borderRadius: BorderRadius.circular(17), border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.48))), alignment: Alignment.center, child: Icon(Icons.library_music_rounded, color: scheme.onSurface, size: 28)),
               const SizedBox(width: 12),
               const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('KOLEKSI MUSIK', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.1)),
+                Text('RUANG MUSIKMU', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.3)),
                 SizedBox(height: 3),
-                Text('Pustaka MusikKu', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: -0.4)),
+                Text('Koleksi kamu', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: -0.55)),
                 SizedBox(height: 3),
                 Text('Favorit, riwayat, dan playlist lokal', style: TextStyle(fontSize: 11.5)),
               ])),

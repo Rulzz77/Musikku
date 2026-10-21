@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../app_info.dart' as app_info;
 import '../services/app_health_monitor.dart';
 import '../services/native_playback_diagnostics.dart';
+import '../widgets/flow_components.dart';
 
 /// Log diagnostik lokal untuk membantu mencari penyebab playback gagal.
 /// Data tidak dikirim ke server; pengguna bisa menyalin atau menghapusnya.
@@ -150,8 +151,15 @@ class _AppHealthPageState extends State<AppHealthPage> {
         builder: (context, snapshot) {
           final events = snapshot.data ?? const <Map<String, dynamic>>[];
           return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 32),
             children: [
+              const FlowPageHero(
+                icon: Icons.health_and_safety_rounded,
+                eyebrow: 'SYSTEM CENTER',
+                title: 'Kesehatan aplikasi',
+                subtitle: 'Pantau kondisi pemutar, perangkat audio, dan log masalah yang tersimpan lokal.',
+              ),
+              const SizedBox(height: 14),
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16),

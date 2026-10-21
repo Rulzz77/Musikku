@@ -90,12 +90,22 @@ class _ChannelAvatarState extends State<ChannelAvatar> {
       },
     );
 
-    if (widget.onTap == null) return avatar;
+    final framed = Container(
+      width: size + 3,
+      height: size + 3,
+      padding: const EdgeInsets.all(1.5),
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: LinearGradient(colors: [scheme.primary.withValues(alpha: 0.9), scheme.secondary.withValues(alpha: 0.8)]),
+      ),
+      child: ClipOval(child: avatar),
+    );
+    if (widget.onTap == null) return framed;
     return InkResponse(
       onTap: widget.onTap,
       customBorder: const CircleBorder(),
-      radius: widget.radius + 6,
-      child: avatar,
+      radius: widget.radius + 7,
+      child: framed,
     );
   }
 }

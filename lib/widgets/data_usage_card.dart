@@ -65,11 +65,15 @@ class _DataUsageCardState extends State<DataUsageCard> {
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.only(bottom: 14),
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.55)),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [scheme.primary.withValues(alpha: 0.08), scheme.surfaceContainerLow, scheme.secondary.withValues(alpha: 0.04)],
+        ),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.62)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

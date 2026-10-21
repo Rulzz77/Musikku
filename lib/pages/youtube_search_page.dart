@@ -118,11 +118,12 @@ class _YoutubeSearchPageState extends State<YoutubeSearchPage> {
       appBar: AppBar(
         titleSpacing: 0,
         title: Container(
-          height: 44,
+          height: 46,
           margin: const EdgeInsets.only(right: 8),
           decoration: BoxDecoration(
             color: scheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.45)),
           ),
           child: TextField(
             controller: _controller,
@@ -160,7 +161,7 @@ class _YoutubeSearchPageState extends State<YoutubeSearchPage> {
           SizedBox(
             height: 58,
             child: ListView.separated(
-              padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
               scrollDirection: Axis.horizontal,
               itemCount: _modes.length,
               separatorBuilder: (_, _) => const SizedBox(width: 8),
@@ -212,7 +213,7 @@ class _YoutubeSearchPageState extends State<YoutubeSearchPage> {
           Expanded(
             child: ListView.separated(
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              padding: const EdgeInsets.fromLTRB(10, 0, 10, 20),
+              padding: const EdgeInsets.fromLTRB(12, 2, 12, 24),
               itemCount: items.length,
               separatorBuilder: (_, _) => const SizedBox(height: 4),
               itemBuilder: (context, index) {

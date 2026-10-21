@@ -91,9 +91,8 @@ extension _HomeRadio on _HomePageState {
     await _nextFromRadio(fromAutoNext: fromAutoNext);
   }
 
-  /// Ambil kandidat dari pool radio yang BUKAN Shorts. Setiap kandidat dicek
-  /// langsung ke YouTube; kalau Short langsung dibuang dan ambil berikutnya.
-  Future<YoutubeSearchResult?> _takeNonShortFromRadio() async {
+  /// Ambil kandidat dari pool radio yang bukan Shorts, memakai metadata lokal.
+  YoutubeSearchResult? _takeNonShortFromRadio() {
     for (var i = 0; i < 15; i++) {
       final candidate = _playerUiState.value.isSmartShuffle
           ? _radio.takeSmart(
@@ -108,9 +107,10 @@ extension _HomeRadio on _HomePageState {
         return null;
       }
 
+      // Filter metadata lokal saja. isShortVideo(videoId) adalah API lama
+      // yang sekarang selalu false dan tidak memberi sinyal tambahan.
       if (YoutubeSearchService.isLikelyShortForm(candidate) ||
-          YoutubeSearchService.isLikelyNonMusicVideo(candidate) ||
-          await _searchService.isShortVideo(candidate.videoId)) {
+          YoutubeSearchService.isLikelyNonMusicVideo(candidate)) {
         continue;
       }
 
@@ -121,10 +121,10 @@ extension _HomeRadio on _HomePageState {
   }
 
   /// Dari daftar [videos] ambil satu yang bukan Shorts (urutan/acak sesuai mode).
-  Future<YoutubeSearchResult?> _pickNonShort(
+  YoutubeSearchResult? _pickNonShort(
     List<YoutubeSearchResult> videos, {
     required bool random,
-  }) async {
+  }) {
     final list = List<YoutubeSearchResult>.from(videos);
 
     if (random) {
@@ -136,9 +136,7 @@ extension _HomeRadio on _HomePageState {
           YoutubeSearchService.isLikelyNonMusicVideo(video)) {
         continue;
       }
-      if (!await _searchService.isShortVideo(video.videoId)) {
-        return video;
-      }
+      return video;
     }
 
     return null;
@@ -157,9 +155,9 @@ extension _HomeRadio on _HomePageState {
 
     YoutubeSearchResult? next;
 
-    // Cari kandidat radio sampai beberapa halaman. Setelah filter Shorts,
-    // anti-repeat, dislike, dan track fingerprint, satu halaman bisa kosong.
-    for (var attempt = 0; attempt < 8 && next == null; attempt++) {
+    // Batasi satu halaman Radio per tindakan Next. Jika halaman kosong/tersaring,
+    // gunakan fallback lokal alih-alih menghabiskan kuota dengan banyak halaman.
+    for (var attempt = 0; attempt < 1 && next == null; attempt++) {
       if (_radio.isPoolEmpty) {
         if (!fromAutoNext && attempt == 0) {
           _toast(
@@ -175,7 +173,7 @@ extension _HomeRadio on _HomePageState {
         continue;
       }
 
-      next = await _takeNonShortFromRadio();
+      next = _takeNonShortFromRadio();
     }
 
     // Fallback 1: pakai hasil pencarian aktif yang sudah ada di memory.
@@ -220,7 +218,7 @@ extension _HomeRadio on _HomePageState {
               ));
         }
 
-        next = await _pickNonShort(
+        next = _pickNonShort(
           styleCandidates,
           random: _playerUiState.value.isShuffle &&
               !_playerUiState.value.isSmartShuffle,
@@ -228,17 +226,11 @@ extension _HomeRadio on _HomePageState {
       }
     }
 
-    // Fallback 2: paksa radio reset dari seed awal. Ini menangani pool/cache
-    // lama yang terlalu ketat setelah perubahan filter Shorts/fingerprint.
-    if (next == null && _radio.hasSeed) {
-      _radio.restart(_radio.seed);
-      await _radio.refill();
-      if (!_radio.isPoolEmpty) {
-        next = await _takeNonShortFromRadio();
-      }
-    }
+    // Jangan reset dan mengambil halaman awal lagi dalam klik Next yang sama.
+    // Tidak ada request halaman tambahan dalam klik Next yang sama; percobaan baru
+    // hanya dilakukan pada interaksi berikutnya setelah fallback lokal di bawah.
 
-    // Fallback 4: kuota/API habis atau offline → jangan diam. Putar dari
+    // Fallback 2: kuota/API habis atau offline → jangan diam. Putar dari
     // favorit / terakhir diputar (bukan lagu yang sedang diputar).
     if (next == null) {
       final currentId = _currentVideo?.videoId;
@@ -267,7 +259,7 @@ extension _HomeRadio on _HomePageState {
 
       if (verifiedLocal.isNotEmpty) {
         final preferred = MusicStyleMatcher.prioritizeStyle(verifiedLocal, targetStyle);
-        next = await _pickNonShort(
+        next = _pickNonShort(
           preferred.isNotEmpty ? preferred : verifiedLocal,
           random: true,
         );
@@ -289,8 +281,7 @@ extension _HomeRadio on _HomePageState {
 
     await _playVideo(next);
 
-    if (_radio.poolLength <= 6) {
-      unawaited(_radio.refill());
-    }
+    // Tidak melakukan prefetch hanya karena pool tinggal beberapa lagu.
+    // Request halaman baru dilakukan saat pool benar-benar habis di Next berikutnya.
   }
 }

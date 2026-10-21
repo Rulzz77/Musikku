@@ -32,6 +32,8 @@ class RadioService {
   final List<YoutubeSearchResult> _pool = [];
   String? _pageToken;
   Future<void>? _fetch;
+  DateTime? _lastRefillStartedAt;
+  static const Duration _minimumRefillInterval = Duration(seconds: 20);
   bool _disposed = false;
   // Incremented whenever the radio context is reset so an older request cannot
   // populate a new pool or clear the handle for a newer in-flight request.
@@ -77,6 +79,7 @@ class RadioService {
       _pool.clear();
       _pageToken = null;
       _fetch = null;
+      _lastRefillStartedAt = null;
     }
 
     // Siapkan lagu berikutnya di belakang layar supaya Next terasa instan.
@@ -98,6 +101,7 @@ class RadioService {
     _pool.clear();
     _pageToken = null;
     _fetch = null;
+    _lastRefillStartedAt = null;
   }
 
   /// Isi ulang pool. Kalau sedang berjalan, pemanggil ikut menunggu yang sama.
@@ -108,6 +112,16 @@ class RadioService {
     if (running != null) {
       return running;
     }
+
+    // Jangan meminta halaman baru berkali-kali saat pengguna menekan Next
+    // beruntun dan semua kandidat lama tersaring. Pool lokal/fallback tetap
+    // dipakai; request berikutnya baru boleh dimulai setelah jeda singkat.
+    final now = DateTime.now();
+    final lastStarted = _lastRefillStartedAt;
+    if (lastStarted != null && now.difference(lastStarted) < _minimumRefillInterval) {
+      return Future<void>.value();
+    }
+    _lastRefillStartedAt = now;
 
     final generation = _fetchGeneration;
     late final Future<void> future;
@@ -501,7 +515,9 @@ class RadioService {
     final targetStyle = MusicStyleMatcher.styleFromText(seed);
 
     try {
-      for (var attempt = 0; attempt < 2; attempt++) {
+      // Satu refill maksimal meminta satu halaman API. Jika seluruh kandidat
+      // tersaring, pemanggil boleh mencoba satu halaman lagi dengan token baru.
+      for (var attempt = 0; attempt < 1; attempt++) {
         final page = await _searchService.searchLatest(
           seed,
           pageToken: _pageToken,

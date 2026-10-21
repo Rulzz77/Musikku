@@ -505,7 +505,7 @@ class YoutubeAccountService implements YoutubeLibraryApi {
     if (!forceRefresh) {
       final cached = await _uploadPageCache.get(
         cacheKey,
-        maxAge: const Duration(minutes: 30),
+        maxAge: const Duration(hours: 2),
       );
       if (cached is Map && cached['items'] is List) {
         final rawItems = cached['items'] as List;
@@ -784,7 +784,7 @@ class YoutubeAccountService implements YoutubeLibraryApi {
         .toList(growable: false);
     if (targets.isEmpty) return const [];
 
-    // Keep concurrency low. Per-channel upload pages are cached for 30 minutes,
+    // Keep concurrency low. Per-channel upload pages are cached for two hours,
     // so reopening the subscription feed does not hit every channel again.
     final lists = <List<YoutubeSearchResult>>[];
     const batchSize = 4;

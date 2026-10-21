@@ -194,6 +194,15 @@ class MainActivity : AudioServiceActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // The current app intentionally has subscription upload/live notifications
+        // disabled. Cancel any worker left scheduled by an older installation so
+        // background playlistItems.list calls cannot keep consuming quota before
+        // Flutter's YouTube hub has a chance to initialize.
+        runCatching {
+            SubscriptionWatchWorker.configure(applicationContext, false, "", emptyList())
+        }.onFailure { error ->
+            MusikKuLogger.w(TAG, "GAGAL MEMATIKAN WORKER SUBSCRIPTION LAMA", error)
+        }
         healthMonitor = AppHealthMonitor.get(this)
         healthMonitor.start()
         // Start sampling per-app network traffic early; the tracker keeps

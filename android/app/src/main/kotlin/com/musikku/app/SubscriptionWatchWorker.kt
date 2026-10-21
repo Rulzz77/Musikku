@@ -46,6 +46,11 @@ class SubscriptionWatchWorker(
     companion object {
         private const val TAG = "MusikKuWatch"
 
+        // The current product intentionally disables background upload/live
+        // notifications. This kill switch also protects installs that still
+        // have WorkManager jobs persisted by an older app build.
+        private const val BACKGROUND_WATCH_FEATURE_ENABLED = false
+
         private const val WORK_PERIODIC = "musikku_subscription_watch"
         private const val WORK_NOW = "musikku_subscription_watch_now"
 
@@ -85,7 +90,7 @@ class SubscriptionWatchWorker(
             val p = prefs(context)
             val workManager = WorkManager.getInstance(context)
 
-            if (!enabled || apiKey.isBlank() || channels.isEmpty()) {
+            if (!BACKGROUND_WATCH_FEATURE_ENABLED || !enabled || apiKey.isBlank() || channels.isEmpty()) {
                 workManager.cancelUniqueWork(WORK_PERIODIC)
                 workManager.cancelUniqueWork(WORK_NOW)
                 p.edit().clear().apply()
@@ -159,7 +164,13 @@ class SubscriptionWatchWorker(
 
     override fun doWork(): Result {
         val p = prefs(appContext)
-        if (!p.getBoolean(KEY_ENABLED, false)) return Result.success()
+        if (!BACKGROUND_WATCH_FEATURE_ENABLED || !p.getBoolean(KEY_ENABLED, false)) {
+            // Cancel stale persisted jobs before they can query playlistItems.list.
+            WorkManager.getInstance(appContext).cancelUniqueWork(WORK_PERIODIC)
+            WorkManager.getInstance(appContext).cancelUniqueWork(WORK_NOW)
+            p.edit().clear().apply()
+            return Result.success()
+        }
 
         val config = try {
             JSONObject(p.getString(KEY_CONFIG, "") ?: "")

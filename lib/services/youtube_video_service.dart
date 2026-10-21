@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import 'disk_cache.dart';
+import 'youtube_api_request_guard.dart';
 
 class YoutubeVideoDetails {
   final String videoId;
@@ -102,6 +103,21 @@ class YoutubeVideoService {
     ttl: Duration(hours: 8),
   );
 
+  /// Route all Data API reads through the same pacing/cooldown guard as the
+  /// search, avatar and account services. This service currently has no call
+  /// sites, but must not bypass quota protection if it is used again.
+  Future<http.Response> _getData(Uri uri) async {
+    await YoutubeApiRequestGuard.beforeRequest('data');
+    final response = await http.get(uri).timeout(const Duration(seconds: 12));
+    YoutubeApiRequestGuard.observeResponse(
+      scope: 'data',
+      statusCode: response.statusCode,
+      body: response.body,
+      headers: response.headers,
+    );
+    return response;
+  }
+
   Future<YoutubeVideoDetails?> details(String videoId) async {
     if (videoId.trim().isEmpty) return null;
     final cached = await _detailsCache.get(videoId);
@@ -132,7 +148,7 @@ class YoutubeVideoService {
       'id': videoId,
       'key': apiKey,
     });
-    final response = await http.get(uri).timeout(const Duration(seconds: 12));
+    final response = await _getData(uri);
     if (response.statusCode != 200) {
       throw StateError('YouTube video ${response.statusCode}: ${response.body}');
     }
@@ -201,7 +217,7 @@ class YoutubeVideoService {
     };
     if (pageToken != null && pageToken.isNotEmpty) params['pageToken'] = pageToken;
     final uri = Uri.parse('$_base/commentThreads').replace(queryParameters: params);
-    final response = await http.get(uri).timeout(const Duration(seconds: 12));
+    final response = await _getData(uri);
     if (response.statusCode == 403 && response.body.contains('commentsDisabled')) return const [];
     if (response.statusCode != 200) {
       throw StateError('YouTube comments ${response.statusCode}: ${response.body}');
@@ -321,7 +337,7 @@ class YoutubeVideoService {
     };
     if (pageToken != null && pageToken.isNotEmpty) params['pageToken'] = pageToken;
     final uri = Uri.parse('$_base/comments').replace(queryParameters: params);
-    final response = await http.get(uri).timeout(const Duration(seconds: 12));
+    final response = await _getData(uri);
     if (response.statusCode == 403 && response.body.contains('commentsDisabled')) return const [];
     if (response.statusCode != 200) {
       throw StateError('YouTube replies ${response.statusCode}: ${response.body}');
@@ -361,7 +377,7 @@ class YoutubeVideoService {
       params['pageToken'] = pageToken;
     }
     final uri = Uri.parse('$_base/liveChat/messages').replace(queryParameters: params);
-    final response = await http.get(uri).timeout(const Duration(seconds: 12));
+    final response = await _getData(uri);
     if (response.statusCode != 200) {
       throw StateError('YouTube live chat ${response.statusCode}: ${response.body}');
     }

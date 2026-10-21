@@ -74,9 +74,8 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
     unawaited(_loadHome());
   }
 
-  /// Pencarian TIDAK lewat [_run]: _run diam-diam membatalkan tugas kalau
-  /// _loading sedang true (mis. saat akun/subscription masih dimuat), sehingga
-  /// hasil pencarian tidak pernah muncul. _query juga langsung diisi supaya
+  /// Set state loading pencarian langsung agar indikator muncul seketika.
+  /// _query diisi sebelum request selesai supaya hasil pencarian responsif.
   /// layar hasil + indikator loading tampil seketika.
   Future<void> _search({bool keepResults = false}) async {
     final query = _searchController.text.trim();
@@ -132,7 +131,7 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
       if (!mounted || requestId != _searchRequestId) return;
       debugPrint('YOUTUBE SEARCH ERROR: $e');
       setState(() {
-        _error = e is YoutubeSearchException ? e.message : describeLoginError(e);
+        _error = e is YoutubeSearchException ? e.message : _formatHubError(e);
       });
     } finally {
       if (mounted && requestId == _searchRequestId) {

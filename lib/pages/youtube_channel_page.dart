@@ -3,9 +3,16 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../models/youtube_search_result.dart';
-import '../services/youtube_account_service.dart';
+import '../services/youtube_public_channel_service.dart';
+import '../models/youtube_channel_models.dart';
 import '../services/youtube_search_service.dart';
 import '../widgets/live_badge.dart';
+
+String _channelErrorMessage(Object error) {
+  final message = error.toString().replaceFirst('Bad state: ', '').trim();
+  if (message.isEmpty) return 'Gagal memuat channel. Periksa koneksi lalu coba lagi.';
+  return message;
+}
 
 /// 1200 -> "1,2 rb", 3400000 -> "3,4 jt" (format YouTube Indonesia).
 String formatCount(int value) {
@@ -33,15 +40,13 @@ String _relativeTime(DateTime time) {
   return '${diff.inDays ~/ 365} tahun lalu';
 }
 
-/// Halaman channel: banner, avatar, jumlah subscriber,
-/// tombol Subscribe / Subscribed, tab Video, Live (siaran langsung + rekaman)
-/// & Tentang. Bisa dibuka TANPA login; login hanya diminta saat Subscribe.
+/// Halaman channel publik: banner, metadata, video musik, live, dan Tentang.
+/// Tidak membutuhkan login akun Google.
 class YoutubeChannelPage extends StatefulWidget {
   final String channelId;
   final String title;
   final String thumbnailUrl;
   final Future<void> Function(YoutubeSearchResult video) onPlay;
-  final VoidCallback? onSubscriptionChanged;
 
   /// Kalau diisi, halaman ini tampil sebagai lapisan DI DALAM hub (bukan
   /// route baru). Memutar video tidak menutup halaman ini, jadi tombol Back
@@ -54,7 +59,6 @@ class YoutubeChannelPage extends StatefulWidget {
     required this.onPlay,
     this.title = '',
     this.thumbnailUrl = '',
-    this.onSubscriptionChanged,
     this.onClose,
   });
 
@@ -63,13 +67,10 @@ class YoutubeChannelPage extends StatefulWidget {
 }
 
 class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
-  final _account = YoutubeAccountService.instance;
+  final _channelService = YoutubePublicChannelService.instance;
   YoutubeChannelDetails? _details;
   List<YoutubeSearchResult> _videos = const [];
   bool _loading = true;
-  bool _subscriptionKnown = false;
-  String? _subscriptionId;
-  bool _busy = false;
   String _error = '';
   int _tab = 0;
 
@@ -101,8 +102,6 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
 
   bool get _hasMore => _oldestFirst ? _oldestShown < _oldestPool.length : _nextToken != null;
 
-  bool get _subscribed => _subscriptionId != null;
-
   bool _isMusicChannelUpload(YoutubeSearchResult video) =>
       YoutubeSearchService.isMusicChannelUpload(
         video,
@@ -120,35 +119,18 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
 
   Future<void> _load() async {
     try {
-      final details = await _account.channelDetails(widget.channelId);
+      final details = await _channelService.channelDetails(widget.channelId);
       if (!mounted) return;
       setState(() => _details = details);
-
-      if (_account.isSignedIn) {
-        try {
-          final id = await _account.subscriptionIdFor(widget.channelId);
-          if (mounted) {
-            setState(() {
-              _subscriptionId = id;
-              _subscriptionKnown = true;
-            });
-          }
-        } catch (_) {
-          // Status subscribe tidak ketahuan; tombol tetap bisa dipakai.
-        }
-      } else if (mounted) {
-        // Belum login: tombol Subscribe tetap aktif, login diminta saat ditekan.
-        setState(() => _subscriptionKnown = true);
-      }
 
       final uploads = details?.uploadsPlaylistId ?? '';
       _uploadsId = uploads;
       var videos = const <YoutubeSearchResult>[];
       String? token;
       if (uploads.isNotEmpty) {
-        final page = await _account.playlistItemsPage(uploads, maxResults: _pageSize);
+        final page = await _channelService.playlistItemsPage(uploads, maxResults: _pageSize);
         token = page.nextPageToken;
-        final musicOnly = (await _account.withViewCounts(page.items))
+        final musicOnly = (await _channelService.withViewCounts(page.items))
             .where(_isMusicChannelUpload)
             .toList(growable: false);
         videos = await YoutubeSearchService().removeShorts(musicOnly);
@@ -165,7 +147,7 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = describeLoginError(e);
+        _error = _channelErrorMessage(e);
       });
     }
   }
@@ -179,7 +161,7 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
       _liveError = '';
     });
     try {
-      final result = await _account.scanLiveVideos(
+      final result = await _channelService.scanLiveVideos(
         _uploadsId,
         pageToken: _liveToken,
         channelTitle: _details?.title.isNotEmpty == true ? _details!.title : widget.title,
@@ -197,7 +179,7 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
         _liveScanned = true;
       });
     } catch (e) {
-      if (mounted) setState(() => _liveError = describeLoginError(e));
+      if (mounted) setState(() => _liveError = _channelErrorMessage(e));
     } finally {
       if (mounted) setState(() => _liveLoading = false);
     }
@@ -228,7 +210,7 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
           String? token;
           var guard = 0;
           do {
-            final page = await _account.playlistItemsPage(_uploadsId, pageToken: token);
+            final page = await _channelService.playlistItemsPage(_uploadsId, pageToken: token);
             all.addAll(page.items);
             token = page.nextPageToken;
             guard++;
@@ -237,7 +219,7 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
           _oldestComplete = true;
         }
         final first = _oldestPool.take(_pageSize).toList(growable: false);
-        final musicOnly = (await _account.withViewCounts(first))
+        final musicOnly = (await _channelService.withViewCounts(first))
             .where(_isMusicChannelUpload)
             .toList(growable: false);
         final withStats = await YoutubeSearchService().removeShorts(musicOnly);
@@ -247,8 +229,8 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
           _oldestShown = first.length;
         });
       } else {
-        final page = await _account.playlistItemsPage(_uploadsId, maxResults: _pageSize);
-        final musicOnly = (await _account.withViewCounts(page.items))
+        final page = await _channelService.playlistItemsPage(_uploadsId, maxResults: _pageSize);
+        final musicOnly = (await _channelService.withViewCounts(page.items))
             .where(_isMusicChannelUpload)
             .toList(growable: false);
         final withStats = await YoutubeSearchService().removeShorts(musicOnly);
@@ -262,7 +244,7 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
       if (!mounted || requestId != _sortRequestId) return;
       setState(() {
         _oldestFirst = !oldestFirst; // kembalikan pilihan lama kalau gagal
-        _error = describeLoginError(e);
+        _error = _channelErrorMessage(e);
       });
     } finally {
       if (mounted && requestId == _sortRequestId) {
@@ -279,7 +261,7 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
       List<YoutubeSearchResult> more;
       if (_oldestFirst) {
         final next = _oldestPool.skip(_oldestShown).take(_pageSize).toList(growable: false);
-        final musicOnly = (await _account.withViewCounts(next))
+        final musicOnly = (await _channelService.withViewCounts(next))
             .where(_isMusicChannelUpload)
             .toList(growable: false);
         more = await YoutubeSearchService().removeShorts(musicOnly);
@@ -289,12 +271,12 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
           _oldestShown += next.length;
         });
       } else {
-        final page = await _account.playlistItemsPage(
+        final page = await _channelService.playlistItemsPage(
           _uploadsId,
           pageToken: _nextToken,
           maxResults: _pageSize,
         );
-        final musicOnly = (await _account.withViewCounts(page.items))
+        final musicOnly = (await _channelService.withViewCounts(page.items))
             .where(_isMusicChannelUpload)
             .toList(growable: false);
         more = await YoutubeSearchService().removeShorts(musicOnly);
@@ -307,7 +289,7 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(describeLoginError(e))),
+          SnackBar(content: Text(_channelErrorMessage(e))),
         );
       }
     } finally {
@@ -339,64 +321,6 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
         ],
       ),
     );
-  }
-
-  Future<void> _toggleSubscribe() async {
-    if (_busy) return;
-    final name = _details?.title ?? widget.title;
-    if (_subscribed) {
-      final ok = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Berhenti berlangganan?'),
-          content: Text('Kamu tidak akan lagi menerima video baru dari $name.'),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Batal')),
-            FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Berhenti')),
-          ],
-        ),
-      );
-      if (ok != true) return;
-    }
-    setState(() => _busy = true);
-    try {
-      if (!_account.isSignedIn) {
-        // Subscribe butuh akun Google: minta login di sini, bukan di awal.
-        await _account.ensureSignedIn();
-        if (!_account.isSignedIn) return;
-        final existing = await _account.subscriptionIdFor(widget.channelId);
-        if (existing != null) {
-          if (mounted) {
-            setState(() {
-              _subscriptionId = existing;
-              _subscriptionKnown = true;
-            });
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Kamu sudah subscribe channel ini.')),
-            );
-          }
-          widget.onSubscriptionChanged?.call();
-          return;
-        }
-      }
-      if (_subscribed) {
-        await _account.unsubscribe(_subscriptionId!);
-        if (mounted) setState(() => _subscriptionId = null);
-      } else {
-        await _account.subscribe(widget.channelId);
-        final id = await _account.subscriptionIdFor(widget.channelId);
-        if (mounted) setState(() => _subscriptionId = id ?? 'unknown');
-      }
-      widget.onSubscriptionChanged?.call();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(describeLoginError(e))),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
   }
 
   Widget _banner(ColorScheme scheme) {
@@ -479,20 +403,6 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
               ),
             ),
           ],
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: _subscribed
-                ? FilledButton.tonalIcon(
-                    onPressed: _busy ? null : _toggleSubscribe,
-                    icon: const Icon(Icons.check_circle_rounded, size: 19),
-                    label: const Text('Subscribed'),
-                  )
-                : FilledButton(
-                    onPressed: (_busy || (!_subscriptionKnown && _loading)) ? null : _toggleSubscribe,
-                    child: const Text('Subscribe'),
-                  ),
-          ),
         ],
       ),
     );
@@ -529,67 +439,6 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
         ],
       ),
     );
-  }
-
-  Future<void> _addVideoToPlaylist(YoutubeSearchResult video) async {
-    if (!_account.isSignedIn) {
-      try {
-        await _account.signIn();
-      } catch (error) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Login YouTube diperlukan: ${describeLoginError(error)}')),
-          );
-        }
-        return;
-      }
-    }
-
-    try {
-      final playlists = await _account.playlists();
-      if (!mounted) return;
-      if (playlists.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Belum ada playlist YouTube. Buat playlist dulu di akun YouTube.')),
-        );
-        return;
-      }
-      final selected = await showModalBottomSheet<YoutubePlaylistSummary>(
-        context: context,
-        showDragHandle: true,
-        builder: (sheetContext) => SafeArea(
-          child: ListView(
-            shrinkWrap: true,
-            children: [
-              const ListTile(
-                title: Text('Tambahkan ke playlist'),
-                subtitle: Text('Pilih playlist YouTube tujuan'),
-              ),
-              for (final playlist in playlists)
-                ListTile(
-                  leading: const Icon(Icons.playlist_add_rounded),
-                  title: Text(playlist.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-                  subtitle: Text('${playlist.itemCount} item • ${playlist.privacyStatus}'),
-                  onTap: () => Navigator.of(sheetContext).pop(playlist),
-                ),
-            ],
-          ),
-        ),
-      );
-      if (selected == null || !mounted) return;
-      await _account.addToPlaylist(selected.id, video.videoId);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Ditambahkan ke playlist "${selected.title}".')),
-        );
-      }
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Gagal menambahkan ke playlist: ${describeLoginError(error)}')),
-        );
-      }
-    }
   }
 
   Widget _videoCard(YoutubeSearchResult video, ColorScheme scheme) {
@@ -648,14 +497,6 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
               const SizedBox(height: 3),
               Text(meta.join(' • '), style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12)),
             ],
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                onPressed: video.isLocal ? null : () => unawaited(_addVideoToPlaylist(video)),
-                icon: const Icon(Icons.playlist_add_rounded, size: 19),
-                label: const Text('Tambah ke playlist'),
-              ),
-            ),
           ],
         ),
       ),
@@ -888,39 +729,3 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
   }
 }
 
-/// Daftar semua channel yang di-subscribe (tombol "Semua" di tab Subscription).
-class YoutubeSubscriptionsPage extends StatelessWidget {
-  final List<YoutubeChannelSummary> channels;
-  final void Function(YoutubeChannelSummary channel) onOpen;
-
-  const YoutubeSubscriptionsPage({
-    super.key,
-    required this.channels,
-    required this.onOpen,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Scaffold(
-      appBar: AppBar(title: Text('Semua subscription (${channels.length})')),
-      body: ListView.builder(
-        itemCount: channels.length,
-        itemBuilder: (context, index) {
-          final c = channels[index];
-          return ListTile(
-            leading: CircleAvatar(
-              radius: 24,
-              backgroundColor: scheme.surfaceContainerHighest,
-              backgroundImage: c.thumbnailUrl.isNotEmpty ? NetworkImage(c.thumbnailUrl) : null,
-              child: c.thumbnailUrl.isEmpty ? const Icon(Icons.person_rounded) : null,
-            ),
-            title: Text(c.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800)),
-            subtitle: c.subscriberCount == null ? null : Text('${formatCount(c.subscriberCount!)} subscriber'),
-            onTap: () => onOpen(c),
-          );
-        },
-      ),
-    );
-  }
-}

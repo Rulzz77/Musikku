@@ -8,6 +8,7 @@ import 'pages/startup_page.dart';
 import 'services/app_settings.dart';
 import 'theme/app_colors.dart';
 import 'services/app_health_monitor.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 Future<void> main() async {
   // This singleton has no binding-dependent constructor side effects, so it
@@ -39,6 +40,7 @@ Future<void> main() async {
       return true;
     };
 
+    await _clearLegacyYouTubeAccountData();
     final settings = AppSettingsController.instance;
     await settings.load();
 
@@ -47,6 +49,41 @@ Future<void> main() async {
   }, (error, stack) async {
     await health.record(kind: 'ZoneError', error: error, stack: stack);
   });
+}
+
+
+/// Remove legacy account login/cache keys from older app versions at startup.
+/// The music player no longer stores or uses a Google/YouTube account session.
+Future<void> _clearLegacyYouTubeAccountData() async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    const exactKeys = <String>{
+      'youtube_session_ok',
+      'youtube_user_explicitly_signed_out',
+      'youtube_last_account_email',
+      'youtube_last_account_name',
+    };
+    for (final key in exactKeys) {
+      await prefs.remove(key);
+    }
+    const legacyPrefixes = <String>[
+      'youtube_hub_cache_v1_',
+      'account_cache_',
+      'youtube_account_',
+      // DiskCache namespaces used only by the previous signed-in library.
+      'cache_index_yt_upload_pages_v1',
+      'cache_yt_upload_pages_v1_',
+      'cache_index_yt_enriched_video_batches_v1',
+      'cache_yt_enriched_video_batches_v1_',
+    ];
+    for (final key in prefs.getKeys().toList(growable: false)) {
+      if (legacyPrefixes.any((prefix) => key.startsWith(prefix))) {
+        await prefs.remove(key);
+      }
+    }
+  } catch (_) {
+    // Legacy cleanup must never block playback startup.
+  }
 }
 
 class MusikKuApp extends StatelessWidget {

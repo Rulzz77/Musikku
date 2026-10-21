@@ -129,9 +129,6 @@ jobs:
       - name: Build split APKs and compatibility universal APK
         env:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-          # Web OAuth Client ID bukan rahasia; Variables direkomendasikan.
-          # Fallback ke Secrets jika sebelumnya sudah disimpan sebagai secret.
-          YOUTUBE_WEB_CLIENT_ID: ${{ vars.YOUTUBE_WEB_CLIENT_ID || secrets.YOUTUBE_WEB_CLIENT_ID }}
         shell: bash
         run: |
           set -euo pipefail
@@ -141,24 +138,13 @@ jobs:
             exit 1
           fi
 
-          if [[ -z "${YOUTUBE_WEB_CLIENT_ID:-}" ]]; then
-            echo "::error::YOUTUBE_WEB_CLIENT_ID belum diatur. Tambahkan sebagai Repository variable atau secret."
-            exit 1
-          fi
-
-          if [[ "$YOUTUBE_WEB_CLIENT_ID" != *.apps.googleusercontent.com ]]; then
-            echo "::error::Format YOUTUBE_WEB_CLIENT_ID tidak benar. Gunakan Web OAuth Client ID."
-            exit 1
-          fi
-
           APK_DIR="build/app/outputs/flutter-apk"
           STASH="$RUNNER_TEMP/musikku-apk-assets"
           mkdir -p "$STASH"
 
           # Build per ABI first and stash the smaller downloads.
           flutter build apk --release --split-per-abi \
-            --dart-define="YOUTUBE_API_KEY=${YOUTUBE_API_KEY}" \
-            --dart-define="YOUTUBE_WEB_CLIENT_ID=${YOUTUBE_WEB_CLIENT_ID}"
+            --dart-define="YOUTUBE_API_KEY=${YOUTUBE_API_KEY}"
 
           for NAME in app-arm64-v8a-release.apk app-armeabi-v7a-release.apk app-x86_64-release.apk; do
             if [[ ! -s "$APK_DIR/$NAME" ]]; then
@@ -171,8 +157,7 @@ jobs:
           # Build app-release.apk as a universal fallback so updater versions
           # installed before ABI-aware selection can still update safely.
           flutter build apk --release \
-            --dart-define="YOUTUBE_API_KEY=${YOUTUBE_API_KEY}" \
-            --dart-define="YOUTUBE_WEB_CLIENT_ID=${YOUTUBE_WEB_CLIENT_ID}"
+            --dart-define="YOUTUBE_API_KEY=${YOUTUBE_API_KEY}"
 
           if [[ ! -s "$APK_DIR/app-release.apk" ]]; then
             echo "::error::APK universal app-release.apk tidak ditemukan."

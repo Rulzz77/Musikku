@@ -122,7 +122,7 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
           ),
         )
       else if (videos.isEmpty)
-        _homeEmptyState(signedIn: _user != null, retry: () => _selectChip(_activeChip, force: true))
+        _homeEmptyState(retry: () => _selectChip(_activeChip, force: true))
       else
         SliverList.builder(
           itemCount: videos.length,
@@ -143,29 +143,18 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
       ];
     }
 
-    // Build a YouTube-like vertical feed, alternating subscription uploads and
-    // popular videos. Dedupe IDs so one video isn't shown twice.
-    final subscriptionVideos = _subscriptionFeed
-        .where((video) => !video.isLive && !video.isUpcoming && YoutubeSearchService.isMusicCandidate(video))
-        .toList(growable: false);
-    final popularVideos = _trending
-        .where((video) => !video.isLive && !video.isUpcoming && YoutubeSearchService.isMusicCatalogItem(video))
-        .toList(growable: false);
+    // Music-only public feed; no signed-in subscription uploads are used.
     final feed = <YoutubeSearchResult>[];
-    final seenIds = <String>{};
-
-    void addUnique(YoutubeSearchResult video) {
-      if (video.videoId.isNotEmpty && seenIds.add(video.videoId)) {
-        feed.add(video);
+    final seenFeedIds = <String>{};
+    for (final video in _trending) {
+      if (video.isLive ||
+          video.isUpcoming ||
+          !YoutubeSearchService.isMusicCatalogItem(video) ||
+          video.videoId.isEmpty ||
+          !seenFeedIds.add(video.videoId)) {
+        continue;
       }
-    }
-
-    final feedLength = subscriptionVideos.length > popularVideos.length
-        ? subscriptionVideos.length
-        : popularVideos.length;
-    for (var index = 0; index < feedLength; index++) {
-      if (index < subscriptionVideos.length) addUnique(subscriptionVideos[index]);
-      if (index < popularVideos.length) addUnique(popularVideos[index]);
+      feed.add(video);
     }
 
     final recentlyPlayed = widget.recentlyPlayed
@@ -255,10 +244,7 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
           ),
         )
       else
-        _homeEmptyState(
-          signedIn: _user != null,
-          retry: () => _loadHome(force: true),
-        ),
+        _homeEmptyState(retry: () => _loadHome(force: true)),
       const SliverToBoxAdapter(child: SizedBox(height: 8)),
     ];
   }
@@ -269,8 +255,6 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
       ..._chipFeeds.values.expand((items) => items),
       ..._searchResults,
       ..._exploreResults,
-      ..._subscriptionFeed,
-      ..._liked,
     ].where(YoutubeSearchService.isMusicCandidate).toList(growable: false);
     return SmartPlaylistService.build(
       favorites: widget.favorites.where(YoutubeSearchService.isMusicCandidate).toList(growable: false),
@@ -568,24 +552,6 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
             onPressed: _openSearch,
             icon: const Icon(Icons.search_rounded, size: 22),
           ),
-          IconButton(
-            tooltip: _user == null ? 'Hubungkan YouTube' : 'Akun YouTube',
-            visualDensity: VisualDensity.compact,
-            constraints: const BoxConstraints.tightFor(width: 36, height: 40),
-            onPressed: _user == null ? _login : _showAccountSheet,
-            icon: Container(
-              width: 29,
-              height: 29,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(shape: BoxShape.circle, color: scheme.primaryContainer, border: Border.all(color: scheme.primary.withValues(alpha: 0.18))),
-              child: _user == null
-                  ? Icon(Icons.person_outline_rounded, size: 18, color: scheme.onPrimaryContainer)
-                  : Text(
-                      (_user!.displayName?.trim().isNotEmpty == true ? _user!.displayName!.trim().characters.first : '?').toUpperCase(),
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: scheme.onPrimaryContainer),
-                    ),
-            ),
-          ),
         ],
       ),
     );
@@ -715,7 +681,7 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
     );
   }
 
-  Widget _homeEmptyState({required bool signedIn, Future<void> Function()? retry}) {
+  Widget _homeEmptyState({Future<void> Function()? retry}) {
     final scheme = Theme.of(context).colorScheme;
     return SliverToBoxAdapter(
       child: Padding(
@@ -733,9 +699,7 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
             ),
             const SizedBox(height: 18),
             Text(
-              _feedError.isNotEmpty
-                  ? 'Lagu belum bisa dimuat'
-                  : (signedIn ? 'Belum ada lagu baru' : 'Beranda masih kosong'),
+              _feedError.isNotEmpty ? 'Lagu belum bisa dimuat' : 'Beranda masih kosong',
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
             ),
@@ -743,9 +707,7 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
             Text(
               _feedError.isNotEmpty
                   ? _feedError
-                  : (signedIn
-                      ? 'Cari lagu lewat kolom pencarian untuk mulai mendengarkan.'
-                      : 'Cari lagu lewat kolom pencarian atau pilih rekomendasi musik di beranda.'),
+                  : 'Cari lagu lewat kolom pencarian atau pilih rekomendasi musik di beranda.',
               textAlign: TextAlign.center,
               style: TextStyle(color: scheme.onSurfaceVariant, height: 1.4),
             ),
@@ -760,12 +722,6 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
                     onPressed: () => unawaited(retry()),
                     icon: const Icon(Icons.refresh_rounded),
                     label: const Text('Coba lagi'),
-                  ),
-                if (!signedIn)
-                  OutlinedButton.icon(
-                    onPressed: _loading ? null : _login,
-                    icon: const Icon(Icons.login_rounded),
-                    label: const Text('Masuk'),
                   ),
                 OutlinedButton.icon(
                   onPressed: _openSearch,

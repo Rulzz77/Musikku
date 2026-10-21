@@ -2,18 +2,13 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
-import 'package:google_sign_in/google_sign_in.dart';
 
 import '../app_info.dart';
 import '../models/youtube_search_result.dart';
 import '../models/listening_stat.dart';
 import '../services/smart_playlist_service.dart';
-import '../services/youtube_account_service.dart';
-import '../services/youtube_library_repository.dart';
-import '../services/account_request_guard.dart';
 import '../services/storage_service.dart';
 import '../services/youtube_search_service.dart';
-import '../services/youtube_controller.dart';
 import '../services/search_suggest_service.dart';
 import '../services/app_settings.dart';
 import '../pages/youtube_search_page.dart';
@@ -26,7 +21,7 @@ import 'live_badge.dart';
 import 'unified_artwork.dart';
 import 'app_update_sheet.dart';
 
-part 'youtube_hub/account_actions.dart';
+part 'youtube_hub/startup_actions.dart';
 part 'youtube_hub/home_views.dart';
 part 'youtube_hub/search_views.dart';
 part 'youtube_hub/video_components.dart';
@@ -103,30 +98,20 @@ class YoutubeHub extends StatefulWidget {
   State<YoutubeHub> createState() => _YoutubeHubState();
 }
 
-enum _YoutubeSection { home, samples, explore, subscriptions, library }
+enum _YoutubeSection { home, samples, explore, library }
 
 class _YoutubeHubState extends State<YoutubeHub> {
   final _searchController = TextEditingController();
   final _searchService = YoutubeSearchService();
   final _suggestService = SearchSuggestService();
   final _storage = StorageService();
-  final _account = YoutubeAccountService.instance;
-  late final _libraryRepository = YoutubeLibraryRepository(account: _account);
-  final _accountRequestGuard = AccountRequestGuard();
-  int _accountRefreshSequence = 0;
-  int _accountCacheLoadSequence = 0;
-  int _feedRefreshSequence = 0;
-  int _playlistRequestSequence = 0;
   int _homeRequestSequence = 0;
   int _chipRequestSequence = 0;
   int _exploreRequestSequence = 0;
   final Random _feedRandom = Random();
 
   _YoutubeSection _section = _YoutubeSection.home;
-  GoogleSignInAccount? _user;
-  String _rememberedAccountEmail = '';
   bool _loading = false;
-  bool _needsAuthorization = false;
   String _error = '';
   String _query = '';
   String _searchMode = 'music';
@@ -168,16 +153,7 @@ class _YoutubeHubState extends State<YoutubeHub> {
   List<YoutubeSearchResult> _searchResults = const [];
   List<YoutubeChannelSearchResult> _searchChannels = const [];
   bool _channelSearchLoading = false;
-  List<YoutubeSearchResult> _liked = const [];
-  List<YoutubeChannelSummary> _subscriptions = const [];
-  List<YoutubePlaylistSummary> _playlists = const [];
-  List<YoutubeSearchResult> _subscriptionFeed = const [];
-  // Semua channel yang memiliki setidaknya satu unggahan musik pada feed
-  // langganan yang telah diperiksa. Tidak dibatasi oleh 30 video yang tampil.
-  Set<String> _musicSubscriptionChannelIds = <String>{};
-  Timer? _subscriptionTimer;
-
-  /// Video trending (semua kategori). Tampil di beranda TANPA perlu login.
+  /// Video trending musik untuk beranda; tidak memerlukan akun.
   List<YoutubeSearchResult> _trending = const [];
   bool _feedLoading = false;
   String _feedError = '';
@@ -186,22 +162,12 @@ class _YoutubeHubState extends State<YoutubeHub> {
   final Map<int, List<YoutubeSearchResult>> _chipFeeds = {};
   bool _chipLoading = false;
 
-  List<YoutubeSearchResult> _playlistItems = const [];
-  YoutubePlaylistSummary? _selectedPlaylist;
-
   /// Channel yang sedang dibuka (lapisan di atas hub). Null = tidak ada.
   _OpenChannel? _openedChannel;
 
   bool _handleControllerBack() {
     if (_openedChannel != null) {
       setState(() => _openedChannel = null);
-      return true;
-    }
-    if (_section == _YoutubeSection.library && _selectedPlaylist != null) {
-      setState(() {
-        _selectedPlaylist = null;
-        _playlistItems = const [];
-      });
       return true;
     }
     if (_section != _YoutubeSection.home) {
@@ -230,21 +196,6 @@ class _YoutubeHubState extends State<YoutubeHub> {
     super.initState();
     widget.controller?._onBack = _handleControllerBack;
     widget.controller?._onOpenChannel = _handleControllerOpenChannel;
-    _user = _account.user;
-    // Matikan worker notifikasi subscription versi lama setelah pembaruan.
-    // Notifikasi kontrol pemutar Android tetap terpisah agar audio background aman.
-    unawaited(NativeYoutubeController.configureBackgroundWatch(enabled: false));
-    // Feed subscription masih disegarkan secara ringan; notif unggahan/live
-    // sengaja dimatikan.
-    _subscriptionTimer = Timer.periodic(const Duration(minutes: 10), (_) {
-      // Pada Super hemat kita hanya refresh di beberapa interval supaya request
-      // background tidak terlalu sering.
-      // interval ganjil sehingga frekuensinya turun tanpa membuat timer baru.
-      final nowMinute = DateTime.now().minute;
-      if (_account.isSignedIn && !_loading && (widget.settings.dataSaverMode.value != DataSaverMode.superSaver || nowMinute.isEven)) {
-        unawaited(_refreshSubscriptionInBackground());
-      }
-    });
     unawaited(_restore());
   }
 
@@ -254,7 +205,6 @@ class _YoutubeHubState extends State<YoutubeHub> {
       widget.controller?._onBack = null;
       widget.controller?._onOpenChannel = null;
     }
-    _subscriptionTimer?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -293,14 +243,11 @@ class _YoutubeHubState extends State<YoutubeHub> {
                   await _selectChip(_activeChip, force: true);
                 } else {
                   await _loadHome(force: true);
-                  if (_account.isSignedIn) await _run(_refreshAccount);
                 }
               } else if (_section == _YoutubeSection.samples) {
                 await _loadHome(force: true);
               } else if (_section == _YoutubeSection.explore) {
                 await _loadExploreCategory(_exploreCategory, force: true);
-              } else if (_account.isSignedIn) {
-                await _run(_refreshAccount);
               }
             } finally {
               _pullRefreshing = false;
@@ -315,7 +262,6 @@ class _YoutubeHubState extends State<YoutubeHub> {
               _YoutubeSection.home => appName,
               _YoutubeSection.samples => 'Mix',
               _YoutubeSection.explore => 'Jelajahi',
-              _YoutubeSection.subscriptions => 'Langganan',
               _YoutubeSection.library => 'Koleksi',
             }),
           if (_query.isNotEmpty)
@@ -336,31 +282,7 @@ class _YoutubeHubState extends State<YoutubeHub> {
           // Di Beranda, chip dirender oleh _homeSections() (di bawah header
           // sambutan) supaya tidak menempel di bawah status bar.
           if (_query.isNotEmpty) _chipRow(),
-          if (_needsAuthorization)
-            SliverToBoxAdapter(
-              child: Card(
-                margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                child: Padding(
-                  padding: const EdgeInsets.all(14),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.lock_open_rounded),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          'Akun Google tersimpan. Izin YouTube perlu disetujui sekali.',
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: _loading ? null : _authorizeYoutube,
-                        child: const Text('Izinkan'),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
+
           if (_error.isNotEmpty)
             SliverToBoxAdapter(
               child: Padding(
@@ -373,10 +295,10 @@ class _YoutubeHubState extends State<YoutubeHub> {
               ..._homeSections()
             else ...[
               if (_searchChannels.isNotEmpty) ...[
-                _sectionHeader('Akun'),
+                _sectionHeader('Channel musik'),
                 SliverToBoxAdapter(
                   child: SizedBox(
-                    // Tinggi cukup untuk avatar + nama + "Buka akun" bahkan saat
+                    // Tinggi cukup untuk avatar + nama + label channel bahkan saat
                     // ukuran font sistem dibesarkan (sebelumnya overflow 10 px).
                     height: 136,
                     child: ListView.separated(
@@ -418,7 +340,7 @@ class _YoutubeHubState extends State<YoutubeHub> {
                                     style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
                                   ),
                                   const SizedBox(height: 2),
-                                  const Text('Buka akun', style: TextStyle(fontSize: 10.5)),
+                                  const Text('Buka channel', style: TextStyle(fontSize: 10.5)),
                                 ],
                               ),
                             ),
@@ -464,8 +386,6 @@ class _YoutubeHubState extends State<YoutubeHub> {
             ..._samplesView()
           else if (_section == _YoutubeSection.explore)
             ..._exploreView()
-          else if (_section == _YoutubeSection.subscriptions)
-            ..._subscriptionsView()
           else
             ..._libraryView(),
           if (_inlineLoading && list.isNotEmpty)
@@ -502,8 +422,6 @@ class _YoutubeHubState extends State<YoutubeHub> {
                     _searchMode = 'music';
                     _searchResults = const [];
                     _searchChannels = const [];
-                    _selectedPlaylist = null;
-                    _playlistItems = const [];
                     _loading = false;
                     _error = '';
                   });
@@ -517,8 +435,6 @@ class _YoutubeHubState extends State<YoutubeHub> {
                   _query = '';
                   _searchResults = const [];
                   _searchChannels = const [];
-                  _selectedPlaylist = null;
-                  _playlistItems = const [];
                   _loading = false;
                   _error = '';
                 });
@@ -526,9 +442,6 @@ class _YoutubeHubState extends State<YoutubeHub> {
                   unawaited(_loadHome());
                 } else if (nextSection == _YoutubeSection.explore) {
                   unawaited(_loadExploreCategory(_exploreCategory));
-                }
-                if ((nextSection == _YoutubeSection.subscriptions || nextSection == _YoutubeSection.library) && !_account.isSignedIn) {
-                  unawaited(_restoreAccountAfterUserAction());
                 }
               },
               height: 66,
@@ -550,11 +463,6 @@ class _YoutubeHubState extends State<YoutubeHub> {
                   label: 'Jelajahi',
                 ),
                 NavigationDestination(
-                  icon: Icon(Icons.subscriptions_outlined),
-                  selectedIcon: Icon(Icons.subscriptions_rounded),
-                  label: 'Langganan',
-                ),
-                NavigationDestination(
                   icon: Icon(Icons.library_music_outlined),
                   selectedIcon: Icon(Icons.library_music_rounded),
                   label: 'Koleksi',
@@ -574,11 +482,16 @@ class _YoutubeHubState extends State<YoutubeHub> {
               title: _openedChannel!.title,
               thumbnailUrl: _openedChannel!.thumbnailUrl,
               onPlay: widget.onPlay,
-              onSubscriptionChanged: _onChannelSubscriptionChanged,
               onClose: () => setState(() => _openedChannel = null),
             ),
           ),
       ],
     );
   }
+}
+
+
+String _formatHubError(Object error) {
+  final message = error.toString().replaceFirst('Bad state: ', '').trim();
+  return message.isEmpty ? 'Permintaan gagal. Periksa koneksi lalu coba lagi.' : message;
 }

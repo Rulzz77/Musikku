@@ -37,6 +37,7 @@ import io.flutter.plugin.platform.PlatformViewFactory
 import java.io.File
 import java.util.Locale
 
+import androidx.work.WorkManager
 import androidx.core.content.FileProvider
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -158,23 +159,6 @@ class MainActivity : AudioServiceActivity() {
 
     }
 
-    // Video dari notifikasi (live / video baru) yang diketuk sebelum Flutter siap.
-    private var pendingNotificationVideo: Map<String, String>? = null
-
-    /** Baca extra dari intent notifikasi; kembalikan null kalau bukan dari notifikasi. */
-    private fun readNotificationVideo(intent: Intent?): Map<String, String>? {
-        val videoId = intent?.getStringExtra(SubscriptionWatchWorker.EXTRA_VIDEO_ID).orEmpty()
-        if (videoId.isEmpty()) return null
-        val video = mapOf(
-            "videoId" to videoId,
-            "title" to (intent?.getStringExtra(SubscriptionWatchWorker.EXTRA_VIDEO_TITLE).orEmpty()),
-            "channelTitle" to (intent?.getStringExtra(SubscriptionWatchWorker.EXTRA_VIDEO_CHANNEL).orEmpty())
-        )
-        // Hapus supaya tidak terbuka lagi saat Activity dibuat ulang (rotasi dll).
-        intent?.removeExtra(SubscriptionWatchWorker.EXTRA_VIDEO_ID)
-        return video
-    }
-
     private fun currentNetworkTypeForApp(): String {
         return try {
             val manager = getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
@@ -194,14 +178,13 @@ class MainActivity : AudioServiceActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // The current app intentionally has subscription upload/live notifications
-        // disabled. Cancel any worker left scheduled by an older installation so
-        // background playlistItems.list calls cannot keep consuming quota before
-        // Flutter's YouTube hub has a chance to initialize.
+        // Cancel subscription-monitor work scheduled by older versions.
+        // Music playback/media controls are unaffected.
         runCatching {
-            SubscriptionWatchWorker.configure(applicationContext, false, "", emptyList())
+            WorkManager.getInstance(applicationContext).cancelUniqueWork("musikku_subscription_watch")
+            WorkManager.getInstance(applicationContext).cancelUniqueWork("musikku_subscription_watch_now")
         }.onFailure { error ->
-            MusikKuLogger.w(TAG, "GAGAL MEMATIKAN WORKER SUBSCRIPTION LAMA", error)
+            MusikKuLogger.w(TAG, "GAGAL MEMBATALKAN WORKER SUBSCRIPTION LAMA", error)
         }
         healthMonitor = AppHealthMonitor.get(this)
         healthMonitor.start()
@@ -215,20 +198,6 @@ class MainActivity : AudioServiceActivity() {
                 previousHandler?.uncaughtException(thread, throwable)
             }
             uncaughtHandlerInstalled = true
-        }
-        pendingNotificationVideo = readNotificationVideo(intent)
-    }
-
-    override fun onNewIntent(intent: Intent) {
-        super.onNewIntent(intent)
-        setIntent(intent)
-        val video = readNotificationVideo(intent) ?: return
-        val channel = notificationMethodChannel
-        if (channel != null) {
-            // Flutter sudah berjalan: langsung buka videonya.
-            channel.invokeMethod("openVideoFromNotification", video)
-        } else {
-            pendingNotificationVideo = video
         }
     }
 
@@ -422,30 +391,6 @@ class MainActivity : AudioServiceActivity() {
                 // ==================================================
                 // LOAD VIDEO
                 // ==================================================
-
-                "configureBackgroundWatch" -> {
-                    val enabled = call.argument<Boolean>("enabled") ?: false
-                    val apiKey = call.argument<String>("apiKey").orEmpty()
-                    val rawChannels = call.argument<List<*>>("channels").orEmpty()
-                    val channels = rawChannels.mapNotNull { entry ->
-                        (entry as? Map<*, *>)?.entries?.associate {
-                            it.key.toString() to it.value.toString()
-                        }
-                    }
-                    try {
-                        SubscriptionWatchWorker.configure(applicationContext, enabled, apiKey, channels)
-                        result.success(null)
-                    } catch (e: Exception) {
-                        MusikKuLogger.e(TAG, "CONFIGURE WATCH GAGAL", e)
-                        result.error("WATCH_FAILED", e.message, null)
-                    }
-                }
-
-                "takePendingVideo" -> {
-                    val video = pendingNotificationVideo
-                    pendingNotificationVideo = null
-                    result.success(video)
-                }
 
                 "setPlayerUiVisible" -> {
                     val visible = call.argument<Boolean>("visible") ?: true

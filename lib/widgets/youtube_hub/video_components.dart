@@ -47,7 +47,6 @@ extension _YoutubeHubVideoComponents on _YoutubeHubState {
   }
 
   Widget _topBar({String? title}) {
-    final scheme = Theme.of(context).colorScheme;
     return SliverToBoxAdapter(
       child: Padding(
         padding: EdgeInsets.fromLTRB(14, MediaQuery.paddingOf(context).top + 4, 10, 4),
@@ -77,24 +76,6 @@ extension _YoutubeHubVideoComponents on _YoutubeHubState {
               visualDensity: VisualDensity.compact,
               onPressed: _openSearch,
               icon: const Icon(Icons.search_rounded),
-            ),
-            IconButton(
-              tooltip: _user == null ? 'Hubungkan YouTube' : 'Akun YouTube',
-              visualDensity: VisualDensity.compact,
-              onPressed: _user == null ? _login : _showAccountSheet,
-              icon: CircleAvatar(
-                radius: 15,
-                backgroundColor: scheme.surfaceContainerHighest,
-                child: _user == null
-                    ? Icon(Icons.person_outline_rounded, size: 18, color: scheme.onSurface)
-                    : Text(
-                        (_user!.displayName?.trim().isNotEmpty == true
-                                ? _user!.displayName!.trim().characters.first
-                                : '?')
-                            .toUpperCase(),
-                        style: TextStyle(color: scheme.onSurface, fontSize: 12, fontWeight: FontWeight.w800),
-                      ),
-              ),
             ),
           ],
         ),

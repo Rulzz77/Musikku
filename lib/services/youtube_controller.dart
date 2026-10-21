@@ -650,52 +650,6 @@ class NativeYoutubeController {
   }
 
   // ========================================================
-  // NOTIFIKASI LATAR BELAKANG (live & video baru)
-  // ========================================================
-
-  static Map<String, String>? _videoArgs(Object? raw) {
-    if (raw is! Map) return null;
-    final id = raw['videoId']?.toString() ?? '';
-    if (id.isEmpty) return null;
-    return {
-      'videoId': id,
-      'title': raw['title']?.toString() ?? '',
-      'channelTitle': raw['channelTitle']?.toString() ?? '',
-    };
-  }
-
-  /// Mengatur pengecekan berkala di sisi native (WorkManager) untuk channel
-  /// yang di-subscribe. Native mengirim notifikasi Android saat ada yang live
-  /// atau mengunggah video baru, walau aplikasi sudah ditutup.
-  /// [enabled] false = matikan dan hapus konfigurasi (mis. saat logout).
-  static Future<void> configureBackgroundWatch({
-    required bool enabled,
-    String apiKey = '',
-    List<Map<String, String>> channels = const [],
-  }) async {
-    try {
-      await _methods.invokeMethod('configureBackgroundWatch', {
-        'enabled': enabled,
-        'apiKey': apiKey,
-        'channels': channels,
-      });
-    } catch (_) {
-      // Build native lama tanpa fitur ini tetap boleh berjalan.
-    }
-  }
-
-  /// Video dari notifikasi yang diketuk saat aplikasi belum berjalan.
-  /// Null kalau tidak ada. Hanya bisa diambil sekali.
-  static Future<Map<String, String>?> takePendingVideo() async {
-    try {
-      final raw = await _methods.invokeMethod<Object>('takePendingVideo');
-      return _videoArgs(raw);
-    } catch (_) {
-      return null;
-    }
-  }
-
-  // ========================================================
   // STOP MEDIA NOTIFICATION
   // ========================================================
 
@@ -716,7 +670,6 @@ class NativeYoutubeController {
     required Future<void> Function() onStop,
     void Function(bool pipEnabled)? onPipChanged,
     void Function()? onPipWillEnter,
-    void Function(Map<String, String> video)? onOpenVideo,
     Future<void> Function(String? videoId, double? positionSeconds, bool shouldPlay)? onYoutubeAudioPlaybackError,
     void Function(String videoId, String error)? onYoutubeEmbedError,
   }) {
@@ -766,10 +719,7 @@ class NativeYoutubeController {
             onPipChanged?.call(call.arguments == true);
             break;
 
-          case 'openVideoFromNotification':
-            final video = _videoArgs(call.arguments);
-            if (video != null) onOpenVideo?.call(video);
-            break;
+
         }
 
         return null;

@@ -5,18 +5,6 @@ part of '../home_page.dart';
 
 /// Navigasi ke halaman lain, tombol Back, dan backup/restore.
 extension _HomeNavigation on _HomePageState {
-  /// Dipanggil saat notifikasi sistem (live / video baru) diketuk.
-  void _openVideoFromNotification(Map<String, String> data) {
-    if (!mounted) return;
-    final id = data['videoId'] ?? '';
-    if (id.isEmpty) return;
-    unawaited(_openYoutubeVideo(YoutubeSearchResult(
-      videoId: id,
-      title: (data['title'] ?? '').isEmpty ? 'Video' : data['title']!,
-      channelTitle: data['channelTitle'] ?? '',
-      thumbnailUrl: '',
-    )));
-  }
 
   Future<void> _playFromCustomList(
     YoutubeSearchResult video,

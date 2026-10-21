@@ -493,7 +493,6 @@ class _HomePageState extends State<HomePage>
           });
         }
       },
-      onOpenVideo: _openVideoFromNotification,
       onPipChanged: (enabled) {
         if (mounted) {
           if (enabled) {
@@ -533,11 +532,7 @@ class _HomePageState extends State<HomePage>
 
     unawaited(_loadSavedData());
 
-    // Notifikasi diketuk saat aplikasi belum berjalan: buka videonya begitu
-    // frame pertama selesai.
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final pending = await NativeYoutubeController.takePendingVideo();
-      if (pending != null && mounted) _openVideoFromNotification(pending);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_checkForAppUpdateOnLaunch());
     });
   }

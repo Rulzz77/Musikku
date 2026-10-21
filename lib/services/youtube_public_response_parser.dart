@@ -1,7 +1,7 @@
 import '../models/youtube_search_result.dart';
 
-/// Converts YouTube account API payloads into the app's track model.
-class YoutubeAccountResponseParser {
+/// Converts public YouTube API payloads into the app's track model.
+class YoutubePublicResponseParser {
   static List<YoutubeSearchResult> playlistItemsToTracks(Map<String, dynamic> data) {
     final items = data['items'];
     if (items is! List) return const [];

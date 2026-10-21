@@ -394,21 +394,42 @@ class _YoutubeHubState extends State<YoutubeHub> {
             ),
           SliverToBoxAdapter(
             child: SizedBox(
-              // 66 = tinggi NavigationBar yang menimpa daftar (Positioned bottom).
-              height: 12 + 66 + widget.bottomInset + MediaQuery.paddingOf(context).bottom,
+              // Extra clearance for the floating, inset navigation dock.
+              height: 26 + 66 + widget.bottomInset + MediaQuery.paddingOf(context).bottom,
             ),
           ),
             ],
           ),
         ),
         Positioned(
-          left: 0,
-          right: 0,
-          bottom: 0,
+          left: 12,
+          right: 12,
+          bottom: 8 + MediaQuery.paddingOf(context).bottom,
           child: Material(
-            color: Theme.of(context).colorScheme.surface,
-            elevation: 8,
-            child: NavigationBar(
+            color: Colors.transparent,
+            elevation: 0,
+            borderRadius: BorderRadius.circular(26),
+            clipBehavior: Clip.antiAlias,
+            child: Container(
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.97),
+                borderRadius: BorderRadius.circular(26),
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.70),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.16),
+                    blurRadius: 24,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: NavigationBar(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              indicatorColor: Theme.of(context).colorScheme.primaryContainer,
+              indicatorShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(17)),
               selectedIndex: _section.index,
               onDestinationSelected: (index) {
                 final nextSection = _YoutubeSection.values[index];
@@ -468,6 +489,7 @@ class _YoutubeHubState extends State<YoutubeHub> {
                   label: 'Koleksi',
                 ),
               ],
+              ),
             ),
           ),
         ),

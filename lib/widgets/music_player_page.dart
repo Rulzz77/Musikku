@@ -161,9 +161,89 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
 
                     return LayoutBuilder(
                       builder: (context, constraints) {
-                        final widthBasedArt = (constraints.maxWidth - 44).clamp(180.0, 330.0).toDouble();
-                        final heightBasedArt = (constraints.maxHeight * 0.36).clamp(170.0, 280.0).toDouble();
+                        final isWideLayout = constraints.maxWidth >= 760;
+                        final widthBasedArt = (constraints.maxWidth - (isWideLayout ? 92 : 44)).clamp(180.0, 330.0).toDouble();
+                        final heightBasedArt = (constraints.maxHeight * (isWideLayout ? 0.54 : 0.36)).clamp(170.0, 280.0).toDouble();
                         final artSize = math.min(widthBasedArt, heightBasedArt).toDouble();
+                        final artworkPanel = Center(
+                          child: Container(
+                            width: artSize,
+                            height: artSize,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(30),
+                              color: scheme.surfaceContainerHighest,
+                              border: Border.all(
+                                color: scheme.primary.withValues(alpha: 0.22),
+                                width: 1.2,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: scheme.primary.withValues(alpha: 0.08),
+                                  blurRadius: 40,
+                                  spreadRadius: 2,
+                                  offset: const Offset(0, 18),
+                                ),
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.16),
+                                  blurRadius: 18,
+                                  offset: const Offset(0, 8),
+                                ),
+                              ],
+                            ),
+                            clipBehavior: Clip.antiAlias,
+                            child: artwork.isNotEmpty
+                                ? Image.network(
+                                    artwork,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, _, _) => _artworkFallback(scheme),
+                                    loadingBuilder: (context, child, progress) => progress == null
+                                        ? child
+                                        : _artworkFallback(scheme, loading: true),
+                                  )
+                                : _artworkFallback(scheme),
+                          ),
+                        );
+                        final trackInfoPanel = Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    widget.video.title,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: theme.textTheme.titleLarge?.copyWith(
+                                      fontWeight: FontWeight.w900,
+                                      height: 1.18,
+                                      letterSpacing: -0.35,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    widget.video.channelTitle.isEmpty ? 'Artis tidak diketahui' : widget.video.channelTitle,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: theme.textTheme.titleMedium?.copyWith(
+                                      color: scheme.onSurfaceVariant,
+                                      fontSize: 14.5,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (busy)
+                              Padding(
+                                padding: const EdgeInsets.only(left: 10),
+                                child: SizedBox(
+                                  width: 22,
+                                  height: 22,
+                                  child: CircularProgressIndicator(strokeWidth: 2.5, color: scheme.primary),
+                                ),
+                              ),
+                          ],
+                        );
                         return SingleChildScrollView(
                           padding: const EdgeInsets.fromLTRB(22, 8, 22, 20),
                           child: ConstrainedBox(
@@ -173,86 +253,20 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
                                 const SizedBox(height: 8),
-                                Center(
-                                  child: Container(
-                                    width: artSize,
-                                    height: artSize,
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(30),
-                                      color: scheme.surfaceContainerHighest,
-                                      border: Border.all(
-                                        color: scheme.primary.withValues(alpha: 0.22),
-                                        width: 1.2,
-                                      ),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: scheme.primary.withValues(alpha: 0.08),
-                                          blurRadius: 40,
-                                          spreadRadius: 2,
-                                          offset: const Offset(0, 18),
-                                        ),
-                                        BoxShadow(
-                                          color: Colors.black.withValues(alpha: 0.16),
-                                          blurRadius: 18,
-                                          offset: const Offset(0, 8),
-                                        ),
-                                      ],
-                                    ),
-                                    clipBehavior: Clip.antiAlias,
-                                    child: artwork.isNotEmpty
-                                        ? Image.network(
-                                            artwork,
-                                            fit: BoxFit.cover,
-                                            errorBuilder: (_, _, _) => _artworkFallback(scheme),
-                                            loadingBuilder: (context, child, progress) => progress == null
-                                                ? child
-                                                : _artworkFallback(scheme, loading: true),
-                                          )
-                                        : _artworkFallback(scheme),
-                                  ),
-                                ),
-                                const SizedBox(height: 28),
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            widget.video.title,
-                                            maxLines: 2,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: theme.textTheme.titleLarge?.copyWith(
-                                              fontWeight: FontWeight.w900,
-                                              height: 1.18,
-                                              letterSpacing: -0.35,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 6),
-                                          Text(
-                                            widget.video.channelTitle.isEmpty ? 'Artis tidak diketahui' : widget.video.channelTitle,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: theme.textTheme.titleMedium?.copyWith(
-                                              color: scheme.onSurfaceVariant,
-                                              fontSize: 14.5,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    if (busy)
-                                      Padding(
-                                        padding: const EdgeInsets.only(left: 10),
-                                        child: SizedBox(
-                                          width: 22,
-                                          height: 22,
-                                          child: CircularProgressIndicator(strokeWidth: 2.5, color: scheme.primary),
-                                        ),
-                                      ),
-                                  ],
-                                ),
+                                if (isWideLayout)
+                                  Row(
+                                    crossAxisAlignment: CrossAxisAlignment.center,
+                                    children: [
+                                      Expanded(child: artworkPanel),
+                                      const SizedBox(width: 20),
+                                      Expanded(child: trackInfoPanel),
+                                    ],
+                                  )
+                                else ...[
+                                  artworkPanel,
+                                  const SizedBox(height: 28),
+                                  trackInfoPanel,
+                                ],
                                 const SizedBox(height: 14),
                                 Wrap(
                                   alignment: WrapAlignment.center,

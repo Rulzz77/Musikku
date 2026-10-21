@@ -206,6 +206,14 @@ class _LyricsPanelState extends State<LyricsPanel> {
               ],
             ),
           ),
+          if (widget.synced && widget.lyrics.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Text(
+                'Ketuk baris lirik untuk melompat ke bagian lagu itu.',
+                style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant),
+              ),
+            ),
           if (widget.nativeState != null)
             ValueListenableBuilder<NativeYoutubeState>(
               valueListenable: widget.nativeState!,

@@ -6,7 +6,6 @@ import '../app_info.dart';
 import 'app_health_page.dart';
 import '../services/app_settings.dart';
 import '../widgets/app_update_sheet.dart';
-import '../widgets/flow_components.dart';
 
 /// Pengaturan global aplikasi. Semua opsi terhubung langsung ke controller
 /// dan disimpan lewat SharedPreferences.
@@ -40,13 +39,59 @@ class AppSettingsPage extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
         children: [
-          const FlowPageHero(
-            icon: Icons.tune_rounded,
-            eyebrow: 'PERSONALISASI',
-            title: 'Atur MusikKu',
-            subtitle: 'Sesuaikan tampilan, penggunaan data, pemutar, dan perilaku aplikasi.',
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [scheme.primaryContainer.withValues(alpha: 0.88), scheme.surfaceContainerLow, scheme.secondaryContainer.withValues(alpha: 0.38)],
+              ),
+              borderRadius: BorderRadius.circular(28),
+              border: Border.all(color: scheme.primary.withValues(alpha: 0.18)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 58,
+                      height: 58,
+                      decoration: BoxDecoration(gradient: LinearGradient(colors: [scheme.primary, scheme.secondary]), borderRadius: BorderRadius.circular(19)),
+                      child: Icon(Icons.tune_rounded, size: 29, color: scheme.onPrimary),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('PUSAT KONTROL', style: TextStyle(color: scheme.primary, fontSize: 9.5, letterSpacing: 1.4, fontWeight: FontWeight.w900)),
+                          const SizedBox(height: 5),
+                          const Text('Atur MusikKu', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: -0.8)),
+                          const SizedBox(height: 5),
+                          Text('Semua preferensi dalam satu tempat.', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12.5, height: 1.35)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _SettingsPill(icon: Icons.palette_outlined, label: 'Tampilan'),
+                    _SettingsPill(icon: Icons.network_check_rounded, label: 'Hemat data'),
+                    _SettingsPill(icon: Icons.graphic_eq_rounded, label: 'Pemutar'),
+                    _SettingsPill(icon: Icons.shield_outlined, label: 'Kontrol lokal'),
+                  ],
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 22),
+          const SizedBox(height: 24),
           _SectionLabel(icon: Icons.palette_outlined, title: 'Tampilan'),
           const SizedBox(height: 8),
           Card(
@@ -314,6 +359,31 @@ class AppSettingsPage extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+
+class _SettingsPill extends StatelessWidget {
+  const _SettingsPill({required this.icon, required this.label});
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: scheme.surface.withValues(alpha: 0.70),
+        borderRadius: BorderRadius.circular(99),
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.45)),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, size: 14, color: scheme.primary),
+        const SizedBox(width: 6),
+        Text(label, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: scheme.onSurfaceVariant)),
+      ]),
     );
   }
 }

@@ -40,12 +40,6 @@ class _YoutubeSearchPageState extends State<YoutubeSearchPage> {
   List<String> _suggestions = const [];
   late List<String> _history;
   int _requestId = 0;
-  int _mode = 0;
-
-  static const _modes = <({String label, IconData icon})>[
-    (label: 'Musik', icon: Icons.music_note_rounded),
-  ];
-
   @override
   void initState() {
     super.initState();
@@ -94,11 +88,10 @@ class _YoutubeSearchPageState extends State<YoutubeSearchPage> {
     final q = value.trim();
     if (q.isEmpty) return;
     Navigator.of(context).pop(
-      YoutubeSearchRequest(query: q, mode: _modesForIndex(_mode)),
+      YoutubeSearchRequest(query: q, mode: YoutubeSearchMode.music),
     );
   }
 
-  YoutubeSearchMode _modesForIndex(int _) => YoutubeSearchMode.music;
 
   void _setSuggestion(String text) {
     _controller.value = TextEditingValue(
@@ -113,144 +106,250 @@ class _YoutubeSearchPageState extends State<YoutubeSearchPage> {
     final scheme = Theme.of(context).colorScheme;
     final typing = _controller.text.trim().isNotEmpty;
     final items = typing ? _suggestions : _history;
+    const quickSearches = <String>[
+      'Pop Indonesia',
+      'Lagu Inggris',
+      'DJ Remix',
+      'K-pop',
+      'Rock Indonesia',
+      'Lagu akustik',
+    ];
 
     return Scaffold(
-      appBar: AppBar(
-        titleSpacing: 0,
-        title: Container(
-          height: 46,
-          margin: const EdgeInsets.only(right: 8),
-          decoration: BoxDecoration(
-            color: scheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.45)),
-          ),
-          child: TextField(
-            controller: _controller,
-            focusNode: _focus,
-            textInputAction: TextInputAction.search,
-            onSubmitted: _submit,
-            decoration: InputDecoration(
-              hintText: 'Cari lagu, artis, album, atau remix',
-              prefixIcon: const Icon(Icons.search_rounded),
-              suffixIcon: typing
-                  ? IconButton(
-                      tooltip: 'Hapus',
-                      onPressed: _controller.clear,
-                      icon: const Icon(Icons.close_rounded),
-                    )
-                  : null,
-              border: InputBorder.none,
-              enabledBorder: InputBorder.none,
-              focusedBorder: InputBorder.none,
-              filled: false,
-              contentPadding: const EdgeInsets.symmetric(vertical: 10),
-            ),
-          ),
-        ),
-        actions: [
-          IconButton(
-            tooltip: 'Cari',
-            onPressed: () => _submit(_controller.text),
-            icon: Icon(Icons.arrow_forward_rounded, color: scheme.primary),
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          SizedBox(
-            height: 58,
-            child: ListView.separated(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-              scrollDirection: Axis.horizontal,
-              itemCount: _modes.length,
-              separatorBuilder: (_, _) => const SizedBox(width: 8),
-              itemBuilder: (context, index) {
-                final mode = _modes[index];
-                return ChoiceChip(
-                  selected: _mode == index,
-                  showCheckmark: false,
-                  avatar: Icon(mode.icon, size: 16),
-                  label: Text(mode.label),
-                  onSelected: (_) {
-                    setState(() => _mode = index);
-                    if (_controller.text.trim().isNotEmpty) {
-                      // Mode adalah affordance discovery; request akhir tetap
-                      // dikendalikan oleh Hub agar API usage tidak dobel.
-                      _focus.requestFocus();
-                    }
-                  },
-                );
-              },
-            ),
-          ),
-          if (!typing && _history.isNotEmpty)
+      body: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 10, 8),
+              padding: const EdgeInsets.fromLTRB(12, 8, 18, 14),
               child: Row(
                 children: [
-                  Icon(Icons.history_rounded, size: 17, color: scheme.onSurfaceVariant),
-                  const SizedBox(width: 8),
-                  Expanded(child: Text('Pencarian terakhir', style: TextStyle(fontWeight: FontWeight.w800, color: scheme.onSurfaceVariant))),
-                  TextButton(
-                    onPressed: () async {
-                      setState(() => _history.clear());
-                      await widget.onDeleteHistory(null);
-                    },
-                    child: const Text('Hapus semua'),
+                  IconButton.filledTonal(
+                    tooltip: 'Kembali',
+                    onPressed: () => Navigator.of(context).maybePop(),
+                    icon: const Icon(Icons.arrow_back_rounded),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Temukan musik',
+                          style: TextStyle(fontSize: 23, fontWeight: FontWeight.w900, letterSpacing: -0.7),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          typing ? 'Pilih saran atau lanjutkan pencarian' : 'Cari lagu, artis, album, atau remix',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(colors: [scheme.primary, scheme.secondary]),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Icon(Icons.graphic_eq_rounded, color: scheme.onPrimary),
                   ),
                 ],
               ),
             ),
-          if (typing && _suggestions.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 2, 16, 8),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text('Saran untuk “${_controller.text.trim()}”', style: const TextStyle(fontWeight: FontWeight.w800)),
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerLow,
+                  borderRadius: BorderRadius.circular(22),
+                  border: Border.all(color: _focus.hasFocus ? scheme.primary.withValues(alpha: 0.65) : scheme.outlineVariant.withValues(alpha: 0.5)),
+                  boxShadow: [
+                    BoxShadow(color: scheme.primary.withValues(alpha: _focus.hasFocus ? 0.08 : 0.025), blurRadius: 20, offset: const Offset(0, 7)),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(left: 15, right: 9),
+                      child: Icon(Icons.search_rounded, color: scheme.primary, size: 25),
+                    ),
+                    Expanded(
+                      child: TextField(
+                        controller: _controller,
+                        focusNode: _focus,
+                        textInputAction: TextInputAction.search,
+                        onSubmitted: _submit,
+                        decoration: const InputDecoration(
+                          hintText: 'Lagu atau nama artis…',
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          filled: false,
+                          contentPadding: EdgeInsets.symmetric(vertical: 17),
+                        ),
+                      ),
+                    ),
+                    if (typing)
+                      IconButton(
+                        tooltip: 'Hapus teks',
+                        onPressed: _controller.clear,
+                        icon: Icon(Icons.close_rounded, color: scheme.onSurfaceVariant),
+                      ),
+                    Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: IconButton.filled(
+                        tooltip: 'Cari sekarang',
+                        onPressed: () => _submit(_controller.text),
+                        icon: const Icon(Icons.arrow_forward_rounded),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          Expanded(
-            child: ListView.separated(
-              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              padding: const EdgeInsets.fromLTRB(12, 2, 12, 24),
-              itemCount: items.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 4),
-              itemBuilder: (context, index) {
-                final text = items[index];
-                return Material(
-                  color: scheme.surfaceContainerLow,
-                  borderRadius: BorderRadius.circular(14),
-                  child: ListTile(
-                    leading: Container(
-                      width: 34,
-                      height: 34,
-                      decoration: BoxDecoration(color: scheme.primaryContainer, borderRadius: BorderRadius.circular(10)),
-                      alignment: Alignment.center,
-                      child: Icon(typing ? Icons.search_rounded : Icons.history_rounded, size: 18, color: scheme.onPrimaryContainer),
+            if (!typing && _history.isEmpty) ...[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(18, 0, 18, 8),
+                child: Text('Mulai dari suasana favoritmu', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: scheme.onSurface)),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final query in quickSearches)
+                      ActionChip(
+                        avatar: const Icon(Icons.play_arrow_rounded, size: 16),
+                        label: Text(query),
+                        onPressed: () => _submit(query),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+            if (!typing && _history.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(18, 0, 12, 8),
+                child: Row(
+                  children: [
+                    Icon(Icons.history_rounded, size: 18, color: scheme.primary),
+                    const SizedBox(width: 8),
+                    const Expanded(child: Text('Pencarian terakhir', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14))),
+                    TextButton(
+                      onPressed: () async {
+                        setState(() => _history.clear());
+                        await widget.onDeleteHistory(null);
+                      },
+                      child: const Text('Hapus semua'),
                     ),
-                    title: Text(text, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
-                    trailing: typing
-                        ? IconButton(
-                            tooltip: 'Isi pencarian',
-                            icon: Icon(Icons.north_west_rounded, size: 18, color: scheme.onSurfaceVariant),
-                            onPressed: () => _setSuggestion(text),
-                          )
-                        : IconButton(
-                            tooltip: 'Hapus dari riwayat',
-                            icon: Icon(Icons.close_rounded, size: 19, color: scheme.onSurfaceVariant),
-                            onPressed: () async {
-                              setState(() => _history.removeWhere((item) => item.toLowerCase() == text.toLowerCase()));
-                              await widget.onDeleteHistory(text);
-                            },
+                  ],
+                ),
+              ),
+            if (typing)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(18, 0, 16, 8),
+                child: Row(
+                  children: [
+                    Icon(Icons.auto_awesome_rounded, size: 17, color: scheme.primary),
+                    const SizedBox(width: 7),
+                    Expanded(
+                      child: Text(
+                        _suggestions.isEmpty ? 'Mencari saran…' : 'Saran untuk “${_controller.text.trim()}”',
+                        style: TextStyle(fontWeight: FontWeight.w900, color: scheme.onSurfaceVariant, fontSize: 12),
+                      ),
+                    ),
+                    if (_suggestions.isNotEmpty) Text('${_suggestions.length}', style: TextStyle(color: scheme.primary, fontWeight: FontWeight.w800)),
+                  ],
+                ),
+              ),
+            Expanded(
+              child: items.isEmpty
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(28),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 78,
+                              height: 78,
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(colors: [scheme.primary.withValues(alpha: 0.17), scheme.secondary.withValues(alpha: 0.10)]),
+                                borderRadius: BorderRadius.circular(26),
+                              ),
+                              child: Icon(typing ? Icons.search_off_rounded : Icons.headphones_rounded, size: 38, color: scheme.primary),
+                            ),
+                            const SizedBox(height: 14),
+                            Text(
+                              typing ? 'Belum ada saran' : 'Musik favoritmu dimulai di sini',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              typing ? 'Coba kata kunci lain atau langsung tekan tombol panah untuk mencari.' : 'Ketik judul lagu atau pilih salah satu ide pencarian di atas.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: scheme.onSurfaceVariant, height: 1.4, fontSize: 12.5),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  : ListView.separated(
+                      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                      padding: const EdgeInsets.fromLTRB(14, 2, 14, 26),
+                      itemCount: items.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 7),
+                      itemBuilder: (context, index) {
+                        final text = items[index];
+                        return Material(
+                          color: scheme.surfaceContainerLow,
+                          borderRadius: BorderRadius.circular(17),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(17),
+                            onTap: () => _submit(text),
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(12, 7, 6, 7),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 42,
+                                    height: 42,
+                                    decoration: BoxDecoration(color: scheme.primaryContainer.withValues(alpha: 0.8), borderRadius: BorderRadius.circular(13)),
+                                    child: Icon(typing ? Icons.search_rounded : Icons.history_rounded, color: scheme.onPrimaryContainer, size: 20),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(child: Text(text, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5))),
+                                  if (typing)
+                                    IconButton(
+                                      tooltip: 'Isi pencarian',
+                                      icon: Icon(Icons.north_west_rounded, size: 19, color: scheme.onSurfaceVariant),
+                                      onPressed: () => _setSuggestion(text),
+                                    )
+                                  else
+                                    IconButton(
+                                      tooltip: 'Hapus dari riwayat',
+                                      icon: Icon(Icons.close_rounded, size: 19, color: scheme.onSurfaceVariant),
+                                      onPressed: () async {
+                                        setState(() => _history.removeWhere((item) => item.toLowerCase() == text.toLowerCase()));
+                                        await widget.onDeleteHistory(text);
+                                      },
+                                    ),
+                                ],
+                              ),
+                            ),
                           ),
-                    onTap: () => _submit(text),
-                  ),
-                );
-              },
+                        );
+                      },
+                    ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

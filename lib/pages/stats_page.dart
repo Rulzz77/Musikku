@@ -121,10 +121,8 @@ class _StatsPageState extends State<StatsPage> {
                 const SizedBox(height: 14),
                 LayoutBuilder(
                   builder: (context, constraints) {
-                    final compact = constraints.maxWidth < 560;
-                    final cardWidth = compact
-                        ? constraints.maxWidth
-                        : (constraints.maxWidth - 20) / 3;
+                    final columns = constraints.maxWidth >= 820 ? 4 : (constraints.maxWidth >= 560 ? 3 : 2);
+                    final cardWidth = (constraints.maxWidth - (10 * (columns - 1))) / columns;
                     return Wrap(
                       spacing: 10,
                       runSpacing: 10,
@@ -146,6 +144,12 @@ class _StatsPageState extends State<StatsPage> {
                           icon: Icons.skip_next_rounded,
                           label: 'Dilewati',
                           value: '$totalSkips',
+                        ),
+                        _MetricCard(
+                          width: cardWidth,
+                          icon: Icons.mic_external_on_rounded,
+                          label: 'Artis unik',
+                          value: '${artistCounts.length}',
                         ),
                       ],
                     );

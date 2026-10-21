@@ -160,6 +160,41 @@ class _AppHealthPageState extends State<AppHealthPage> {
                 subtitle: 'Pantau kondisi pemutar, perangkat audio, dan log masalah yang tersimpan lokal.',
               ),
               const SizedBox(height: 14),
+              GridView.count(
+                crossAxisCount: MediaQuery.sizeOf(context).width >= 1000 ? 4 : 2,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                crossAxisSpacing: 10,
+                mainAxisSpacing: 10,
+                childAspectRatio: MediaQuery.sizeOf(context).width >= 1000 ? 2.55 : 2.05,
+                children: [
+                  _HealthMetricCard(
+                    icon: Icons.receipt_long_rounded,
+                    label: 'Log tersimpan',
+                    value: '${events.length}',
+                    scheme: scheme,
+                  ),
+                  _HealthMetricCard(
+                    icon: events.isEmpty ? Icons.check_circle_outline_rounded : Icons.info_outline_rounded,
+                    label: 'Ringkasan log',
+                    value: events.isEmpty ? 'Tidak ada' : 'Ada catatan',
+                    scheme: scheme,
+                  ),
+                  _HealthMetricCard(
+                    icon: Icons.devices_rounded,
+                    label: 'Platform',
+                    value: _platformName,
+                    scheme: scheme,
+                  ),
+                  _HealthMetricCard(
+                    icon: Icons.verified_rounded,
+                    label: 'Versi',
+                    value: app_info.appVersion,
+                    scheme: scheme,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16),
@@ -350,6 +385,36 @@ class _AppHealthPageState extends State<AppHealthPage> {
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+
+class _HealthMetricCard extends StatelessWidget {
+  const _HealthMetricCard({required this.icon, required this.label, required this.value, required this.scheme});
+  final IconData icon;
+  final String label;
+  final String value;
+  final ColorScheme scheme;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(13),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.42)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Row(children: [Icon(icon, color: scheme.primary, size: 18), const SizedBox(width: 7), Expanded(child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11, fontWeight: FontWeight.w700))) ]),
+          const SizedBox(height: 7),
+          Text(value, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900, letterSpacing: -0.4, color: scheme.onSurface)),
+        ],
       ),
     );
   }

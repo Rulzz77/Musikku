@@ -111,20 +111,15 @@ class _LocalMusicPageState extends State<LocalMusicPage> {
     return '$minutes:${(seconds % 60).toString().padLeft(2, '0')}';
   }
 
-  Future<void> _playAll() async {
-    final songs = _visibleSongs.map((song) => song.toPlayable()).toList(growable: false);
-    if (songs.isEmpty) return;
-    await widget.onPlayFromList(songs.first, songs);
-  }
-
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final songs = _visibleSongs;
+    final playableSongs = songs.map((song) => song.toPlayable()).toList(growable: false);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Musik di perangkat'),
+        title: const Text('Musik Lokal'),
         actions: [
           IconButton(
             tooltip: 'Pindai ulang',
@@ -158,78 +153,128 @@ class _LocalMusicPageState extends State<LocalMusicPage> {
                         slivers: [
                           SliverToBoxAdapter(
                             child: Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
+                              padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
                               child: Container(
                                 padding: const EdgeInsets.all(18),
                                 decoration: BoxDecoration(
                                   gradient: LinearGradient(
                                     begin: Alignment.topLeft,
                                     end: Alignment.bottomRight,
-                                    colors: [scheme.primaryContainer.withValues(alpha: 0.75), scheme.surfaceContainerLow],
+                                    colors: [scheme.primaryContainer.withValues(alpha: 0.88), scheme.surfaceContainerLow],
                                   ),
-                                  borderRadius: BorderRadius.circular(28),
+                                  borderRadius: BorderRadius.circular(26),
                                   border: Border.all(color: scheme.primary.withValues(alpha: 0.20)),
-                                  boxShadow: [BoxShadow(color: scheme.primary.withValues(alpha: 0.06), blurRadius: 24, offset: const Offset(0, 8))],
                                 ),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text('YOUR DEVICE LIBRARY', style: TextStyle(color: scheme.secondary, fontSize: 9.5, letterSpacing: 1.25, fontWeight: FontWeight.w900)),
-                                    const SizedBox(height: 9),
                                     Row(
                                       children: [
-                                        Container(width: 52, height: 52, decoration: BoxDecoration(color: scheme.primary.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(16)), child: Icon(Icons.folder_open_rounded, color: scheme.primary, size: 26)),
-                                        const SizedBox(width: 12),
+                                        Container(
+                                          width: 58,
+                                          height: 58,
+                                          decoration: BoxDecoration(
+                                            gradient: LinearGradient(colors: [scheme.primary, scheme.secondary]),
+                                            borderRadius: BorderRadius.circular(18),
+                                          ),
+                                          child: Icon(Icons.library_music_rounded, color: scheme.onPrimary, size: 28),
+                                        ),
+                                        const SizedBox(width: 13),
                                         Expanded(
-                                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                                            Text('${_songs.length} lagu ditemukan', style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w900, letterSpacing: -0.35)),
-                                            const SizedBox(height: 3),
-                                            Text('File audio lokal tetap berada di perangkatmu.', style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant)),
-                                          ]),
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text('KOLEKSI PERANGKAT', style: TextStyle(color: scheme.primary, fontSize: 9.5, letterSpacing: 1.35, fontWeight: FontWeight.w900)),
+                                              const SizedBox(height: 5),
+                                              Text('${_songs.length} lagu tersedia', style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w900, letterSpacing: -0.6)),
+                                              const SizedBox(height: 3),
+                                              Text('Tersimpan lokal • tetap di perangkatmu', style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant)),
+                                            ],
+                                          ),
                                         ),
                                       ],
                                     ),
-                                    const SizedBox(height: 12),
-                                    Wrap(
-                                      spacing: 7,
-                                      runSpacing: 7,
-                                      children: [
-                                        _LibraryPill(icon: Icons.library_music_rounded, label: '${_songs.length} lagu'),
-                                        _LibraryPill(icon: Icons.person_rounded, label: '${_songs.map((item) => item.artist.trim()).where((item) => item.isNotEmpty).toSet().length} artis'),
-                                        const _LibraryPill(icon: Icons.phone_android_rounded, label: 'Lokal · privat'),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 15),
-                                    TextField(
-                                      controller: _search,
-                                      textInputAction: TextInputAction.search,
-                                      decoration: InputDecoration(
-                                        hintText: 'Cari judul, artis, album…',
-                                        prefixIcon: const Icon(Icons.search_rounded),
-                                        suffixIcon: _search.text.isEmpty ? null : IconButton(onPressed: _search.clear, icon: const Icon(Icons.close_rounded)),
-                                        filled: true,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 12),
+                                    const SizedBox(height: 16),
                                     Wrap(
                                       spacing: 8,
                                       runSpacing: 8,
                                       children: [
-                                        ChoiceChip(label: const Text('Judul'), selected: _sort == _LocalSort.title, onSelected: (_) => setState(() => _sort = _LocalSort.title)),
-                                        ChoiceChip(label: const Text('Artis'), selected: _sort == _LocalSort.artist, onSelected: (_) => setState(() => _sort = _LocalSort.artist)),
-                                        ChoiceChip(label: const Text('Durasi'), selected: _sort == _LocalSort.duration, onSelected: (_) => setState(() => _sort = _LocalSort.duration)),
-                                        FilledButton.icon(onPressed: songs.isEmpty ? null : _playAll, icon: const Icon(Icons.play_arrow_rounded, size: 18), label: const Text('Putar semua')),
+                                        _LibraryPill(icon: Icons.person_rounded, label: '${_songs.map((item) => item.artist.trim()).where((item) => item.isNotEmpty).toSet().length} artis'),
+                                        const _LibraryPill(icon: Icons.phone_android_rounded, label: 'Lokal · privat'),
                                       ],
+                                    ),
+                                    const SizedBox(height: 12),
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: FilledButton.icon(
+                                        onPressed: playableSongs.isEmpty ? null : () => widget.onPlayFromList(playableSongs.first, playableSongs),
+                                        icon: const Icon(Icons.play_arrow_rounded, size: 19),
+                                        label: const Text('Putar semua'),
+                                      ),
                                     ),
                                   ],
                                 ),
                               ),
                             ),
                           ),
+                          SliverToBoxAdapter(
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                              child: TextField(
+                                controller: _search,
+                                textInputAction: TextInputAction.search,
+                                decoration: InputDecoration(
+                                  hintText: 'Cari judul, artis, album, atau genre',
+                                  prefixIcon: const Icon(Icons.search_rounded),
+                                  suffixIcon: _search.text.isEmpty ? null : IconButton(onPressed: _search.clear, icon: const Icon(Icons.close_rounded)),
+                                  filled: true,
+                                  fillColor: scheme.surfaceContainerLow,
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide.none),
+                                ),
+                              ),
+                            ),
+                          ),
+                          SliverToBoxAdapter(
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(18, 0, 16, 10),
+                              child: Row(
+                                children: [
+                                  const Expanded(child: Text('Semua lagu', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900, letterSpacing: -0.3))),
+                                  Text('${songs.length} lagu', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12, fontWeight: FontWeight.w700)),
+                                  const SizedBox(width: 8),
+                                  PopupMenuButton<_LocalSort>(
+                                    tooltip: 'Urutkan lagu',
+                                    initialValue: _sort,
+                                    onSelected: (value) => setState(() => _sort = value),
+                                    icon: const Icon(Icons.sort_rounded),
+                                    itemBuilder: (context) => const [
+                                      PopupMenuItem(value: _LocalSort.title, child: Text('Urutkan: judul')),
+                                      PopupMenuItem(value: _LocalSort.artist, child: Text('Urutkan: artis')),
+                                      PopupMenuItem(value: _LocalSort.duration, child: Text('Durasi terpanjang')),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
                           if (songs.isEmpty)
                             SliverFillRemaining(
                               hasScrollBody: false,
-                              child: Center(child: Padding(padding: const EdgeInsets.all(24), child: Column(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.music_off_rounded, size: 48, color: scheme.onSurfaceVariant), const SizedBox(height: 10), const Text('Lagu tidak ditemukan', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900)), const SizedBox(height: 4), Text(_search.text.isEmpty ? 'Tambahkan file audio ke perangkat lalu pindai ulang.' : 'Coba kata kunci lain.', style: TextStyle(color: scheme.onSurfaceVariant), textAlign: TextAlign.center)]))),
+                              child: Center(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(24),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.music_off_rounded, size: 48, color: scheme.onSurfaceVariant),
+                                      const SizedBox(height: 10),
+                                      const Text('Lagu tidak ditemukan', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
+                                      const SizedBox(height: 4),
+                                      Text(_search.text.isEmpty ? 'Tambahkan file audio ke perangkat lalu pindai ulang.' : 'Coba kata kunci lain.', style: TextStyle(color: scheme.onSurfaceVariant), textAlign: TextAlign.center),
+                                    ],
+                                  ),
+                                ),
+                              ),
                             )
                           else
                             SliverPadding(
@@ -239,26 +284,49 @@ class _LocalMusicPageState extends State<LocalMusicPage> {
                                 itemBuilder: (context, index) {
                                   final song = songs[index];
                                   final video = song.toPlayable();
-                                  return Card(
-                                    margin: const EdgeInsets.symmetric(vertical: 4),
-                                    child: ListTile(
-                                      contentPadding: const EdgeInsets.fromLTRB(9, 4, 6, 4),
-                                      onTap: () => unawaited(widget.onPlayFromList(video, songs.map((item) => item.toPlayable()).toList(growable: false))),
-                                      leading: ClipRRect(
-                                        borderRadius: BorderRadius.circular(12),
-                                        child: UnifiedArtwork(track: video, width: 58, height: 58, cacheWidth: 174, borderRadius: BorderRadius.circular(12)),
-                                      ),
-                                      title: Text(song.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
-                                      subtitle: Padding(
-                                        padding: const EdgeInsets.only(top: 3),
-                                        child: Text([song.artist.isEmpty ? 'Artis tidak diketahui' : song.artist, if (song.album.isNotEmpty) song.album].join(' • '), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11)),
-                                      ),
-                                      trailing: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Text(_duration(song.durationMs), style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11, fontWeight: FontWeight.w700)),
-                                          IconButton(tooltip: 'Tambahkan ke antrean', onPressed: () => widget.onAddToQueue(video), icon: const Icon(Icons.playlist_add_rounded)),
-                                        ],
+                                  return Padding(
+                                    padding: const EdgeInsets.only(bottom: 8),
+                                    child: Material(
+                                      color: scheme.surfaceContainerLow,
+                                      borderRadius: BorderRadius.circular(19),
+                                      child: InkWell(
+                                        borderRadius: BorderRadius.circular(19),
+                                        onTap: () => unawaited(widget.onPlayFromList(video, playableSongs)),
+                                        child: Padding(
+                                          padding: const EdgeInsets.fromLTRB(10, 9, 5, 9),
+                                          child: Row(
+                                            children: [
+                                              SizedBox(
+                                                width: 24,
+                                                child: Text('${index + 1}', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant, fontWeight: FontWeight.w800)),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              ClipRRect(
+                                                borderRadius: BorderRadius.circular(13),
+                                                child: UnifiedArtwork(track: video, width: 56, height: 56, cacheWidth: 168, borderRadius: BorderRadius.circular(13)),
+                                              ),
+                                              const SizedBox(width: 12),
+                                              Expanded(
+                                                child: Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    Text(song.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13)),
+                                                    const SizedBox(height: 4),
+                                                    Text([song.artist.isEmpty ? 'Artis tidak diketahui' : song.artist, if (song.album.isNotEmpty) song.album].join(' · '), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11.5)),
+                                                    const SizedBox(height: 5),
+                                                    Text(_sort == _LocalSort.duration ? 'Durasi ${_duration(song.durationMs)}' : 'Audio lokal · ${_duration(song.durationMs)}', style: TextStyle(color: scheme.primary, fontSize: 10, fontWeight: FontWeight.w800)),
+                                                  ],
+                                                ),
+                                              ),
+                                              IconButton(
+                                                tooltip: 'Tambahkan ke antrean',
+                                                onPressed: () => widget.onAddToQueue(video),
+                                                icon: const Icon(Icons.playlist_add_rounded),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
                                       ),
                                     ),
                                   );

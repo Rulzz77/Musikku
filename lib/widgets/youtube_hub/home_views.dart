@@ -167,28 +167,35 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
       SliverToBoxAdapter(child: _modernWelcomeHeader()),
       SliverToBoxAdapter(child: _featuredMusicBanner()),
       _chipRow(),
-      _sectionHeader('Akses cepat'),
+      _sectionHeader('Langsung putar'),
       SliverToBoxAdapter(
-        child: SizedBox(
-          height: 86,
-          child: ListView.separated(
-            padding: const EdgeInsets.fromLTRB(14, 0, 14, 5),
-            scrollDirection: Axis.horizontal,
-            itemCount: 4,
-            separatorBuilder: (_, _) => const SizedBox(width: 9),
-            itemBuilder: (context, index) {
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 0, 14, 4),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final columns = constraints.maxWidth >= 620 ? 4 : 2;
               final actions = <({String title, String subtitle, IconData icon, VoidCallback onTap})>[
                 (title: 'Mix favorit', subtitle: '${widget.favorites.length} lagu tersimpan', icon: Icons.auto_awesome_rounded, onTap: _playFavoritesMix),
                 (title: 'Musik lokal', subtitle: 'File di perangkat', icon: Icons.library_music_rounded, onTap: _openLocalMusic),
                 (title: 'Riwayat', subtitle: '${widget.recentlyPlayed.length} lagu terakhir', icon: Icons.history_rounded, onTap: _openRecentHistory),
-                (title: 'Radio', subtitle: 'Temukan lagu serupa', icon: Icons.radio_rounded, onTap: _startRadioFromCollection),
+                (title: 'Radio', subtitle: 'Lagu yang nyambung', icon: Icons.radio_rounded, onTap: _startRadioFromCollection),
               ];
-              final action = actions[index];
-              return _homeQuickActionCard(
-                title: action.title,
-                subtitle: action.subtitle,
-                icon: action.icon,
-                onTap: action.onTap,
+              return GridView.count(
+                crossAxisCount: columns,
+                crossAxisSpacing: 9,
+                mainAxisSpacing: 9,
+                childAspectRatio: columns == 2 ? 2.14 : 1.95,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                children: [
+                  for (final action in actions)
+                    _homeQuickActionCard(
+                      title: action.title,
+                      subtitle: action.subtitle,
+                      icon: action.icon,
+                      onTap: action.onTap,
+                    ),
+                ],
               );
             },
           ),
@@ -428,7 +435,7 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
   }) {
     final scheme = Theme.of(context).colorScheme;
     return SizedBox(
-      width: 158,
+      width: double.infinity,
       child: Material(
         color: scheme.surfaceContainerLow,
         shape: RoundedRectangleBorder(

@@ -236,38 +236,75 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
     return [
       SliverToBoxAdapter(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Radio untuk selera kamu', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900, letterSpacing: -0.7)),
-              const SizedBox(height: 6),
-              Text('Mulai dari satu lagu, lalu lanjutkan ke rekomendasi yang diacak tetapi tetap nyambung. Bahasa boleh berganti kalau gaya musiknya cocok.', style: TextStyle(color: scheme.onSurfaceVariant, height: 1.4)),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  FilledButton.icon(
-                    onPressed: videos.isEmpty ? null : () => unawaited(widget.onPlayFromList(videos.first, videos)),
-                    icon: const Icon(Icons.shuffle_rounded, size: 18),
-                    label: const Text('Putar mix'),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: radioSeed == null || widget.onStartRadio == null
-                        ? null
-                        : () => unawaited(widget.onStartRadio!(radioSeed)),
-                    icon: const Icon(Icons.radio_rounded, size: 18),
-                    label: const Text('Mulai radio'),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: _feedLoading ? null : () => unawaited(_loadHome(force: true)),
-                    icon: const Icon(Icons.refresh_rounded, size: 18),
-                    label: const Text('Segarkan'),
-                  ),
-                ],
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+          child: Container(
+            padding: const EdgeInsets.all(19),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [scheme.primaryContainer.withValues(alpha: 0.92), scheme.surfaceContainerLow, scheme.secondaryContainer.withValues(alpha: 0.42)],
               ),
-            ],
+              borderRadius: BorderRadius.circular(28),
+              border: Border.all(color: scheme.primary.withValues(alpha: 0.20)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 58,
+                      height: 58,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(colors: [scheme.primary, scheme.secondary]),
+                        borderRadius: BorderRadius.circular(19),
+                      ),
+                      child: Icon(Icons.radio_rounded, size: 30, color: scheme.onPrimary),
+                    ),
+                    const SizedBox(width: 13),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('MUSIC DISCOVERY', style: TextStyle(color: scheme.primary, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.35)),
+                          const SizedBox(height: 5),
+                          const Text('Radio untuk selera kamu', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900, letterSpacing: -0.65)),
+                          const SizedBox(height: 4),
+                          Text('Mulai dari satu lagu, lalu temukan lagu lain yang nyambung.', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12, height: 1.35)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 15),
+                Text('Rekomendasi diacak berdasarkan gaya musik dan konteks lagu. Bahasa bisa berganti jika lagunya cocok.', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12.5, height: 1.4)),
+                const SizedBox(height: 15),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    FilledButton.icon(
+                      onPressed: videos.isEmpty ? null : () => unawaited(widget.onPlayFromList(videos.first, videos)),
+                      icon: const Icon(Icons.shuffle_rounded, size: 18),
+                      label: const Text('Putar mix'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: radioSeed == null || widget.onStartRadio == null
+                          ? null
+                          : () => unawaited(widget.onStartRadio!(radioSeed)),
+                      icon: const Icon(Icons.radio_rounded, size: 18),
+                      label: const Text('Mulai radio'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: _feedLoading ? null : () => unawaited(_loadHome(force: true)),
+                      icon: const Icon(Icons.refresh_rounded, size: 18),
+                      label: const Text('Segarkan'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),

@@ -470,40 +470,64 @@ extension _HomeQueueSheet on _HomePageState {
                           itemBuilder: (context, index) {
                             final item = items[index];
                             final video = item.video;
-                            return Card(
+                            return Padding(
                               key: ValueKey<String>(item.id),
-                              margin: const EdgeInsets.symmetric(vertical: 4),
-                              color: scheme.surfaceContainerLow,
-                              child: ListTile(
-                                onTap: () {
-                                  _queueManager.remove(video.videoId);
-                                  unawaited(_storage.saveQueue(_queueManager.items));
-                                  Navigator.of(sheetContext).pop();
-                                  unawaited(_playVideo(video));
-                                },
-                                leading: ClipRRect(
-                                  borderRadius: BorderRadius.circular(10),
-                                  child: SizedBox(
-                                    width: 54,
-                                    height: 54,
-                                    child: video.coverUrl.isEmpty
-                                        ? ColoredBox(color: scheme.surfaceContainerHighest, child: Icon(Icons.music_note_rounded, color: scheme.onSurfaceVariant))
-                                        : Image.network(video.coverUrl, fit: BoxFit.cover, errorBuilder: (_, _, _) => ColoredBox(color: scheme.surfaceContainerHighest, child: Icon(Icons.music_note_rounded, color: scheme.onSurfaceVariant))),
-                                  ),
-                                ),
-                                title: Text(video.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
-                                subtitle: Text(video.channelTitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
-                                trailing: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    IconButton(
-                                      tooltip: 'Hapus dari antrean',
-                                      visualDensity: VisualDensity.compact,
-                                      onPressed: () => removeFromQueueWithUndo(video),
-                                      icon: const Icon(Icons.close_rounded, size: 20),
+                              padding: const EdgeInsets.symmetric(vertical: 4),
+                              child: Material(
+                                color: scheme.surfaceContainerLow,
+                                borderRadius: BorderRadius.circular(18),
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(18),
+                                  onTap: () {
+                                    _queueManager.remove(video.videoId);
+                                    unawaited(_storage.saveQueue(_queueManager.items));
+                                    Navigator.of(sheetContext).pop();
+                                    unawaited(_playVideo(video));
+                                  },
+                                  child: Padding(
+                                    padding: const EdgeInsets.fromLTRB(10, 9, 6, 9),
+                                    child: Row(
+                                      children: [
+                                        ClipRRect(
+                                          borderRadius: BorderRadius.circular(13),
+                                          child: SizedBox(
+                                            width: 54,
+                                            height: 54,
+                                            child: video.coverUrl.isEmpty
+                                                ? ColoredBox(color: scheme.surfaceContainerHighest, child: Icon(Icons.music_note_rounded, color: scheme.onSurfaceVariant))
+                                                : Image.network(video.coverUrl, fit: BoxFit.cover, errorBuilder: (_, _, _) => ColoredBox(color: scheme.surfaceContainerHighest, child: Icon(Icons.music_note_rounded, color: scheme.onSurfaceVariant))),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Text(video.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13)),
+                                              const SizedBox(height: 4),
+                                              Text(video.channelTitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
+                                              const SizedBox(height: 5),
+                                              Text('MENUNGGU DIPUTAR', style: TextStyle(fontSize: 8.5, letterSpacing: 0.8, fontWeight: FontWeight.w900, color: scheme.primary)),
+                                            ],
+                                          ),
+                                        ),
+                                        IconButton(
+                                          tooltip: 'Hapus dari antrean',
+                                          visualDensity: VisualDensity.compact,
+                                          onPressed: () => removeFromQueueWithUndo(video),
+                                          icon: const Icon(Icons.close_rounded, size: 20),
+                                        ),
+                                        ReorderableDragStartListener(
+                                          index: index,
+                                          child: Padding(
+                                            padding: const EdgeInsets.symmetric(horizontal: 5),
+                                            child: Icon(Icons.drag_handle_rounded, color: scheme.onSurfaceVariant),
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                    ReorderableDragStartListener(index: index, child: Icon(Icons.drag_handle_rounded, color: scheme.onSurfaceVariant)),
-                                  ],
+                                  ),
                                 ),
                               ),
                             );

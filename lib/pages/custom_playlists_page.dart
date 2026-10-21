@@ -391,52 +391,124 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
             icon: const Icon(Icons.add_rounded),
           ),
         ),
-        const SizedBox(height: 11),
-        for (final playlist in widget.playlists) ...[
-          Card(
-            clipBehavior: Clip.antiAlias,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(22),
-              onTap: () => setState(() => _selectedPlaylistId = playlist.id),
-              child: Padding(
-                padding: const EdgeInsets.all(10),
-                child: Row(
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(16),
-                      child: SizedBox(
-                        width: 66,
-                        height: 66,
-                        child: playlist.songs.isEmpty
-                            ? DecoratedBox(
-                                decoration: BoxDecoration(gradient: LinearGradient(colors: [scheme.primaryContainer, scheme.secondaryContainer])),
-                                child: Icon(Icons.queue_music_rounded, color: scheme.primary, size: 28),
-                              )
-                            : UnifiedArtwork(track: playlist.songs.first, width: 66, height: 66, fit: BoxFit.cover),
-                      ),
-                    ),
-                    const SizedBox(width: 13),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(playlist.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14)),
-                          const SizedBox(height: 5),
-                          Text('${playlist.songs.length} lagu', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12)),
-                        ],
-                      ),
-                    ),
-                    Icon(Icons.chevron_right_rounded, color: scheme.onSurfaceVariant),
-                  ],
-                ),
+        const SizedBox(height: 12),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final columns = constraints.maxWidth >= 620 ? 3 : 2;
+            return GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: widget.playlists.length,
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: columns,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                childAspectRatio: 0.79,
               ),
-            ),
-          ),
-          const SizedBox(height: 8),
-        ],
+              itemBuilder: (context, index) => _playlistPoster(widget.playlists[index], scheme),
+            );
+          },
+        ),
       ],
     );
   }
+
+  Widget _playlistPoster(Playlist playlist, ColorScheme scheme) {
+    final track = playlist.songs.isEmpty ? null : playlist.songs.first;
+    final coverUrl = track?.coverUrl ?? '';
+    return Material(
+      color: scheme.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(22),
+        side: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.56)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => setState(() => _selectedPlaylistId = playlist.id),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  if (coverUrl.isNotEmpty)
+                    Image.network(
+                      coverUrl,
+                      fit: BoxFit.cover,
+                      cacheWidth: 420,
+                      errorBuilder: (_, _, _) => _playlistCoverFallback(scheme),
+                    )
+                  else
+                    _playlistCoverFallback(scheme),
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [Colors.black.withValues(alpha: 0.04), Colors.transparent, Colors.black.withValues(alpha: 0.58)],
+                        stops: const [0, 0.48, 1],
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    left: 10,
+                    top: 10,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                      decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.54), borderRadius: BorderRadius.circular(999)),
+                      child: Text('${playlist.songs.length} lagu', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800)),
+                    ),
+                  ),
+                  Positioned(
+                    right: 9,
+                    bottom: 9,
+                    child: IconButton.filled(
+                      tooltip: 'Putar ${playlist.name}',
+                      onPressed: playlist.songs.isEmpty ? null : () => unawaited(_playPlaylistAndReturn(playlist)),
+                      style: IconButton.styleFrom(backgroundColor: scheme.primary, foregroundColor: scheme.onPrimary),
+                      icon: const Icon(Icons.play_arrow_rounded, size: 24),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(11, 11, 9, 12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(playlist.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13, height: 1.15)),
+                        const SizedBox(height: 4),
+                        Text(playlist.songs.isEmpty ? 'Kosong · ketuk untuk isi' : 'Playlist pribadi', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10.5)),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 3),
+                  Icon(Icons.chevron_right_rounded, color: scheme.onSurfaceVariant, size: 20),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _playlistCoverFallback(ColorScheme scheme) => DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [scheme.primaryContainer, scheme.secondaryContainer, scheme.surfaceContainerHighest],
+          ),
+        ),
+        child: Center(child: Icon(Icons.queue_music_rounded, color: scheme.onPrimaryContainer, size: 44)),
+      );
 
   Widget _buildPlaylistSongs(Playlist playlist, ColorScheme scheme) {
     if (playlist.songs.isEmpty) {

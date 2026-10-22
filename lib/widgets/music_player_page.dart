@@ -181,8 +181,8 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                         final isWideLayout = constraints.maxWidth >= 760;
                         // Near-full-width square artwork on phones, and a larger
                         // immersive cover on tablets/landscape layouts.
-                        // Full-bleed album artwork on phones: the image stays sharp,
-                        // while only its lower edge fades into the player surface.
+                        // Full-bleed cover on phones: sharp art dissolves at both top and bottom
+                        // into a soft blurred layer, rather than ending like a card.
                         // Wide layouts keep a framed hero to preserve balanced spacing.
                         final artWidth = isWideLayout
                             ? ((constraints.maxWidth - 68) / 2).clamp(280.0, 560.0).toDouble()
@@ -194,66 +194,23 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                           width: artWidth,
                           height: artHeight,
                           child: AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 440),
+                            duration: const Duration(milliseconds: 520),
                             switchInCurve: Curves.easeOutCubic,
                             switchOutCurve: Curves.easeInCubic,
                             transitionBuilder: (child, animation) => FadeTransition(
                               opacity: animation,
                               child: ScaleTransition(
-                                scale: Tween<double>(begin: 1.035, end: 1).animate(
+                                scale: Tween<double>(begin: 1.025, end: 1).animate(
                                   CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
                                 ),
                                 child: child,
                               ),
                             ),
-                            child: ClipRRect(
+                            child: _buildImmersiveArtwork(
                               key: ValueKey<String>('art-${widget.video.videoId}'),
-                              borderRadius: isWideLayout
-                                  ? BorderRadius.circular(28)
-                                  : const BorderRadius.only(
-                                      bottomLeft: Radius.circular(30),
-                                      bottomRight: Radius.circular(30),
-                                    ),
-                              child: Stack(
-                                fit: StackFit.expand,
-                                children: [
-                                  AlbumArtworkImage(
-                                    track: widget.video,
-                                    fit: BoxFit.cover,
-                                    iconSize: 88,
-                                  ),
-                                  // A cinematic fade joins the lower edge to the player
-                                  // background without blurring or washing out the cover.
-                                  DecoratedBox(
-                                    decoration: BoxDecoration(
-                                      gradient: LinearGradient(
-                                        begin: Alignment.topCenter,
-                                        end: Alignment.bottomCenter,
-                                        stops: const [0, 0.18, 0.54, 0.82, 1],
-                                        colors: [
-                                          Colors.black.withValues(alpha: 0.12),
-                                          Colors.transparent,
-                                          scheme.surface.withValues(alpha: 0.04),
-                                          scheme.surface.withValues(alpha: 0.72),
-                                          scheme.surface,
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                  if (isWideLayout)
-                                    Positioned.fill(
-                                      child: DecoratedBox(
-                                        decoration: BoxDecoration(
-                                          border: Border.all(
-                                            color: Colors.white.withValues(alpha: 0.12),
-                                            width: 1,
-                                          ),
-                                          borderRadius: BorderRadius.circular(28),
-                                        ),
-                                      ),
-                                    ),
-                                ],
-                              ),
+                              isWideLayout: isWideLayout,
+                              track: widget.video,
+                              surfaceColor: scheme.surface,
                             ),
                           ),
                         );
@@ -512,6 +469,84 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
       ],
       ),
     );
+  }
+
+  /// Renders a sharp cover over a softly blurred copy of itself. A vertical
+  /// alpha mask dissolves the sharp layer at the top and bottom so it feels
+  /// continuous with the player background instead of looking like a rounded
+  /// card pasted onto the page.
+  Widget _buildImmersiveArtwork({
+    required Key key,
+    required bool isWideLayout,
+    required YoutubeSearchResult track,
+    required Color surfaceColor,
+  }) {
+    final artwork = Stack(
+      fit: StackFit.expand,
+      children: [
+        // The same artwork is blurred beneath the hero. It is revealed at the
+        // edges by the alpha mask and adds a natural soft halo to the cover.
+        ImageFiltered(
+          imageFilter: ui.ImageFilter.blur(sigmaX: 22, sigmaY: 22),
+          child: Opacity(
+            opacity: 0.86,
+            child: AlbumArtworkImage(track: track, fit: BoxFit.cover, iconSize: 88),
+          ),
+        ),
+        ShaderMask(
+          blendMode: BlendMode.dstIn,
+          shaderCallback: (bounds) => const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Colors.transparent,
+              Colors.white,
+              Colors.white,
+              Colors.transparent,
+            ],
+            stops: [0.0, 0.19, 0.76, 1.0],
+          ).createShader(bounds),
+          child: AlbumArtworkImage(track: track, fit: BoxFit.cover, iconSize: 88),
+        ),
+        // The top and bottom veils blend into the page surface. There are no
+        // rounded phone-card corners, so the cover dissolves rather than ends.
+        DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                surfaceColor.withValues(alpha: 0.78),
+                surfaceColor.withValues(alpha: 0.26),
+                Colors.transparent,
+                Colors.transparent,
+                surfaceColor.withValues(alpha: 0.28),
+                surfaceColor.withValues(alpha: 0.96),
+              ],
+              stops: const [0.0, 0.10, 0.25, 0.62, 0.88, 1.0],
+            ),
+          ),
+        ),
+        if (isWideLayout)
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.10),
+                  width: 1,
+                ),
+                borderRadius: BorderRadius.circular(28),
+              ),
+            ),
+          ),
+      ],
+    );
+
+    // Wide layouts keep a gently framed composition. On phones the artwork is
+    // clipped only to its bounds; no border radius makes a visible card shape.
+    return isWideLayout
+        ? ClipRRect(key: key, borderRadius: BorderRadius.circular(28), child: artwork)
+        : ClipRect(key: key, child: artwork);
   }
 
   Widget _actionIcon({

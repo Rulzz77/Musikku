@@ -1,0 +1,47 @@
+name: MusikKu Security CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# No workflow step needs write permissions during CI.
+permissions:
+  contents: read
+
+concurrency:
+  group: musikku-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze-test-security:
+    name: Analyze, test, and scan tracked source
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout source (pinned)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Flutter (pinned)
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          channel: stable
+          flutter-version: '3.47.5'
+          cache: true
+
+      - name: Scan tracked files for common secrets and local signing files
+        shell: bash
+        run: bash tool/security_preflight.sh
+
+      - name: Install Flutter dependencies
+        run: flutter pub get
+
+      - name: Analyze Dart source
+        run: flutter analyze --no-pub
+
+      - name: Run tests
+        run: flutter test --reporter expanded

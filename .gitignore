@@ -1,23 +1,56 @@
-# Flutter / Dart
+# Flutter / Dart generated files
 .dart_tool/
+.packages
+.pub/
+.pub-cache/
 .flutter-plugins
 .flutter-plugins-dependencies
-.packages
 build/
 coverage/
 
-# Android / Gradle
-android/.gradle/
-android/.kotlin/
-android/build/
-android/app/build/
-android/local.properties
-android/key.properties
-android/app/*.jks
-
-# Editor and OS
+# IDE and OS
 .idea/
-.vscode/
 *.iml
 .DS_Store
 Thumbs.db
+.vscode/
+
+# Android generated/local configuration
+android/.gradle/
+android/local.properties
+android/key.properties
+android/build/
+android/app/build/
+android/app/*.jks
+android/app/*.keystore
+android/app/*.p12
+android/app/*.pfx
+android/app/*.pem
+
+# Local secrets and environment files
+.env
+.env.*
+!.env.example
+secrets.*
+*.secret
+*.credentials
+
+# Signing material (never commit production keys)
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.pem
+*.key
+
+# Local backups and editor swap files
+*.bak
+*.bak_*
+*.backup
+*.old
+*~
+*.swp
+*.swo
+
+# Flutter build metadata
+.flutter-plugins-dependencies

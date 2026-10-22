@@ -1,34 +1,97 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Lightweight guardrail only. This is not a replacement for secret scanning
-# across Git history or a dedicated scanner such as GitHub secret scanning.
+# Scans tracked text files for concrete, high-confidence credential values.
+# The patterns are assembled in Python so the scanner source does not match
+# its own signature definitions. This is a guardrail, not a full Git-history scan.
 
 if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   echo "Security preflight must run inside a Git worktree." >&2
   exit 2
 fi
 
-found=0
+python3 - <<'PY'
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
 
-# Scan tracked text files for common high-confidence credential formats.
-# Print file names only to avoid copying any detected secret into Actions logs.
-if git grep -I -l -E \
-  'AIza[0-9A-Za-z_-]{35}|ya29\.[0-9A-Za-z_-]{20,}|gh[pousr]_[A-Za-z0-9_]{30,}|github_pat_[A-Za-z0-9_]{50,}|AKIA[0-9A-Z]{16}|xox[baprs]-[A-Za-z0-9-]{10,}|-----BEGIN (RSA |OPENSSH |EC |DSA )?PRIVATE KEY-----' \
-  -- . ':!*.md' ':!*.example' ':!.gitignore'; then
-  echo "::error::Potential credential pattern found in tracked source file(s). Remove/rotate them before release." >&2
-  found=1
-fi
+# Assemble signatures from fragments to avoid matching the scanner's own code.
+patterns = [
+    ("Google API key", re.compile(("AI" + "za") + r"[0-9A-Za-z_-]{35}")),
+    ("Google OAuth token", re.compile(("ya" + "29") + r"\.[0-9A-Za-z_-]{20,}")),
+    ("GitHub token", re.compile(r"gh" + r"[pousr]_" + r"[A-Za-z0-9_]{30,}")),
+    ("GitHub fine-grained token", re.compile("github" + r"_pat_[A-Za-z0-9_]{50,}")),
+    ("AWS access key", re.compile("AK" + r"IA[0-9A-Z]{16}")),
+    ("Slack token", re.compile("xo" + r"x[baprs]-[A-Za-z0-9-]{10,}")),
+]
+# Detect an actual multi-line PEM private-key block, not just a code regex or
+# the text of a BEGIN marker in a security scanner.
+pem = re.compile(
+    r"-" * 5 + r"BEGIN (?:RSA |OPENSSH |EC |DSA )?PRIVATE KEY" + r"-" * 5
+    + r"\s*\n(?:[A-Za-z0-9+/=]{40,}\s*\n)+"
+    + r"-" * 5 + r"END (?:RSA |OPENSSH |EC |DSA )?PRIVATE KEY" + r"-" * 5,
+    re.MULTILINE,
+)
 
-# A local signing file should never be tracked in the repository.
-if git ls-files | grep -E '(^|/)(local\.properties|key\.properties)$|\.(jks|keystore|p12|pfx|pem|key)$' >/dev/null; then
-  echo "::error::A local configuration or signing-key file is tracked by Git. Remove it from the index and rotate exposed credentials." >&2
-  git ls-files | grep -E '(^|/)(local\.properties|key\.properties)$|\.(jks|keystore|p12|pfx|pem|key)$' || true
-  found=1
-fi
+try:
+    raw = subprocess.check_output(["git", "ls-files", "-z"])
+except subprocess.CalledProcessError:
+    print("::error::Could not list tracked files with Git.", file=sys.stderr)
+    sys.exit(2)
 
-if [[ "$found" -ne 0 ]]; then
-  exit 1
-fi
+tracked = [p.decode("utf-8", "surrogateescape") for p in raw.split(b"\0") if p]
+hits = []
+local_config = []
 
-echo "Security preflight passed (common credential patterns and tracked local signing files). This is not a full security audit."
+for rel in tracked:
+    posix = rel.replace("\\", "/")
+    name = posix.rsplit("/", 1)[-1].lower()
+    suffix = Path(posix).suffix.lower()
+
+    if name in {"local.properties", "key.properties"} or suffix in {".jks", ".keystore", ".p12", ".pfx", ".pem", ".key"}:
+        local_config.append(posix)
+
+    # Documentation and explicit examples may describe credential formats;
+    # generated/binary files are not source text and should not be tracked.
+    if suffix in {".md", ".rst", ".adoc", ".example"} or name == ".gitignore":
+        continue
+    try:
+        data = Path(rel).read_bytes()
+    except (OSError, PermissionError):
+        continue
+    if b"\0" in data:
+        continue
+    text = data.decode("utf-8", "replace")
+
+    for label, pattern in patterns:
+        for match in pattern.finditer(text):
+            line = text.count("\n", 0, match.start()) + 1
+            hits.append((posix, line, label))
+    for match in pem.finditer(text):
+        line = text.count("\n", 0, match.start()) + 1
+        hits.append((posix, line, "PEM private-key block"))
+
+failed = False
+seen = set()
+for path, line, label in hits:
+    item = (path, line, label)
+    if item in seen:
+        continue
+    seen.add(item)
+    print(f"::error file={path},line={line},title=Potential credential::{label} pattern detected; matched content is not printed.")
+    failed = True
+
+if local_config:
+    for path in sorted(set(local_config)):
+        print(f"::error file={path},title=Tracked local configuration or signing material::{path} should not be committed.")
+    failed = True
+
+if failed:
+    print("Security preflight failed. Inspect the reported file/line locally; do not paste credential values into logs or chat.", file=sys.stderr)
+    sys.exit(1)
+
+print("Security preflight passed: no common concrete credential values or tracked local signing files detected.")
+print("Note: this does not scan all Git history and is not a substitute for GitHub secret scanning/push protection.")
+PY

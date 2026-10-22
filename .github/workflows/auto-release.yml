@@ -1,7 +1,11 @@
 name: MusikKu Secure Release
 
-# Publishing is intentionally manual so routine pushes cannot overwrite a public release.
+# Push a new release when pubspec.yaml is bumped; allow manual runs from main too.
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'pubspec.yaml'
   workflow_dispatch:
 
 permissions:
@@ -13,7 +17,7 @@ concurrency:
 
 jobs:
   prepare:
-    name: Validate version and tag
+    name: Synchronize version and validate new tag
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -28,7 +32,10 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Validate app version and require a new release tag
+      - name: Synchronize app info from pubspec
+        run: python3 tool/sync_app_version.py
+
+      - name: Validate version and ensure tag is new
         id: version
         env:
           GH_TOKEN: ${{ github.token }}
@@ -36,38 +43,31 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          VERSION_SPEC="$(sed -n 's/^version:[[:space:]]*//p' pubspec.yaml | head -n 1 | tr -d "\r'\"")"
-          if [[ -z "$VERSION_SPEC" || "$VERSION_SPEC" != *+* ]]; then
-            echo "::error::pubspec.yaml version must use NAME+BUILD format, for example 5.0.9+93."
-            exit 1
-          fi
+          VERSION_SPEC="$(python3 tool/sync_app_version.py --print-version)"
           VERSION_NAME="${VERSION_SPEC%%+*}"
           BUILD_NUMBER="${VERSION_SPEC##*+}"
-          if [[ ! "$VERSION_NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ || ! "$BUILD_NUMBER" =~ ^[0-9]+$ ]]; then
-            echo "::error::Invalid pubspec version: $VERSION_SPEC"
-            exit 1
-          fi
-          APP_VERSION="$(sed -n "s/^[[:space:]]*const String appVersion = '\([^']*\)';/\1/p" lib/app_info.dart | head -n 1)"
-          APP_BUILD_NUMBER="$(sed -n "s/^[[:space:]]*const String appBuildNumber = '\([^']*\)';/\1/p" lib/app_info.dart | head -n 1)"
+          APP_VERSION="$(sed -n "s/^[[:space:]]*const String appVersion = '\\([^']*\\)';/\\1/p" lib/app_info.dart | head -n 1)"
+          APP_BUILD_NUMBER="$(sed -n "s/^[[:space:]]*const String appBuildNumber = '\\([^']*\\)';/\\1/p" lib/app_info.dart | head -n 1)"
           if [[ "$APP_VERSION" != "$VERSION_NAME" || "$APP_BUILD_NUMBER" != "$BUILD_NUMBER" ]]; then
-            echo "::error::pubspec.yaml ($VERSION_SPEC) and lib/app_info.dart ($APP_VERSION+$APP_BUILD_NUMBER) do not match."
+            echo "::error::Version sync failed: pubspec.yaml=$VERSION_SPEC; app_info.dart=$APP_VERSION+$APP_BUILD_NUMBER."
             exit 1
           fi
           TAG="v${VERSION_NAME}"
           if git tag --list "$TAG" | grep -Fxq "$TAG"; then
-            echo "::error::Tag $TAG already exists. Bump VERSION_NAME (not only build number) before releasing; this workflow never overwrites an existing version."
+            echo "::error::Tag $TAG already exists. Increment the VERSION_NAME in pubspec.yaml, not just BUILD. Example: 5.0.8+92 -> 5.0.9+93."
             exit 1
           fi
           if gh release view "$TAG" --repo "$GH_REPO" >/dev/null 2>&1; then
-            echo "::error::GitHub Release $TAG already exists. This workflow never overwrites an existing release."
+            echo "::error::Release $TAG already exists. Existing releases are immutable; increment VERSION_NAME."
             exit 1
           fi
           echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
           echo "build_number=$BUILD_NUMBER" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Preparing MusikKu $VERSION_NAME build $BUILD_NUMBER (tag $TAG)."
 
   build:
-    name: Build and verify universal APK
+    name: Analyze, test and build universal APK
     needs: prepare
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
@@ -93,8 +93,10 @@ jobs:
           flutter-version: '3.47.5'
           cache: true
 
+      - name: Synchronize app info from pubspec
+        run: python3 tool/sync_app_version.py
+
       - name: Scan tracked files before secrets are materialized
-        shell: bash
         run: bash tool/security_preflight.sh
 
       - name: Restore release signing key
@@ -120,7 +122,7 @@ jobs:
             printf 'keyPassword=%s\n' "$KEY_PASSWORD"
           } > android/key.properties
 
-      - name: Install dependencies
+      - name: Install Flutter dependencies
         run: flutter pub get
 
       - name: Analyze Dart source
@@ -140,25 +142,27 @@ jobs:
             exit 1
           fi
           flutter build apk --release --dart-define="YOUTUBE_API_KEY=${YOUTUBE_API_KEY}"
-          test -s build/app/outputs/flutter-apk/app-release.apk
-          sha256sum build/app/outputs/flutter-apk/app-release.apk > build/app/outputs/flutter-apk/app-release.apk.sha256
+          APK="build/app/outputs/flutter-apk/app-release.apk"
+          test -s "$APK"
+          sha256sum "$APK" > "$APK.sha256"
 
       - name: Remove signing material
         if: always()
         shell: bash
-        run: |
-          rm -f android/app/musikku-upload-key.jks android/key.properties
+        run: rm -f android/app/musikku-upload-key.jks android/key.properties
 
-      - name: Upload APK for the publish job (short retention)
+      - name: Upload universal APK (pinned, short retention)
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: musikku-release-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: |
+            build/app/outputs/flutter-apk/app-release.apk
+            build/app/outputs/flutter-apk/app-release.apk.sha256
           if-no-files-found: error
           retention-days: 1
 
   publish:
-    name: Publish immutable-version release
+    name: Publish immutable GitHub Release
     needs: [prepare, build]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
@@ -172,7 +176,7 @@ jobs:
           name: musikku-release-apk
           path: release-assets
 
-      - name: Publish new release only; never clobber existing assets
+      - name: Publish new version without overwriting old releases
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.prepare.outputs.tag }}
@@ -186,13 +190,13 @@ jobs:
           APK="release-assets/app-release.apk"
           test -s "$APK"
           if gh release view "$TAG" --repo "$GH_REPO" >/dev/null 2>&1; then
-            echo "::error::Release $TAG already exists. Existing public releases are never overwritten."
+            echo "::error::Release $TAG already exists; refusing to overwrite."
             exit 1
           fi
           if gh api "repos/$GH_REPO/git/ref/tags/$TAG" >/dev/null 2>&1; then
-            echo "::error::Git tag $TAG already exists. Create a new app version before publishing."
+            echo "::error::Tag $TAG already exists; increment VERSION_NAME."
             exit 1
           fi
           SHA256="$(sha256sum "$APK" | awk '{print $1}')"
-          NOTES="$(printf 'MusikKu %s (build %s).\n\nAPK universal: app-release.apk\nSHA-256: %s\n\nKeamanan: release dibuat oleh workflow manual dan tidak menimpa tag/aset yang sudah ada.' "$VERSION_NAME" "$BUILD_NUMBER" "$SHA256")"
-          gh release create "$TAG" "$APK" --repo "$GH_REPO" --title "MusikKu $VERSION_NAME" --notes "$NOTES" --target "$TARGET_SHA"
+          NOTES="$(printf 'MusikKu %s (build %s).\\n\\nAPK: app-release.apk\\nSHA-256: %s\\n' "$VERSION_NAME" "$BUILD_NUMBER" "$SHA256")"
+          gh release create "$TAG" "$APK" "$APK.sha256" --repo "$GH_REPO" --title "MusikKu $VERSION_NAME" --notes "$NOTES" --target "$TARGET_SHA"

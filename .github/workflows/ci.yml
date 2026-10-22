@@ -7,7 +7,6 @@ on:
     branches: [main]
   workflow_dispatch:
 
-# No workflow step needs write permissions during CI.
 permissions:
   contents: read
 
@@ -17,7 +16,7 @@ concurrency:
 
 jobs:
   analyze-test-security:
-    name: Analyze, test, and scan tracked source
+    name: Synchronize version, analyze, test, scan secrets
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -32,6 +31,9 @@ jobs:
           channel: stable
           flutter-version: '3.47.5'
           cache: true
+
+      - name: Sync visible app version from pubspec
+        run: python3 tool/sync_app_version.py
 
       - name: Scan tracked files for common secrets and local signing files
         shell: bash

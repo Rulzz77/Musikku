@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
@@ -7,6 +8,7 @@ import '../models/loop_mode.dart';
 import '../models/native_youtube_state.dart';
 import '../models/player_ui_state.dart';
 import '../models/youtube_search_result.dart';
+import 'album_artwork_image.dart';
 import 'data_usage_card.dart';
 import 'lyrics_panel.dart';
 
@@ -84,23 +86,38 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final artwork = widget.video.coverUrl;
-
     return Material(
       color: scheme.surface,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              scheme.primary.withValues(alpha: 0.075),
-              scheme.secondary.withValues(alpha: 0.018),
-              scheme.surface,
-            ],
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          // Album art fills the page behind the controls, softly blurred so the
+          // cover feels immersive without reducing text/control contrast.
+          Positioned.fill(
+            child: Opacity(
+              opacity: 0.48,
+              child: ImageFiltered(
+                imageFilter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                child: AlbumArtworkImage(track: widget.video, fit: BoxFit.cover, iconSize: 100),
+              ),
+            ),
           ),
-        ),
-        child: SafeArea(
+          Positioned.fill(
+            child: ColoredBox(color: scheme.surface.withValues(alpha: 0.44)),
+          ),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  scheme.primary.withValues(alpha: 0.10),
+                  scheme.secondary.withValues(alpha: 0.035),
+                  scheme.surface.withValues(alpha: 0.40),
+                ],
+              ),
+            ),
+            child: SafeArea(
           child: Column(
             children: [
               Padding(
@@ -162,8 +179,10 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                     return LayoutBuilder(
                       builder: (context, constraints) {
                         final isWideLayout = constraints.maxWidth >= 760;
-                        final widthBasedArt = (constraints.maxWidth - (isWideLayout ? 100 : 52)).clamp(168.0, 292.0).toDouble();
-                        final heightBasedArt = (constraints.maxHeight * (isWideLayout ? 0.43 : 0.32)).clamp(158.0, 258.0).toDouble();
+                        // Near-full-width square artwork on phones, and a larger
+                        // immersive cover on tablets/landscape layouts.
+                        final widthBasedArt = (constraints.maxWidth - (isWideLayout ? 112 : 28)).clamp(220.0, 500.0).toDouble();
+                        final heightBasedArt = (constraints.maxHeight * (isWideLayout ? 0.74 : 0.49)).clamp(220.0, 460.0).toDouble();
                         final artSize = math.min(widthBasedArt, heightBasedArt).toDouble();
                         final artworkPanel = Center(
                           child: AnimatedSwitcher(
@@ -199,16 +218,11 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                               ],
                             ),
                             clipBehavior: Clip.antiAlias,
-                            child: artwork.isNotEmpty
-                                ? Image.network(
-                                    artwork,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (_, _, _) => _artworkFallback(scheme),
-                                    loadingBuilder: (context, child, progress) => progress == null
-                                        ? child
-                                        : _artworkFallback(scheme, loading: true),
-                                  )
-                                : _artworkFallback(scheme),
+                            child: AlbumArtworkImage(
+                              track: widget.video,
+                              fit: BoxFit.cover,
+                              iconSize: 88,
+                            ),
                           ),
                           ),
                         );
@@ -454,6 +468,8 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
           ),
         ),
       ),
+      ],
+      ),
     );
   }
 
@@ -485,6 +501,8 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
+      backgroundColor: Colors.transparent,
+      elevation: 0,
       useSafeArea: true,
       isScrollControlled: true,
       constraints: const BoxConstraints(maxWidth: 640),
@@ -511,14 +529,4 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
     );
   }
 
-  Widget _artworkFallback(ColorScheme scheme, {bool loading = false}) {
-    return ColoredBox(
-      color: scheme.surfaceContainerHighest,
-      child: Center(
-        child: loading
-            ? const CircularProgressIndicator()
-            : Icon(Icons.music_note_rounded, size: 84, color: scheme.onSurfaceVariant),
-      ),
-    );
-  }
 }

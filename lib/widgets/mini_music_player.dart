@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 
 import '../models/native_youtube_state.dart';
+import 'album_artwork_image.dart';
 import '../models/youtube_search_result.dart';
 
 /// Compact audio-only player shown above the app navigation while a track is
@@ -50,8 +51,8 @@ class MiniMusicPlayer extends StatelessWidget {
           elevation: 9,
           shadowColor: Colors.black.withValues(alpha: 0.22),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(22),
-            side: BorderSide(color: scheme.primary.withValues(alpha: 0.24), width: 1.1),
+            borderRadius: BorderRadius.circular(21),
+            side: BorderSide(color: scheme.primary.withValues(alpha: 0.16), width: 1.1),
           ),
           clipBehavior: Clip.antiAlias,
           child: Stack(
@@ -59,42 +60,19 @@ class MiniMusicPlayer extends StatelessWidget {
               InkWell(
                 onTap: onOpen,
                 child: SizedBox(
-                  height: 78,
+                  height: 76,
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(11, 9, 6, 9),
                     child: Row(
                       children: [
                         ClipRRect(
-                          borderRadius: BorderRadius.circular(14),
-                          child: AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 320),
-                            switchInCurve: Curves.easeOutCubic,
-                            switchOutCurve: Curves.easeInCubic,
-                            transitionBuilder: (child, animation) => FadeTransition(
-                              opacity: animation,
-                              child: ScaleTransition(
-                                scale: Tween<double>(begin: 0.86, end: 1).animate(animation),
-                                child: child,
-                              ),
-                            ),
-                            child: SizedBox(
-                              key: ValueKey<String>('mini-art-${video.videoId}'),
-                              width: 58,
-                              height: 58,
-                              child: video.coverUrl.isEmpty
-                                  ? ColoredBox(
-                                      color: scheme.surfaceContainerHighest,
-                                      child: Icon(Icons.music_note_rounded, color: scheme.onSurfaceVariant),
-                                    )
-                                  : Image.network(
-                                      video.coverUrl,
-                                      fit: BoxFit.cover,
-                                      errorBuilder: (_, _, _) => ColoredBox(
-                                        color: scheme.surfaceContainerHighest,
-                                        child: Icon(Icons.music_note_rounded, color: scheme.onSurfaceVariant),
-                                      ),
-                                    ),
-                            ),
+                          borderRadius: BorderRadius.circular(12),
+                          child: AlbumArtworkImage(
+                            track: video,
+                            width: 54,
+                            height: 54,
+                            fit: BoxFit.cover,
+                            iconSize: 28,
                           ),
                         ),
                         const SizedBox(width: 11),
@@ -103,22 +81,14 @@ class MiniMusicPlayer extends StatelessWidget {
                             mainAxisAlignment: MainAxisAlignment.center,
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              AnimatedSwitcher(
-                                duration: const Duration(milliseconds: 220),
-                                switchInCurve: Curves.easeOut,
-                                child: Align(
-                                  key: ValueKey<String>('mini-title-${video.videoId}'),
-                                  alignment: Alignment.centerLeft,
-                                  child: Text(
-                                    video.title,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: theme.textTheme.bodyMedium?.copyWith(
-                                      fontWeight: FontWeight.w900,
-                                      letterSpacing: -0.25,
-                                      height: 1.15,
-                                    ),
-                                  ),
+                              Text(
+                                video.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: -0.1,
+                                  height: 1.15,
                                 ),
                               ),
                               const SizedBox(height: 3),

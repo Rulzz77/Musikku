@@ -47,7 +47,7 @@ extension _HomeUiLayout on _HomePageState {
               right: 12,
               // Keep a visible gap between the mini-player and the glass dock.
               // MediaQuery padding accounts for Android system navigation/gestures.
-              bottom: safeBottom + 66 + 24,
+              bottom: safeBottom + 66 + 18,
               child: MiniMusicPlayer(
                 key: ValueKey<String>('mini-music-player-${current.videoId}'),
                 video: current,

@@ -114,6 +114,7 @@ class _YoutubeHubState extends State<YoutubeHub> {
   _YoutubeSection _section = _YoutubeSection.home;
   double _sectionSwipeDistance = 0;
   double? _dockDragIndex;
+  double _dockReflectionX = 0.5;
   bool _dockDragging = false;
   bool _loading = false;
   String _error = '';
@@ -236,6 +237,7 @@ class _YoutubeHubState extends State<YoutubeHub> {
     _searchController.clear();
     setState(() {
       _section = nextSection;
+      _dockReflectionX = index / (_YoutubeSection.values.length - 1);
       _query = '';
       _searchResults = const [];
       _searchChannels = const [];
@@ -480,6 +482,7 @@ class _YoutubeHubState extends State<YoutubeHub> {
             setState(() {
               _dockDragging = true;
               _dockDragIndex = _section.index.toDouble();
+              _dockReflectionX = _section.index / (_YoutubeSection.values.length - 1);
             });
           },
           onHorizontalDragUpdate: (details) {
@@ -490,7 +493,10 @@ class _YoutubeHubState extends State<YoutubeHub> {
             final next = (localX / itemWidth)
                 .clamp(0.0, (_YoutubeSection.values.length - 1).toDouble())
                 .toDouble();
-            setState(() => _dockDragIndex = next);
+            setState(() {
+              _dockDragIndex = next;
+              _dockReflectionX = (localX / dockWidth).clamp(0.0, 1.0).toDouble();
+            });
           },
           onHorizontalDragEnd: (details) {
             if (_query.isNotEmpty || _openedChannel != null) {
@@ -514,12 +520,13 @@ class _YoutubeHubState extends State<YoutubeHub> {
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                     colors: [
-                      Theme.of(context).colorScheme.surface.withValues(alpha: 0.72),
-                      Theme.of(context).colorScheme.surface.withValues(alpha: 0.50),
+                      Theme.of(context).colorScheme.surface.withValues(alpha: 0.48),
+                      Theme.of(context).colorScheme.surface.withValues(alpha: 0.30),
+                      Colors.white.withValues(alpha: 0.045),
                     ],
                   ),
                   borderRadius: BorderRadius.circular(28),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.18), width: 1.1),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.30), width: 1.15),
                   boxShadow: [
                     BoxShadow(color: Colors.black.withValues(alpha: 0.20), blurRadius: 28, offset: const Offset(0, 10)),
                     BoxShadow(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.08), blurRadius: 20, offset: const Offset(0, 2)),
@@ -534,6 +541,26 @@ class _YoutubeHubState extends State<YoutubeHub> {
                         height: 57,
                         child: Stack(
                           children: [
+                            // A permanent glass bevel makes the dock look like
+                            // translucent material even before it is touched.
+                            Positioned.fill(
+                              child: IgnorePointer(
+                                child: DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(22),
+                                    gradient: LinearGradient(
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                      colors: [
+                                        Colors.white.withValues(alpha: 0.14),
+                                        Colors.white.withValues(alpha: 0.015),
+                                        Colors.white.withValues(alpha: 0.055),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
                             AnimatedPositioned(
                               duration: _dockDragging ? Duration.zero : const Duration(milliseconds: 430),
                               curve: Curves.easeOutBack,
@@ -556,6 +583,34 @@ class _YoutubeHubState extends State<YoutubeHub> {
                                   boxShadow: [
                                     BoxShadow(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.13), blurRadius: 15, offset: const Offset(0, 3)),
                                   ],
+                                ),
+                              ),
+                            ),
+                            AnimatedPositioned(
+                              duration: _dockDragging ? Duration.zero : const Duration(milliseconds: 280),
+                              curve: Curves.easeOutCubic,
+                              left: ((constraints.maxWidth - 72) * _dockReflectionX).clamp(0.0, max(0.0, constraints.maxWidth - 72)).toDouble(),
+                              top: -8,
+                              bottom: -8,
+                              width: 72,
+                              child: IgnorePointer(
+                                child: Transform.rotate(
+                                  angle: pi / 12,
+                                  child: DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(99),
+                                      gradient: LinearGradient(
+                                        begin: Alignment.centerLeft,
+                                        end: Alignment.centerRight,
+                                        colors: [
+                                          Colors.white.withValues(alpha: 0.0),
+                                          Colors.white.withValues(alpha: _dockDragging ? 0.22 : 0.11),
+                                          Theme.of(context).colorScheme.primary.withValues(alpha: _dockDragging ? 0.10 : 0.035),
+                                          Colors.white.withValues(alpha: 0.0),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),

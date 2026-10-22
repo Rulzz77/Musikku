@@ -1,7 +1,7 @@
 name: flutter_application_5
 description: "MusikKu - pemutar musik Android."
 publish_to: 'none'
-version: 5.1.1+95
+version: 5.0.10+94
 
 environment:
   sdk: ^3.13.4
@@ -15,6 +15,9 @@ dependencies:
   # (menjaga Flutter engine tetap hidup saat background). Jangan dihapus
   # kecuali MainActivity diganti.
   audio_service: ^0.18.19
+  flutter_local_notifications: ^22.3.1
+  # Retained while legacy account-service files remain in source.
+  google_sign_in: ^6.3.0
   http: ^1.5.0
   path_provider: ^2.1.6
   shared_preferences: ^2.5.5

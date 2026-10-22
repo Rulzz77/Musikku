@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 
@@ -66,6 +68,28 @@ class _LyricsPanelState extends State<LyricsPanel> {
     return ((position.inMilliseconds - startMs) / span).clamp(0.0, 1.0).toDouble();
   }
 
+  List<double> _wordProgresses(List<String> words, double lineProgress) {
+    if (words.isEmpty) return const <double>[];
+    // LRC sources generally expose line timestamps rather than word timestamps.
+    // Allocate time by word length and add a small pause weight for punctuation;
+    // this feels closer to vocal cadence than splitting every line evenly.
+    final weights = words.map((word) {
+      final lexicalLength = word.replaceAll(RegExp(r'[,.;:!?…]+$'), '').runes.length;
+      var weight = lexicalLength.clamp(1, 12).toDouble();
+      if (RegExp(r'[,;:]$').hasMatch(word)) weight += 0.45;
+      if (RegExp(r'[.!?…]$').hasMatch(word)) weight += 0.8;
+      return weight;
+    }).toList(growable: false);
+    final total = weights.fold<double>(0, (sum, value) => sum + value);
+    var cursor = 0.0;
+    final elapsed = lineProgress.clamp(0.0, 1.0) * total;
+    return weights.map((weight) {
+      final result = ((elapsed - cursor) / weight).clamp(0.0, 1.0).toDouble();
+      cursor += weight;
+      return result;
+    }).toList(growable: false);
+  }
+
   Widget _karaokeLine(
     BuildContext context,
     String text,
@@ -75,6 +99,7 @@ class _LyricsPanelState extends State<LyricsPanel> {
     final scheme = Theme.of(context).colorScheme;
     final words = text.trim().split(RegExp(r'\s+')).where((word) => word.isNotEmpty).toList(growable: false);
     if (words.isEmpty) return const SizedBox.shrink();
+    final wordProgress = _wordProgresses(words, progress);
     final baseStyle = TextStyle(
       fontSize: fontSize,
       height: 1.30,
@@ -89,8 +114,9 @@ class _LyricsPanelState extends State<LyricsPanel> {
       children: [
         for (var i = 0; i < words.length; i++)
           _KaraokeWord(
+            key: ValueKey<String>('$i:${words[i]}'),
             text: words[i],
-            progress: (progress * words.length - i).clamp(0.0, 1.0).toDouble(),
+            progress: wordProgress[i],
             baseStyle: baseStyle,
             fillStyle: fillStyle,
           ),
@@ -295,17 +321,24 @@ class _LyricsPanelState extends State<LyricsPanel> {
     final liveState = widget.nativeState;
     final position = liveState?.value.position ?? Duration.zero;
 
-    return Container(
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(28),
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        child: Container(
       margin: widget.expandToAvailableHeight ? EdgeInsets.zero : const EdgeInsets.fromLTRB(14, 8, 14, 8),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [scheme.surfaceContainerLow.withValues(alpha: 0.96), scheme.surface, scheme.surfaceContainerLow.withValues(alpha: 0.92)],
+          colors: [scheme.surfaceContainerLow.withValues(alpha: 0.78), scheme.surface.withValues(alpha: 0.64), scheme.surfaceContainerLow.withValues(alpha: 0.76)],
         ),
         borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.62)),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 24, offset: const Offset(0, 8))],
+        border: Border.all(color: Colors.white.withValues(alpha: 0.22), width: 1.0),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 24, offset: const Offset(0, 8)),
+          BoxShadow(color: scheme.primary.withValues(alpha: 0.05), blurRadius: 22, offset: const Offset(0, -2)),
+        ],
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
@@ -373,6 +406,8 @@ class _LyricsPanelState extends State<LyricsPanel> {
                 : SizedBox(height: widget.loading || widget.lyrics.isEmpty ? 190 : 300, child: _lyricsBody(context, position))),
         ],
       ),
+        ),
+      ),
     );
   }
 }
@@ -380,8 +415,9 @@ class _LyricsPanelState extends State<LyricsPanel> {
 
 /// Fills a word from left to right. Exact word timestamps are not supplied by
 /// the current lyric model, so progress is interpolated across each synced line.
-class _KaraokeWord extends StatelessWidget {
+class _KaraokeWord extends StatefulWidget {
   const _KaraokeWord({
+    super.key,
     required this.text,
     required this.progress,
     required this.baseStyle,
@@ -394,9 +430,44 @@ class _KaraokeWord extends StatelessWidget {
   final TextStyle fillStyle;
 
   @override
+  State<_KaraokeWord> createState() => _KaraokeWordState();
+}
+
+class _KaraokeWordState extends State<_KaraokeWord> with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  double _from = 0;
+  double _to = 0;
+
+  double get _displayProgress => _from + ((_to - _from) * _controller.value);
+
+  @override
+  void initState() {
+    super.initState();
+    _from = widget.progress;
+    _to = widget.progress;
+    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 140))..value = 1;
+  }
+
+  @override
+  void didUpdateWidget(covariant _KaraokeWord oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final next = widget.progress.clamp(0.0, 1.0).toDouble();
+    if ((next - _to).abs() < 0.001) return;
+    final current = _displayProgress;
+    _from = current;
+    _to = next;
+    // Smaller duration when seeking backwards, but don't restart every frame
+    // from zero. This interpolates from the most recent rendered fill amount.
+    _controller.duration = next < current
+        ? const Duration(milliseconds: 75)
+        : const Duration(milliseconds: 145);
+    _controller.forward(from: 0);
+  }
+
+  @override
   Widget build(BuildContext context) {
     final painter = TextPainter(
-      text: TextSpan(text: text, style: fillStyle),
+      text: TextSpan(text: widget.text, style: widget.fillStyle),
       textDirection: Directionality.of(context),
       textScaler: MediaQuery.textScalerOf(context),
       maxLines: 1,
@@ -404,42 +475,51 @@ class _KaraokeWord extends StatelessWidget {
     final wordWidth = painter.width;
     final wordHeight = painter.height;
 
-    return TweenAnimationBuilder<double>(
-      tween: Tween<double>(begin: 0, end: progress),
-      duration: const Duration(milliseconds: 110),
-      curve: Curves.linear,
-      builder: (context, value, _) => SizedBox(
-        width: wordWidth,
-        height: wordHeight,
-        child: Stack(
-          alignment: Alignment.topLeft,
-          clipBehavior: Clip.hardEdge,
-          children: [
-            Text(text, style: baseStyle, maxLines: 1, softWrap: false),
-            if (value > 0)
-              Positioned(
-                left: 0,
-                top: 0,
-                width: wordWidth * value.clamp(0.0, 1.0),
-                height: wordHeight,
-                child: ClipRect(
-                  child: OverflowBox(
-                    alignment: Alignment.centerLeft,
-                    minWidth: wordWidth,
-                    maxWidth: wordWidth,
-                    minHeight: wordHeight,
-                    maxHeight: wordHeight,
-                    child: SizedBox(
-                      width: wordWidth,
-                      height: wordHeight,
-                      child: Text(text, style: fillStyle, maxLines: 1, softWrap: false),
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, _) {
+        final progress = _displayProgress.clamp(0.0, 1.0).toDouble();
+        return SizedBox(
+          width: wordWidth,
+          height: wordHeight,
+          child: Stack(
+            alignment: Alignment.topLeft,
+            clipBehavior: Clip.hardEdge,
+            children: [
+              Positioned.fill(
+                child: Text(widget.text, style: widget.baseStyle, maxLines: 1, softWrap: false),
+              ),
+              if (progress > 0)
+                Positioned(
+                  left: 0,
+                  top: 0,
+                  width: wordWidth * progress,
+                  height: wordHeight,
+                  child: ClipRect(
+                    child: OverflowBox(
+                      alignment: Alignment.centerLeft,
+                      minWidth: wordWidth,
+                      maxWidth: wordWidth,
+                      minHeight: wordHeight,
+                      maxHeight: wordHeight,
+                      child: SizedBox(
+                        width: wordWidth,
+                        height: wordHeight,
+                        child: Text(widget.text, style: widget.fillStyle, maxLines: 1, softWrap: false),
+                      ),
                     ),
                   ),
                 ),
-              ),
-          ],
-        ),
-      ),
+            ],
+          ),
+        );
+      },
     );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
   }
 }

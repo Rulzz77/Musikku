@@ -94,8 +94,8 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              scheme.primary.withValues(alpha: 0.19),
-              scheme.secondary.withValues(alpha: 0.045),
+              scheme.primary.withValues(alpha: 0.075),
+              scheme.secondary.withValues(alpha: 0.018),
               scheme.surface,
             ],
           ),
@@ -162,8 +162,8 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                     return LayoutBuilder(
                       builder: (context, constraints) {
                         final isWideLayout = constraints.maxWidth >= 760;
-                        final widthBasedArt = (constraints.maxWidth - (isWideLayout ? 92 : 44)).clamp(180.0, 330.0).toDouble();
-                        final heightBasedArt = (constraints.maxHeight * (isWideLayout ? 0.54 : 0.36)).clamp(170.0, 280.0).toDouble();
+                        final widthBasedArt = (constraints.maxWidth - (isWideLayout ? 100 : 52)).clamp(168.0, 292.0).toDouble();
+                        final heightBasedArt = (constraints.maxHeight * (isWideLayout ? 0.43 : 0.32)).clamp(158.0, 258.0).toDouble();
                         final artSize = math.min(widthBasedArt, heightBasedArt).toDouble();
                         final artworkPanel = Center(
                           child: AnimatedSwitcher(
@@ -184,7 +184,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                             width: artSize,
                             height: artSize,
                             decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(30),
+                              borderRadius: BorderRadius.circular(24),
                               color: scheme.surfaceContainerHighest,
                               border: Border.all(
                                 color: scheme.primary.withValues(alpha: 0.22),
@@ -192,13 +192,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                               ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: scheme.primary.withValues(alpha: 0.08),
-                                  blurRadius: 40,
-                                  spreadRadius: 2,
-                                  offset: const Offset(0, 18),
-                                ),
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.16),
+                                  color: Colors.black.withValues(alpha: 0.12),
                                   blurRadius: 18,
                                   offset: const Offset(0, 8),
                                 ),
@@ -282,62 +276,55 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                                   const SizedBox(height: 28),
                                   trackInfoPanel,
                                 ],
-                                const SizedBox(height: 14),
+                                const SizedBox(height: 7),
                                 Wrap(
                                   alignment: WrapAlignment.center,
-                                  spacing: 7,
-                                  runSpacing: 7,
+                                  spacing: 10,
+                                  runSpacing: 4,
                                   children: [
-                                    OutlinedButton.icon(
+                                    _actionIcon(
+                                      context: context,
+                                      icon: Icons.playlist_add_rounded,
+                                      tooltip: 'Tambah ke playlist',
                                       onPressed: widget.onAddToPlaylist,
-                                      icon: const Icon(Icons.playlist_add_rounded, size: 17),
-                                      label: const Text('Tambah ke playlist'),
-                                      style: OutlinedButton.styleFrom(
-                                        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
-                                        visualDensity: VisualDensity.compact,
-                                      ),
                                     ),
-                                    OutlinedButton.icon(
+                                    _actionIcon(
+                                      context: context,
+                                      icon: Icons.lyrics_rounded,
+                                      tooltip: 'Buka lirik karaoke',
                                       onPressed: _openLyrics,
-                                      icon: const Icon(Icons.lyrics_rounded, size: 17),
-                                      label: const Text('Lirik'),
-                                      style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8), visualDensity: VisualDensity.compact),
                                     ),
-                                    OutlinedButton.icon(
+                                    _actionIcon(
+                                      context: context,
+                                      icon: Icons.queue_music_rounded,
+                                      tooltip: 'Buka antrean',
                                       onPressed: widget.onOpenQueue,
-                                      icon: const Icon(Icons.queue_music_rounded, size: 17),
-                                      label: const Text('Antrean'),
-                                      style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8), visualDensity: VisualDensity.compact),
                                     ),
-                                    OutlinedButton.icon(
+                                    _actionIcon(
+                                      context: context,
+                                      icon: Icons.equalizer_rounded,
+                                      tooltip: 'Efek audio dan equalizer',
                                       onPressed: widget.onOpenAudioSettings,
-                                      icon: const Icon(Icons.equalizer_rounded, size: 17),
-                                      label: const Text('Efek audio'),
-                                      style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8), visualDensity: VisualDensity.compact),
                                     ),
                                     ValueListenableBuilder<bool>(
                                       valueListenable: widget.sleepActive,
-                                      builder: (context, active, _) => OutlinedButton.icon(
+                                      builder: (context, active, _) => _actionIcon(
+                                        context: context,
+                                        icon: active ? Icons.timer_rounded : Icons.bedtime_outlined,
+                                        tooltip: active ? 'Timer tidur aktif' : 'Timer tidur',
                                         onPressed: widget.onOpenSleepTimer,
-                                        icon: Icon(active ? Icons.timer_rounded : Icons.bedtime_outlined, size: 17, color: active ? scheme.primary : null),
-                                        label: Text(active ? 'Timer aktif' : 'Timer tidur'),
-                                        style: OutlinedButton.styleFrom(
-                                          foregroundColor: active ? scheme.primary : null,
-                                          side: BorderSide(color: active ? scheme.primary.withValues(alpha: 0.6) : scheme.outlineVariant),
-                                          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
-                                          visualDensity: VisualDensity.compact,
-                                        ),
+                                        selected: active,
                                       ),
                                     ),
                                   ],
                                 ),
-                                const SizedBox(height: 12),
+                                const SizedBox(height: 5),
                                 SliderTheme(
                                   data: SliderTheme.of(context).copyWith(
                                     // YouTube-style buffer bar:
                                     // red = already played, light gray = buffered ahead,
                                     // dark gray = not buffered yet.
-                                    trackHeight: 4,
+                                    trackHeight: 3,
                                     activeTrackColor: scheme.primary,
                                     secondaryActiveTrackColor: scheme.onSurface.withValues(alpha: 0.46),
                                     inactiveTrackColor: scheme.onSurface.withValues(alpha: 0.18),
@@ -401,24 +388,24 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                                         IconButton(
                                           tooltip: 'Lagu sebelumnya (MusikKu)',
                                           onPressed: widget.onPrevious,
-                                          icon: const Icon(Icons.skip_previous_rounded, size: 36),
+                                          icon: const Icon(Icons.skip_previous_rounded, size: 31),
                                         ),
                                         SizedBox(
-                                          width: 72,
-                                          height: 72,
+                                          width: 64,
+                                          height: 64,
                                           child: FilledButton(
                                             style: FilledButton.styleFrom(shape: const CircleBorder(), padding: EdgeInsets.zero),
                                             onPressed: busy ? null : () => widget.onPlayPause(),
                                             child: Icon(
                                               busy ? Icons.hourglass_top_rounded : (playing ? Icons.pause_rounded : Icons.play_arrow_rounded),
-                                              size: 42,
+                                              size: 36,
                                             ),
                                           ),
                                         ),
                                         IconButton(
                                           tooltip: 'Lagu berikutnya (MusikKu)',
                                           onPressed: widget.onNext,
-                                          icon: const Icon(Icons.skip_next_rounded, size: 36),
+                                          icon: const Icon(Icons.skip_next_rounded, size: 31),
                                         ),
                                         IconButton(
                                           tooltip: switch (ui.loopMode) {
@@ -467,6 +454,30 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _actionIcon({
+    required BuildContext context,
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback onPressed,
+    bool selected = false,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+    return IconButton.filledTonal(
+      tooltip: tooltip,
+      visualDensity: VisualDensity.compact,
+      style: IconButton.styleFrom(
+        minimumSize: const Size(44, 44),
+        maximumSize: const Size(44, 44),
+        padding: EdgeInsets.zero,
+        shape: const CircleBorder(),
+        backgroundColor: selected ? scheme.primaryContainer : scheme.surfaceContainerHighest.withValues(alpha: 0.72),
+        foregroundColor: selected ? scheme.onPrimaryContainer : scheme.onSurfaceVariant,
+      ),
+      onPressed: onPressed,
+      icon: Icon(icon, size: 20),
     );
   }
 

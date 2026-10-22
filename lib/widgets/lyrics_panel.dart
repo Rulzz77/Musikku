@@ -50,6 +50,54 @@ class _LyricsPanelState extends State<LyricsPanel> {
     return answer;
   }
 
+  double _lineProgress(int index, Duration position) {
+    if (index < 0 || index >= widget.lyrics.length) return 0;
+    final startMs = widget.lyrics[index].time.inMilliseconds;
+    int endMs;
+    if (index + 1 < widget.lyrics.length) {
+      final nextMs = widget.lyrics[index + 1].time.inMilliseconds;
+      endMs = nextMs > startMs ? nextMs : startMs + 2500;
+    } else {
+      final durationMs = widget.nativeState?.value.duration.inMilliseconds ?? 0;
+      final wordCount = widget.lyrics[index].text.trim().split(RegExp(r'\s+')).where((word) => word.isNotEmpty).length;
+      endMs = durationMs > startMs ? durationMs : startMs + (wordCount * 360).clamp(2500, 7000).toInt();
+    }
+    final span = (endMs - startMs).clamp(1, 1 << 30);
+    return ((position.inMilliseconds - startMs) / span).clamp(0.0, 1.0).toDouble();
+  }
+
+  Widget _karaokeLine(
+    BuildContext context,
+    String text,
+    double progress, {
+    double fontSize = 21,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+    final words = text.trim().split(RegExp(r'\s+')).where((word) => word.isNotEmpty).toList(growable: false);
+    if (words.isEmpty) return const SizedBox.shrink();
+    final baseStyle = TextStyle(
+      fontSize: fontSize,
+      height: 1.30,
+      fontWeight: FontWeight.w900,
+      color: scheme.onSurfaceVariant.withValues(alpha: 0.82),
+    );
+    final fillStyle = baseStyle.copyWith(color: scheme.primary);
+    return Wrap(
+      alignment: WrapAlignment.center,
+      spacing: 4,
+      runSpacing: 5,
+      children: [
+        for (var i = 0; i < words.length; i++)
+          _KaraokeWord(
+            text: words[i],
+            progress: (progress * words.length - i).clamp(0.0, 1.0).toDouble(),
+            baseStyle: baseStyle,
+            fillStyle: fillStyle,
+          ),
+      ],
+    );
+  }
+
   void _ensureVisible(int index) {
     if (index < 0 || index >= widget.lyrics.length || index == _lastIndex) return;
     _lastIndex = index;
@@ -121,13 +169,18 @@ class _LyricsPanelState extends State<LyricsPanel> {
                       child: child,
                     ),
                   ),
-                  child: Text(
-                    line,
-                    key: ValueKey<int>(index),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 15, height: 1.25, fontWeight: FontWeight.w800, color: scheme.onSurface),
-                  ),
+                  child: widget.synced && index >= 0
+                      ? KeyedSubtree(
+                          key: ValueKey<int>(index),
+                          child: _karaokeLine(context, line, _lineProgress(index, position), fontSize: 15),
+                        )
+                      : Text(
+                          line,
+                          key: ValueKey<int>(index),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 15, height: 1.25, fontWeight: FontWeight.w800, color: scheme.onSurface),
+                        ),
                 ),
               ],
             ),
@@ -188,6 +241,7 @@ class _LyricsPanelState extends State<LyricsPanel> {
         final line = widget.lyrics[index];
         final active = index == current;
         final passed = current > index;
+        final lyricProgress = active && widget.synced ? _lineProgress(index, position) : 0.0;
         return AnimatedContainer(
           duration: const Duration(milliseconds: 220),
           curve: Curves.easeOutCubic,
@@ -218,7 +272,9 @@ class _LyricsPanelState extends State<LyricsPanel> {
                   fontWeight: active ? FontWeight.w900 : FontWeight.w600,
                   color: active ? scheme.primary : scheme.onSurfaceVariant.withValues(alpha: passed ? 0.46 : 0.82),
                 ),
-                child: Text(line.text, textAlign: TextAlign.center),
+                child: active && widget.synced
+                    ? _karaokeLine(context, line.text, lyricProgress)
+                    : Text(line.text, textAlign: TextAlign.center),
               ),
             ),
           ),
@@ -316,6 +372,73 @@ class _LyricsPanelState extends State<LyricsPanel> {
                 ? Expanded(child: _lyricsBody(context, position))
                 : SizedBox(height: widget.loading || widget.lyrics.isEmpty ? 190 : 300, child: _lyricsBody(context, position))),
         ],
+      ),
+    );
+  }
+}
+
+
+/// Fills a word from left to right. Exact word timestamps are not supplied by
+/// the current lyric model, so progress is interpolated across each synced line.
+class _KaraokeWord extends StatelessWidget {
+  const _KaraokeWord({
+    required this.text,
+    required this.progress,
+    required this.baseStyle,
+    required this.fillStyle,
+  });
+
+  final String text;
+  final double progress;
+  final TextStyle baseStyle;
+  final TextStyle fillStyle;
+
+  @override
+  Widget build(BuildContext context) {
+    final painter = TextPainter(
+      text: TextSpan(text: text, style: fillStyle),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      maxLines: 1,
+    )..layout();
+    final wordWidth = painter.width;
+    final wordHeight = painter.height;
+
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(begin: 0, end: progress),
+      duration: const Duration(milliseconds: 110),
+      curve: Curves.linear,
+      builder: (context, value, _) => SizedBox(
+        width: wordWidth,
+        height: wordHeight,
+        child: Stack(
+          alignment: Alignment.topLeft,
+          clipBehavior: Clip.hardEdge,
+          children: [
+            Text(text, style: baseStyle, maxLines: 1, softWrap: false),
+            if (value > 0)
+              Positioned(
+                left: 0,
+                top: 0,
+                width: wordWidth * value.clamp(0.0, 1.0),
+                height: wordHeight,
+                child: ClipRect(
+                  child: OverflowBox(
+                    alignment: Alignment.centerLeft,
+                    minWidth: wordWidth,
+                    maxWidth: wordWidth,
+                    minHeight: wordHeight,
+                    maxHeight: wordHeight,
+                    child: SizedBox(
+                      width: wordWidth,
+                      height: wordHeight,
+                      child: Text(text, style: fillStyle, maxLines: 1, softWrap: false),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

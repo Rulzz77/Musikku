@@ -113,6 +113,8 @@ class _YoutubeHubState extends State<YoutubeHub> {
 
   _YoutubeSection _section = _YoutubeSection.home;
   double _sectionSwipeDistance = 0;
+  double? _dockDragIndex;
+  bool _dockDragging = false;
   bool _loading = false;
   String _error = '';
   String _query = '';
@@ -473,24 +475,36 @@ class _YoutubeHubState extends State<YoutubeHub> {
           bottom: 8 + MediaQuery.paddingOf(context).bottom,
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onHorizontalDragStart: (_) => _sectionSwipeDistance = 0,
-            onHorizontalDragUpdate: (details) => _sectionSwipeDistance += details.delta.dx,
-            onHorizontalDragEnd: (details) {
-              if (_query.isNotEmpty || _openedChannel != null) {
-                _sectionSwipeDistance = 0;
-                return;
-              }
-              final distance = _sectionSwipeDistance;
-              _sectionSwipeDistance = 0;
-              final velocity = details.primaryVelocity ?? 0;
-              if (distance.abs() < 45 && velocity.abs() < 400) return;
-              final step = distance.abs() >= 45 ? (distance < 0 ? 1 : -1) : (velocity < 0 ? 1 : -1);
-              final target = (_section.index + step)
-                  .clamp(0, _YoutubeSection.values.length - 1)
-                  .toInt();
-              if (target != _section.index) _selectDockDestination(target);
-            },
-            child: ClipRRect(
+            onHorizontalDragStart: (_) {
+            if (_query.isNotEmpty || _openedChannel != null) return;
+            setState(() {
+              _dockDragging = true;
+              _dockDragIndex = _section.index.toDouble();
+            });
+          },
+          onHorizontalDragUpdate: (details) {
+            if (_query.isNotEmpty || _openedChannel != null) return;
+            final dockWidth = (MediaQuery.sizeOf(context).width - 34).clamp(200.0, 10000.0);
+            final itemWidth = dockWidth / _YoutubeSection.values.length;
+            final localX = (details.localPosition.dx - 5).clamp(0.0, dockWidth);
+            final next = (localX / itemWidth)
+                .clamp(0.0, (_YoutubeSection.values.length - 1).toDouble())
+                .toDouble();
+            setState(() => _dockDragIndex = next);
+          },
+          onHorizontalDragEnd: (details) {
+            if (_query.isNotEmpty || _openedChannel != null) {
+              setState(() { _dockDragging = false; _dockDragIndex = null; });
+              return;
+            }
+            final target = (_dockDragIndex ?? _section.index.toDouble())
+                .round()
+                .clamp(0, _YoutubeSection.values.length - 1)
+                .toInt();
+            setState(() { _dockDragging = false; _dockDragIndex = null; });
+            if (target != _section.index) _selectDockDestination(target);
+          },
+          child: ClipRRect(
             borderRadius: BorderRadius.circular(28),
             child: BackdropFilter(
               filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
@@ -521,9 +535,9 @@ class _YoutubeHubState extends State<YoutubeHub> {
                         child: Stack(
                           children: [
                             AnimatedPositioned(
-                              duration: const Duration(milliseconds: 430),
+                              duration: _dockDragging ? Duration.zero : const Duration(milliseconds: 430),
                               curve: Curves.easeOutBack,
-                              left: itemWidth * _section.index + 2,
+                              left: itemWidth * (_dockDragIndex ?? _section.index.toDouble()) + 2,
                               top: 1,
                               bottom: 1,
                               width: itemWidth - 4,

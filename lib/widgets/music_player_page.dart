@@ -181,49 +181,80 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                         final isWideLayout = constraints.maxWidth >= 760;
                         // Near-full-width square artwork on phones, and a larger
                         // immersive cover on tablets/landscape layouts.
-                        final widthBasedArt = (constraints.maxWidth - (isWideLayout ? 112 : 28)).clamp(220.0, 500.0).toDouble();
-                        final heightBasedArt = (constraints.maxHeight * (isWideLayout ? 0.74 : 0.49)).clamp(220.0, 460.0).toDouble();
-                        final artSize = math.min(widthBasedArt, heightBasedArt).toDouble();
-                        final artworkPanel = Center(
+                        // Full-bleed album artwork on phones: the image stays sharp,
+                        // while only its lower edge fades into the player surface.
+                        // Wide layouts keep a framed hero to preserve balanced spacing.
+                        final artWidth = isWideLayout
+                            ? ((constraints.maxWidth - 68) / 2).clamp(280.0, 560.0).toDouble()
+                            : constraints.maxWidth;
+                        final artHeight = isWideLayout
+                            ? (constraints.maxHeight * 0.72).clamp(300.0, 560.0).toDouble()
+                            : (constraints.maxHeight * 0.68).clamp(320.0, 560.0).toDouble();
+                        final artworkPanel = SizedBox(
+                          width: artWidth,
+                          height: artHeight,
                           child: AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 420),
+                            duration: const Duration(milliseconds: 440),
                             switchInCurve: Curves.easeOutCubic,
                             switchOutCurve: Curves.easeInCubic,
                             transitionBuilder: (child, animation) => FadeTransition(
                               opacity: animation,
                               child: ScaleTransition(
-                                scale: Tween<double>(begin: 0.92, end: 1).animate(
-                                  CurvedAnimation(parent: animation, curve: Curves.easeOutBack),
+                                scale: Tween<double>(begin: 1.035, end: 1).animate(
+                                  CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
                                 ),
                                 child: child,
                               ),
                             ),
-                            child: Container(
-                            key: ValueKey<String>('art-${widget.video.videoId}'),
-                            width: artSize,
-                            height: artSize,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(24),
-                              color: scheme.surfaceContainerHighest,
-                              border: Border.all(
-                                color: scheme.primary.withValues(alpha: 0.22),
-                                width: 1.2,
+                            child: ClipRRect(
+                              key: ValueKey<String>('art-${widget.video.videoId}'),
+                              borderRadius: isWideLayout
+                                  ? BorderRadius.circular(28)
+                                  : const BorderRadius.only(
+                                      bottomLeft: Radius.circular(30),
+                                      bottomRight: Radius.circular(30),
+                                    ),
+                              child: Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  AlbumArtworkImage(
+                                    track: widget.video,
+                                    fit: BoxFit.cover,
+                                    iconSize: 88,
+                                  ),
+                                  // A cinematic fade joins the lower edge to the player
+                                  // background without blurring or washing out the cover.
+                                  DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        begin: Alignment.topCenter,
+                                        end: Alignment.bottomCenter,
+                                        stops: const [0, 0.18, 0.54, 0.82, 1],
+                                        colors: [
+                                          Colors.black.withValues(alpha: 0.12),
+                                          Colors.transparent,
+                                          scheme.surface.withValues(alpha: 0.04),
+                                          scheme.surface.withValues(alpha: 0.72),
+                                          scheme.surface,
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                  if (isWideLayout)
+                                    Positioned.fill(
+                                      child: DecoratedBox(
+                                        decoration: BoxDecoration(
+                                          border: Border.all(
+                                            color: Colors.white.withValues(alpha: 0.12),
+                                            width: 1,
+                                          ),
+                                          borderRadius: BorderRadius.circular(28),
+                                        ),
+                                      ),
+                                    ),
+                                ],
                               ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.12),
-                                  blurRadius: 18,
-                                  offset: const Offset(0, 8),
-                                ),
-                              ],
                             ),
-                            clipBehavior: Clip.antiAlias,
-                            child: AlbumArtworkImage(
-                              track: widget.video,
-                              fit: BoxFit.cover,
-                              iconSize: 88,
-                            ),
-                          ),
                           ),
                         );
                         final trackInfoPanel = Row(
@@ -268,192 +299,202 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                           ],
                         );
                         return SingleChildScrollView(
-                          padding: const EdgeInsets.fromLTRB(22, 8, 22, 20),
+                          padding: EdgeInsets.zero,
                           child: ConstrainedBox(
-                            constraints: BoxConstraints(minHeight: constraints.maxHeight - 28),
+                            constraints: BoxConstraints(minHeight: constraints.maxHeight - 12),
                             child: Column(
-                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                const SizedBox(height: 8),
                                 if (isWideLayout)
-                                  Row(
-                                    crossAxisAlignment: CrossAxisAlignment.center,
-                                    children: [
-                                      Expanded(child: artworkPanel),
-                                      const SizedBox(width: 20),
-                                      Expanded(child: trackInfoPanel),
-                                    ],
-                                  )
-                                else ...[
-                                  artworkPanel,
-                                  const SizedBox(height: 28),
-                                  trackInfoPanel,
-                                ],
-                                const SizedBox(height: 7),
-                                Wrap(
-                                  alignment: WrapAlignment.center,
-                                  spacing: 10,
-                                  runSpacing: 4,
-                                  children: [
-                                    _actionIcon(
-                                      context: context,
-                                      icon: Icons.playlist_add_rounded,
-                                      tooltip: 'Tambah ke playlist',
-                                      onPressed: widget.onAddToPlaylist,
-                                    ),
-                                    _actionIcon(
-                                      context: context,
-                                      icon: Icons.lyrics_rounded,
-                                      tooltip: 'Buka lirik karaoke',
-                                      onPressed: _openLyrics,
-                                    ),
-                                    _actionIcon(
-                                      context: context,
-                                      icon: Icons.queue_music_rounded,
-                                      tooltip: 'Buka antrean',
-                                      onPressed: widget.onOpenQueue,
-                                    ),
-                                    _actionIcon(
-                                      context: context,
-                                      icon: Icons.equalizer_rounded,
-                                      tooltip: 'Efek audio dan equalizer',
-                                      onPressed: widget.onOpenAudioSettings,
-                                    ),
-                                    ValueListenableBuilder<bool>(
-                                      valueListenable: widget.sleepActive,
-                                      builder: (context, active, _) => _actionIcon(
-                                        context: context,
-                                        icon: active ? Icons.timer_rounded : Icons.bedtime_outlined,
-                                        tooltip: active ? 'Timer tidur aktif' : 'Timer tidur',
-                                        onPressed: widget.onOpenSleepTimer,
-                                        selected: active,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 5),
-                                SliderTheme(
-                                  data: SliderTheme.of(context).copyWith(
-                                    // YouTube-style buffer bar:
-                                    // red = already played, light gray = buffered ahead,
-                                    // dark gray = not buffered yet.
-                                    trackHeight: 3,
-                                    activeTrackColor: scheme.primary,
-                                    secondaryActiveTrackColor: scheme.onSurface.withValues(alpha: 0.46),
-                                    inactiveTrackColor: scheme.onSurface.withValues(alpha: 0.18),
-                                    thumbColor: scheme.primary,
-                                    overlayColor: scheme.primary.withValues(alpha: 0.12),
-                                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                                    overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
-                                  ),
-                                  child: Slider(
-                                    min: 0,
-                                    max: maxMs,
-                                    value: sliderValue,
-                                    secondaryTrackValue: bufferedTrackValue,
-                                    onChanged: duration <= Duration.zero
-                                        ? null
-                                        : (value) => setState(() {
-                                              _dragPositionMs = value;
-                                            }),
-                                    onChangeEnd: duration <= Duration.zero
-                                        ? null
-                                        : (value) async {
-                                            setState(() {
-                                              _dragPositionMs = null;
-                                            });
-                                            await widget.onSeek(Duration(milliseconds: value.round()));
-                                          },
-                                  ),
-                                ),
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Text(_time(Duration(milliseconds: sliderValue.round())), style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
-                                      Text(_time(duration), style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                ValueListenableBuilder<PlayerUiState>(
-                                  valueListenable: widget.playerUiState,
-                                  builder: (context, ui, _) {
-                                    return Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  Padding(
+                                    padding: const EdgeInsets.fromLTRB(24, 12, 24, 4),
+                                    child: Row(
+                                      crossAxisAlignment: CrossAxisAlignment.center,
                                       children: [
-                                        IconButton(
-                                          tooltip: ui.isSmartShuffle
-                                              ? 'Smart Shuffle aktif • tekan lama untuk mematikan'
-                                              : 'Shuffle • tekan lama untuk Smart Shuffle',
-                                          onPressed: widget.onToggleShuffle,
-                                          onLongPress: widget.onToggleSmartShuffle,
-                                          icon: Icon(
-                                            ui.isSmartShuffle
-                                                ? Icons.auto_awesome_rounded
-                                                : Icons.shuffle_rounded,
-                                            color: ui.isShuffle
-                                                ? scheme.primary
-                                                : scheme.onSurfaceVariant,
-                                          ),
+                                        Expanded(child: artworkPanel),
+                                        const SizedBox(width: 28),
+                                        Expanded(child: trackInfoPanel),
+                                      ],
+                                    ),
+                                  )
+                                else
+                                  artworkPanel,
+                                Padding(
+                                  padding: EdgeInsets.fromLTRB(22, isWideLayout ? 14 : 0, 22, 28),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                                    children: [
+                                      if (!isWideLayout) ...[
+                                        trackInfoPanel,
+                                        const SizedBox(height: 13),
+                                      ],
+                                    const SizedBox(height: 7),
+                                    Wrap(
+                                      alignment: WrapAlignment.center,
+                                      spacing: 10,
+                                      runSpacing: 4,
+                                      children: [
+                                        _actionIcon(
+                                          context: context,
+                                          icon: Icons.playlist_add_rounded,
+                                          tooltip: 'Tambah ke playlist',
+                                          onPressed: widget.onAddToPlaylist,
                                         ),
-                                        IconButton(
-                                          tooltip: 'Lagu sebelumnya (MusikKu)',
-                                          onPressed: widget.onPrevious,
-                                          icon: const Icon(Icons.skip_previous_rounded, size: 31),
+                                        _actionIcon(
+                                          context: context,
+                                          icon: Icons.lyrics_rounded,
+                                          tooltip: 'Buka lirik karaoke',
+                                          onPressed: _openLyrics,
                                         ),
-                                        SizedBox(
-                                          width: 64,
-                                          height: 64,
-                                          child: FilledButton(
-                                            style: FilledButton.styleFrom(shape: const CircleBorder(), padding: EdgeInsets.zero),
-                                            onPressed: busy ? null : () => widget.onPlayPause(),
-                                            child: Icon(
-                                              busy ? Icons.hourglass_top_rounded : (playing ? Icons.pause_rounded : Icons.play_arrow_rounded),
-                                              size: 36,
-                                            ),
-                                          ),
+                                        _actionIcon(
+                                          context: context,
+                                          icon: Icons.queue_music_rounded,
+                                          tooltip: 'Buka antrean',
+                                          onPressed: widget.onOpenQueue,
                                         ),
-                                        IconButton(
-                                          tooltip: 'Lagu berikutnya (MusikKu)',
-                                          onPressed: widget.onNext,
-                                          icon: const Icon(Icons.skip_next_rounded, size: 31),
+                                        _actionIcon(
+                                          context: context,
+                                          icon: Icons.equalizer_rounded,
+                                          tooltip: 'Efek audio dan equalizer',
+                                          onPressed: widget.onOpenAudioSettings,
                                         ),
-                                        IconButton(
-                                          tooltip: switch (ui.loopMode) {
-                                            LoopModeCustom.off => 'Aktifkan repeat',
-                                            LoopModeCustom.all => 'Repeat semua aktif',
-                                            LoopModeCustom.one => 'Repeat satu aktif',
-                                          },
-                                          onPressed: widget.onCycleLoop,
-                                          icon: Icon(
-                                            ui.loopMode == LoopModeCustom.one ? Icons.repeat_one_rounded : Icons.repeat_rounded,
-                                            color: ui.loopMode == LoopModeCustom.off ? scheme.onSurfaceVariant : scheme.primary,
+                                        ValueListenableBuilder<bool>(
+                                          valueListenable: widget.sleepActive,
+                                          builder: (context, active, _) => _actionIcon(
+                                            context: context,
+                                            icon: active ? Icons.timer_rounded : Icons.bedtime_outlined,
+                                            tooltip: active ? 'Timer tidur aktif' : 'Timer tidur',
+                                            onPressed: widget.onOpenSleepTimer,
+                                            selected: active,
                                           ),
                                         ),
                                       ],
-                                    );
-                                  },
-                                ),
-                                if (stateMatchesTrack && state.playbackState == NativePlaybackState.error)
-                                  Padding(
-                                    padding: const EdgeInsets.only(top: 12),
-                                    child: Text(
-                                      'Lagu ini gagal dimuat dari sumber audio. Tekan Putar ulang atau pilih lagu berikutnya.',
-                                      textAlign: TextAlign.center,
-                                      style: theme.textTheme.bodySmall?.copyWith(color: scheme.error),
                                     ),
+                                    const SizedBox(height: 5),
+                                    SliderTheme(
+                                      data: SliderTheme.of(context).copyWith(
+                                        // YouTube-style buffer bar:
+                                        // red = already played, light gray = buffered ahead,
+                                        // dark gray = not buffered yet.
+                                        trackHeight: 3,
+                                        activeTrackColor: scheme.primary,
+                                        secondaryActiveTrackColor: scheme.onSurface.withValues(alpha: 0.46),
+                                        inactiveTrackColor: scheme.onSurface.withValues(alpha: 0.18),
+                                        thumbColor: scheme.primary,
+                                        overlayColor: scheme.primary.withValues(alpha: 0.12),
+                                        thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                                        overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+                                      ),
+                                      child: Slider(
+                                        min: 0,
+                                        max: maxMs,
+                                        value: sliderValue,
+                                        secondaryTrackValue: bufferedTrackValue,
+                                        onChanged: duration <= Duration.zero
+                                            ? null
+                                            : (value) => setState(() {
+                                                  _dragPositionMs = value;
+                                                }),
+                                        onChangeEnd: duration <= Duration.zero
+                                            ? null
+                                            : (value) async {
+                                                setState(() {
+                                                  _dragPositionMs = null;
+                                                });
+                                                await widget.onSeek(Duration(milliseconds: value.round()));
+                                              },
+                                      ),
+                                    ),
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Text(_time(Duration(milliseconds: sliderValue.round())), style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
+                                          Text(_time(duration), style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    ValueListenableBuilder<PlayerUiState>(
+                                      valueListenable: widget.playerUiState,
+                                      builder: (context, ui, _) {
+                                        return Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            IconButton(
+                                              tooltip: ui.isSmartShuffle
+                                                  ? 'Smart Shuffle aktif • tekan lama untuk mematikan'
+                                                  : 'Shuffle • tekan lama untuk Smart Shuffle',
+                                              onPressed: widget.onToggleShuffle,
+                                              onLongPress: widget.onToggleSmartShuffle,
+                                              icon: Icon(
+                                                ui.isSmartShuffle
+                                                    ? Icons.auto_awesome_rounded
+                                                    : Icons.shuffle_rounded,
+                                                color: ui.isShuffle
+                                                    ? scheme.primary
+                                                    : scheme.onSurfaceVariant,
+                                              ),
+                                            ),
+                                            IconButton(
+                                              tooltip: 'Lagu sebelumnya (MusikKu)',
+                                              onPressed: widget.onPrevious,
+                                              icon: const Icon(Icons.skip_previous_rounded, size: 31),
+                                            ),
+                                            SizedBox(
+                                              width: 64,
+                                              height: 64,
+                                              child: FilledButton(
+                                                style: FilledButton.styleFrom(shape: const CircleBorder(), padding: EdgeInsets.zero),
+                                                onPressed: busy ? null : () => widget.onPlayPause(),
+                                                child: Icon(
+                                                  busy ? Icons.hourglass_top_rounded : (playing ? Icons.pause_rounded : Icons.play_arrow_rounded),
+                                                  size: 36,
+                                                ),
+                                              ),
+                                            ),
+                                            IconButton(
+                                              tooltip: 'Lagu berikutnya (MusikKu)',
+                                              onPressed: widget.onNext,
+                                              icon: const Icon(Icons.skip_next_rounded, size: 31),
+                                            ),
+                                            IconButton(
+                                              tooltip: switch (ui.loopMode) {
+                                                LoopModeCustom.off => 'Aktifkan repeat',
+                                                LoopModeCustom.all => 'Repeat semua aktif',
+                                                LoopModeCustom.one => 'Repeat satu aktif',
+                                              },
+                                              onPressed: widget.onCycleLoop,
+                                              icon: Icon(
+                                                ui.loopMode == LoopModeCustom.one ? Icons.repeat_one_rounded : Icons.repeat_rounded,
+                                                color: ui.loopMode == LoopModeCustom.off ? scheme.onSurfaceVariant : scheme.primary,
+                                              ),
+                                            ),
+                                          ],
+                                        );
+                                      },
+                                    ),
+                                    if (stateMatchesTrack && state.playbackState == NativePlaybackState.error)
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 12),
+                                        child: Text(
+                                          'Lagu ini gagal dimuat dari sumber audio. Tekan Putar ulang atau pilih lagu berikutnya.',
+                                          textAlign: TextAlign.center,
+                                          style: theme.textTheme.bodySmall?.copyWith(color: scheme.error),
+                                        ),
+                                      ),
+                                    ValueListenableBuilder<bool>(
+                                      valueListenable: widget.showDataUsageOnPlayer,
+                                      builder: (context, visible, _) => visible
+                                          ? const Padding(
+                                              padding: EdgeInsets.only(top: 12),
+                                              child: DataUsageCard(),
+                                            )
+                                          : const SizedBox.shrink(),
+                                    ),
+                                    ],
                                   ),
-                                ValueListenableBuilder<bool>(
-                                  valueListenable: widget.showDataUsageOnPlayer,
-                                  builder: (context, visible, _) => visible
-                                      ? const Padding(
-                                          padding: EdgeInsets.only(top: 12),
-                                          child: DataUsageCard(),
-                                        )
-                                      : const SizedBox.shrink(),
                                 ),
                               ],
                             ),

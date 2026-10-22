@@ -99,7 +99,7 @@ extension _YoutubeHubLibraryViews on _YoutubeHubState {
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 14),
           child: GridView.count(
-            crossAxisCount: 2, crossAxisSpacing: 10, mainAxisSpacing: 10, childAspectRatio: 1.28, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
+            crossAxisCount: 2, crossAxisSpacing: 10, mainAxisSpacing: 10, childAspectRatio: 1.48, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
             children: [
               _libraryQuickTile(title: 'Riwayat dengar', subtitle: '${widget.recentlyPlayed.length} lagu terakhir', icon: Icons.history_rounded, onTap: _openRecentHistory),
               _libraryQuickTile(title: 'Favorit MusikKu', subtitle: '${widget.favorites.length} lagu tersimpan', icon: Icons.favorite_rounded, onTap: _openFavoritesList),

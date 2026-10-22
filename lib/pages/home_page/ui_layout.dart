@@ -21,7 +21,7 @@ extension _HomeUiLayout on _HomePageState {
                 onPlay: _openYoutubeVideo,
                 onClose: _closeYoutubeWatch,
                 // Reserve room above navigation for the persistent mini-player.
-                bottomInset: showMiniPlayer ? 94 : 0,
+                bottomInset: showMiniPlayer ? 82 : 0,
                 watchProgress: _watchProgress,
                 watchDuration: _watchDuration,
                 recentlyPlayed: _recentlyPlayed,
@@ -45,9 +45,9 @@ extension _HomeUiLayout on _HomePageState {
             Positioned(
               left: 12,
               right: 12,
-              // Keep a visible gap between the mini-player and the glass dock.
-              // MediaQuery padding accounts for Android system navigation/gestures.
-              bottom: safeBottom + 66 + 18,
+              // NavigationBar is 66 logical pixels high. MediaQuery padding
+              // accounts for Android's system navigation/gesture area.
+              bottom: safeBottom + 60 + 18,
               child: MiniMusicPlayer(
                 key: ValueKey<String>('mini-music-player-${current.videoId}'),
                 video: current,

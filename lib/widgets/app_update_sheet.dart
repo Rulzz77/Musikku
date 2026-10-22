@@ -37,7 +37,8 @@ class AppUpdateSheet {
         context: context,
         useSafeArea: true,
         isScrollControlled: true,
-        showDragHandle: true,
+        backgroundColor: Colors.transparent,
+        showDragHandle: false,
         builder: (context) => AppUpdatePanel(
           initialResult: initialResult,
           automaticPrompt: automaticPrompt,
@@ -288,11 +289,26 @@ class _AppUpdatePanelState extends State<AppUpdatePanel> with WidgetsBindingObse
         ? (_downloadedBytes / _totalBytes).clamp(0.0, 1.0).toDouble()
         : null;
 
-    return ConstrainedBox(
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.sizeOf(context).height * 0.88,
-      ),
-      child: SingleChildScrollView(
+    return ClipRRect(
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              colors.surface.withValues(alpha: 0.98),
+              colors.surfaceContainerLow.withValues(alpha: 0.98),
+              colors.surface.withValues(alpha: 0.98),
+            ],
+          ),
+          border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.19))),
+        ),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(context).height * 0.88,
+          ),
+          child: SingleChildScrollView(
         padding: EdgeInsets.fromLTRB(
           20,
           4,
@@ -344,7 +360,7 @@ class _AppUpdatePanelState extends State<AppUpdatePanel> with WidgetsBindingObse
                         const SizedBox(height: 4),
                         Text('Versi terpasang: $appVersion', style: TextStyle(color: colors.onSurfaceVariant, fontSize: 12)),
                         const SizedBox(height: 6),
-                        Text('UPDATE CENTER', style: TextStyle(color: colors.secondary, fontSize: 9, letterSpacing: 1.2, fontWeight: FontWeight.w900)),
+                        Text('UPDATE CENTER  •  v$appVersion', style: TextStyle(color: colors.secondary, fontSize: 9, letterSpacing: 1.0, fontWeight: FontWeight.w900)),
                       ],
                     ),
                   ),
@@ -511,6 +527,8 @@ class _AppUpdatePanelState extends State<AppUpdatePanel> with WidgetsBindingObse
               style: TextStyle(color: colors.onSurfaceVariant, fontSize: 11, height: 1.35),
             ),
           ],
+        ),
+          ),
         ),
       ),
     );

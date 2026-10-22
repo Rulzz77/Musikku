@@ -112,10 +112,7 @@ class _YoutubeHubState extends State<YoutubeHub> {
   final Random _feedRandom = Random();
 
   _YoutubeSection _section = _YoutubeSection.home;
-  double _sectionSwipeDistance = 0;
-  double? _dockDragIndex;
-  double _dockReflectionX = 0.5;
-  bool _dockDragging = false;
+  double _dockDragProgress = 0;
   bool _loading = false;
   String _error = '';
   String _query = '';
@@ -237,7 +234,6 @@ class _YoutubeHubState extends State<YoutubeHub> {
     _searchController.clear();
     setState(() {
       _section = nextSection;
-      _dockReflectionX = index / (_YoutubeSection.values.length - 1);
       _query = '';
       _searchResults = const [];
       _searchChannels = const [];
@@ -263,29 +259,8 @@ class _YoutubeHubState extends State<YoutubeHub> {
 
     return Stack(
       children: [
-        GestureDetector(
-          behavior: HitTestBehavior.translucent,
-          onHorizontalDragStart: (_) => _sectionSwipeDistance = 0,
-          onHorizontalDragUpdate: (details) => _sectionSwipeDistance += details.delta.dx,
-          onHorizontalDragEnd: (details) {
-            // Main-tab swipes are disabled while searching or viewing a channel.
-            // Horizontal carousels inside the page keep their own gesture arena.
-            if (_query.isNotEmpty || _openedChannel != null) {
-              _sectionSwipeDistance = 0;
-              return;
-            }
-            final distance = _sectionSwipeDistance;
-            _sectionSwipeDistance = 0;
-            final velocity = details.primaryVelocity ?? 0;
-            if (distance.abs() < 60 && velocity.abs() < 500) return;
-            final step = distance.abs() >= 60 ? (distance < 0 ? 1 : -1) : (velocity < 0 ? 1 : -1);
-            final target = (_section.index + step)
-                .clamp(0, _YoutubeSection.values.length - 1)
-                .toInt();
-            if (target != _section.index) _selectDockDestination(target);
-          },
-          child: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 380),
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 300),
           reverseDuration: const Duration(milliseconds: 210),
           switchInCurve: Curves.easeOutCubic,
           switchOutCurve: Curves.easeInCubic,
@@ -463,152 +438,106 @@ class _YoutubeHubState extends State<YoutubeHub> {
           SliverToBoxAdapter(
             child: SizedBox(
               // Extra clearance for the floating, inset navigation dock.
-              height: 26 + 66 + widget.bottomInset + MediaQuery.paddingOf(context).bottom,
+              height: 14 + 72 + widget.bottomInset + MediaQuery.paddingOf(context).bottom,
             ),
           ),
             ],
           ),
         ),
         ),
-        ),
         Positioned(
-          left: 12,
-          right: 12,
-          bottom: 8 + MediaQuery.paddingOf(context).bottom,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onHorizontalDragStart: (_) {
-            if (_query.isNotEmpty || _openedChannel != null) return;
-            setState(() {
-              _dockDragging = true;
-              _dockDragIndex = _section.index.toDouble();
-              _dockReflectionX = _section.index / (_YoutubeSection.values.length - 1);
-            });
-          },
-          onHorizontalDragUpdate: (details) {
-            if (_query.isNotEmpty || _openedChannel != null) return;
-            final dockWidth = (MediaQuery.sizeOf(context).width - 34).clamp(200.0, 10000.0);
-            final itemWidth = dockWidth / _YoutubeSection.values.length;
-            final localX = (details.localPosition.dx - 5).clamp(0.0, dockWidth);
-            final next = (localX / itemWidth)
-                .clamp(0.0, (_YoutubeSection.values.length - 1).toDouble())
-                .toDouble();
-            setState(() {
-              _dockDragIndex = next;
-              _dockReflectionX = (localX / dockWidth).clamp(0.0, 1.0).toDouble();
-            });
-          },
-          onHorizontalDragEnd: (details) {
-            if (_query.isNotEmpty || _openedChannel != null) {
-              setState(() { _dockDragging = false; _dockDragIndex = null; });
-              return;
-            }
-            final target = (_dockDragIndex ?? _section.index.toDouble())
-                .round()
-                .clamp(0, _YoutubeSection.values.length - 1)
-                .toInt();
-            setState(() { _dockDragging = false; _dockDragIndex = null; });
-            if (target != _section.index) _selectDockDestination(target);
-          },
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(28),
-            child: BackdropFilter(
-              filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Theme.of(context).colorScheme.surface.withValues(alpha: 0.48),
-                      Theme.of(context).colorScheme.surface.withValues(alpha: 0.30),
-                      Colors.white.withValues(alpha: 0.045),
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(28),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.30), width: 1.15),
-                  boxShadow: [
-                    BoxShadow(color: Colors.black.withValues(alpha: 0.20), blurRadius: 28, offset: const Offset(0, 10)),
-                    BoxShadow(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.08), blurRadius: 20, offset: const Offset(0, 2)),
-                  ],
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 5),
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      final itemWidth = constraints.maxWidth / 4;
-                      return SizedBox(
-                        height: 57,
+          left: 14,
+          right: 14,
+          bottom: MediaQuery.paddingOf(context).bottom + 8,
+          child: SizedBox(
+            height: 64,
+            child: LayoutBuilder(
+              builder: (context, dockConstraints) {
+                final colors = Theme.of(context).colorScheme;
+                final cellWidth = dockConstraints.maxWidth / 4;
+                final activeIndex = _section.index;
+                final visualIndex = (activeIndex + _dockDragProgress).clamp(0.0, 3.0).toDouble();
+                final dragging = _dockDragProgress.abs() > 0.001;
+                return GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onHorizontalDragStart: (_) => setState(() => _dockDragProgress = 0),
+                  onHorizontalDragUpdate: (details) {
+                    setState(() {
+                      _dockDragProgress = (_dockDragProgress + details.delta.dx / cellWidth).clamp(-0.95, 0.95).toDouble();
+                    });
+                  },
+                  onHorizontalDragEnd: (details) {
+                    final progress = _dockDragProgress;
+                    final velocity = details.velocity.pixelsPerSecond.dx;
+                    var target = activeIndex;
+                    if (progress < -0.18 || velocity < -420) target = (activeIndex + 1).clamp(0, 3).toInt();
+                    if (progress > 0.18 || velocity > 420) target = (activeIndex - 1).clamp(0, 3).toInt();
+                    setState(() => _dockDragProgress = 0);
+                    if (target != activeIndex) _selectDockDestination(target);
+                  },
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(28),
+                    child: BackdropFilter(
+                      filter: ui.ImageFilter.blur(sigmaX: 26, sigmaY: 26),
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              Colors.white.withValues(alpha: 0.20),
+                              colors.surface.withValues(alpha: 0.53),
+                              colors.surfaceContainerHighest.withValues(alpha: 0.35),
+                              Colors.white.withValues(alpha: 0.09),
+                            ],
+                          ),
+                          borderRadius: BorderRadius.circular(28),
+                          border: Border.all(color: Colors.white.withValues(alpha: 0.27), width: 1),
+                          boxShadow: [
+                            BoxShadow(color: Colors.black.withValues(alpha: 0.18), blurRadius: 26, offset: const Offset(0, 9)),
+                            BoxShadow(color: Colors.white.withValues(alpha: 0.045), blurRadius: 1, spreadRadius: 0.5),
+                          ],
+                        ),
                         child: Stack(
+                          fit: StackFit.expand,
                           children: [
-                            // A permanent glass bevel makes the dock look like
-                            // translucent material even before it is touched.
-                            Positioned.fill(
-                              child: IgnorePointer(
-                                child: DecoratedBox(
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(22),
-                                    gradient: LinearGradient(
-                                      begin: Alignment.topLeft,
-                                      end: Alignment.bottomRight,
-                                      colors: [
-                                        Colors.white.withValues(alpha: 0.14),
-                                        Colors.white.withValues(alpha: 0.015),
-                                        Colors.white.withValues(alpha: 0.055),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
                             AnimatedPositioned(
-                              duration: _dockDragging ? Duration.zero : const Duration(milliseconds: 430),
-                              curve: Curves.easeOutBack,
-                              left: itemWidth * (_dockDragIndex ?? _section.index.toDouble()) + 2,
-                              top: 1,
-                              bottom: 1,
-                              width: itemWidth - 4,
+                              duration: dragging ? Duration.zero : const Duration(milliseconds: 300),
+                              curve: Curves.easeOutCubic,
+                              left: visualIndex * cellWidth + 4,
+                              top: 4,
+                              bottom: 4,
+                              width: cellWidth - 8,
                               child: DecoratedBox(
                                 decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(23),
                                   gradient: LinearGradient(
                                     begin: Alignment.topLeft,
                                     end: Alignment.bottomRight,
                                     colors: [
-                                      Theme.of(context).colorScheme.primary.withValues(alpha: 0.22),
-                                      Theme.of(context).colorScheme.secondary.withValues(alpha: 0.13),
+                                      Colors.white.withValues(alpha: 0.29),
+                                      colors.primary.withValues(alpha: 0.13),
+                                      Colors.white.withValues(alpha: 0.045),
                                     ],
                                   ),
-                                  borderRadius: BorderRadius.circular(22),
-                                  border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
-                                  boxShadow: [
-                                    BoxShadow(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.13), blurRadius: 15, offset: const Offset(0, 3)),
-                                  ],
+                                  border: Border.all(color: Colors.white.withValues(alpha: 0.30)),
                                 ),
                               ),
                             ),
                             AnimatedPositioned(
-                              duration: _dockDragging ? Duration.zero : const Duration(milliseconds: 280),
+                              duration: dragging ? Duration.zero : const Duration(milliseconds: 260),
                               curve: Curves.easeOutCubic,
-                              left: ((constraints.maxWidth - 72) * _dockReflectionX).clamp(0.0, max(0.0, constraints.maxWidth - 72)).toDouble(),
-                              top: -8,
-                              bottom: -8,
-                              width: 72,
+                              left: (visualIndex * cellWidth + cellWidth * 0.17).clamp(0.0, dockConstraints.maxWidth - cellWidth * 0.42).toDouble(),
+                              top: 1,
+                              bottom: 1,
+                              width: cellWidth * 0.42,
                               child: IgnorePointer(
-                                child: Transform.rotate(
-                                  angle: pi / 12,
-                                  child: DecoratedBox(
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(99),
-                                      gradient: LinearGradient(
-                                        begin: Alignment.centerLeft,
-                                        end: Alignment.centerRight,
-                                        colors: [
-                                          Colors.white.withValues(alpha: 0.0),
-                                          Colors.white.withValues(alpha: _dockDragging ? 0.22 : 0.11),
-                                          Theme.of(context).colorScheme.primary.withValues(alpha: _dockDragging ? 0.10 : 0.035),
-                                          Colors.white.withValues(alpha: 0.0),
-                                        ],
-                                      ),
+                                child: DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      begin: Alignment.centerLeft,
+                                      end: Alignment.centerRight,
+                                      colors: [Colors.white.withValues(alpha: 0), Colors.white.withValues(alpha: dragging ? 0.21 : 0.09), Colors.white.withValues(alpha: 0)],
                                     ),
                                   ),
                                 ),
@@ -616,37 +545,20 @@ class _YoutubeHubState extends State<YoutubeHub> {
                             ),
                             Row(
                               children: [
-                                Expanded(child: _FlowDockDestination(
-                                  label: 'Beranda', icon: Icons.home_outlined, selectedIcon: Icons.home_rounded,
-                                  selected: _section == _YoutubeSection.home,
-                                  onTap: () => _selectDockDestination(_YoutubeSection.home.index),
-                                )),
-                                Expanded(child: _FlowDockDestination(
-                                  label: 'Jelajah', icon: Icons.explore_outlined, selectedIcon: Icons.explore_rounded,
-                                  selected: _section == _YoutubeSection.explore,
-                                  onTap: () => _selectDockDestination(_YoutubeSection.explore.index),
-                                )),
-                                Expanded(child: _FlowDockDestination(
-                                  label: 'Radio', icon: Icons.radio_outlined, selectedIcon: Icons.radio_rounded,
-                                  selected: _section == _YoutubeSection.samples,
-                                  onTap: () => _selectDockDestination(_YoutubeSection.samples.index),
-                                )),
-                                Expanded(child: _FlowDockDestination(
-                                  label: 'Koleksi', icon: Icons.library_music_outlined, selectedIcon: Icons.library_music_rounded,
-                                  selected: _section == _YoutubeSection.library,
-                                  onTap: () => _selectDockDestination(_YoutubeSection.library.index),
-                                )),
+                                Expanded(child: _FlowDockDestination(label: 'Beranda', icon: Icons.home_outlined, selectedIcon: Icons.home_rounded, selected: _section == _YoutubeSection.home, onTap: () => _selectDockDestination(_YoutubeSection.home.index))),
+                                Expanded(child: _FlowDockDestination(label: 'Jelajah', icon: Icons.explore_outlined, selectedIcon: Icons.explore_rounded, selected: _section == _YoutubeSection.explore, onTap: () => _selectDockDestination(_YoutubeSection.explore.index))),
+                                Expanded(child: _FlowDockDestination(label: 'Radio', icon: Icons.radio_outlined, selectedIcon: Icons.radio_rounded, selected: _section == _YoutubeSection.samples, onTap: () => _selectDockDestination(_YoutubeSection.samples.index))),
+                                Expanded(child: _FlowDockDestination(label: 'Koleksi', icon: Icons.library_music_outlined, selectedIcon: Icons.library_music_rounded, selected: _section == _YoutubeSection.library, onTap: () => _selectDockDestination(_YoutubeSection.library.index))),
                               ],
                             ),
                           ],
                         ),
-                      );
-                    },
+                      ),
+                    ),
                   ),
-                ),
-              ),
+                );
+              },
             ),
-          ),
           ),
         ),
         // Halaman channel sebagai lapisan di atas hub (termasuk bar navigasi).
@@ -705,41 +617,46 @@ class _FlowDockDestination extends StatelessWidget {
           color: Colors.transparent,
           child: InkWell(
             onTap: onTap,
-            borderRadius: BorderRadius.circular(22),
-            child: SizedBox(
-              height: 57,
+            borderRadius: BorderRadius.circular(19),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 240),
+              curve: Curves.easeOutCubic,
+              margin: const EdgeInsets.symmetric(horizontal: 2),
+              padding: const EdgeInsets.symmetric(vertical: 5),
+              decoration: BoxDecoration(
+                color: selected ? scheme.primaryContainer.withValues(alpha: 0.94) : Colors.transparent,
+                borderRadius: BorderRadius.circular(19),
+                border: Border.all(
+                  color: selected ? scheme.primary.withValues(alpha: 0.24) : Colors.transparent,
+                ),
+                boxShadow: selected
+                    ? [BoxShadow(color: scheme.primary.withValues(alpha: 0.10), blurRadius: 12, offset: const Offset(0, 3))]
+                    : const [],
+              ),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   AnimatedScale(
-                    scale: selected ? 1.12 : 0.96,
-                    duration: const Duration(milliseconds: 300),
+                    scale: selected ? 1.08 : 1.0,
+                    duration: const Duration(milliseconds: 240),
                     curve: Curves.easeOutBack,
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 180),
-                      transitionBuilder: (child, animation) => ScaleTransition(
-                        scale: animation,
-                        child: FadeTransition(opacity: animation, child: child),
-                      ),
-                      child: Icon(
-                        selected ? selectedIcon : icon,
-                        key: ValueKey<bool>(selected),
-                        size: 22,
-                        color: selected ? scheme.primary : scheme.onSurfaceVariant,
-                      ),
+                    child: Icon(
+                      selected ? selectedIcon : icon,
+                      size: 22,
+                      color: selected ? scheme.primary : scheme.onSurfaceVariant,
                     ),
                   ),
-                  const SizedBox(height: 3),
+                  const SizedBox(height: 2),
                   AnimatedDefaultTextStyle(
-                    duration: const Duration(milliseconds: 220),
+                    duration: const Duration(milliseconds: 180),
                     curve: Curves.easeOut,
                     style: TextStyle(
-                      fontSize: selected ? 10.4 : 9.5,
+                      fontSize: selected ? 10.3 : 9.5,
                       height: 1.1,
                       fontWeight: selected ? FontWeight.w900 : FontWeight.w600,
                       color: selected ? scheme.primary : scheme.onSurfaceVariant,
-                      letterSpacing: selected ? 0 : 0.05,
+                      letterSpacing: selected ? -0.05 : 0,
                     ),
                     child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
                   ),

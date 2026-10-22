@@ -335,7 +335,7 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
       else ...[
         SliverToBoxAdapter(
           child: SizedBox(
-            height: 304,
+            height: 260,
             child: ListView.separated(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
               scrollDirection: Axis.horizontal,
@@ -395,20 +395,31 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
         ),
       ),
       SliverToBoxAdapter(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 2, 14, 10),
-          child: Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final category in _YoutubeHubState._exploreCategories)
-                ChoiceChip(
-                  label: Text(category),
-                  selected: _exploreCategory == category,
-                  showCheckmark: false,
-                  onSelected: (selected) { if (selected && category != _exploreCategory) unawaited(_loadExploreCategory(category)); },
-                ),
-            ],
+        child: SizedBox(
+          height: 48,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.fromLTRB(14, 2, 14, 8),
+            itemCount: _YoutubeHubState._exploreCategories.length,
+            separatorBuilder: (_, _) => const SizedBox(width: 8),
+            itemBuilder: (context, index) {
+              final category = _YoutubeHubState._exploreCategories[index];
+              final selected = _exploreCategory == category;
+              return ChoiceChip(
+                label: Text(category),
+                selected: selected,
+                showCheckmark: false,
+                visualDensity: VisualDensity.compact,
+                onSelected: (value) {
+                  if (value && category != _exploreCategory) unawaited(_loadExploreCategory(category));
+                },
+                backgroundColor: scheme.surfaceContainerLow,
+                selectedColor: scheme.primaryContainer,
+                side: BorderSide(color: selected ? scheme.primary.withValues(alpha: 0.32) : scheme.outlineVariant.withValues(alpha: 0.45)),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+                labelStyle: TextStyle(fontSize: 12, fontWeight: selected ? FontWeight.w800 : FontWeight.w600, color: selected ? scheme.onPrimaryContainer : scheme.onSurfaceVariant),
+              );
+            },
           ),
         ),
       ),

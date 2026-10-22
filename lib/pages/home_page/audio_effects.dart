@@ -135,6 +135,11 @@ extension _HomeAudioSettingsUi on _HomePageState {
       showDragHandle: true,
       useSafeArea: true,
       isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      elevation: 0,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+      ),
       constraints: const BoxConstraints(maxWidth: 600),
       builder: (sheetContext) => StatefulBuilder(
         builder: (context, setSheetState) {
@@ -196,48 +201,147 @@ extension _HomeAudioSettingsUi on _HomePageState {
                   ],
                 ),
                 const SizedBox(height: 10),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    for (final preset in presets)
-                      ChoiceChip(
+                SizedBox(
+                  height: 43,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: presets.length,
+                    separatorBuilder: (_, _) => const SizedBox(width: 8),
+                    itemBuilder: (context, index) {
+                      final preset = presets[index];
+                      return ChoiceChip(
                         label: Text(preset.name),
                         selected: _equalizerPreset == preset.name,
                         avatar: _equalizerPreset == preset.name ? const Icon(Icons.check_rounded, size: 16) : null,
+                        side: BorderSide(
+                          color: _equalizerPreset == preset.name
+                              ? scheme.primary.withValues(alpha: 0.45)
+                              : scheme.outlineVariant.withValues(alpha: 0.55),
+                        ),
+                        shape: const StadiumBorder(),
                         onSelected: (_) async {
                           await _applyEqualizerPreset(preset.name);
                           if (context.mounted) setSheetState(() {});
                         },
-                      ),
-                  ],
+                      );
+                    },
+                  ),
                 ),
                 const SizedBox(height: 5),
                 Text(
                   presets.firstWhere((item) => item.name == _equalizerPreset, orElse: () => presets.first).detail,
                   style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11.5),
                 ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    const Expanded(child: Text('Equalizer manual 5-band', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800))),
-                    Text('±12 dB', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11)),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                for (var band = 0; band < customBands.length; band++)
-                  Row(
+                const SizedBox(height: 18),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.fromLTRB(13, 14, 13, 12),
+                  decoration: BoxDecoration(
+                    color: scheme.surfaceContainerHighest.withValues(alpha: 0.48),
+                    borderRadius: BorderRadius.circular(23),
+                    border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.55)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      SizedBox(width: 54, child: Text(bandLabels[band], style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant))),
-                      Expanded(
-                        child: Slider(
-                          value: customBands[band],
-                          min: -12,
-                          max: 12,
-                          divisions: 24,
-                          label: '${customBands[band].toStringAsFixed(0)} dB',
-                          onChanged: (value) => setSheetState(() => customBands[band] = value),
-                          onChangeEnd: (_) async {
+                      Row(
+                        children: [
+                          Container(
+                            width: 34,
+                            height: 34,
+                            decoration: BoxDecoration(
+                              color: scheme.primary.withValues(alpha: 0.13),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Icon(Icons.tune_rounded, color: scheme.primary, size: 19),
+                          ),
+                          const SizedBox(width: 10),
+                          const Expanded(child: Text('EQ manual', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900))),
+                          Text('5 band • ±12 dB', style: TextStyle(fontSize: 10.5, color: scheme.onSurfaceVariant, fontWeight: FontWeight.w700)),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text('Geser tiap band untuk membentuk karakter suara.', style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        height: 174,
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            for (var band = 0; band < customBands.length; band++)
+                              Expanded(
+                                child: Column(
+                                  children: [
+                                    AnimatedContainer(
+                                      duration: const Duration(milliseconds: 140),
+                                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: scheme.primary.withValues(alpha: 0.10),
+                                        borderRadius: BorderRadius.circular(9),
+                                      ),
+                                      child: Text(
+                                        '${customBands[band] > 0 ? '+' : ''}${customBands[band].toStringAsFixed(0)}',
+                                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: scheme.primary),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Expanded(
+                                      child: Center(
+                                        child: RotatedBox(
+                                          quarterTurns: 3,
+                                          child: SizedBox(
+                                            width: 118,
+                                            child: SliderTheme(
+                                              data: SliderTheme.of(context).copyWith(
+                                                trackHeight: 3.5,
+                                                activeTrackColor: scheme.primary,
+                                                inactiveTrackColor: scheme.outlineVariant.withValues(alpha: 0.8),
+                                                thumbColor: scheme.primary,
+                                                overlayColor: scheme.primary.withValues(alpha: 0.12),
+                                                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                                                overlayShape: const RoundSliderOverlayShape(overlayRadius: 13),
+                                              ),
+                                              child: Slider(
+                                                value: customBands[band],
+                                                min: -12,
+                                                max: 12,
+                                                divisions: 24,
+                                                label: '${customBands[band].toStringAsFixed(0)} dB',
+                                                onChanged: (value) => setSheetState(() => customBands[band] = value),
+                                                onChangeEnd: (_) async {
+                                                  var applied = false;
+                                                  try {
+                                                    applied = await _youtubeController.setEqualizerBands(customBands);
+                                                    final prefs = await SharedPreferences.getInstance();
+                                                    await prefs.setStringList(customBandsPrefKey, customBands.map((v) => v.toString()).toList());
+                                                  } catch (_) {}
+                                                  if (context.mounted) {
+                                                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                                      content: Text(applied ? 'Equalizer manual diterapkan' : 'Efek manual bergantung dukungan audio perangkat'),
+                                                      duration: const Duration(seconds: 2),
+                                                    ));
+                                                  }
+                                                },
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 3),
+                                    Text(bandLabels[band], maxLines: 1, style: TextStyle(fontSize: 9, color: scheme.onSurfaceVariant, fontWeight: FontWeight.w700)),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton.icon(
+                          onPressed: () async {
+                            setSheetState(() { for (var i = 0; i < customBands.length; i++) { customBands[i] = 0; } });
                             var applied = false;
                             try {
                               applied = await _youtubeController.setEqualizerBands(customBands);
@@ -245,32 +349,14 @@ extension _HomeAudioSettingsUi on _HomePageState {
                               await prefs.setStringList(customBandsPrefKey, customBands.map((v) => v.toString()).toList());
                             } catch (_) {}
                             if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                                content: Text(applied ? 'Equalizer manual diterapkan' : 'Equalizer manual belum didukung oleh output perangkat ini'),
-                                duration: const Duration(seconds: 2),
-                              ));
+                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(applied ? 'Equalizer direset' : 'Nilai EQ direset; efek bergantung dukungan perangkat')));
                             }
                           },
+                          icon: const Icon(Icons.restart_alt_rounded, size: 17),
+                          label: const Text('Reset band'),
                         ),
                       ),
-                      SizedBox(width: 42, child: Text('${customBands[band] >= 0 ? '+' : ''}${customBands[band].toStringAsFixed(0)}', textAlign: TextAlign.end, style: const TextStyle(fontSize: 11))),
                     ],
-                  ),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton.icon(
-                    onPressed: () async {
-                      setSheetState(() { for (var i = 0; i < customBands.length; i++) { customBands[i] = 0; } });
-                      var applied = false;
-                      try {
-                        applied = await _youtubeController.setEqualizerBands(customBands);
-                        final prefs = await SharedPreferences.getInstance();
-                        await prefs.setStringList(customBandsPrefKey, customBands.map((v) => v.toString()).toList());
-                      } catch (_) {}
-                      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(applied ? 'Equalizer manual direset' : 'Reset tersimpan di tampilan; output perangkat tidak mendukung EQ manual')));
-                    },
-                    icon: const Icon(Icons.restart_alt_rounded, size: 18),
-                    label: const Text('Reset band'),
                   ),
                 ),
                 const SizedBox(height: 22),

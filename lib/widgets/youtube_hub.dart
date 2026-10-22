@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
@@ -111,6 +112,7 @@ class _YoutubeHubState extends State<YoutubeHub> {
   final Random _feedRandom = Random();
 
   _YoutubeSection _section = _YoutubeSection.home;
+  double _sectionSwipeDistance = 0;
   bool _loading = false;
   String _error = '';
   String _query = '';
@@ -257,8 +259,29 @@ class _YoutubeHubState extends State<YoutubeHub> {
 
     return Stack(
       children: [
-        AnimatedSwitcher(
-          duration: const Duration(milliseconds: 300),
+        GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onHorizontalDragStart: (_) => _sectionSwipeDistance = 0,
+          onHorizontalDragUpdate: (details) => _sectionSwipeDistance += details.delta.dx,
+          onHorizontalDragEnd: (details) {
+            // Main-tab swipes are disabled while searching or viewing a channel.
+            // Horizontal carousels inside the page keep their own gesture arena.
+            if (_query.isNotEmpty || _openedChannel != null) {
+              _sectionSwipeDistance = 0;
+              return;
+            }
+            final distance = _sectionSwipeDistance;
+            _sectionSwipeDistance = 0;
+            final velocity = details.primaryVelocity ?? 0;
+            if (distance.abs() < 60 && velocity.abs() < 500) return;
+            final step = distance.abs() >= 60 ? (distance < 0 ? 1 : -1) : (velocity < 0 ? 1 : -1);
+            final target = (_section.index + step)
+                .clamp(0, _YoutubeSection.values.length - 1)
+                .toInt();
+            if (target != _section.index) _selectDockDestination(target);
+          },
+          child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 380),
           reverseDuration: const Duration(milliseconds: 210),
           switchInCurve: Curves.easeOutCubic,
           switchOutCurve: Curves.easeInCubic,
@@ -443,66 +466,118 @@ class _YoutubeHubState extends State<YoutubeHub> {
           ),
         ),
         ),
+        ),
         Positioned(
           left: 12,
           right: 12,
           bottom: 8 + MediaQuery.paddingOf(context).bottom,
-          child: Material(
-            color: Colors.transparent,
-            elevation: 0,
-            borderRadius: BorderRadius.circular(26),
-            clipBehavior: Clip.antiAlias,
-            child: Container(
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.97),
-                borderRadius: BorderRadius.circular(26),
-                border: Border.all(
-                  color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.70),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.16),
-                    blurRadius: 24,
-                    offset: const Offset(0, 8),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onHorizontalDragStart: (_) => _sectionSwipeDistance = 0,
+            onHorizontalDragUpdate: (details) => _sectionSwipeDistance += details.delta.dx,
+            onHorizontalDragEnd: (details) {
+              if (_query.isNotEmpty || _openedChannel != null) {
+                _sectionSwipeDistance = 0;
+                return;
+              }
+              final distance = _sectionSwipeDistance;
+              _sectionSwipeDistance = 0;
+              final velocity = details.primaryVelocity ?? 0;
+              if (distance.abs() < 45 && velocity.abs() < 400) return;
+              final step = distance.abs() >= 45 ? (distance < 0 ? 1 : -1) : (velocity < 0 ? 1 : -1);
+              final target = (_section.index + step)
+                  .clamp(0, _YoutubeSection.values.length - 1)
+                  .toInt();
+              if (target != _section.index) _selectDockDestination(target);
+            },
+            child: ClipRRect(
+            borderRadius: BorderRadius.circular(28),
+            child: BackdropFilter(
+              filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Theme.of(context).colorScheme.surface.withValues(alpha: 0.72),
+                      Theme.of(context).colorScheme.surface.withValues(alpha: 0.50),
+                    ],
                   ),
-                ],
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 5),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: _FlowDockDestination(
-                        label: 'Beranda', icon: Icons.home_outlined, selectedIcon: Icons.home_rounded,
-                        selected: _section == _YoutubeSection.home,
-                        onTap: () => _selectDockDestination(_YoutubeSection.home.index),
-                      ),
-                    ),
-                    Expanded(
-                      child: _FlowDockDestination(
-                        label: 'Jelajah', icon: Icons.explore_outlined, selectedIcon: Icons.explore_rounded,
-                        selected: _section == _YoutubeSection.explore,
-                        onTap: () => _selectDockDestination(_YoutubeSection.explore.index),
-                      ),
-                    ),
-                    Expanded(
-                      child: _FlowDockDestination(
-                        label: 'Radio', icon: Icons.radio_outlined, selectedIcon: Icons.radio_rounded,
-                        selected: _section == _YoutubeSection.samples,
-                        onTap: () => _selectDockDestination(_YoutubeSection.samples.index),
-                      ),
-                    ),
-                    Expanded(
-                      child: _FlowDockDestination(
-                        label: 'Koleksi', icon: Icons.library_music_outlined, selectedIcon: Icons.library_music_rounded,
-                        selected: _section == _YoutubeSection.library,
-                        onTap: () => _selectDockDestination(_YoutubeSection.library.index),
-                      ),
-                    ),
+                  borderRadius: BorderRadius.circular(28),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.18), width: 1.1),
+                  boxShadow: [
+                    BoxShadow(color: Colors.black.withValues(alpha: 0.20), blurRadius: 28, offset: const Offset(0, 10)),
+                    BoxShadow(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.08), blurRadius: 20, offset: const Offset(0, 2)),
                   ],
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 5),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final itemWidth = constraints.maxWidth / 4;
+                      return SizedBox(
+                        height: 57,
+                        child: Stack(
+                          children: [
+                            AnimatedPositioned(
+                              duration: const Duration(milliseconds: 430),
+                              curve: Curves.easeOutBack,
+                              left: itemWidth * _section.index + 2,
+                              top: 1,
+                              bottom: 1,
+                              width: itemWidth - 4,
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                    colors: [
+                                      Theme.of(context).colorScheme.primary.withValues(alpha: 0.22),
+                                      Theme.of(context).colorScheme.secondary.withValues(alpha: 0.13),
+                                    ],
+                                  ),
+                                  borderRadius: BorderRadius.circular(22),
+                                  border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
+                                  boxShadow: [
+                                    BoxShadow(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.13), blurRadius: 15, offset: const Offset(0, 3)),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            Row(
+                              children: [
+                                Expanded(child: _FlowDockDestination(
+                                  label: 'Beranda', icon: Icons.home_outlined, selectedIcon: Icons.home_rounded,
+                                  selected: _section == _YoutubeSection.home,
+                                  onTap: () => _selectDockDestination(_YoutubeSection.home.index),
+                                )),
+                                Expanded(child: _FlowDockDestination(
+                                  label: 'Jelajah', icon: Icons.explore_outlined, selectedIcon: Icons.explore_rounded,
+                                  selected: _section == _YoutubeSection.explore,
+                                  onTap: () => _selectDockDestination(_YoutubeSection.explore.index),
+                                )),
+                                Expanded(child: _FlowDockDestination(
+                                  label: 'Radio', icon: Icons.radio_outlined, selectedIcon: Icons.radio_rounded,
+                                  selected: _section == _YoutubeSection.samples,
+                                  onTap: () => _selectDockDestination(_YoutubeSection.samples.index),
+                                )),
+                                Expanded(child: _FlowDockDestination(
+                                  label: 'Koleksi', icon: Icons.library_music_outlined, selectedIcon: Icons.library_music_rounded,
+                                  selected: _section == _YoutubeSection.library,
+                                  onTap: () => _selectDockDestination(_YoutubeSection.library.index),
+                                )),
+                              ],
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
                 ),
               ),
             ),
+          ),
           ),
         ),
         // Halaman channel sebagai lapisan di atas hub (termasuk bar navigasi).
@@ -561,46 +636,41 @@ class _FlowDockDestination extends StatelessWidget {
           color: Colors.transparent,
           child: InkWell(
             onTap: onTap,
-            borderRadius: BorderRadius.circular(19),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 240),
-              curve: Curves.easeOutCubic,
-              margin: const EdgeInsets.symmetric(horizontal: 2),
-              padding: const EdgeInsets.symmetric(vertical: 5),
-              decoration: BoxDecoration(
-                color: selected ? scheme.primaryContainer.withValues(alpha: 0.94) : Colors.transparent,
-                borderRadius: BorderRadius.circular(19),
-                border: Border.all(
-                  color: selected ? scheme.primary.withValues(alpha: 0.24) : Colors.transparent,
-                ),
-                boxShadow: selected
-                    ? [BoxShadow(color: scheme.primary.withValues(alpha: 0.10), blurRadius: 12, offset: const Offset(0, 3))]
-                    : const [],
-              ),
+            borderRadius: BorderRadius.circular(22),
+            child: SizedBox(
+              height: 57,
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   AnimatedScale(
-                    scale: selected ? 1.08 : 1.0,
-                    duration: const Duration(milliseconds: 240),
+                    scale: selected ? 1.12 : 0.96,
+                    duration: const Duration(milliseconds: 300),
                     curve: Curves.easeOutBack,
-                    child: Icon(
-                      selected ? selectedIcon : icon,
-                      size: 22,
-                      color: selected ? scheme.primary : scheme.onSurfaceVariant,
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 180),
+                      transitionBuilder: (child, animation) => ScaleTransition(
+                        scale: animation,
+                        child: FadeTransition(opacity: animation, child: child),
+                      ),
+                      child: Icon(
+                        selected ? selectedIcon : icon,
+                        key: ValueKey<bool>(selected),
+                        size: 22,
+                        color: selected ? scheme.primary : scheme.onSurfaceVariant,
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 2),
+                  const SizedBox(height: 3),
                   AnimatedDefaultTextStyle(
-                    duration: const Duration(milliseconds: 180),
+                    duration: const Duration(milliseconds: 220),
                     curve: Curves.easeOut,
                     style: TextStyle(
-                      fontSize: selected ? 10.3 : 9.5,
+                      fontSize: selected ? 10.4 : 9.5,
                       height: 1.1,
                       fontWeight: selected ? FontWeight.w900 : FontWeight.w600,
                       color: selected ? scheme.primary : scheme.onSurfaceVariant,
-                      letterSpacing: selected ? -0.05 : 0,
+                      letterSpacing: selected ? 0 : 0.05,
                     ),
                     child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
                   ),

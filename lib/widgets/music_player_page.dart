@@ -95,15 +95,33 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
           // cover feels immersive without reducing text/control contrast.
           Positioned.fill(
             child: Opacity(
-              opacity: 0.48,
+              opacity: 0.64,
               child: ImageFiltered(
-                imageFilter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                imageFilter: ui.ImageFilter.blur(sigmaX: 28, sigmaY: 28),
                 child: AlbumArtworkImage(track: widget.video, fit: BoxFit.cover, iconSize: 100),
               ),
             ),
           ),
+          // Darken the artwork just enough for legible controls while keeping
+          // its colours visibly present behind the entire player page.
           Positioned.fill(
-            child: ColoredBox(color: scheme.surface.withValues(alpha: 0.44)),
+            child: ColoredBox(color: Colors.black.withValues(alpha: 0.25)),
+          ),
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.black.withValues(alpha: 0.45),
+                    Colors.transparent,
+                    scheme.surface.withValues(alpha: 0.48),
+                  ],
+                  stops: const [0.0, 0.48, 1.0],
+                ),
+              ),
+            ),
           ),
           DecoratedBox(
             decoration: BoxDecoration(
@@ -111,9 +129,9 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  scheme.primary.withValues(alpha: 0.10),
-                  scheme.secondary.withValues(alpha: 0.035),
-                  scheme.surface.withValues(alpha: 0.40),
+                  scheme.primary.withValues(alpha: 0.08),
+                  scheme.secondary.withValues(alpha: 0.02),
+                  scheme.surface.withValues(alpha: 0.18),
                 ],
               ),
             ),
@@ -129,15 +147,28 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                       onPressed: widget.onBack,
                       icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 30),
                     ),
-                    const Expanded(
+                    Expanded(
                       child: Column(
                         children: [
                           Text(
                             'SEDANG DIPUTAR',
-                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1.5),
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: Colors.white.withValues(alpha: 0.72),
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 1.7,
+                            ),
                           ),
-                          SizedBox(height: 3),
-                          Text('MusikKu • Pemutar audio', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+                          const SizedBox(height: 3),
+                          Text(
+                            widget.video.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -189,29 +220,43 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                             : constraints.maxWidth;
                         final artHeight = isWideLayout
                             ? (constraints.maxHeight * 0.72).clamp(300.0, 560.0).toDouble()
-                            : (constraints.maxHeight * 0.68).clamp(320.0, 560.0).toDouble();
+                            : (constraints.maxHeight * 0.72).clamp(340.0, 620.0).toDouble();
                         final artworkPanel = SizedBox(
                           width: artWidth,
                           height: artHeight,
-                          child: AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 520),
-                            switchInCurve: Curves.easeOutCubic,
-                            switchOutCurve: Curves.easeInCubic,
-                            transitionBuilder: (child, animation) => FadeTransition(
-                              opacity: animation,
-                              child: ScaleTransition(
-                                scale: Tween<double>(begin: 1.025, end: 1).animate(
-                                  CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              AnimatedSwitcher(
+                                duration: const Duration(milliseconds: 520),
+                                switchInCurve: Curves.easeOutCubic,
+                                switchOutCurve: Curves.easeInCubic,
+                                transitionBuilder: (child, animation) => FadeTransition(
+                                  opacity: animation,
+                                  child: ScaleTransition(
+                                    scale: Tween<double>(begin: 1.025, end: 1).animate(
+                                      CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+                                    ),
+                                    child: child,
+                                  ),
                                 ),
-                                child: child,
+                                child: _buildImmersiveArtwork(
+                                  key: ValueKey<String>('art-${widget.video.videoId}'),
+                                  isWideLayout: isWideLayout,
+                                  track: widget.video,
+                                  surfaceColor: scheme.surface,
+                                ),
                               ),
-                            ),
-                            child: _buildImmersiveArtwork(
-                              key: ValueKey<String>('art-${widget.video.videoId}'),
-                              isWideLayout: isWideLayout,
-                              track: widget.video,
-                              surfaceColor: scheme.surface,
-                            ),
+                              if (!isWideLayout)
+                                Positioned(
+                                  left: 0,
+                                  right: 0,
+                                  bottom: 2,
+                                  child: _buildCurrentLyricGlass(
+                                    textTheme: theme.textTheme,
+                                  ),
+                                ),
+                            ],
                           ),
                         );
                         final trackInfoPanel = Row(
@@ -471,28 +516,18 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
     );
   }
 
-  /// Renders a sharp cover over a softly blurred copy of itself. A vertical
-  /// alpha mask dissolves the sharp layer at the top and bottom so it feels
-  /// continuous with the player background instead of looking like a rounded
-  /// card pasted onto the page.
+  /// Places sharp album art over the blurred full-page artwork in the root
+  /// Stack. The alpha mask dissolves the top and bottom edges into that shared
+  /// background, so the image never reads as a rectangular card.
   Widget _buildImmersiveArtwork({
     required Key key,
     required bool isWideLayout,
     required YoutubeSearchResult track,
     required Color surfaceColor,
   }) {
-    final artwork = Stack(
+    final art = Stack(
       fit: StackFit.expand,
       children: [
-        // The same artwork is blurred beneath the hero. It is revealed at the
-        // edges by the alpha mask and adds a natural soft halo to the cover.
-        ImageFiltered(
-          imageFilter: ui.ImageFilter.blur(sigmaX: 22, sigmaY: 22),
-          child: Opacity(
-            opacity: 0.86,
-            child: AlbumArtworkImage(track: track, fit: BoxFit.cover, iconSize: 88),
-          ),
-        ),
         ShaderMask(
           blendMode: BlendMode.dstIn,
           shaderCallback: (bounds) => const LinearGradient(
@@ -504,49 +539,129 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
               Colors.white,
               Colors.transparent,
             ],
-            stops: [0.0, 0.19, 0.76, 1.0],
+            stops: [0.0, 0.15, 0.79, 1.0],
           ).createShader(bounds),
           child: AlbumArtworkImage(track: track, fit: BoxFit.cover, iconSize: 88),
         ),
-        // The top and bottom veils blend into the page surface. There are no
-        // rounded phone-card corners, so the cover dissolves rather than ends.
-        DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                surfaceColor.withValues(alpha: 0.78),
-                surfaceColor.withValues(alpha: 0.26),
-                Colors.transparent,
-                Colors.transparent,
-                surfaceColor.withValues(alpha: 0.28),
-                surfaceColor.withValues(alpha: 0.96),
-              ],
-              stops: const [0.0, 0.10, 0.25, 0.62, 0.88, 1.0],
-            ),
-          ),
-        ),
-        if (isWideLayout)
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.10),
-                  width: 1,
-                ),
-                borderRadius: BorderRadius.circular(28),
+        // A very light vignette gently hides the fade boundary without putting
+        // an opaque surface-colour band over the cover.
+        IgnorePointer(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.black.withValues(alpha: 0.12),
+                  Colors.transparent,
+                  Colors.transparent,
+                  surfaceColor.withValues(alpha: 0.07),
+                ],
+                stops: const [0.0, 0.20, 0.76, 1.0],
               ),
             ),
           ),
+        ),
       ],
     );
 
-    // Wide layouts keep a gently framed composition. On phones the artwork is
-    // clipped only to its bounds; no border radius makes a visible card shape.
+    // On phones the art touches the screen edges and fades vertically into the
+    // full-page blurred art. Wide layouts retain a restrained rounded frame.
     return isWideLayout
-        ? ClipRRect(key: key, borderRadius: BorderRadius.circular(28), child: artwork)
-        : ClipRect(key: key, child: artwork);
+        ? ClipRRect(key: key, borderRadius: BorderRadius.circular(28), child: art)
+        : ClipRect(key: key, child: art);
+  }
+
+  /// Small glass lyric pill floating over the soft edge of the full-bleed art.
+  /// It is displayed only for real timestamped lyrics; unsynced text must not
+  /// pretend to follow playback position.
+  Widget _buildCurrentLyricGlass({
+    required TextTheme textTheme,
+  }) {
+    return ValueListenableBuilder<PlayerUiState>(
+      valueListenable: widget.playerUiState,
+      builder: (context, playerState, _) {
+        if (playerState.video?.videoId != widget.video.videoId ||
+            !playerState.lyricsSynced ||
+            playerState.lyrics.isEmpty) {
+          return const SizedBox.shrink();
+        }
+
+        return ValueListenableBuilder<NativeYoutubeState>(
+          valueListenable: widget.nativeState,
+          builder: (context, state, _) {
+            final matchesTrack = state.videoId.isEmpty || state.videoId == widget.video.videoId;
+            final position = matchesTrack ? state.position : Duration.zero;
+            var lineIndex = 0;
+            for (var i = 0; i < playerState.lyrics.length; i++) {
+              if (playerState.lyrics[i].time <= position) {
+                lineIndex = i;
+              } else {
+                break;
+              }
+            }
+            final lyric = playerState.lyrics[lineIndex].text.trim();
+            if (lyric.isEmpty) return const SizedBox.shrink();
+
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(28),
+                child: BackdropFilter(
+                  filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.105),
+                      borderRadius: BorderRadius.circular(28),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.20)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.12),
+                          blurRadius: 20,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 260),
+                      switchInCurve: Curves.easeOutCubic,
+                      switchOutCurve: Curves.easeInCubic,
+                      transitionBuilder: (child, animation) => FadeTransition(
+                        opacity: animation,
+                        child: SlideTransition(
+                          position: Tween<Offset>(
+                            begin: const Offset(0, 0.10),
+                            end: Offset.zero,
+                          ).animate(animation),
+                          child: child,
+                        ),
+                      ),
+                      child: Text(
+                        lyric,
+                        key: ValueKey<String>('lyric-$lineIndex-$lyric'),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                        style: textTheme.titleSmall?.copyWith(
+                          color: Colors.white,
+                          height: 1.25,
+                          fontWeight: FontWeight.w700,
+                          shadows: [
+                            Shadow(color: Colors.black.withValues(alpha: 0.25), blurRadius: 8),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   Widget _actionIcon({

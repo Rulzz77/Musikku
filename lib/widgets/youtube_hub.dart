@@ -112,7 +112,7 @@ class _YoutubeHubState extends State<YoutubeHub> {
   final Random _feedRandom = Random();
 
   _YoutubeSection _section = _YoutubeSection.home;
-  double _dockDragProgress = 0;
+  double? _dockDragX;
   bool _loading = false;
   String _error = '';
   String _query = '';
@@ -456,25 +456,40 @@ class _YoutubeHubState extends State<YoutubeHub> {
                 final colors = Theme.of(context).colorScheme;
                 final cellWidth = dockConstraints.maxWidth / 4;
                 final activeIndex = _section.index;
-                final visualIndex = (activeIndex + _dockDragProgress).clamp(0.0, 3.0).toDouble();
-                final dragging = _dockDragProgress.abs() > 0.001;
+                // Track the finger's actual horizontal position across the whole
+                // dock. A relative +/- one-tab offset made the glass feel like a
+                // button animation and could not be dragged across multiple tabs.
+                final dragX = _dockDragX;
+                final visualIndex = dragX == null
+                    ? activeIndex.toDouble()
+                    : (dragX / cellWidth - 0.5).clamp(0.0, 3.0).toDouble();
+                final dragging = dragX != null;
                 return GestureDetector(
                   behavior: HitTestBehavior.opaque,
-                  onHorizontalDragStart: (_) => setState(() => _dockDragProgress = 0),
-                  onHorizontalDragUpdate: (details) {
+                  onHorizontalDragStart: (details) {
                     setState(() {
-                      _dockDragProgress = (_dockDragProgress + details.delta.dx / cellWidth).clamp(-0.95, 0.95).toDouble();
+                      _dockDragX = details.localPosition.dx
+                          .clamp(cellWidth * 0.5, dockConstraints.maxWidth - cellWidth * 0.5)
+                          .toDouble();
                     });
                   },
-                  onHorizontalDragEnd: (details) {
-                    final progress = _dockDragProgress;
-                    final velocity = details.velocity.pixelsPerSecond.dx;
-                    var target = activeIndex;
-                    if (progress < -0.18 || velocity < -420) target = (activeIndex + 1).clamp(0, 3).toInt();
-                    if (progress > 0.18 || velocity > 420) target = (activeIndex - 1).clamp(0, 3).toInt();
-                    setState(() => _dockDragProgress = 0);
-                    if (target != activeIndex) _selectDockDestination(target);
+                  onHorizontalDragUpdate: (details) {
+                    setState(() {
+                      final nextX = (_dockDragX ?? ((activeIndex + 0.5) * cellWidth)) + details.delta.dx;
+                      _dockDragX = nextX
+                          .clamp(cellWidth * 0.5, dockConstraints.maxWidth - cellWidth * 0.5)
+                          .toDouble();
+                    });
                   },
+                  onHorizontalDragEnd: (_) {
+                    final endX = _dockDragX;
+                    final target = endX == null
+                        ? activeIndex
+                        : (endX / cellWidth - 0.5).round().clamp(0, 3).toInt();
+                    setState(() => _dockDragX = null);
+                    if (target != _section.index) _selectDockDestination(target);
+                  },
+                  onHorizontalDragCancel: () => setState(() => _dockDragX = null),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(28),
                     child: BackdropFilter(

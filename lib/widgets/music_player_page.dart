@@ -215,9 +215,21 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                         // Full-bleed cover on phones: sharp art dissolves at both top and bottom
                         // into a soft blurred layer, rather than ending like a card.
                         // Wide layouts keep a framed hero to preserve balanced spacing.
-                        final maxArtHeight = (constraints.maxHeight * 0.47).clamp(1.0, 520.0).toDouble();
-                        final minArtHeight = math.min(constraints.maxHeight * 0.28, maxArtHeight);
-                        final artRatio = isWideLayout ? 0.40 : (constraints.maxHeight < 460 ? 0.34 : 0.42);
+                        // Restore the large, immersive cover from the reference
+                        // layout. The previous 0.42 ratio left too much empty space
+                        // around a small-looking square. Controls remain in the
+                        // fixed lower viewport; no page-level vertical scroll is added.
+                        final maxArtHeight = (constraints.maxHeight * (isWideLayout ? 0.56 : 0.66))
+                            .clamp(1.0, 720.0)
+                            .toDouble();
+                        final minArtHeight = math.min(constraints.maxHeight * (constraints.maxHeight < 560 ? 0.36 : 0.50), maxArtHeight);
+                        final artRatio = isWideLayout
+                            ? 0.48
+                            : constraints.maxHeight < 460
+                                ? 0.42
+                                : constraints.maxHeight < 620
+                                    ? 0.53
+                                    : 0.60;
                         final artHeight = (constraints.maxHeight * artRatio)
                             .clamp(minArtHeight, maxArtHeight)
                             .toDouble();
@@ -460,7 +472,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                                         style: theme.textTheme.bodySmall?.copyWith(color: Colors.white.withValues(alpha: 0.88)),
                                       ),
                                     // Keep the optional usage card off very short screens so controls never scroll/overflow.
-                                    if (constraints.maxHeight >= 640)
+                                    if (constraints.maxHeight >= 760)
                                       ValueListenableBuilder<bool>(
                                         valueListenable: widget.showDataUsageOnPlayer,
                                         builder: (context, visible, _) => visible

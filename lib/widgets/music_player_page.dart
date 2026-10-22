@@ -109,6 +109,8 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
               ),
             ),
           ),
+          // Keep the blurred layer visible under the transparent ends of the
+          // full-screen artwork. A heavy opaque veil here would hide the blur.
           Positioned.fill(
             child: DecoratedBox(
               decoration: BoxDecoration(
@@ -116,13 +118,64 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    scheme.surface.withValues(alpha: 0.54),
-                    scheme.surface.withValues(alpha: 0.72),
-                    scheme.surface.withValues(alpha: 0.94),
+                    scheme.surface.withValues(alpha: 0.24),
+                    scheme.surface.withValues(alpha: 0.38),
+                    scheme.surface.withValues(alpha: 0.64),
                   ],
                   stops: const [0.0, 0.52, 1.0],
                 ),
               ),
+            ),
+          ),
+          // The key difference from a normal album-art card: the sharp cover
+          // itself fills the player canvas, underneath every control. Its alpha
+          // fades vertically at both ends and reveals the enlarged blurred copy
+          // above. No rounded clip, border, or square card is used.
+          Positioned.fill(
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                ShaderMask(
+                  blendMode: BlendMode.dstIn,
+                  shaderCallback: (bounds) => const LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.transparent,
+                      Color(0x99FFFFFF),
+                      Colors.white,
+                      Colors.white,
+                      Color(0x77FFFFFF),
+                      Colors.transparent,
+                    ],
+                    stops: [0.0, 0.10, 0.20, 0.76, 0.90, 1.0],
+                  ).createShader(bounds),
+                  child: UnifiedArtwork(
+                    track: widget.video,
+                    fit: BoxFit.cover,
+                    iconSize: 240,
+                  ),
+                ),
+                // Slight vignette keeps white controls legible without hiding
+                // the image or introducing rounded corners.
+                IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.black.withValues(alpha: 0.12),
+                          Colors.transparent,
+                          Colors.transparent,
+                          Colors.black.withValues(alpha: 0.26),
+                        ],
+                        stops: const [0.0, 0.20, 0.68, 1.0],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
           SafeArea(
@@ -199,37 +252,11 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
                                 const SizedBox(height: 8),
-                                Center(
-                                  child: SizedBox(
-                                    width: artSize,
-                                    height: artSize,
-                                    // Keep the artwork square and sharp in the center.
-                                    // Its alpha softly fades only at the top and bottom,
-                                    // revealing the same artwork blurred across the entire
-                                    // player behind it. No rounded corners or card border.
-                                    child: ShaderMask(
-                                      blendMode: BlendMode.dstIn,
-                                      shaderCallback: (bounds) => const LinearGradient(
-                                        begin: Alignment.topCenter,
-                                        end: Alignment.bottomCenter,
-                                        colors: [
-                                          Colors.transparent,
-                                          Color(0x55FFFFFF),
-                                          Colors.white,
-                                          Colors.white,
-                                          Color(0x55FFFFFF),
-                                          Colors.transparent,
-                                        ],
-                                        stops: [0.0, 0.10, 0.22, 0.78, 0.90, 1.0],
-                                      ).createShader(bounds),
-                                      child: UnifiedArtwork(
-                                        track: widget.video,
-                                        fit: BoxFit.cover,
-                                        iconSize: 100,
-                                      ),
-                                    ),
-                                  ),
-                                ),
+                                // Preserve the visual breathing room where the
+                                // old album-art square sat. The cover is now one
+                                // full-screen image behind this layout, not a
+                                // separate centered square/card.
+                                SizedBox(height: artSize),
                                 SizedBox(height: constraints.maxHeight < 600 ? 10 : 18),
                                 Row(
                                   children: [

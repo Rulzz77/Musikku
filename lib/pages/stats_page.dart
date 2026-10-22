@@ -328,10 +328,19 @@ class _MetricCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return SizedBox(
-      width: width,
-      child: Card(
-        child: Padding(
+    return TweenAnimationBuilder<double>(
+      key: ValueKey<String>('stats-metric-$label'),
+      tween: Tween<double>(begin: 0.92, end: 1.0),
+      duration: const Duration(milliseconds: 360),
+      curve: Curves.easeOutBack,
+      builder: (context, scale, child) => Opacity(
+        opacity: scale.clamp(0.0, 1.0).toDouble(),
+        child: Transform.scale(scale: scale, child: child),
+      ),
+      child: SizedBox(
+        width: width,
+        child: Card(
+          child: Padding(
           padding: const EdgeInsets.all(15),
           child: Row(
             children: [
@@ -379,6 +388,7 @@ class _MetricCard extends StatelessWidget {
             ],
           ),
         ),
+      ),
       ),
     );
   }

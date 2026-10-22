@@ -117,7 +117,19 @@ extension _YoutubeHubVideoComponents on _YoutubeHubState {
     final channel = video.channelTitle.trim();
     final isCurrent = widget.currentVideoId == video.videoId;
 
-    return Padding(
+    return TweenAnimationBuilder<double>(
+      key: ValueKey<String>('flow-song-${video.videoId}'),
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOutCubic,
+      tween: Tween<double>(begin: 0, end: 1),
+      builder: (context, value, child) => Opacity(
+        opacity: value.clamp(0.0, 1.0).toDouble(),
+        child: Transform.translate(
+          offset: Offset(0, 12 * (1 - value)),
+          child: child,
+        ),
+      ),
+      child: Padding(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
       child: Material(
         color: isCurrent ? scheme.primaryContainer.withValues(alpha: 0.50) : scheme.surfaceContainerLow,
@@ -200,6 +212,7 @@ extension _YoutubeHubVideoComponents on _YoutubeHubState {
             ),
           ),
         ),
+      ),
       ),
     );
   }

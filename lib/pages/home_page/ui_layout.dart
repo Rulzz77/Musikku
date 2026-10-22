@@ -57,32 +57,52 @@ extension _HomeUiLayout on _HomePageState {
                 onNext: () => _next(),
               ),
             ),
-          if (watch != null)
-            Positioned.fill(
-              child: MusicPlayerPage(
-                key: ValueKey<String>('music-player-${watch.videoId}'),
-                video: watch,
-                nativeState: _nativeStateNotifier,
-                playerUiState: _playerUiState,
-                onBack: () => unawaited(_closeYoutubeWatch()),
-                onPlayPause: _togglePlayPause,
-                onNext: () => _next(),
-                onPrevious: _previous,
-                onSeek: (position) => _youtubeController.seekTo(
-                  seconds: position.inMilliseconds / 1000.0,
-                ),
-                onToggleShuffle: _toggleShuffle,
-                onToggleSmartShuffle: _toggleSmartShuffle,
-                onCycleLoop: _cycleLoopMode,
-                onToggleFavorite: () => _toggleFavorite(watch),
-                onAddToPlaylist: () => _showAddToPlaylist(watch),
-                onOpenQueue: _showQueueSheet,
-                onOpenAudioSettings: _showAudioSettingsSheet,
-                onOpenSleepTimer: _showSleepTimerSheet,
-                sleepActive: _sleepActive,
-                showDataUsageOnPlayer: widget.settings.showDataUsageOnPlayer,
+          Positioned.fill(
+            child: IgnorePointer(
+              ignoring: watch == null,
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 340),
+                reverseDuration: const Duration(milliseconds: 260),
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                transitionBuilder: (child, animation) {
+                  final slide = Tween<Offset>(
+                    begin: const Offset(0, 0.055),
+                    end: Offset.zero,
+                  ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic));
+                  return FadeTransition(
+                    opacity: animation,
+                    child: SlideTransition(position: slide, child: child),
+                  );
+                },
+                child: watch == null
+                    ? const SizedBox.shrink(key: ValueKey<String>('player-closed'))
+                    : MusicPlayerPage(
+                        key: ValueKey<String>('music-player-${watch.videoId}'),
+                        video: watch,
+                        nativeState: _nativeStateNotifier,
+                        playerUiState: _playerUiState,
+                        onBack: () => unawaited(_closeYoutubeWatch()),
+                        onPlayPause: _togglePlayPause,
+                        onNext: () => _next(),
+                        onPrevious: _previous,
+                        onSeek: (position) => _youtubeController.seekTo(
+                          seconds: position.inMilliseconds / 1000.0,
+                        ),
+                        onToggleShuffle: _toggleShuffle,
+                        onToggleSmartShuffle: _toggleSmartShuffle,
+                        onCycleLoop: _cycleLoopMode,
+                        onToggleFavorite: () => _toggleFavorite(watch),
+                        onAddToPlaylist: () => _showAddToPlaylist(watch),
+                        onOpenQueue: _showQueueSheet,
+                        onOpenAudioSettings: _showAudioSettingsSheet,
+                        onOpenSleepTimer: _showSleepTimerSheet,
+                        sleepActive: _sleepActive,
+                        showDataUsageOnPlayer: widget.settings.showDataUsageOnPlayer,
+                      ),
               ),
             ),
+          ),
         ],
       ),
     );

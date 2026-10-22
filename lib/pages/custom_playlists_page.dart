@@ -405,7 +405,23 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
                 mainAxisSpacing: 12,
                 childAspectRatio: 0.79,
               ),
-              itemBuilder: (context, index) => _playlistPoster(widget.playlists[index], scheme),
+              itemBuilder: (context, index) {
+                final playlist = widget.playlists[index];
+                return TweenAnimationBuilder<double>(
+                  key: ValueKey<String>('playlist-poster-${playlist.id}'),
+                  tween: Tween<double>(begin: 0.0, end: 1.0),
+                  duration: Duration(milliseconds: 300 + (index.clamp(0, 7).toInt() * 28)),
+                  curve: Curves.easeOutCubic,
+                  builder: (context, value, child) => Opacity(
+                    opacity: value.clamp(0.0, 1.0).toDouble(),
+                    child: Transform.translate(
+                      offset: Offset(0, 18 * (1 - value)),
+                      child: child,
+                    ),
+                  ),
+                  child: _playlistPoster(playlist, scheme),
+                );
+              },
             );
           },
         ),

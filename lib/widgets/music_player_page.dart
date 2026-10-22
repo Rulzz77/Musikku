@@ -166,7 +166,21 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                         final heightBasedArt = (constraints.maxHeight * (isWideLayout ? 0.54 : 0.36)).clamp(170.0, 280.0).toDouble();
                         final artSize = math.min(widthBasedArt, heightBasedArt).toDouble();
                         final artworkPanel = Center(
-                          child: Container(
+                          child: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 420),
+                            switchInCurve: Curves.easeOutCubic,
+                            switchOutCurve: Curves.easeInCubic,
+                            transitionBuilder: (child, animation) => FadeTransition(
+                              opacity: animation,
+                              child: ScaleTransition(
+                                scale: Tween<double>(begin: 0.92, end: 1).animate(
+                                  CurvedAnimation(parent: animation, curve: Curves.easeOutBack),
+                                ),
+                                child: child,
+                              ),
+                            ),
+                            child: Container(
+                            key: ValueKey<String>('art-${widget.video.videoId}'),
                             width: artSize,
                             height: artSize,
                             decoration: BoxDecoration(
@@ -201,6 +215,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                                         : _artworkFallback(scheme, loading: true),
                                   )
                                 : _artworkFallback(scheme),
+                          ),
                           ),
                         );
                         final trackInfoPanel = Row(

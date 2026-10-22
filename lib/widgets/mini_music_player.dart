@@ -65,23 +65,36 @@ class MiniMusicPlayer extends StatelessWidget {
                     child: Row(
                       children: [
                         ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: SizedBox(
-                            width: 56,
-                            height: 56,
-                            child: video.coverUrl.isEmpty
-                                ? ColoredBox(
-                                    color: scheme.surfaceContainerHighest,
-                                    child: Icon(Icons.music_note_rounded, color: scheme.onSurfaceVariant),
-                                  )
-                                : Image.network(
-                                    video.coverUrl,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (_, _, _) => ColoredBox(
+                          borderRadius: BorderRadius.circular(14),
+                          child: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 320),
+                            switchInCurve: Curves.easeOutCubic,
+                            switchOutCurve: Curves.easeInCubic,
+                            transitionBuilder: (child, animation) => FadeTransition(
+                              opacity: animation,
+                              child: ScaleTransition(
+                                scale: Tween<double>(begin: 0.86, end: 1).animate(animation),
+                                child: child,
+                              ),
+                            ),
+                            child: SizedBox(
+                              key: ValueKey<String>('mini-art-${video.videoId}'),
+                              width: 58,
+                              height: 58,
+                              child: video.coverUrl.isEmpty
+                                  ? ColoredBox(
                                       color: scheme.surfaceContainerHighest,
                                       child: Icon(Icons.music_note_rounded, color: scheme.onSurfaceVariant),
+                                    )
+                                  : Image.network(
+                                      video.coverUrl,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, _, _) => ColoredBox(
+                                        color: scheme.surfaceContainerHighest,
+                                        child: Icon(Icons.music_note_rounded, color: scheme.onSurfaceVariant),
+                                      ),
                                     ),
-                                  ),
+                            ),
                           ),
                         ),
                         const SizedBox(width: 11),
@@ -90,14 +103,22 @@ class MiniMusicPlayer extends StatelessWidget {
                             mainAxisAlignment: MainAxisAlignment.center,
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                video.title,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: -0.1,
-                                  height: 1.15,
+                              AnimatedSwitcher(
+                                duration: const Duration(milliseconds: 220),
+                                switchInCurve: Curves.easeOut,
+                                child: Align(
+                                  key: ValueKey<String>('mini-title-${video.videoId}'),
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    video.title,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: theme.textTheme.bodyMedium?.copyWith(
+                                      fontWeight: FontWeight.w900,
+                                      letterSpacing: -0.25,
+                                      height: 1.15,
+                                    ),
+                                  ),
                                 ),
                               ),
                               const SizedBox(height: 3),

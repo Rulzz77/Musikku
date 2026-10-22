@@ -46,8 +46,14 @@ extension _HomeQueue on _HomePageState {
     final language = _shuffleMusicLanguage;
     final reference = sourceVideo ?? _currentVideo;
     final bool? localSource = reference?.isLocal;
+    final allowMixedPlaylistSources =
+        _activeSource == _ListSource.playlist && _activePlaylistId != null;
     _shufflePool = _activeList.where((video) {
-      if (localSource != null && video.isLocal != localSource) return false;
+      if (!allowMixedPlaylistSources &&
+          localSource != null &&
+          video.isLocal != localSource) {
+        return false;
+      }
       return MusicStyleMatcher.isCompatible(
         video: video,
         targetStyle: style,
@@ -126,8 +132,15 @@ extension _HomeQueue on _HomePageState {
     final language = _shuffleMusicLanguage;
     final current = _currentVideo;
     _shufflePool.removeWhere((video) {
-      // Secondary guard: a stale/mixed pool must never switch local ↔ YouTube.
-      if (current != null && video.isLocal != current.isLocal) return true;
+      // Explicit custom playlists may intentionally mix local and YouTube
+      // tracks. Other Shuffle sessions stay source-pure.
+      final allowMixedPlaylistSources =
+          _activeSource == _ListSource.playlist && _activePlaylistId != null;
+      if (!allowMixedPlaylistSources &&
+          current != null &&
+          video.isLocal != current.isLocal) {
+        return true;
+      }
       return !MusicStyleMatcher.isCompatible(
         video: video,
         targetStyle: style,

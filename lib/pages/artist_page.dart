@@ -155,7 +155,19 @@ class _ArtistPageState extends State<ArtistPage> {
                 );
               }
               final video = songs[index - 1];
-              return Card(
+              return TweenAnimationBuilder<double>(
+                key: ValueKey<String>('artist-track-${video.videoId}'),
+                tween: Tween<double>(begin: 0.0, end: 1.0),
+                duration: Duration(milliseconds: 260 + (index.clamp(0, 8).toInt() * 24)),
+                curve: Curves.easeOutCubic,
+                builder: (context, value, child) => Opacity(
+                  opacity: value.clamp(0.0, 1.0).toDouble(),
+                  child: Transform.translate(
+                    offset: Offset(0, 14 * (1 - value)),
+                    child: child,
+                  ),
+                ),
+                child: Card(
                 elevation: 0,
                 color: Theme.of(context).colorScheme.surfaceContainerHighest,
                 child: InkWell(
@@ -219,6 +231,7 @@ class _ArtistPageState extends State<ArtistPage> {
                       ],
                     ),
                   ),
+                ),
                 ),
               );
             },

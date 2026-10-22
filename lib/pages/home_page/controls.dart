@@ -5,6 +5,22 @@ part of '../home_page.dart';
 
 /// Kontrol pemutar: play/pause, previous, next, stop, shuffle, repeat.
 extension _HomeControls on _HomePageState {
+  /// Sumber ini harus tetap berada dalam daftar yang sedang diputar.
+  /// Collection hanya dikunci bila lagu aktif benar-benar berasal dari daftar
+  /// yang dimulai pengguna; tap satu lagu tunggal tetap boleh masuk Radio.
+  bool get _isFixedPlaybackList {
+    if (_activeSource == _ListSource.playlist ||
+        _activeSource == _ListSource.favorites ||
+        _activeSource == _ListSource.local) {
+      return true;
+    }
+    if (_activeSource == _ListSource.collection) {
+      final currentId = _currentVideo?.videoId;
+      return currentId != null &&
+          _activeList.any((song) => song.videoId == currentId);
+    }
+    return false;
+  }
   Future<void> _persistPlaybackModes() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -195,10 +211,15 @@ extension _HomeControls on _HomePageState {
       return;
     }
 
-    // Dalam sesi Shuffle, Previous juga harus menghormati batas sumber.
-    // Abaikan entri history dari sesi sumber lain agar file lokal tidak meloncat
-    // ke YouTube (atau sebaliknya) hanya karena riwayat pemutaran lama.
-    if (_playerUiState.value.isShuffle) {
+    // Dalam daftar aktif, Previous tidak boleh kembali ke lagu dari sumber lain
+    // (misalnya lagu YouTube yang diputar sebelum playlist dibuka).
+    if (_isFixedPlaybackList) {
+      while (_playHistory.isNotEmpty &&
+          !_activeList.any((song) => song.videoId == _playHistory.last.videoId)) {
+        _playHistory.removeLast();
+      }
+    } else if (_playerUiState.value.isShuffle) {
+      // Di luar playlist, tetap pisahkan riwayat lokal dan YouTube.
       while (_playHistory.isNotEmpty &&
           _playHistory.last.isLocal != current.isLocal) {
         _playHistory.removeLast();
@@ -242,6 +263,16 @@ extension _HomeControls on _HomePageState {
   }
 
   Future<void> _next({bool fromAutoNext = false}) async {
+    if (_nextActionInProgress) return;
+    _nextActionInProgress = true;
+    try {
+      await _performNext(fromAutoNext: fromAutoNext);
+    } finally {
+      _nextActionInProgress = false;
+    }
+  }
+
+  Future<void> _performNext({bool fromAutoNext = false}) async {
     final current = _currentVideo;
 
     if (current == null) {
@@ -257,9 +288,10 @@ extension _HomeControls on _HomePageState {
 
     final loopMode = _playerUiState.value.loopMode;
 
-    // Tombol Next manual juga mengambil dari antrean dulu
-    // (auto-next sudah menangani antrean sendiri).
-    if (!fromAutoNext && _queueManager.isNotEmpty) {
+    // Saat playlist/favorit/daftar koleksi sedang diputar, Next tetap berada
+    // di daftar itu. Item global dari queue tidak boleh menyela playlist.
+    // Queue tetap tersimpan dan bisa dipakai setelah pengguna pindah sumber.
+    if (!fromAutoNext && !_isFixedPlaybackList && _queueManager.isNotEmpty) {
       final nextItem = _takeQueueItemForCurrentMode(shuffle: isShuffle);
 
       if (nextItem != null) {
@@ -287,10 +319,13 @@ extension _HomeControls on _HomePageState {
     }
 
     if (_activeList.isEmpty) {
-      // Belum ada playlist (mis. baru buka app dan menekan Next):
-      // lanjut ke lagu serupa dari lagu yang sedang dipilih.
+      if (_isFixedPlaybackList) {
+        await _stopPlayback();
+        if (!fromAutoNext) _toast('Daftar yang diputar sudah selesai.');
+        return;
+      }
+      // Lagu tunggal / pencarian tanpa daftar aktif boleh lanjut ke Radio.
       await _continueWithRadio(current, fromAutoNext: fromAutoNext);
-
       return;
     }
 
@@ -301,9 +336,13 @@ extension _HomeControls on _HomePageState {
     if (isShuffle) {
       if (_shufflePool.isEmpty) {
         if (loopMode != LoopModeCustom.all) {
-          if (_activeSource == _ListSource.local) {
+          if (_isFixedPlaybackList) {
             await _stopPlayback();
-            _toast('Daftar musik lokal selesai.');
+            if (!fromAutoNext) {
+              _toast(_activeSource == _ListSource.local
+                  ? 'Daftar musik lokal selesai.'
+                  : 'Playlist selesai. Aktifkan Repeat Semua untuk mengulang.');
+            }
           } else {
             await _continueWithRadio(current, fromAutoNext: fromAutoNext);
           }
@@ -359,9 +398,13 @@ extension _HomeControls on _HomePageState {
       return;
     }
 
-    if (_activeSource == _ListSource.local) {
+    if (_isFixedPlaybackList) {
       await _stopPlayback();
-      _toast('Daftar musik lokal selesai.');
+      if (!fromAutoNext) {
+        _toast(_activeSource == _ListSource.local
+            ? 'Daftar musik lokal selesai.'
+            : 'Playlist selesai. Aktifkan Repeat Semua untuk mengulang.');
+      }
       return;
     }
 

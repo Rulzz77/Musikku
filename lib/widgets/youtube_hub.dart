@@ -226,13 +226,54 @@ class _YoutubeHubState extends State<YoutubeHub> {
   bool get _inlineLoading => _loading && !_pullRefreshing;
 
 
+  void _selectDockDestination(int index) {
+    final nextSection = _YoutubeSection.values[index];
+    _searchRequestId++;
+    _searchController.clear();
+    setState(() {
+      _section = nextSection;
+      _query = '';
+      _searchResults = const [];
+      _searchChannels = const [];
+      _loading = false;
+      _error = '';
+      if (nextSection == _YoutubeSection.home) {
+        _activeChip = 0;
+        _searchMode = 'music';
+      }
+    });
+    if (nextSection == _YoutubeSection.home) {
+      unawaited(_loadHome());
+    } else if (nextSection == _YoutubeSection.samples && _trending.isEmpty && !_feedLoading) {
+      unawaited(_loadHome());
+    } else if (nextSection == _YoutubeSection.explore) {
+      unawaited(_loadExploreCategory(_exploreCategory));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final list = _query.isNotEmpty ? _searchResults : _homeVideos;
 
     return Stack(
       children: [
-        RefreshIndicator(
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 300),
+          reverseDuration: const Duration(milliseconds: 210),
+          switchInCurve: Curves.easeOutCubic,
+          switchOutCurve: Curves.easeInCubic,
+          transitionBuilder: (child, animation) {
+            final slide = Tween<Offset>(
+              begin: const Offset(0, 0.018),
+              end: Offset.zero,
+            ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic));
+            return FadeTransition(
+              opacity: animation,
+              child: SlideTransition(position: slide, child: child),
+            );
+          },
+          child: RefreshIndicator(
+            key: ValueKey<String>('hub-${_section.name}-${_query.isNotEmpty ? 'search' : 'browse'}'),
           onRefresh: () async {
             _pullRefreshing = true;
             try {
@@ -401,6 +442,7 @@ class _YoutubeHubState extends State<YoutubeHub> {
             ],
           ),
         ),
+        ),
         Positioned(
           left: 12,
           right: 12,
@@ -425,70 +467,40 @@ class _YoutubeHubState extends State<YoutubeHub> {
                   ),
                 ],
               ),
-              child: NavigationBar(
-              backgroundColor: Colors.transparent,
-              elevation: 0,
-              indicatorColor: Theme.of(context).colorScheme.primaryContainer,
-              indicatorShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(17)),
-              selectedIndex: _section.index,
-              onDestinationSelected: (index) {
-                final nextSection = _YoutubeSection.values[index];
-                if (nextSection == _YoutubeSection.home) {
-                  _searchRequestId++;
-                  _searchController.clear();
-                  setState(() {
-                    _section = _YoutubeSection.home;
-                    _activeChip = 0;
-                    _query = '';
-                    _searchMode = 'music';
-                    _searchResults = const [];
-                    _searchChannels = const [];
-                    _loading = false;
-                    _error = '';
-                  });
-                  unawaited(_loadHome());
-                  return;
-                }
-                _searchRequestId++;
-                _searchController.clear();
-                setState(() {
-                  _section = nextSection;
-                  _query = '';
-                  _searchResults = const [];
-                  _searchChannels = const [];
-                  _loading = false;
-                  _error = '';
-                });
-                if (nextSection == _YoutubeSection.samples && _trending.isEmpty && !_feedLoading) {
-                  unawaited(_loadHome());
-                } else if (nextSection == _YoutubeSection.explore) {
-                  unawaited(_loadExploreCategory(_exploreCategory));
-                }
-              },
-              height: 66,
-              labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-              destinations: const [
-                NavigationDestination(
-                  icon: Icon(Icons.home_outlined),
-                  selectedIcon: Icon(Icons.home_rounded),
-                  label: 'Beranda',
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 5),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _FlowDockDestination(
+                        label: 'Beranda', icon: Icons.home_outlined, selectedIcon: Icons.home_rounded,
+                        selected: _section == _YoutubeSection.home,
+                        onTap: () => _selectDockDestination(_YoutubeSection.home.index),
+                      ),
+                    ),
+                    Expanded(
+                      child: _FlowDockDestination(
+                        label: 'Jelajah', icon: Icons.explore_outlined, selectedIcon: Icons.explore_rounded,
+                        selected: _section == _YoutubeSection.explore,
+                        onTap: () => _selectDockDestination(_YoutubeSection.explore.index),
+                      ),
+                    ),
+                    Expanded(
+                      child: _FlowDockDestination(
+                        label: 'Radio', icon: Icons.radio_outlined, selectedIcon: Icons.radio_rounded,
+                        selected: _section == _YoutubeSection.samples,
+                        onTap: () => _selectDockDestination(_YoutubeSection.samples.index),
+                      ),
+                    ),
+                    Expanded(
+                      child: _FlowDockDestination(
+                        label: 'Koleksi', icon: Icons.library_music_outlined, selectedIcon: Icons.library_music_rounded,
+                        selected: _section == _YoutubeSection.library,
+                        onTap: () => _selectDockDestination(_YoutubeSection.library.index),
+                      ),
+                    ),
+                  ],
                 ),
-                NavigationDestination(
-                  icon: Icon(Icons.explore_outlined),
-                  selectedIcon: Icon(Icons.explore_rounded),
-                  label: 'Jelajah',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.radio_outlined),
-                  selectedIcon: Icon(Icons.radio_rounded),
-                  label: 'Radio',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.library_music_outlined),
-                  selectedIcon: Icon(Icons.library_music_rounded),
-                  label: 'Koleksi',
-                ),
-              ],
               ),
             ),
           ),
@@ -516,4 +528,88 @@ class _YoutubeHubState extends State<YoutubeHub> {
 String _formatHubError(Object error) {
   final message = error.toString().replaceFirst('Bad state: ', '').trim();
   return message.isEmpty ? 'Permintaan gagal. Periksa koneksi lalu coba lagi.' : message;
+}
+
+
+/// Destination untuk floating dock: indikator aktif, ikon, dan label ikut
+/// bergerak halus, bukan hanya mengganti warna NavigationBar standar.
+class _FlowDockDestination extends StatelessWidget {
+  const _FlowDockDestination({
+    required this.label,
+    required this.icon,
+    required this.selectedIcon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final IconData selectedIcon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: label,
+      child: Tooltip(
+        message: label,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(19),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 240),
+              curve: Curves.easeOutCubic,
+              margin: const EdgeInsets.symmetric(horizontal: 2),
+              padding: const EdgeInsets.symmetric(vertical: 5),
+              decoration: BoxDecoration(
+                color: selected ? scheme.primaryContainer.withValues(alpha: 0.94) : Colors.transparent,
+                borderRadius: BorderRadius.circular(19),
+                border: Border.all(
+                  color: selected ? scheme.primary.withValues(alpha: 0.24) : Colors.transparent,
+                ),
+                boxShadow: selected
+                    ? [BoxShadow(color: scheme.primary.withValues(alpha: 0.10), blurRadius: 12, offset: const Offset(0, 3))]
+                    : const [],
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  AnimatedScale(
+                    scale: selected ? 1.08 : 1.0,
+                    duration: const Duration(milliseconds: 240),
+                    curve: Curves.easeOutBack,
+                    child: Icon(
+                      selected ? selectedIcon : icon,
+                      size: 22,
+                      color: selected ? scheme.primary : scheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  AnimatedDefaultTextStyle(
+                    duration: const Duration(milliseconds: 180),
+                    curve: Curves.easeOut,
+                    style: TextStyle(
+                      fontSize: selected ? 10.3 : 9.5,
+                      height: 1.1,
+                      fontWeight: selected ? FontWeight.w900 : FontWeight.w600,
+                      color: selected ? scheme.primary : scheme.onSurfaceVariant,
+                      letterSpacing: selected ? -0.05 : 0,
+                    ),
+                    child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }

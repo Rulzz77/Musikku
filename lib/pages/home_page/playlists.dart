@@ -57,16 +57,15 @@ extension _HomePlaylists on _HomePageState {
         !playlist.songs.any((song) => song.videoId == video.videoId)) {
       return;
     }
-    _activeList = PlaybackSourcePolicy.sameSourceAs(
-      playlist.songs,
-      selected: video,
-    );
+    // A user's playlist is the playback contract. Keep every valid item in
+    // order, including local tracks alongside YouTube tracks.
+    _activeList = PlaybackSourcePolicy.explicitPlaylistItems(playlist.songs);
     _activeSource = _ListSource.playlist;
     _activePlaylistId = playlist.id;
     if (_playerUiState.value.isShuffle) {
       _prepareShufflePool(excludeCurrent: true, sourceVideo: video);
     }
-    await _openYoutubeVideo(video);
+    await _openYoutubeVideo(video, preserveListContext: true);
   }
 
   /// Buat playlist baru. Kalau [thenAdd] diisi, lagu itu langsung dimasukkan.
@@ -155,10 +154,17 @@ extension _HomePlaylists on _HomePageState {
       return;
     }
 
-    final current = _currentVideo;
-    final songsForCurrentSource = current == null
-        ? List<YoutubeSearchResult>.from(playlist.songs)
-        : PlaybackSourcePolicy.sameSourceAs(playlist.songs, selected: current);
+    final seenIds = <String>{};
+    // Keep the playlist exactly as edited. PlaybackSourcePolicy.sameSourceAs
+    // inserts the current track if absent, which is useful for a new context
+    // but wrong when a user removes that track from the active playlist.
+    final songsForCurrentSource = playlist.songs.where((song) {
+      // Do not silently remove local or remote entries from a custom playlist.
+      // The explicit playlist remains fixed even when its sources are mixed.
+      final id = song.videoId.trim();
+      if (id.isEmpty) return false;
+      return seenIds.add(id);
+    }).toList(growable: false);
     final ids = songsForCurrentSource.map((song) => song.videoId).toSet();
     final known = _activeList.map((song) => song.videoId).toSet();
 

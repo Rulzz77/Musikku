@@ -567,6 +567,9 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
   Widget _featuredMusicBanner() {
     final scheme = Theme.of(context).colorScheme;
     final isCompact = MediaQuery.sizeOf(context).width < 370 || MediaQuery.textScalerOf(context).scale(14) > 18;
+    final featuredTrack = _trending.isNotEmpty
+        ? _trending.first
+        : (widget.recentlyPlayed.isNotEmpty ? widget.recentlyPlayed.first : null);
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
@@ -646,37 +649,62 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
                       ],
                     ),
                   ),
-                  if (!isCompact) ...[
-                    const SizedBox(width: 5),
-                    SizedBox(
-                      width: 91,
-                      height: 132,
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          Container(width: 86, height: 86, decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Colors.white.withValues(alpha: 0.13), width: 1.4), color: Colors.white.withValues(alpha: 0.05))),
-                          Container(
-                            width: 72,
-                            height: 72,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFFDAFDF7), Color(0xFF55DCCB), Color(0xFF6E49D8)]),
-                              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.20), blurRadius: 15, offset: const Offset(0, 7))],
-                            ),
-                            child: const Icon(Icons.graphic_eq_rounded, color: Colors.white, size: 38),
+                  if (featuredTrack != null) ...[
+                    const SizedBox(width: 10),
+                    Semantics(
+                      button: true,
+                      label: 'Putar ${featuredTrack.title}',
+                      child: InkWell(
+                        onTap: () => unawaited(widget.onPlay(featuredTrack)),
+                        borderRadius: BorderRadius.circular(20),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 260),
+                          curve: Curves.easeOutCubic,
+                          width: isCompact ? 66 : 100,
+                          height: isCompact ? 94 : 132,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: Colors.white.withValues(alpha: 0.32)),
+                            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.25), blurRadius: 18, offset: const Offset(0, 8))],
                           ),
-                          Positioned(top: 8, right: 2, child: Icon(Icons.music_note_rounded, color: Colors.white.withValues(alpha: 0.94), size: 25)),
-                          Positioned(
-                            bottom: 10,
-                            left: 0,
-                            child: Container(
-                              padding: const EdgeInsets.all(7),
-                              decoration: BoxDecoration(color: const Color(0xFF25121F).withValues(alpha: 0.72), borderRadius: BorderRadius.circular(13), border: Border.all(color: Colors.white.withValues(alpha: 0.16))),
-                              child: const Icon(Icons.headphones_rounded, color: Colors.white, size: 22),
-                            ),
+                          clipBehavior: Clip.antiAlias,
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              UnifiedArtwork(track: featuredTrack, fit: BoxFit.cover, iconSize: 28),
+                              DecoratedBox(
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                    colors: [Colors.black.withValues(alpha: 0.02), Colors.black.withValues(alpha: 0.62)],
+                                  ),
+                                ),
+                              ),
+                              Align(
+                                alignment: Alignment.bottomCenter,
+                                child: Padding(
+                                  padding: const EdgeInsets.fromLTRB(4, 4, 4, 7),
+                                  child: Icon(Icons.play_circle_fill_rounded, color: Colors.white, size: isCompact ? 27 : 35),
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
+                        ),
                       ),
+                    ),
+                  ] else if (!isCompact) ...[
+                    const SizedBox(width: 5),
+                    Container(
+                      width: 91,
+                      height: 112,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.07),
+                        borderRadius: BorderRadius.circular(25),
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
+                      ),
+                      child: const Icon(Icons.graphic_eq_rounded, color: Colors.white, size: 46),
                     ),
                   ],
                 ],

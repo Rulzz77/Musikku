@@ -177,6 +177,9 @@ class _HomePageState extends State<HomePage>
 
   _ListSource _activeSource = _ListSource.none;
 
+  /// Menahan dua aksi Next yang terlalu berdekatan agar tidak memilih track dobel.
+  bool _nextActionInProgress = false;
+
   /// Lagu yang BELUM diputar dalam siklus shuffle saat ini.
   List<YoutubeSearchResult> _shufflePool = [];
 

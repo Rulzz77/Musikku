@@ -5,7 +5,6 @@ part of '../home_page.dart';
 
 /// Navigasi ke halaman lain, tombol Back, dan backup/restore.
 extension _HomeNavigation on _HomePageState {
-
   Future<void> _playFromCustomList(
     YoutubeSearchResult video,
     List<YoutubeSearchResult> list,
@@ -22,27 +21,47 @@ extension _HomeNavigation on _HomePageState {
     if (_playerUiState.value.isShuffle) {
       _prepareShufflePool(excludeCurrent: true, sourceVideo: video);
     }
-    await _openYoutubeVideo(video);
+    await _openYoutubeVideo(video, preserveListContext: true);
   }
 
-  Future<void> _openYoutubeVideo(YoutubeSearchResult video) async {
+  Future<void> _openYoutubeVideo(
+    YoutubeSearchResult video, {
+    bool preserveListContext = false,
+  }) async {
     if (!mounted) return;
 
-    // Direct taps from the hub do not provide a list context. Never keep a
-    // stale local list when a YouTube result is tapped (or vice versa). If the
-    // existing list is mixed, normalize it to the selected track's source.
-    final activeContainsVideo =
-        _activeList.any((item) => item.videoId == video.videoId);
-    final activeListIsSourcePure =
-        _activeList.every((item) => item.isLocal == video.isLocal);
-    if (!activeContainsVideo || !activeListIsSourcePure) {
-      _activeList = PlaybackSourcePolicy.sameSourceAs(
-        activeContainsVideo ? _activeList : const <YoutubeSearchResult>[],
-        selected: video,
-      );
+    if (!preserveListContext) {
+      // A direct song tap starts a new radio session. Do not accidentally keep
+      // the previous playlist/feed as Next's source just because it contains
+      // this same video ID. This stale context was the main reason Next could
+      // jump to unrelated items after leaving a playlist.
+      if (_isFixedPlaybackList) _playHistory.clear();
+      _activeList = <YoutubeSearchResult>[];
       _activeSource = video.isLocal ? _ListSource.local : _ListSource.collection;
       _activePlaylistId = null;
-      _shufflePool = [];
+      _shufflePool = <YoutubeSearchResult>[];
+    } else {
+      // Callers that pass a list (playlist, local music, history, or a smart
+      // mix) deliberately preserve that list. Normalize only if it is mixed or
+      // does not contain the selected item.
+      final activeContainsVideo =
+          _activeList.any((item) => item.videoId == video.videoId);
+      final activeListIsSourcePure =
+          _activeList.every((item) => item.isLocal == video.isLocal);
+      final isExplicitPlaylist = _activeSource == _ListSource.playlist &&
+          _activePlaylistId != null;
+      if (!activeContainsVideo ||
+          (!activeListIsSourcePure && !isExplicitPlaylist)) {
+        _activeList = PlaybackSourcePolicy.sameSourceAs(
+          activeContainsVideo ? _activeList : const <YoutubeSearchResult>[],
+          selected: video,
+        );
+        if (_activeSource != _ListSource.playlist) {
+          _activeSource = video.isLocal ? _ListSource.local : _ListSource.collection;
+        }
+        _activePlaylistId = null;
+        _shufflePool = <YoutubeSearchResult>[];
+      }
       if (_playerUiState.value.isShuffle) {
         _prepareShufflePool(excludeCurrent: true, sourceVideo: video);
       }
@@ -117,8 +136,13 @@ extension _HomeNavigation on _HomePageState {
           artist: name,
           searchService: _searchService,
           onPlay: (video) {
+            // Artist page is an explicit source change. Clear the old playlist
+            // so Radio fallback cannot jump back into stale items or repeat them.
             _activeSource = _ListSource.radio;
-            _radio.start('$name music');
+            _activePlaylistId = null;
+            _activeList = <YoutubeSearchResult>[];
+            _shufflePool = <YoutubeSearchResult>[];
+            _radio.start(MusicStyleMatcher.recommendationSeedFor(video));
             unawaited(_playVideo(video));
           },
           onLongPress: _showVideoMenu,

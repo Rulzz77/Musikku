@@ -160,6 +160,10 @@ class RadioService {
     final targetStyle = MusicStyleMatcher.styleFromText(_seed);
     final targetLanguage = _preferredLanguage ?? MusicStyleMatcher.languageFromText(_seed);
     _pool.removeWhere((video) =>
+        video.videoId == currentVideoId() ||
+        _playedIds.contains(video.videoId) ||
+        trackKeysFor(video).any(_playedTrackKeys.contains) ||
+        _recentlySelected(video) ||
         _blockedIds().contains(video.videoId) ||
         ChannelBlockFilter.isBlocked(video, _blockedChannelKeys()) ||
         !MusicStyleMatcher.isCompatible(
@@ -173,13 +177,28 @@ class RadioService {
       return null;
     }
 
-    final candidatesPool = MusicStyleMatcher.rankForRadio(
+    final rankedPool = MusicStyleMatcher.rankForRadio(
       _pool,
       targetStyle: targetStyle,
       targetLanguage: targetLanguage,
       allowCrossLanguage: !_lockLanguage,
     );
-    final scored = candidatesPool
+    // Different YouTube IDs can be duplicate uploads of the same track. Do
+    // not make recently selected tracks eligible again merely because all
+    // alternatives have a lower score.
+    final candidatesPool = rankedPool
+        .where((video) => !_recentlySelected(video))
+        .toList(growable: false);
+    if (candidatesPool.isEmpty) return null;
+    final currentArtist = _recentSelectionArtists.isEmpty
+        ? ''
+        : _recentSelectionArtists.last;
+    final differentArtists = candidatesPool.where((video) {
+      final artist = _artistKey(video);
+      return currentArtist.isEmpty || artist.isEmpty || artist != currentArtist;
+    }).toList(growable: false);
+    final sourcePool = differentArtists.isNotEmpty ? differentArtists : candidatesPool;
+    final scored = sourcePool
         .map((video) {
           final key = trackKeyFor(video);
           final artist = _artistKey(video);
@@ -208,11 +227,11 @@ class RadioService {
 
     final topCount = scored.length < 20 ? scored.length : 20;
     final candidates = scored.take(topCount).map((item) => item.video).toList();
+    if (candidates.isEmpty) return null;
 
-    // Pilih acak dari kumpulan kandidat bagus yang lebih beragam.
-    // Track/artist yang baru muncul tetap sudah diberi penalti.
+    // Random di antara kandidat yang belum dipilih dan dengan variasi artis.
     final selected = candidates[_random.nextInt(candidates.length)];
-    _pool.removeWhere((video) => video.videoId == selected.videoId);
+    _removeTrackFamilyFromPool(selected);
     _rememberSelection(selected);
     return selected;
   }
@@ -225,6 +244,10 @@ class RadioService {
     final targetStyle = MusicStyleMatcher.styleFromText(_seed);
     final targetLanguage = _preferredLanguage ?? MusicStyleMatcher.languageFromText(_seed);
     _pool.removeWhere((video) =>
+        video.videoId == currentVideoId() ||
+        _playedIds.contains(video.videoId) ||
+        trackKeysFor(video).any(_playedTrackKeys.contains) ||
+        _recentlySelected(video) ||
         _blockedIds().contains(video.videoId) ||
         ChannelBlockFilter.isBlocked(video, _blockedChannelKeys()) ||
         !MusicStyleMatcher.isCompatible(
@@ -254,9 +277,10 @@ class RadioService {
       final artist = _artistKey(video);
       return currentArtist.isEmpty || artist.isEmpty || artist != currentArtist;
     }).toList();
-    final source = diverse.isNotEmpty
-        ? diverse
-        : (fresh.isNotEmpty ? fresh : candidates);
+    // Never fall back to [candidates] when [fresh] is empty. That fallback
+    // reintroduced recently selected tracks and made Radio feel repetitive.
+    final source = diverse.isNotEmpty ? diverse : fresh;
+    if (source.isEmpty) return null;
 
     final selected = random
         ? source[_random.nextInt(source.length)]
@@ -266,7 +290,7 @@ class RadioService {
             targetLanguage: targetLanguage,
           );
 
-    _pool.removeWhere((video) => video.videoId == selected.videoId);
+    _removeTrackFamilyFromPool(selected);
     _rememberSelection(selected);
     return selected;
   }
@@ -320,8 +344,19 @@ class RadioService {
   }
 
   bool _recentlySelected(YoutubeSearchResult video) {
-    final key = trackKeyFor(video);
-    return key.isNotEmpty && _recentSelectionTrackKeys.contains(key);
+    final keys = trackKeysFor(video);
+    return keys.isNotEmpty && keys.any(_recentSelectionTrackKeys.contains);
+  }
+
+  /// Remove duplicate uploads/versions of a selected song from the in-memory
+  /// pool too, so a batch queue cannot contain the same track twice merely
+  /// because YouTube returned different video IDs.
+  void _removeTrackFamilyFromPool(YoutubeSearchResult selected) {
+    final selectedKeys = trackKeysFor(selected);
+    _pool.removeWhere((candidate) =>
+        candidate.videoId == selected.videoId ||
+        (selectedKeys.isNotEmpty &&
+            trackKeysFor(candidate).any(selectedKeys.contains)));
   }
 
   static String _artistKey(YoutubeSearchResult video) {
@@ -359,6 +394,45 @@ class RadioService {
         );
       }
     }
+  }
+
+  /// True jika ID atau keluarga judul lagu sudah diputar dalam sesi terbaru.
+  /// Digunakan saat fallback dari cache/hasil pencarian supaya lagu lama tidak
+  /// terus dipilih hanya karena berada paling awal di daftar.
+  bool wasPlayedRecently(YoutubeSearchResult video) {
+    final id = video.videoId.trim();
+    if (id.isEmpty) return false;
+    if (_playedIds.contains(id)) return true;
+    final keys = trackKeysFor(video);
+    return keys.isNotEmpty && keys.any(_playedTrackKeys.contains);
+  }
+
+  /// Return only unique, never-played candidates. This is deliberately stricter
+  /// than a UI history list: fallback catalogues must not re-introduce a song
+  /// after the Radio pool has exhausted its fresh candidates.
+  List<YoutubeSearchResult> filterUnplayedCandidates(
+    Iterable<YoutubeSearchResult> candidates,
+  ) {
+    final result = <YoutubeSearchResult>[];
+    final seenIds = <String>{};
+    final seenTrackKeys = <String>{};
+
+    for (final video in candidates) {
+      final id = video.videoId.trim();
+      if (id.isEmpty || !seenIds.add(id)) continue;
+
+      final keys = trackKeysFor(video);
+      final wasSelectedRecently =
+          keys.isNotEmpty && keys.any(_recentSelectionTrackKeys.contains);
+      if (wasPlayedRecently(video) ||
+          wasSelectedRecently ||
+          (keys.isNotEmpty && keys.any(seenTrackKeys.contains))) {
+        continue;
+      }
+      seenTrackKeys.addAll(keys);
+      result.add(video);
+    }
+    return result;
   }
 
   /// Catat lagu yang diputar agar tidak muncul lagi di radio.

@@ -1,6 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_application_5/models/youtube_search_result.dart';
 import 'package:flutter_application_5/services/music_style_matcher.dart';
+import 'package:flutter_application_5/services/radio_service.dart';
+import 'package:flutter_application_5/services/playback_source_policy.dart';
+import 'package:flutter_application_5/services/youtube_search_service.dart';
 
 YoutubeSearchResult _video({
   required String id,
@@ -179,4 +182,106 @@ void main() {
       );
     });
   });
+
+  group('Playback source isolation', () {
+    test('explicit playlist preserves order and mixed local/YouTube sources', () {
+      final remoteOne = _video(id: 'remote-1', title: 'Remote Song', channel: 'Artist A');
+      final localOne = YoutubeSearchResult(
+        videoId: 'local:local-one',
+        title: 'Local Song',
+        channelTitle: 'Local files',
+        thumbnailUrl: '',
+        sourceType: 'local',
+        mediaUri: 'file:///music/local-one.mp3',
+      );
+      final remoteTwo = _video(id: 'remote-2', title: 'Remote Song 2', channel: 'Artist B');
+      final items = PlaybackSourcePolicy.explicitPlaylistItems([
+        remoteOne,
+        localOne,
+        remoteTwo,
+        remoteOne,
+      ]);
+
+      expect(items.map((item) => item.videoId), [
+        'remote-1',
+        'local:local-one',
+        'remote-2',
+      ]);
+      expect(items.map((item) => item.isLocal), [false, true, false]);
+    });
+  });
+
+  group('RadioService no-repeat history', () {
+    test('filters a played video ID and alternate upload of the same song', () {
+      final radio = RadioService(
+        YoutubeSearchService(),
+        currentVideoId: () => null,
+      );
+      final played = _video(
+        id: 'anti-hero-original',
+        title: 'Anti-Hero (Official Music Video)',
+        channel: 'Taylor Swift',
+      );
+      final alternateUpload = _video(
+        id: 'anti-hero-reupload',
+        title: 'Anti-Hero - Taylor Swift (Official Audio)',
+        channel: 'Taylor Swift Topic',
+      );
+      final differentSong = _video(
+        id: 'cruel-summer',
+        title: 'Cruel Summer (Official Audio)',
+        channel: 'Taylor Swift',
+      );
+
+      radio.markPlayed(played);
+      expect(radio.wasPlayedRecently(played), isTrue);
+      expect(radio.wasPlayedRecently(alternateUpload), isTrue);
+      expect(radio.wasPlayedRecently(differentSong), isFalse);
+      radio.dispose();
+    });
+
+    test('fallback candidate list excludes played songs and duplicate uploads', () {
+      final radio = RadioService(
+        YoutubeSearchService(),
+        currentVideoId: () => null,
+      );
+      final played = _video(
+        id: 'played-1',
+        title: 'Anti-Hero (Official Music Video)',
+        channel: 'Taylor Swift',
+      );
+      final playedAlternate = _video(
+        id: 'played-reupload',
+        title: 'Anti-Hero - Taylor Swift (Official Audio)',
+        channel: 'Taylor Swift Topic',
+      );
+      final fresh = _video(
+        id: 'fresh-song',
+        title: 'Cruel Summer (Official Audio)',
+        channel: 'Taylor Swift',
+      );
+      final freshAlternate = _video(
+        id: 'fresh-song-reupload',
+        title: 'Cruel Summer - Taylor Swift (Official Music Video)',
+        channel: 'Taylor Swift Topic',
+      );
+
+      radio.markPlayed(played);
+      final filtered = radio.filterUnplayedCandidates([
+        played,
+        playedAlternate,
+        fresh,
+        freshAlternate,
+      ]);
+
+      expect(filtered.map((video) => video.videoId), ['fresh-song']);
+      expect(
+        radio.filterUnplayedCandidates([played, playedAlternate]),
+        isEmpty,
+        reason: 'Radio must stop gracefully instead of replaying stale tracks.',
+      );
+      radio.dispose();
+    });
+  });
+
 }

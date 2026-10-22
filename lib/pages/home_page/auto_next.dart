@@ -40,8 +40,8 @@ extension _HomeAutoNext on _HomePageState {
         return;
       }
 
-      // 2. QUEUE (prioritas di atas hasil pencarian / shuffle)
-      if (_queueManager.isNotEmpty) {
+      // 2. QUEUE. Jangan menyela playlist tetap dengan item dari sumber lain.
+      if (!_isFixedPlaybackList && _queueManager.isNotEmpty) {
         final nextItem = _takeQueueItemForCurrentMode(shuffle: isShuffle);
 
         if (nextItem != null) {

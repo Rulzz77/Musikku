@@ -33,24 +33,30 @@ extension _HomeRadio on _HomePageState {
       _toast('Tidak menemukan konteks radio untuk lagu ini.');
       return;
     }
+
+    // Starting Radio is an explicit source change. Never keep the old playlist,
+    // search list, shuffle pool or Previous history as a hidden fallback.
+    _activeSource = _ListSource.radio;
+    _activePlaylistId = null;
+    _activeList = <YoutubeSearchResult>[];
+    _shufflePool = <YoutubeSearchResult>[];
+    _playHistory.clear();
     _radio.start(
       seed,
       preferredLanguage: _radioPreferredLanguageFor(video),
       lockLanguage: false,
     );
-    await _radio.refill();
-    var added = 0;
-    for (var i = 0; i < (widget.settings.dataSaverLevel >= 2 ? 4 : (widget.settings.dataSaverLevel == 1 ? 6 : 12)); i++) {
-      final next = _radio.take(random: false);
-      if (next == null) break;
-      if (_queueManager.add(next)) added++;
+
+    // Start the selected song as the radio seed. Recommendations stay in the
+    // RadioService pool instead of being mixed into the user's explicit queue;
+    // this prevents unrelated/stale queue entries from hijacking Next.
+    if (_currentVideo?.videoId != video.videoId) {
+      await _playVideo(video);
     }
-    if (added > 0) {
-      await _storage.saveQueue(_queueManager.items);
-      if (mounted) setState(() {});
-      _toast('Radio dari lagu ini menambahkan $added lagu.');
-    } else {
-      _toast('Belum menemukan lagu lain yang relevan.');
+    await _radio.refill();
+    if (mounted) {
+      setState(() {});
+      _toast('Radio aktif · lagu berikutnya akan dipilih otomatis.');
     }
   }
 
@@ -60,6 +66,13 @@ extension _HomeRadio on _HomePageState {
     YoutubeSearchResult current, {
     required bool fromAutoNext,
   }) async {
+    // Safety net: playlist mode may never be converted into Radio by auto-next.
+    if (_isFixedPlaybackList) {
+      await _stopPlayback();
+      if (!fromAutoNext) _toast('Playlist selesai. Pilih Repeat Semua untuk mengulang.');
+      return;
+    }
+
     // Device-local playback has no YouTube radio continuation. This guard also
     // covers a restored local track whose playlist context is empty after app
     // restart, so Next/auto-next cannot jump into remote YouTube audio.
@@ -82,6 +95,11 @@ extension _HomeRadio on _HomePageState {
     }
 
     _activeSource = _ListSource.radio;
+    _activePlaylistId = null;
+    // Once Radio takes over, stale search/feed lists must not be used as a
+    // fallback source for Next.
+    _activeList = <YoutubeSearchResult>[];
+    _shufflePool = <YoutubeSearchResult>[];
 
     _radio.start(
       seed,
@@ -94,7 +112,7 @@ extension _HomeRadio on _HomePageState {
 
   /// Ambil kandidat dari pool radio yang bukan Shorts, memakai metadata lokal.
   YoutubeSearchResult? _takeNonShortFromRadio() {
-    for (var i = 0; i < 15; i++) {
+    for (var i = 0; i < 50; i++) {
       final candidate = _playerUiState.value.isSmartShuffle
           ? _radio.takeSmart(
               score: (video) => _smartShuffleScore(
@@ -132,7 +150,7 @@ extension _HomeRadio on _HomePageState {
       list.shuffle(_random);
     }
 
-    for (final video in list.take(15)) {
+    for (final video in list) {
       if (YoutubeSearchService.isLikelyShortForm(video) ||
           YoutubeSearchService.isLikelyNonMusicVideo(video)) {
         continue;
@@ -190,7 +208,11 @@ extension _HomeRadio on _HomePageState {
         currentVideo: _currentVideo,
       );
       final candidates = _activeList.where((video) {
-        if (video.videoId == currentId) return false;
+        if (video.videoId == currentId ||
+            (_currentVideo != null &&
+                RadioService.isSameTrackFamily(video, _currentVideo!))) {
+          return false;
+        }
         if (_dislikedIds.contains(video.videoId)) return false;
         if (ChannelBlockFilter.isBlocked(video, _blockedChannelKeys)) return false;
         if (YoutubeSearchService.isLikelyShortForm(video)) return false;
@@ -206,9 +228,12 @@ extension _HomeRadio on _HomePageState {
         }
         return RadioService.trackKeyFor(video).isNotEmpty;
       }).toList();
+      // Only offer candidates not played in this radio history. Falling back
+      // to [candidates] when freshCandidates is empty caused familiar tracks
+      // to repeat immediately whenever the API/cache was exhausted.
+      final freshCandidates = _radio.filterUnplayedCandidates(candidates);
       // Active search results may be stale or cached before Shorts filtering.
-      // Verify them again so fallback cannot re-introduce a Short into autoplay.
-      final verifiedCandidates = await _searchService.removeShorts(candidates);
+      final verifiedCandidates = await _searchService.removeShorts(freshCandidates);
 
       if (verifiedCandidates.isNotEmpty) {
         final styleCandidates = MusicStyleMatcher.rankForRadio(
@@ -217,23 +242,26 @@ extension _HomeRadio on _HomePageState {
           targetLanguage: targetLanguage,
           allowCrossLanguage: !_radio.locksLanguage,
         );
+        var selectionPool = styleCandidates;
         if (_playerUiState.value.isSmartShuffle) {
-          styleCandidates.sort((a, b) => _smartShuffleScore(
-                b,
-                currentArtist: _currentVideo?.channelTitle,
-              ).compareTo(
-                _smartShuffleScore(
-                  a,
+          selectionPool = List<YoutubeSearchResult>.from(styleCandidates)
+            ..sort((a, b) => _smartShuffleScore(
+                  b,
                   currentArtist: _currentVideo?.channelTitle,
-                ),
-              ));
+                ).compareTo(
+                  _smartShuffleScore(
+                    a,
+                    currentArtist: _currentVideo?.channelTitle,
+                  ),
+                ));
+          // Smart Shuffle remains smart, but still randomizes among a small
+          // high-score pool rather than always selecting the same first item.
+          if (selectionPool.length > 8) {
+            selectionPool = selectionPool.take(8).toList(growable: false);
+          }
         }
 
-        next = _pickNonShort(
-          styleCandidates,
-          random: _playerUiState.value.isShuffle &&
-              !_playerUiState.value.isSmartShuffle,
-        );
+        next = _pickNonShort(selectionPool, random: true);
       }
     }
 
@@ -258,6 +286,8 @@ extension _HomeRadio on _HomePageState {
         ..._recentlyPlayed,
       ].where((video) {
         return video.videoId != currentId &&
+            (_currentVideo == null ||
+                !RadioService.isSameTrackFamily(video, _currentVideo!)) &&
             !_dislikedIds.contains(video.videoId) &&
             !ChannelBlockFilter.isBlocked(video, _blockedChannelKeys) &&
             !YoutubeSearchService.isLikelyShortForm(video) &&
@@ -271,8 +301,11 @@ extension _HomeRadio on _HomePageState {
               allowCrossLanguage: !_radio.locksLanguage,
             );
       }).toList();
-      // Favorites/history are also possible stale sources; re-verify Shorts.
-      final verifiedLocal = await _searchService.removeShorts(local);
+      // Favorites/history are a last-resort cache, not permission to replay the
+      // same tracks. When every cached item was played already, stop gracefully
+      // instead of returning a song from the same history again.
+      final freshLocal = _radio.filterUnplayedCandidates(local);
+      final verifiedLocal = await _searchService.removeShorts(freshLocal);
 
       if (verifiedLocal.isNotEmpty) {
         final preferred = MusicStyleMatcher.rankForRadio(

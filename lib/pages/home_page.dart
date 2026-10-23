@@ -15,6 +15,7 @@ import '../models/queue_item.dart';
 import '../models/youtube_search_result.dart';
 import '../services/lyrics_service.dart';
 import '../services/listening_playback_tracker.dart';
+import '../services/listening_together_service.dart';
 import '../services/music_style_matcher.dart';
 import '../services/app_settings.dart';
 import '../services/app_health_monitor.dart';
@@ -45,6 +46,7 @@ part 'home_page/favorites.dart';
 part 'home_page/playlists.dart';
 part 'home_page/radio.dart';
 part 'home_page/auto_next.dart';
+part 'home_page/listening_together.dart';
 part 'home_page/playback.dart';
 part 'home_page/controls.dart';
 part 'home_page/queue.dart';
@@ -94,6 +96,15 @@ class _HomePageState extends State<HomePage>
   final PlaybackSessionGuard _playbackSessionGuard = PlaybackSessionGuard();
 
   final StorageService _storage = StorageService();
+
+  // Listen Together dapat memakai server realtime lintas jaringan bila dikonfigurasi;
+  // tanpa kredensial project, layanan mempertahankan mode lokal Wi-Fi/hotspot.
+  final ListeningTogetherService _listenTogether = ListeningTogetherService();
+  StreamSubscription<Map<String, dynamic>>? _listenTogetherMessagesSubscription;
+  Timer? _listenTogetherSyncTimer;
+  bool _applyingListenTogetherState = false;
+  bool _wasFollowingListenTogether = false;
+  String _lastRoomUnsupportedTrackId = '';
 
   final Random _random = Random();
 
@@ -436,6 +447,13 @@ class _HomePageState extends State<HomePage>
     return '$minutes:${remainder.toString().padLeft(2, '0')}';
   }
 
+  // Refresh UI from part-file extensions without calling the protected
+  // State.setState member outside the State subclass declaration.
+  void _refreshListeningTogetherUi() {
+    if (!mounted) return;
+    setState(() {});
+  }
+
   // ============================================================
   // LIFECYCLE & BUILD (override harus tetap di kelas State)
   // ============================================================
@@ -455,6 +473,12 @@ class _HomePageState extends State<HomePage>
     widget.settings.bufferAlertSeconds.addListener(_onBufferAlertThresholdChanged);
     unawaited(_youtubeController.setVideoCrop(_videoCropZoom));
     unawaited(_youtubeController.setDataSaverLevel(widget.settings.dataSaverLevel));
+
+    _listenTogetherMessagesSubscription = _listenTogether.messages.listen(
+      _onListenTogetherMessage,
+      onError: (Object error) => debugPrint('LISTEN TOGETHER ERROR: $error'),
+    );
+    _listenTogether.status.addListener(_onListenTogetherStatusChanged);
 
     _videoStateSubscription = _youtubeController.stateStream.listen(
       _onYoutubeState,
@@ -594,6 +618,10 @@ class _HomePageState extends State<HomePage>
     _playbackWatchdog?.cancel();
 
     _videoStateSubscription?.cancel();
+    _listenTogetherSyncTimer?.cancel();
+    _listenTogetherMessagesSubscription?.cancel();
+    _listenTogether.status.removeListener(_onListenTogetherStatusChanged);
+    unawaited(_listenTogether.dispose());
 
     _youtubeController.dispose();
 

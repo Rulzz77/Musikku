@@ -34,6 +34,8 @@ class MusicPlayerPage extends StatefulWidget {
     required this.onOpenQueue,
     required this.onOpenAudioSettings,
     required this.onOpenSleepTimer,
+    required this.onOpenListeningRoom,
+    required this.followingRoom,
     required this.sleepActive,
     required this.showDataUsageOnPlayer,
   });
@@ -54,6 +56,8 @@ class MusicPlayerPage extends StatefulWidget {
   final VoidCallback onOpenQueue;
   final VoidCallback onOpenAudioSettings;
   final VoidCallback onOpenSleepTimer;
+  final VoidCallback onOpenListeningRoom;
+  final bool followingRoom;
   final ValueListenable<bool> sleepActive;
   final ValueListenable<bool> showDataUsageOnPlayer;
 
@@ -155,7 +159,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                       child: Column(
                         children: [
                           Text(
-                            'SEDANG DIPUTAR',
+                            widget.followingRoom ? 'DENGERIN BARENG' : 'SEDANG DIPUTAR',
                             style: theme.textTheme.labelMedium?.copyWith(
                               color: Colors.white.withValues(alpha: 0.78),
                               fontWeight: FontWeight.w800,
@@ -163,6 +167,14 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                             ),
                           ),
                         ],
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: widget.followingRoom ? 'Mengikuti sesi host' : 'Dengerin bareng tanpa login',
+                      onPressed: widget.onOpenListeningRoom,
+                      icon: Icon(
+                        widget.followingRoom ? Icons.headphones_rounded : Icons.groups_2_rounded,
+                        color: Colors.white,
                       ),
                     ),
                     ValueListenableBuilder<PlayerUiState>(
@@ -203,28 +215,30 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                     return LayoutBuilder(
                       builder: (context, constraints) {
                         final isWideLayout = constraints.maxWidth >= 760;
-                        // Artwork size depends on screen width only (never on song
-                        // metadata or remaining height), so the cover stays put when
-                        // switching tracks. A compact cap avoids oversized album art.
-                        final phoneArtSize = math.min(
-                          340.0,
-                          math.max(210.0, constraints.maxWidth * 0.87),
+                        // Keep the artwork fixed for a given device and available height.
+                        // Old layout added two independent spacers from leftover height;
+                        // on short/tall screens that caused controls to jump or leave a gap.
+                        final phoneArtWidth = math.min(
+                          300.0,
+                          math.max(160.0, constraints.maxWidth * 0.80),
                         ).toDouble();
+                        // Reserved space is independent of lyrics, buffering, and optional
+                        // data cards. Dynamic reservations made the cover resize mid-song.
+                        final reservedLowerHeight = isWideLayout ? 300.0 : 400.0;
+                        final heightLimitedArt = (constraints.maxHeight - reservedLowerHeight)
+                            .clamp(145.0, 300.0)
+                            .toDouble();
                         final artWidth = isWideLayout
-                            ? ((constraints.maxWidth - 68) / 2).clamp(220.0, 300.0).toDouble()
-                            : phoneArtSize;
-                        // Album covers are square. Keep a 1:1 hero instead of
-                        // stretching a portrait crop into a tall rectangle.
+                            ? math.min(
+                                300.0,
+                                math.min(
+                                  ((constraints.maxWidth - 68) / 2).clamp(180.0, 300.0).toDouble(),
+                                  (constraints.maxHeight * 0.54).clamp(145.0, 300.0).toDouble(),
+                                ),
+                              ).toDouble()
+                            : math.min(phoneArtWidth, heightLimitedArt).toDouble();
+                        // Covers remain square; height is capped to leave room for controls.
                         final artHeight = artWidth;
-                        // Leftover vertical space on tall phones (screen-size only, so
-                        // nothing jumps when the track changes). A little goes above the
-                        // cover; more goes between the action buttons and the seekbar so
-                        // the player controls sit lower and breathe.
-                        final freeSpace = constraints.maxHeight - (artHeight + 320);
-                        final topGap = (freeSpace * 0.15).clamp(0.0, 40.0).toDouble();
-                        // Gap between track info and the action buttons: moves the whole
-                        // lower player group (buttons + seekbar + controls) down together.
-                        final playerGap = (freeSpace * 0.6).clamp(14.0, 100.0).toDouble();
                         final artworkPanel = SizedBox(
                           width: artWidth,
                           height: artHeight,
@@ -246,6 +260,12 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                                   track: widget.video,
                                 ),
                               ),
+                              Positioned(
+                                left: 10,
+                                right: 10,
+                                bottom: 10,
+                                child: _buildCurrentLyricGlass(textTheme: theme.textTheme),
+                              ),
                             ],
                           ),
                         );
@@ -255,25 +275,37 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(
-                                    widget.video.title,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: theme.textTheme.titleLarge?.copyWith(
-                                      fontWeight: FontWeight.w900,
-                                      height: 1.18,
-                                      letterSpacing: -0.35,
+                                  SizedBox(
+                                    height: 52,
+                                    child: Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: Text(
+                                        widget.video.title,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: theme.textTheme.titleLarge?.copyWith(
+                                          fontWeight: FontWeight.w900,
+                                          height: 1.18,
+                                          letterSpacing: -0.35,
+                                        ),
+                                      ),
                                     ),
                                   ),
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    widget.video.channelTitle.isEmpty ? 'Artis tidak diketahui' : widget.video.channelTitle,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: theme.textTheme.titleMedium?.copyWith(
-                                      color: scheme.onSurfaceVariant,
-                                      fontSize: 14.5,
-                                      fontWeight: FontWeight.w600,
+                                  const SizedBox(height: 3),
+                                  SizedBox(
+                                    height: 21,
+                                    child: Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: Text(
+                                        widget.video.channelTitle.isEmpty ? 'Artis tidak diketahui' : widget.video.channelTitle,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: theme.textTheme.titleMedium?.copyWith(
+                                          color: scheme.onSurfaceVariant,
+                                          fontSize: 14.5,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
                                     ),
                                   ),
                                 ],
@@ -290,16 +322,14 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                               ),
                           ],
                         );
-                        return SingleChildScrollView(
-                          padding: EdgeInsets.zero,
-                          child: ConstrainedBox(
-                            constraints: BoxConstraints(minHeight: constraints.maxHeight - 12),
-                            child: Column(
+                        return SizedBox.expand(
+                          child: Column(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
                                 if (isWideLayout)
                                   Padding(
-                                    padding: const EdgeInsets.fromLTRB(24, 12, 24, 4),
+                                    padding: const EdgeInsets.fromLTRB(24, 4, 24, 4),
                                     child: Row(
                                       crossAxisAlignment: CrossAxisAlignment.center,
                                       children: [
@@ -311,18 +341,13 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                                   )
                                 else
                                   Padding(
-                                    // Push the whole player group down on tall phones so it
-                                    // does not hug the top with a big empty area underneath.
-                                    // Depends only on screen size (not song metadata), so the
-                                    // cover stays put when the track changes.
-                                    padding: EdgeInsets.only(
-                                      top: 8 + topGap,
-                                      bottom: 4,
-                                    ),
+                                    // Compact top spacing: controls stay directly below
+                                    // the artwork and the player never becomes a scroll page.
+                                    padding: const EdgeInsets.only(top: 10, bottom: 4),
                                     child: Center(child: artworkPanel),
                                   ),
                                 Padding(
-                                  padding: EdgeInsets.fromLTRB(22, isWideLayout ? 14 : 0, 22, 28),
+                                  padding: EdgeInsets.fromLTRB(22, isWideLayout ? 8 : 0, 22, 8),
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.stretch,
                                     children: [
@@ -333,9 +358,9 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                                         // This only affects vertical spacing, not cover geometry.
                                         const SizedBox(height: 8),
                                       ],
-                                      _buildCurrentLyricGlass(textTheme: theme.textTheme),
-                                      // Compact gap between track info and action buttons.
-                                      SizedBox(height: isWideLayout ? 10 : playerGap),
+                                      // Stable gap; synced lyrics live on the cover so this
+                                      // control block does not move when lyrics load.
+                                      const SizedBox(height: 4),
                                     Wrap(
                                       alignment: WrapAlignment.center,
                                       spacing: 10,
@@ -371,7 +396,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                                             context: context,
                                             icon: active ? Icons.timer_rounded : Icons.bedtime_outlined,
                                             tooltip: active ? 'Timer tidur aktif' : 'Timer tidur',
-                                            onPressed: widget.onOpenSleepTimer,
+                                            onPressed: widget.followingRoom ? null : widget.onOpenSleepTimer,
                                             selected: active,
                                           ),
                                         ),
@@ -397,12 +422,12 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                                         max: maxMs,
                                         value: sliderValue,
                                         secondaryTrackValue: bufferedTrackValue,
-                                        onChanged: duration <= Duration.zero
+                                        onChanged: duration <= Duration.zero || widget.followingRoom
                                             ? null
                                             : (value) => setState(() {
                                                   _dragPositionMs = value;
                                                 }),
-                                        onChangeEnd: duration <= Duration.zero
+                                        onChangeEnd: duration <= Duration.zero || widget.followingRoom
                                             ? null
                                             : (value) async {
                                                 setState(() {
@@ -433,8 +458,8 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                                               tooltip: ui.isSmartShuffle
                                                   ? 'Smart Shuffle aktif • tekan lama untuk mematikan'
                                                   : 'Shuffle • tekan lama untuk Smart Shuffle',
-                                              onPressed: widget.onToggleShuffle,
-                                              onLongPress: widget.onToggleSmartShuffle,
+                                              onPressed: widget.followingRoom ? null : widget.onToggleShuffle,
+                                              onLongPress: widget.followingRoom ? null : widget.onToggleSmartShuffle,
                                               icon: Icon(
                                                 ui.isSmartShuffle
                                                     ? Icons.auto_awesome_rounded
@@ -446,7 +471,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                                             ),
                                             IconButton(
                                               tooltip: 'Lagu sebelumnya (MusikKu)',
-                                              onPressed: widget.onPrevious,
+                                              onPressed: widget.followingRoom ? null : widget.onPrevious,
                                               icon: const Icon(Icons.skip_previous_rounded, size: 31),
                                             ),
                                             SizedBox(
@@ -454,7 +479,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                                               height: 64,
                                               child: FilledButton(
                                                 style: FilledButton.styleFrom(shape: const CircleBorder(), padding: EdgeInsets.zero),
-                                                onPressed: busy ? null : () => widget.onPlayPause(),
+                                                onPressed: busy || widget.followingRoom ? null : () => widget.onPlayPause(),
                                                 child: Icon(
                                                   busy ? Icons.hourglass_top_rounded : (playing ? Icons.pause_rounded : Icons.play_arrow_rounded),
                                                   size: 36,
@@ -463,7 +488,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                                             ),
                                             IconButton(
                                               tooltip: 'Lagu berikutnya (MusikKu)',
-                                              onPressed: widget.onNext,
+                                              onPressed: widget.followingRoom ? null : widget.onNext,
                                               icon: const Icon(Icons.skip_next_rounded, size: 31),
                                             ),
                                             IconButton(
@@ -472,7 +497,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                                                 LoopModeCustom.all => 'Repeat semua aktif',
                                                 LoopModeCustom.one => 'Repeat satu aktif',
                                               },
-                                              onPressed: widget.onCycleLoop,
+                                              onPressed: widget.followingRoom ? null : widget.onCycleLoop,
                                               icon: Icon(
                                                 ui.loopMode == LoopModeCustom.one ? Icons.repeat_one_rounded : Icons.repeat_rounded,
                                                 color: ui.loopMode == LoopModeCustom.off ? scheme.onSurfaceVariant : scheme.primary,
@@ -504,7 +529,6 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                                   ),
                                 ),
                               ],
-                            ),
                           ),
                         );
                       },
@@ -641,7 +665,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
     required BuildContext context,
     required IconData icon,
     required String tooltip,
-    required VoidCallback onPressed,
+    required VoidCallback? onPressed,
     bool selected = false,
   }) {
     final scheme = Theme.of(context).colorScheme;

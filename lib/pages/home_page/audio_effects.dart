@@ -439,90 +439,203 @@ extension _HomeAudioSettingsUi on _HomePageState {
   }
 
   void _showSleepTimerSheet() {
+    var selectedMinutes = 30;
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
       useSafeArea: true,
+      isScrollControlled: true,
       constraints: const BoxConstraints(maxWidth: 520),
-      builder: (sheetContext) => ValueListenableBuilder<bool>(
-        valueListenable: _sleepActive,
-        builder: (context, active, _) {
-          final scheme = Theme.of(context).colorScheme;
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) => ValueListenableBuilder<bool>(
+          valueListenable: _sleepActive,
+          builder: (context, active, _) {
+            final scheme = Theme.of(context).colorScheme;
 
-          void startTimer(Duration duration) {
-            _clearSleepTimer();
-            _stopAfterCurrent = false;
-            _sleepActive.value = true;
-            _sleepTimer = Timer(duration, () {
-              if (!mounted) return;
+            void startTimer(Duration duration) {
               _clearSleepTimer();
-              unawaited(_stopPlayback());
-              _toast('Timer tidur selesai. Pemutaran dijeda.');
-            });
-            Navigator.of(sheetContext).pop();
-            _toast('MusikKu akan berhenti dalam ${duration.inMinutes} menit.');
-          }
+              _stopAfterCurrent = false;
+              _sleepActive.value = true;
+              _sleepTimer = Timer(duration, () {
+                if (!mounted) return;
+                _clearSleepTimer();
+                unawaited(_stopPlayback());
+                _toast('Timer tidur selesai. Pemutaran dijeda.');
+              });
+              Navigator.of(sheetContext).pop();
+              _toast('MusikKu akan berhenti dalam ${duration.inMinutes} menit.');
+            }
 
-          void stopAfterTrack() {
-            _sleepTimer?.cancel();
-            _sleepTimer = null;
-            _stopAfterCurrent = true;
-            _sleepActive.value = true;
-            Navigator.of(sheetContext).pop();
-            _toast('Musik akan berhenti setelah lagu ini selesai.');
-          }
+            void stopAfterTrack() {
+              _sleepTimer?.cancel();
+              _sleepTimer = null;
+              _stopAfterCurrent = true;
+              _sleepActive.value = true;
+              Navigator.of(sheetContext).pop();
+              _toast('Musik akan berhenti setelah lagu ini selesai.');
+            }
 
-          return Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 22),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(width: 44, height: 44, alignment: Alignment.center, decoration: BoxDecoration(color: scheme.primaryContainer, borderRadius: BorderRadius.circular(17)), child: Icon(Icons.bedtime_rounded, color: scheme.primary, size: 24)),
-                    const SizedBox(width: 12),
-                    const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('Timer tidur', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900)), SizedBox(height: 3), Text('Atur kapan musik berhenti.') ])),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                if (active)
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
-                    margin: const EdgeInsets.only(bottom: 12),
-                    decoration: BoxDecoration(color: scheme.primaryContainer.withValues(alpha: 0.65), borderRadius: BorderRadius.circular(14)),
-                    child: Row(children: [Icon(Icons.timer_rounded, color: scheme.primary), const SizedBox(width: 9), Expanded(child: Text(_stopAfterCurrent ? 'Aktif • berhenti setelah lagu selesai' : 'Timer sedang aktif', style: TextStyle(color: scheme.onPrimaryContainer, fontWeight: FontWeight.w800))) ]),
-                  ),
-                GridView.count(
-                  crossAxisCount: 3,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  mainAxisSpacing: 8,
-                  crossAxisSpacing: 8,
-                  childAspectRatio: 1.65,
-                  children: [
-                    for (final minutes in const [15, 30, 45, 60, 90, 120])
-                      FilledButton.tonal(
-                        onPressed: () => startTimer(Duration(minutes: minutes)),
-                        style: FilledButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
-                        child: Text('$minutes menit', style: const TextStyle(fontWeight: FontWeight.w900)),
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 22),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 46,
+                        height: 46,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(16),
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              scheme.primary.withValues(alpha: 0.24),
+                              scheme.tertiary.withValues(alpha: 0.10),
+                            ],
+                          ),
+                          border: Border.all(color: scheme.primary.withValues(alpha: 0.30)),
+                        ),
+                        child: Icon(Icons.bedtime_rounded, color: scheme.primary, size: 25),
                       ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Timer tidur', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900)),
+                            SizedBox(height: 3),
+                            Text('Atur musik berhenti otomatis.'),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Tutup',
+                        onPressed: () => Navigator.of(sheetContext).pop(),
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(18, 16, 18, 12),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(22),
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          scheme.primaryContainer.withValues(alpha: 0.88),
+                          scheme.surfaceContainerHighest.withValues(alpha: 0.82),
+                        ],
+                      ),
+                      border: Border.all(color: scheme.primary.withValues(alpha: 0.22)),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 76,
+                          height: 76,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: scheme.surface.withValues(alpha: 0.70),
+                            border: Border.all(color: scheme.primary.withValues(alpha: 0.26), width: 1.5),
+                          ),
+                          child: Icon(Icons.hourglass_bottom_rounded, size: 34, color: scheme.primary),
+                        ),
+                        const SizedBox(width: 18),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                active ? 'Timer sudah aktif' : 'Musik berhenti dalam',
+                                style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant, fontWeight: FontWeight.w700),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                active
+                                    ? (_stopAfterCurrent ? 'Lagu ini selesai' : 'Waktu berjalan')
+                                    : '$selectedMinutes menit',
+                                style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w900, letterSpacing: -0.7),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                active ? 'Timer akan mem-pause pemutar.' : 'Geser untuk mengatur durasi.',
+                                style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (!active) ...[
+                    const SizedBox(height: 12),
+                    SliderTheme(
+                      data: SliderTheme.of(context).copyWith(
+                        trackHeight: 5,
+                        activeTrackColor: scheme.primary,
+                        inactiveTrackColor: scheme.outlineVariant,
+                        thumbColor: scheme.primary,
+                        overlayColor: scheme.primary.withValues(alpha: 0.13),
+                      ),
+                      child: Slider(
+                        value: selectedMinutes.toDouble(),
+                        min: 5,
+                        max: 180,
+                        divisions: 35,
+                        label: '$selectedMinutes menit',
+                        onChanged: (value) {
+                          setSheetState(() => selectedMinutes = (value / 5).round() * 5);
+                        },
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('5 mnt', style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
+                          Text('3 jam', style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final minutes in const [15, 30, 45, 60, 90, 120])
+                          ChoiceChip(
+                            label: Text('$minutes mnt'),
+                            selected: selectedMinutes == minutes,
+                            onSelected: (_) => setSheetState(() => selectedMinutes = minutes),
+                            showCheckmark: false,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    FilledButton.icon(
+                      onPressed: () => startTimer(Duration(minutes: selectedMinutes)),
+                      icon: const Icon(Icons.play_arrow_rounded),
+                      label: Text('Mulai timer · $selectedMinutes menit'),
+                      style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(50)),
+                    ),
                   ],
-                ),
-                const SizedBox(height: 10),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
+                  const SizedBox(height: 10),
+                  OutlinedButton.icon(
                     onPressed: _currentVideo == null ? null : stopAfterTrack,
                     icon: const Icon(Icons.skip_next_rounded),
                     label: const Text('Berhenti setelah lagu ini'),
+                    style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(46)),
                   ),
-                ),
-                if (active)
-                  SizedBox(
-                    width: double.infinity,
-                    child: TextButton.icon(
+                  if (active)
+                    TextButton.icon(
                       onPressed: () {
                         _clearSleepTimer();
                         Navigator.of(sheetContext).pop();
@@ -531,13 +644,25 @@ extension _HomeAudioSettingsUi on _HomePageState {
                       icon: const Icon(Icons.timer_off_rounded),
                       label: const Text('Batalkan timer'),
                     ),
+                  const SizedBox(height: 6),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.info_outline_rounded, size: 16, color: scheme.onSurfaceVariant),
+                      const SizedBox(width: 7),
+                      Expanded(
+                        child: Text(
+                          'Timer berlaku selama proses MusikKu tetap berjalan. Mode “setelah lagu ini” mengikuti event selesai dari pemutar.',
+                          style: TextStyle(fontSize: 11, height: 1.35, color: scheme.onSurfaceVariant),
+                        ),
+                      ),
+                    ],
                   ),
-                const SizedBox(height: 4),
-                Text('Timer aktif selama aplikasi/proses MusikKu tetap berjalan. Opsi berhenti setelah lagu menggunakan event selesai dari pemutar.', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11.5, height: 1.35)),
-              ],
-            ),
-          );
-        },
+                ],
+              ),
+            );
+          },
+        ),
       ),
     );
   }

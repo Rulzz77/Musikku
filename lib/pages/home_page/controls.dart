@@ -110,6 +110,9 @@ extension _HomeControls on _HomePageState {
   }
 
   Future<void> _togglePlayPause() async {
+    // Perangkat tamu mengikuti state host, termasuk dari tombol headset/
+    // notifikasi. Jangan biarkan kontrol lokal memecah sinkronisasi.
+    if (_listenTogether.isGuest) return;
     if (_playPauseBusy) {
       return;
     }
@@ -181,6 +184,7 @@ extension _HomeControls on _HomePageState {
   }
 
   Future<void> _previous() async {
+    if (_listenTogether.isGuest) return;
     final current = _currentVideo;
 
     if (current == null) {
@@ -263,6 +267,7 @@ extension _HomeControls on _HomePageState {
   }
 
   Future<void> _next({bool fromAutoNext = false}) async {
+    if (_listenTogether.isGuest) return;
     if (_nextActionInProgress) return;
     _nextActionInProgress = true;
     try {

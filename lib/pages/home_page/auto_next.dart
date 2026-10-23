@@ -6,6 +6,10 @@ part of '../home_page.dart';
 /// Auto-next berdasarkan event lagu selesai dari Media3.
 extension _HomeAutoNext on _HomePageState {
   Future<void> _handleAutoNext(String endedVideoId) async {
+    // Guest devices follow the host's song changes; their local ENDED event
+    // must never pick an independent next song.
+    if (_listenTogether.isGuest) return;
+
     if (_suppressAutoNextInPip) {
       return;
     }

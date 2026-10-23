@@ -119,6 +119,55 @@ void main() {
           {'english-pop', 'indonesian-pop'});
     });
 
+    test('Radio prefers recognized compatible styles over unknown metadata when available', () {
+      final englishPop = _video(
+        id: 'known-pop-en',
+        title: 'Popular English Pop Song',
+        channel: 'Taylor Swift',
+      );
+      final indonesianPop = _video(
+        id: 'known-pop-id',
+        title: 'Pop Indonesia Populer',
+        channel: 'Armada',
+      );
+      final unknownStyle = _video(
+        id: 'unknown-style',
+        title: 'A Song With No Recognized Genre',
+        channel: 'Unknown Artist',
+      );
+
+      final ranked = MusicStyleMatcher.rankForRadio(
+        [unknownStyle, englishPop, indonesianPop],
+        targetStyle: 'pop',
+        allowCrossLanguage: true,
+      );
+
+      expect(ranked.map((video) => video.videoId).toSet(),
+          {'known-pop-en', 'known-pop-id'});
+    });
+
+    test('Radio keeps unknown metadata as fallback when there is only one known style', () {
+      final knownPop = _video(
+        id: 'one-known-pop',
+        title: 'Popular Pop Song',
+        channel: 'Unknown Artist',
+      );
+      final unknownStyle = _video(
+        id: 'one-unknown-style',
+        title: 'A Song With No Recognized Genre',
+        channel: 'Unknown Artist',
+      );
+
+      final ranked = MusicStyleMatcher.rankForRadio(
+        [unknownStyle, knownPop],
+        targetStyle: 'pop',
+        allowCrossLanguage: true,
+      );
+
+      expect(ranked.map((video) => video.videoId).toSet(),
+          {'one-known-pop', 'one-unknown-style'});
+    });
+
     test('radio style score allows a related track in another language', () {
       final englishPop = _video(
         id: 'english-pop-score',

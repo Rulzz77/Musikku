@@ -409,12 +409,28 @@ class MusicStyleMatcher {
     String? targetLanguage,
     bool allowCrossLanguage = true,
   }) {
-    final list = videos.where((video) => isCompatible(
+    var list = videos.where((video) => isCompatible(
       video: video,
       targetStyle: targetStyle,
       targetLanguage: targetLanguage,
       allowCrossLanguage: allowCrossLanguage,
     )).toList();
+
+    // Unknown metadata is useful as a fallback, but if the pool already has
+    // several songs with a recognized matching/related style, mixing unknowns
+    // into the same shuffle makes Radio feel unrelated. Use metadata-known
+    // candidates first and only fall back to unknowns when the known pool is
+    // too small to form a useful next-song list.
+    if (targetStyle != null) {
+      final recognized = list.where((video) {
+        final style = styleFromVideo(video);
+        return style != null && isRelatedStyle(style, targetStyle);
+      }).toList();
+      if (recognized.length >= 2) {
+        list = recognized;
+      }
+    }
+
     list.sort((a, b) => radioSimilarityScore(
       video: b,
       targetStyle: targetStyle,

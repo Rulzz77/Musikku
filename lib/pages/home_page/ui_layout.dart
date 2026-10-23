@@ -103,6 +103,8 @@ extension _HomeUiLayout on _HomePageState {
                         onOpenQueue: _showQueueSheet,
                         onOpenAudioSettings: _showAudioSettingsSheet,
                         onOpenSleepTimer: _showSleepTimerSheet,
+                        onOpenListeningRoom: _showListenTogetherSheet,
+                        followingRoom: _listenTogether.isGuest,
                         sleepActive: _sleepActive,
                         showDataUsageOnPlayer: widget.settings.showDataUsageOnPlayer,
                       ),

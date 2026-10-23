@@ -302,7 +302,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                                   )
                                 else
                                   Padding(
-                                    padding: const EdgeInsets.only(top: 12, bottom: 10),
+                                    padding: const EdgeInsets.only(top: 8, bottom: 4),
                                     child: Center(child: artworkPanel),
                                   ),
                                 Padding(
@@ -312,14 +312,14 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                                     children: [
                                       if (!isWideLayout) ...[
                                         trackInfoPanel,
-                                        // Keep metadata comfortable below the cover.
+                                        // Keep metadata close to the action buttons so the
+                                        // title/artist and controls read as one group.
                                         // This only affects vertical spacing, not cover geometry.
-                                        const SizedBox(height: 18),
+                                        const SizedBox(height: 8),
                                       ],
                                       _buildCurrentLyricGlass(textTheme: theme.textTheme),
-                                      // Give the actual playback controls more breathing room
-                                      // so the player does not feel top-heavy on tall phones.
-                                      SizedBox(height: isWideLayout ? 10 : 30),
+                                      // Compact gap between track info and action buttons.
+                                      SizedBox(height: isWideLayout ? 10 : 12),
                                     Wrap(
                                       alignment: WrapAlignment.center,
                                       spacing: 10,
@@ -361,7 +361,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                                         ),
                                       ],
                                     ),
-                                    const SizedBox(height: 5),
+                                    const SizedBox(height: 2),
                                     SliderTheme(
                                       data: SliderTheme.of(context).copyWith(
                                         // YouTube-style buffer bar:
@@ -406,7 +406,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                                         ],
                                       ),
                                     ),
-                                    const SizedBox(height: 8),
+                                    const SizedBox(height: 4),
                                     ValueListenableBuilder<PlayerUiState>(
                                       valueListenable: widget.playerUiState,
                                       builder: (context, ui, _) {

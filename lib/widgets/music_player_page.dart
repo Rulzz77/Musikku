@@ -207,8 +207,8 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                         // metadata or remaining height), so the cover stays put when
                         // switching tracks. A compact cap avoids oversized album art.
                         final phoneArtSize = math.min(
-                          292.0,
-                          math.max(200.0, constraints.maxWidth * 0.78),
+                          340.0,
+                          math.max(210.0, constraints.maxWidth * 0.87),
                         ).toDouble();
                         final artWidth = isWideLayout
                             ? ((constraints.maxWidth - 68) / 2).clamp(220.0, 300.0).toDouble()
@@ -222,7 +222,9 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                         // the player controls sit lower and breathe.
                         final freeSpace = constraints.maxHeight - (artHeight + 320);
                         final topGap = (freeSpace * 0.15).clamp(0.0, 40.0).toDouble();
-                        final playerGap = (freeSpace * 0.5).clamp(18.0, 90.0).toDouble();
+                        // Gap between track info and the action buttons: moves the whole
+                        // lower player group (buttons + seekbar + controls) down together.
+                        final playerGap = (freeSpace * 0.6).clamp(14.0, 100.0).toDouble();
                         final artworkPanel = SizedBox(
                           width: artWidth,
                           height: artHeight,
@@ -333,7 +335,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                                       ],
                                       _buildCurrentLyricGlass(textTheme: theme.textTheme),
                                       // Compact gap between track info and action buttons.
-                                      SizedBox(height: isWideLayout ? 10 : 12),
+                                      SizedBox(height: isWideLayout ? 10 : playerGap),
                                     Wrap(
                                       alignment: WrapAlignment.center,
                                       spacing: 10,
@@ -375,7 +377,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                                         ),
                                       ],
                                     ),
-                                    SizedBox(height: isWideLayout ? 8 : playerGap),
+                                    const SizedBox(height: 4),
                                     SliderTheme(
                                       data: SliderTheme.of(context).copyWith(
                                         // YouTube-style buffer bar:

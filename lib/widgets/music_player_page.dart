@@ -302,7 +302,17 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                                   )
                                 else
                                   Padding(
-                                    padding: const EdgeInsets.only(top: 8, bottom: 4),
+                                    // Push the whole player group down on tall phones so it
+                                    // does not hug the top with a big empty area underneath.
+                                    // Depends only on screen size (not song metadata), so the
+                                    // cover stays put when the track changes.
+                                    padding: EdgeInsets.only(
+                                      top: 8 +
+                                          ((constraints.maxHeight - (artHeight + 320)) * 0.55)
+                                              .clamp(0.0, 180.0)
+                                              .toDouble(),
+                                      bottom: 4,
+                                    ),
                                     child: Center(child: artworkPanel),
                                   ),
                                 Padding(

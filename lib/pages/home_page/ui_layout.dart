@@ -14,30 +14,36 @@ extension _HomeUiLayout on _HomePageState {
       body: Stack(
         children: [
           Positioned.fill(
-            child: IgnorePointer(
-              ignoring: watch != null,
-              child: YoutubeHub(
-                controller: _hubController,
-                onPlay: _openYoutubeVideo,
-                onClose: _closeYoutubeWatch,
-                // Reserve room above navigation for the persistent mini-player.
-                bottomInset: showMiniPlayer ? 82 : 0,
-                watchProgress: _watchProgress,
-                watchDuration: _watchDuration,
-                recentlyPlayed: _recentlyPlayed,
-                favorites: _favorites,
-                listeningStats: _listeningStatsById.values.toList(growable: false),
-                customPlaylistCount: _playlists.length,
-                onOpenCustomPlaylists: _openCustomPlaylistsPage,
-                currentVideoId: current?.videoId,
-                onStartRadio: _startRadioFromVideo,
-                onPlayFromList: _playFromCustomList,
-                onAddToQueue: _addToQueue,
-                onShowVideoMenu: (video) => _showVideoMenu(video),
-                onSearchQueryChanged: (query) {
-                  _lastSearchQuery = query.trim();
-                },
-                settings: widget.settings,
+            // Keep the feed alive so its scroll/navigation state survives, but
+            // do not paint it below the full player. Platform-backed previews
+            // can otherwise look like a giant, duplicated artwork backdrop.
+            child: Offstage(
+              offstage: watch != null,
+              child: IgnorePointer(
+                ignoring: watch != null,
+                child: YoutubeHub(
+                  controller: _hubController,
+                  onPlay: _openYoutubeVideo,
+                  onClose: _closeYoutubeWatch,
+                  // Reserve room above navigation for the persistent mini-player.
+                  bottomInset: showMiniPlayer ? 90 : 0,
+                  watchProgress: _watchProgress,
+                  watchDuration: _watchDuration,
+                  recentlyPlayed: _recentlyPlayed,
+                  favorites: _favorites,
+                  listeningStats: _listeningStatsById.values.toList(growable: false),
+                  customPlaylistCount: _playlists.length,
+                  onOpenCustomPlaylists: _openCustomPlaylistsPage,
+                  currentVideoId: current?.videoId,
+                  onStartRadio: _startRadioFromVideo,
+                  onPlayFromList: _playFromCustomList,
+                  onAddToQueue: _addToQueue,
+                  onShowVideoMenu: (video) => _showVideoMenu(video),
+                  onSearchQueryChanged: (query) {
+                    _lastSearchQuery = query.trim();
+                  },
+                  settings: widget.settings,
+                ),
               ),
             ),
           ),
@@ -45,9 +51,9 @@ extension _HomeUiLayout on _HomePageState {
             Positioned(
               left: 12,
               right: 12,
-              // NavigationBar is 66 logical pixels high. MediaQuery padding
-              // accounts for Android's system navigation/gesture area.
-              bottom: safeBottom + 60 + 18,
+              // Keep a real 14dp gap above the 64dp glass dock. Include the
+              // Android gesture/system inset so the mini-player never touches it.
+              bottom: safeBottom + 64 + 8 + 14,
               child: MiniMusicPlayer(
                 key: ValueKey<String>('mini-music-player-${current.videoId}'),
                 video: current,
@@ -78,7 +84,7 @@ extension _HomeUiLayout on _HomePageState {
                 child: watch == null
                     ? const SizedBox.shrink(key: ValueKey<String>('player-closed'))
                     : MusicPlayerPage(
-                        key: ValueKey<String>('music-player-${watch.videoId}'),
+                        key: const ValueKey<String>('music-player'),
                         video: watch,
                         nativeState: _nativeStateNotifier,
                         playerUiState: _playerUiState,

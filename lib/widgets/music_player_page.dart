@@ -91,18 +91,9 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          // The album cover is the full-page canvas (not merely a blurred tint).
-          // A dark veil and the lower gradient maintain readable playback controls.
-          Positioned.fill(
-            child: AlbumArtworkImage(
-              track: widget.video,
-              fit: BoxFit.cover,
-              iconSize: 100,
-            ),
-          ),
-          Positioned.fill(
-            child: ColoredBox(color: Colors.black.withValues(alpha: 0.42)),
-          ),
+          // Keep the backdrop stable when the queue changes. The album cover
+          // is rendered only in its fixed square slot below, never blown up
+          // as a full-screen image that changes crop between songs.
           Positioned.fill(
             child: DecoratedBox(
               decoration: BoxDecoration(
@@ -110,11 +101,27 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    Colors.black.withValues(alpha: 0.34),
-                    Colors.black.withValues(alpha: 0.10),
-                    scheme.surface.withValues(alpha: 0.72),
+                    const Color(0xFF101718),
+                    Color.lerp(const Color(0xFF101718), scheme.surface, 0.10)!,
+                    scheme.surface,
                   ],
-                  stops: const [0.0, 0.48, 1.0],
+                  stops: const [0.0, 0.55, 1.0],
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            top: -90,
+            right: -90,
+            child: IgnorePointer(
+              child: Container(
+                width: 300,
+                height: 300,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [scheme.primary.withValues(alpha: 0.15), scheme.primary.withValues(alpha: 0.0)],
+                  ),
                 ),
               ),
             ),
@@ -125,9 +132,9 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  scheme.primary.withValues(alpha: 0.08),
-                  scheme.secondary.withValues(alpha: 0.02),
-                  scheme.surface.withValues(alpha: 0.18),
+                  Colors.black.withValues(alpha: 0.12),
+                  Colors.transparent,
+                  scheme.surface.withValues(alpha: 0.06),
                 ],
               ),
             ),
@@ -149,21 +156,10 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                         children: [
                           Text(
                             'SEDANG DIPUTAR',
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: Colors.white.withValues(alpha: 0.72),
+                            style: theme.textTheme.labelMedium?.copyWith(
+                              color: Colors.white.withValues(alpha: 0.78),
                               fontWeight: FontWeight.w800,
                               letterSpacing: 1.7,
-                            ),
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            widget.video.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            textAlign: TextAlign.center,
-                            style: theme.textTheme.titleSmall?.copyWith(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w600,
                             ),
                           ),
                         ],
@@ -207,15 +203,15 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                     return LayoutBuilder(
                       builder: (context, constraints) {
                         final isWideLayout = constraints.maxWidth >= 760;
-                        // Use a square hero on every layout so a square album cover
-                        // is never stretched into a tall crop. Phone covers use the
-                        // full available width; wide layouts balance art and metadata.
+                        // Artwork size depends on screen width only (never on song
+                        // metadata or remaining height), so the cover stays put when
+                        // switching tracks. A compact cap avoids oversized album art.
                         final phoneArtSize = math.min(
-                          constraints.maxWidth,
-                          math.max(220.0, constraints.maxHeight * 0.62),
+                          232.0,
+                          math.max(176.0, constraints.maxWidth * 0.62),
                         ).toDouble();
                         final artWidth = isWideLayout
-                            ? ((constraints.maxWidth - 68) / 2).clamp(280.0, 560.0).toDouble()
+                            ? ((constraints.maxWidth - 68) / 2).clamp(220.0, 300.0).toDouble()
                             : phoneArtSize;
                         // Album covers are square. Keep a 1:1 hero instead of
                         // stretching a portrait crop into a tall rectangle.
@@ -230,30 +226,17 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                                 duration: const Duration(milliseconds: 520),
                                 switchInCurve: Curves.easeOutCubic,
                                 switchOutCurve: Curves.easeInCubic,
+                                // Fade the pixels only. Scale animation made the
+                                // cover appear to jump/zoom whenever the song changed.
                                 transitionBuilder: (child, animation) => FadeTransition(
                                   opacity: animation,
-                                  child: ScaleTransition(
-                                    scale: Tween<double>(begin: 1.025, end: 1).animate(
-                                      CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
-                                    ),
-                                    child: child,
-                                  ),
+                                  child: child,
                                 ),
                                 child: _buildImmersiveArtwork(
                                   key: ValueKey<String>('art-${widget.video.videoId}'),
-                                  isWideLayout: isWideLayout,
                                   track: widget.video,
                                 ),
                               ),
-                              if (!isWideLayout)
-                                Positioned(
-                                  left: 0,
-                                  right: 0,
-                                  bottom: 2,
-                                  child: _buildCurrentLyricGlass(
-                                    textTheme: theme.textTheme,
-                                  ),
-                                ),
                             ],
                           ),
                         );
@@ -311,14 +294,17 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                                     child: Row(
                                       crossAxisAlignment: CrossAxisAlignment.center,
                                       children: [
-                                        Expanded(child: artworkPanel),
+                                        Expanded(child: Center(child: artworkPanel)),
                                         const SizedBox(width: 28),
                                         Expanded(child: trackInfoPanel),
                                       ],
                                     ),
                                   )
                                 else
-                                  artworkPanel,
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 12, bottom: 10),
+                                    child: Center(child: artworkPanel),
+                                  ),
                                 Padding(
                                   padding: EdgeInsets.fromLTRB(22, isWideLayout ? 14 : 0, 22, 28),
                                   child: Column(
@@ -326,9 +312,10 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                                     children: [
                                       if (!isWideLayout) ...[
                                         trackInfoPanel,
-                                        const SizedBox(height: 13),
+                                        const SizedBox(height: 10),
                                       ],
-                                    const SizedBox(height: 7),
+                                      _buildCurrentLyricGlass(textTheme: theme.textTheme),
+                                      const SizedBox(height: 7),
                                     Wrap(
                                       alignment: WrapAlignment.center,
                                       spacing: 10,
@@ -514,26 +501,31 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
     );
   }
 
-  /// Shows the complete square album cover in front of the full-page cover
-  /// canvas. No vertical alpha mask: it used to fade/crop the artwork so much
-  /// that the album image did not read as a proper cover.
+  /// Shows the complete square cover in a fixed-size slot. The slot size comes
+  /// from the device width and remains the same when the active song changes.
   Widget _buildImmersiveArtwork({
     required Key key,
-    required bool isWideLayout,
     required YoutubeSearchResult track,
   }) {
-    return ClipRRect(
+    return Container(
       key: key,
-      borderRadius: BorderRadius.circular(isWideLayout ? 28 : 4),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.22), width: 1),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.18), blurRadius: 22, offset: const Offset(0, 10)),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
       child: AlbumArtworkImage(
         track: track,
         fit: BoxFit.cover,
-        iconSize: 88,
+        iconSize: 64,
       ),
     );
   }
 
-  /// Small glass lyric pill floating over the soft edge of the full-bleed art.
+  /// Small glass lyric pill floating over the lower edge of the cover.
   /// It is displayed only for real timestamped lyrics; unsynced text must not
   /// pretend to follow playback position.
   Widget _buildCurrentLyricGlass({
@@ -565,7 +557,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
             if (lyric.isEmpty) return const SizedBox.shrink();
 
             return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+              padding: const EdgeInsets.symmetric(vertical: 6),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(28),
                 child: BackdropFilter(

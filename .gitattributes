@@ -1,0 +1,27 @@
+# Normalize text files consistently across Windows, Linux, and macOS.
+* text=auto
+
+# Flutter/Dart and cross-platform native/config files stay LF.
+*.dart text eol=lf
+*.kt text eol=lf
+*.kts text eol=lf
+*.java text eol=lf
+*.xml text eol=lf
+*.gradle text eol=lf
+*.properties text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.sh text eol=lf
+*.swift text eol=lf
+*.cc text eol=lf
+*.h text eol=lf
+*.cmake text eol=lf
+gradlew text eol=lf
+.gitignore text eol=lf
+.metadata text eol=lf
+
+# Windows scripts should retain native Windows line endings.
+*.bat text eol=crlf
+*.ps1 text eol=crlf

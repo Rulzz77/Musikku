@@ -112,7 +112,6 @@ class _YoutubeHubState extends State<YoutubeHub> {
   final Random _feedRandom = Random();
 
   _YoutubeSection _section = _YoutubeSection.home;
-  double? _dockDragX;
   bool _loading = false;
   String _error = '';
   String _query = '';
@@ -449,131 +448,9 @@ class _YoutubeHubState extends State<YoutubeHub> {
           left: 14,
           right: 14,
           bottom: MediaQuery.paddingOf(context).bottom + 8,
-          child: SizedBox(
-            height: 64,
-            child: LayoutBuilder(
-              builder: (context, dockConstraints) {
-                final colors = Theme.of(context).colorScheme;
-                final cellWidth = dockConstraints.maxWidth / 4;
-                final activeIndex = _section.index;
-                // Track the finger's actual horizontal position across the whole
-                // dock. A relative +/- one-tab offset made the glass feel like a
-                // button animation and could not be dragged across multiple tabs.
-                final dragX = _dockDragX;
-                final visualIndex = dragX == null
-                    ? activeIndex.toDouble()
-                    : (dragX / cellWidth - 0.5).clamp(0.0, 3.0).toDouble();
-                final dragging = dragX != null;
-                return GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onHorizontalDragStart: (details) {
-                    setState(() {
-                      _dockDragX = details.localPosition.dx
-                          .clamp(cellWidth * 0.5, dockConstraints.maxWidth - cellWidth * 0.5)
-                          .toDouble();
-                    });
-                  },
-                  onHorizontalDragUpdate: (details) {
-                    setState(() {
-                      final nextX = (_dockDragX ?? ((activeIndex + 0.5) * cellWidth)) + details.delta.dx;
-                      _dockDragX = nextX
-                          .clamp(cellWidth * 0.5, dockConstraints.maxWidth - cellWidth * 0.5)
-                          .toDouble();
-                    });
-                  },
-                  onHorizontalDragEnd: (_) {
-                    final endX = _dockDragX;
-                    final target = endX == null
-                        ? activeIndex
-                        : (endX / cellWidth - 0.5).round().clamp(0, 3).toInt();
-                    setState(() => _dockDragX = null);
-                    if (target != _section.index) _selectDockDestination(target);
-                  },
-                  onHorizontalDragCancel: () => setState(() => _dockDragX = null),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(28),
-                    child: BackdropFilter(
-                      filter: ui.ImageFilter.blur(sigmaX: 26, sigmaY: 26),
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [
-                              Colors.white.withValues(alpha: 0.20),
-                              colors.surface.withValues(alpha: 0.53),
-                              colors.surfaceContainerHighest.withValues(alpha: 0.35),
-                              Colors.white.withValues(alpha: 0.09),
-                            ],
-                          ),
-                          borderRadius: BorderRadius.circular(28),
-                          border: Border.all(color: Colors.white.withValues(alpha: 0.27), width: 1),
-                          boxShadow: [
-                            BoxShadow(color: Colors.black.withValues(alpha: 0.18), blurRadius: 26, offset: const Offset(0, 9)),
-                            BoxShadow(color: Colors.white.withValues(alpha: 0.045), blurRadius: 1, spreadRadius: 0.5),
-                          ],
-                        ),
-                        child: Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            AnimatedPositioned(
-                              duration: dragging ? Duration.zero : const Duration(milliseconds: 300),
-                              curve: Curves.easeOutCubic,
-                              left: visualIndex * cellWidth + 4,
-                              top: 4,
-                              bottom: 4,
-                              width: cellWidth - 8,
-                              child: DecoratedBox(
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(23),
-                                  gradient: LinearGradient(
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                    colors: [
-                                      Colors.white.withValues(alpha: 0.29),
-                                      colors.primary.withValues(alpha: 0.13),
-                                      Colors.white.withValues(alpha: 0.045),
-                                    ],
-                                  ),
-                                  border: Border.all(color: Colors.white.withValues(alpha: 0.30)),
-                                ),
-                              ),
-                            ),
-                            AnimatedPositioned(
-                              duration: dragging ? Duration.zero : const Duration(milliseconds: 260),
-                              curve: Curves.easeOutCubic,
-                              left: (visualIndex * cellWidth + cellWidth * 0.17).clamp(0.0, dockConstraints.maxWidth - cellWidth * 0.42).toDouble(),
-                              top: 1,
-                              bottom: 1,
-                              width: cellWidth * 0.42,
-                              child: IgnorePointer(
-                                child: DecoratedBox(
-                                  decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                      begin: Alignment.centerLeft,
-                                      end: Alignment.centerRight,
-                                      colors: [Colors.white.withValues(alpha: 0), Colors.white.withValues(alpha: dragging ? 0.21 : 0.09), Colors.white.withValues(alpha: 0)],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            Row(
-                              children: [
-                                Expanded(child: _FlowDockDestination(label: 'Beranda', icon: Icons.home_outlined, selectedIcon: Icons.home_rounded, selected: _section == _YoutubeSection.home, onTap: () => _selectDockDestination(_YoutubeSection.home.index))),
-                                Expanded(child: _FlowDockDestination(label: 'Jelajah', icon: Icons.explore_outlined, selectedIcon: Icons.explore_rounded, selected: _section == _YoutubeSection.explore, onTap: () => _selectDockDestination(_YoutubeSection.explore.index))),
-                                Expanded(child: _FlowDockDestination(label: 'Radio', icon: Icons.radio_outlined, selectedIcon: Icons.radio_rounded, selected: _section == _YoutubeSection.samples, onTap: () => _selectDockDestination(_YoutubeSection.samples.index))),
-                                Expanded(child: _FlowDockDestination(label: 'Koleksi', icon: Icons.library_music_outlined, selectedIcon: Icons.library_music_rounded, selected: _section == _YoutubeSection.library, onTap: () => _selectDockDestination(_YoutubeSection.library.index))),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
+          child: _GlassMagnifyingDock(
+            selectedIndex: _section.index,
+            onSelect: _selectDockDestination,
           ),
         ),
         // Halaman channel sebagai lapisan di atas hub (termasuk bar navigasi).
@@ -596,6 +473,234 @@ class _YoutubeHubState extends State<YoutubeHub> {
 }
 
 
+/// Floating glass dock. Drag state lives inside this widget so moving the
+/// magnifying lens does not rebuild the whole music feed on every pointer tick.
+class _GlassMagnifyingDock extends StatefulWidget {
+  const _GlassMagnifyingDock({
+    required this.selectedIndex,
+    required this.onSelect,
+  });
+
+  final int selectedIndex;
+  final ValueChanged<int> onSelect;
+
+  @override
+  State<_GlassMagnifyingDock> createState() => _GlassMagnifyingDockState();
+}
+
+class _GlassMagnifyingDockState extends State<_GlassMagnifyingDock> {
+  double? _dragX;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 64,
+      child: LayoutBuilder(
+        builder: (context, dockConstraints) {
+          final colors = Theme.of(context).colorScheme;
+          final cellWidth = dockConstraints.maxWidth / 4;
+          final activeIndex = widget.selectedIndex;
+          final dragX = _dragX;
+          final visualIndex = dragX == null
+              ? activeIndex.toDouble()
+              : (dragX / cellWidth - 0.5).clamp(0.0, 3.0).toDouble();
+          final dragging = dragX != null;
+
+          return GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onHorizontalDragStart: (details) {
+              setState(() {
+                _dragX = details.localPosition.dx
+                    .clamp(cellWidth * 0.5, dockConstraints.maxWidth - cellWidth * 0.5)
+                    .toDouble();
+              });
+            },
+            onHorizontalDragUpdate: (details) {
+              setState(() {
+                final nextX = (_dragX ?? ((activeIndex + 0.5) * cellWidth)) + details.delta.dx;
+                _dragX = nextX
+                    .clamp(cellWidth * 0.5, dockConstraints.maxWidth - cellWidth * 0.5)
+                    .toDouble();
+              });
+            },
+            onHorizontalDragEnd: (_) {
+              final endX = _dragX;
+              final target = endX == null
+                  ? activeIndex
+                  : (endX / cellWidth - 0.5).round().clamp(0, 3).toInt();
+              setState(() => _dragX = null);
+              if (target != widget.selectedIndex) widget.onSelect(target);
+            },
+            onHorizontalDragCancel: () => setState(() => _dragX = null),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(28),
+              child: BackdropFilter(
+                filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Colors.white.withValues(alpha: 0.11),
+                        colors.surface.withValues(alpha: 0.84),
+                        colors.surfaceContainerHighest.withValues(alpha: 0.27),
+                        colors.surface.withValues(alpha: 0.76),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(28),
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.19), width: 1),
+                    boxShadow: [
+                      BoxShadow(color: Colors.black.withValues(alpha: 0.22), blurRadius: 22, offset: const Offset(0, 7)),
+                      BoxShadow(color: Colors.white.withValues(alpha: 0.035), blurRadius: 1, spreadRadius: 0.5),
+                    ],
+                  ),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      // At rest, selection is communicated by the icon/label.
+                      // While dragging, a compact glass lens follows the finger
+                      // and magnifies nearby icons without filling an entire tab.
+                      if (dragging) ...[
+                        AnimatedPositioned(
+                          duration: Duration.zero,
+                          curve: Curves.easeOutCubic,
+                          left: (visualIndex * cellWidth + cellWidth * 0.14)
+                              .clamp(0.0, dockConstraints.maxWidth - cellWidth * 0.72)
+                              .toDouble(),
+                          top: 4,
+                          bottom: 4,
+                          width: cellWidth * 0.72,
+                          child: IgnorePointer(
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(23),
+                              child: BackdropFilter(
+                                filter: ui.ImageFilter.blur(sigmaX: 11, sigmaY: 11),
+                                child: DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(23),
+                                    gradient: LinearGradient(
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                      colors: [
+                                        colors.primary.withValues(alpha: 0.24),
+                                        Colors.white.withValues(alpha: 0.12),
+                                        colors.primary.withValues(alpha: 0.075),
+                                      ],
+                                    ),
+                                    border: Border.all(
+                                      color: Colors.white.withValues(alpha: 0.30),
+                                      width: 1,
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withValues(alpha: 0.10),
+                                        blurRadius: 12,
+                                        offset: const Offset(0, 3),
+                                      ),
+                                      BoxShadow(
+                                        color: Colors.white.withValues(alpha: 0.10),
+                                        blurRadius: 2,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        Positioned(
+                          left: (visualIndex * cellWidth + cellWidth * 0.23)
+                              .clamp(0.0, dockConstraints.maxWidth - cellWidth * 0.54)
+                              .toDouble(),
+                          top: 5,
+                          bottom: 5,
+                          width: cellWidth * 0.54,
+                          child: IgnorePointer(
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(22),
+                                gradient: LinearGradient(
+                                  begin: Alignment.centerLeft,
+                                  end: Alignment.centerRight,
+                                  colors: [
+                                    Colors.white.withValues(alpha: 0),
+                                    Colors.white.withValues(alpha: 0.15),
+                                    Colors.white.withValues(alpha: 0),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _FlowDockDestination(
+                              label: 'Beranda',
+                              icon: Icons.home_outlined,
+                              selectedIcon: Icons.home_rounded,
+                              selected: activeIndex == 0,
+                              magnification: _dockMagnification(0, visualIndex, dragging, activeIndex),
+                              onTap: () => widget.onSelect(0),
+                            ),
+                          ),
+                          Expanded(
+                            child: _FlowDockDestination(
+                              label: 'Jelajah',
+                              icon: Icons.explore_outlined,
+                              selectedIcon: Icons.explore_rounded,
+                              selected: activeIndex == 1,
+                              magnification: _dockMagnification(1, visualIndex, dragging, activeIndex),
+                              onTap: () => widget.onSelect(1),
+                            ),
+                          ),
+                          Expanded(
+                            child: _FlowDockDestination(
+                              label: 'Radio',
+                              icon: Icons.radio_outlined,
+                              selectedIcon: Icons.radio_rounded,
+                              selected: activeIndex == 2,
+                              magnification: _dockMagnification(2, visualIndex, dragging, activeIndex),
+                              onTap: () => widget.onSelect(2),
+                            ),
+                          ),
+                          Expanded(
+                            child: _FlowDockDestination(
+                              label: 'Koleksi',
+                              icon: Icons.library_music_outlined,
+                              selectedIcon: Icons.library_music_rounded,
+                              selected: activeIndex == 3,
+                              magnification: _dockMagnification(3, visualIndex, dragging, activeIndex),
+                              onTap: () => widget.onSelect(3),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+double _dockMagnification(
+  int index,
+  double visualIndex,
+  bool dragging,
+  int activeIndex,
+) {
+  if (!dragging) return index == activeIndex ? 0.22 : 0.0;
+  final distance = (index - visualIndex).abs();
+  return (1.0 - distance / 1.35).clamp(0.0, 1.0).toDouble();
+}
+
 String _formatHubError(Object error) {
   final message = error.toString().replaceFirst('Bad state: ', '').trim();
   return message.isEmpty ? 'Permintaan gagal. Periksa koneksi lalu coba lagi.' : message;
@@ -610,6 +715,7 @@ class _FlowDockDestination extends StatelessWidget {
     required this.icon,
     required this.selectedIcon,
     required this.selected,
+    required this.magnification,
     required this.onTap,
   });
 
@@ -617,6 +723,7 @@ class _FlowDockDestination extends StatelessWidget {
   final IconData icon;
   final IconData selectedIcon;
   final bool selected;
+  final double magnification;
   final VoidCallback onTap;
 
   @override
@@ -634,40 +741,42 @@ class _FlowDockDestination extends StatelessWidget {
             onTap: onTap,
             borderRadius: BorderRadius.circular(19),
             child: AnimatedContainer(
-              duration: const Duration(milliseconds: 240),
+              duration: const Duration(milliseconds: 160),
               curve: Curves.easeOutCubic,
               margin: const EdgeInsets.symmetric(horizontal: 2),
               padding: const EdgeInsets.symmetric(vertical: 5),
               decoration: BoxDecoration(
-                color: selected ? scheme.primaryContainer.withValues(alpha: 0.94) : Colors.transparent,
+                // The moving glass lens behind the row supplies the selected
+                // surface; destinations themselves stay clear and don't jump.
+                color: Colors.transparent,
                 borderRadius: BorderRadius.circular(19),
-                border: Border.all(
-                  color: selected ? scheme.primary.withValues(alpha: 0.24) : Colors.transparent,
-                ),
-                boxShadow: selected
-                    ? [BoxShadow(color: scheme.primary.withValues(alpha: 0.10), blurRadius: 12, offset: const Offset(0, 3))]
-                    : const [],
               ),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  AnimatedScale(
-                    scale: selected ? 1.08 : 1.0,
-                    duration: const Duration(milliseconds: 240),
-                    curve: Curves.easeOutBack,
-                    child: Icon(
-                      selected ? selectedIcon : icon,
-                      size: 22,
-                      color: selected ? scheme.primary : scheme.onSurfaceVariant,
+                  Transform.translate(
+                    offset: Offset(0, -magnification * 3.5),
+                    child: AnimatedScale(
+                      scale: 1.0 + magnification * 0.30,
+                      duration: const Duration(milliseconds: 120),
+                      curve: Curves.easeOutCubic,
+                      child: Icon(
+                        selected || magnification > 0.42 ? selectedIcon : icon,
+                        size: 22,
+                        color: selected || magnification > 0.42 ? scheme.primary : scheme.onSurfaceVariant,
+                        shadows: magnification > 0.25
+                            ? [Shadow(color: Colors.white.withValues(alpha: 0.30), blurRadius: 7)]
+                            : const [],
+                      ),
                     ),
                   ),
                   const SizedBox(height: 2),
                   AnimatedDefaultTextStyle(
-                    duration: const Duration(milliseconds: 180),
+                    duration: const Duration(milliseconds: 140),
                     curve: Curves.easeOut,
                     style: TextStyle(
-                      fontSize: selected ? 10.3 : 9.5,
+                      fontSize: selected ? 10.2 : 9.5,
                       height: 1.1,
                       fontWeight: selected ? FontWeight.w900 : FontWeight.w600,
                       color: selected ? scheme.primary : scheme.onSurfaceVariant,

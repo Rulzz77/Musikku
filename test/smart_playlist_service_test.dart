@@ -55,6 +55,35 @@ void main() {
       expect(mostPlayed.songs.map((e) => e.videoId).toList(), ['b', 'a']);
     });
 
+    test('Mix Kamu only includes repeated songs and restores songs from old stats', () {
+      final result = SmartPlaylistService.build(
+        favorites: const [],
+        recentlyPlayed: [song('recent')],
+        catalog: [song('catalog')],
+        listeningStats: [
+          stat('once', plays: 1, listened: 900),
+          stat('quick_skip', plays: 7, listened: 12),
+          stat('old_repeat', plays: 8, listened: 1400),
+          stat('catalog', plays: 3, listened: 420),
+        ],
+      );
+
+      final mix = result.firstWhere((playlist) => playlist.id == 'smart_most_played');
+      expect(mix.title, 'Mix Kamu');
+      expect(mix.songs.map((entry) => entry.videoId).toList(), ['old_repeat', 'catalog']);
+      expect(mix.songs.any((entry) => entry.videoId == 'once'), isFalse);
+      expect(mix.songs.any((entry) => entry.videoId == 'quick_skip'), isFalse);
+    });
+
+    test('does not create Mix Kamu when no track has been replayed', () {
+      final result = SmartPlaylistService.build(
+        favorites: [song('favorite')],
+        recentlyPlayed: [song('recent')],
+        listeningStats: [stat('favorite', plays: 1)],
+      );
+      expect(result.any((playlist) => playlist.id == 'smart_most_played'), isFalse);
+    });
+
     test('does not duplicate a tiny history as a rediscover playlist', () {
       final result = SmartPlaylistService.build(
         favorites: const [],

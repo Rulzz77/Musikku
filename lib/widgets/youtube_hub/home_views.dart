@@ -162,6 +162,7 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
         .take(12)
         .toList(growable: false);
     final smartPlaylists = _buildSmartPlaylists();
+    final frequentMix = _findFrequentMix(smartPlaylists);
 
     return [
       SliverToBoxAdapter(child: _modernWelcomeHeader()),
@@ -175,7 +176,14 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
             builder: (context, constraints) {
               final columns = constraints.maxWidth >= 620 ? 4 : 2;
               final actions = <({String title, String subtitle, IconData icon, VoidCallback onTap})>[
-                (title: 'Mix favorit', subtitle: '${widget.favorites.length} lagu tersimpan', icon: Icons.auto_awesome_rounded, onTap: _playFavoritesMix),
+                (
+                  title: 'Mix kamu',
+                  subtitle: frequentMix == null
+                      ? 'Belum ada lagu berulang'
+                      : '${frequentMix.songs.length} lagu sering diputar',
+                  icon: Icons.graphic_eq_rounded,
+                  onTap: () => _playFrequentMix(frequentMix),
+                ),
                 (title: 'Musik lokal', subtitle: 'File di perangkat', icon: Icons.library_music_rounded, onTap: _openLocalMusic),
                 (title: 'Riwayat', subtitle: '${widget.recentlyPlayed.length} lagu terakhir', icon: Icons.history_rounded, onTap: _openRecentHistory),
                 (title: 'Radio', subtitle: 'Lagu yang nyambung', icon: Icons.radio_rounded, onTap: _startRadioFromCollection),
@@ -387,18 +395,26 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
     );
   }
 
-  void _playFavoritesMix() {
-    final songs = widget.favorites
-        .where(YoutubeSearchService.isMusicCandidate)
-        .toList(growable: false);
-    if (songs.isEmpty) {
+  SmartPlaylist? _findFrequentMix(List<SmartPlaylist> playlists) {
+    for (final playlist in playlists) {
+      if (playlist.id == 'smart_most_played' && playlist.songs.isNotEmpty) {
+        return playlist;
+      }
+    }
+    return null;
+  }
+
+  void _playFrequentMix(SmartPlaylist? playlist) {
+    if (playlist == null || playlist.songs.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Belum ada lagu favorit. Simpan lagu dulu untuk membuat Mix Favorit.')),
+        const SnackBar(
+          content: Text('Mix kamu akan muncul setelah beberapa lagu diputar berulang kali.'),
+        ),
       );
       return;
     }
-    songs.shuffle(_feedRandom);
-    unawaited(widget.onPlayFromList(songs.first, songs));
+    // Keep the listening-frequency ranking; do not shuffle it into a random mix.
+    unawaited(widget.onPlayFromList(playlist.songs.first, playlist.songs));
   }
 
   void _openRecentHistory() {

@@ -67,7 +67,7 @@ extension _YoutubeHubLibraryViews on _YoutubeHubState {
         ),
       ),
       spacedCard('Playlist MusikKu', '${widget.customPlaylistCount} playlist buatan sendiri · bisa diurutkan dan diedit', Icons.queue_music_rounded, widget.onOpenCustomPlaylists ?? () {}),
-      spacedCard('Playlist pintar', 'Mix favorit, riwayat, dan lagu yang sering diputar', Icons.auto_awesome_rounded, _showSmartPlaylistPicker),
+      spacedCard('Playlist pintar', 'Mix kamu dibuat dari lagu yang sering diputar, ditambah favorit dan riwayat', Icons.auto_awesome_rounded, _showSmartPlaylistPicker),
       SliverToBoxAdapter(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 18, 14, 9),

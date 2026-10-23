@@ -28,9 +28,25 @@ class SmartPlaylistService {
     int maxSongs = 40,
   }) {
     final limit = maxSongs.clamp(1, 200).toInt();
+    final statsList = listeningStats.toList(growable: false);
     final known = <String, YoutubeSearchResult>{};
     for (final song in <YoutubeSearchResult>[...catalog, ...recentlyPlayed, ...favorites]) {
       if (song.videoId.isNotEmpty) known[song.videoId] = song;
+    }
+    // Stats are the long-term listening library, not just the most recent 30
+    // tracks. Rebuild YouTube song metadata from it so old repeat-listens can
+    // still appear in the personalized mix after they leave recent history.
+    for (final stat in statsList) {
+      if (stat.videoId.isEmpty || stat.videoId.startsWith('local:')) continue;
+      known.putIfAbsent(
+        stat.videoId,
+        () => YoutubeSearchResult(
+          videoId: stat.videoId,
+          title: stat.title.trim().isEmpty ? 'Tanpa judul' : stat.title,
+          channelTitle: stat.artist.trim().isEmpty ? 'Artis tidak diketahui' : stat.artist,
+          thumbnailUrl: stat.thumbnailUrl,
+        ),
+      );
     }
 
     List<YoutubeSearchResult> uniqueTracks(Iterable<YoutubeSearchResult> songs) {
@@ -42,13 +58,13 @@ class SmartPlaylistService {
     }
 
     final result = <SmartPlaylist>[];
-    final favoriteMix = uniqueTracks(favorites);
-    if (favoriteMix.isNotEmpty) {
+    final favoriteTracks = uniqueTracks(favorites);
+    if (favoriteTracks.isNotEmpty) {
       result.add(SmartPlaylist(
         id: 'smart_favorites',
-        title: 'Mix Favorit',
-        subtitle: '${favoriteMix.length} lagu yang kamu simpan',
-        songs: favoriteMix,
+        title: 'Favorit',
+        subtitle: '${favoriteTracks.length} lagu yang kamu simpan',
+        songs: favoriteTracks,
       ));
     }
 
@@ -63,12 +79,15 @@ class SmartPlaylistService {
     }
 
     final statsById = <String, ListeningStat>{
-      for (final stat in listeningStats)
+      for (final stat in statsList)
         if (stat.videoId.isNotEmpty) stat.videoId: stat,
     };
+    // One play is not enough to qualify as a frequent-listening mix. Require
+    // repeated starts and at least 30 seconds of real listening time so quick
+    // skips do not get promoted as the user's favorites-by-habit.
     final mostPlayed = known.values.where((song) {
       final stat = statsById[song.videoId];
-      return stat != null && stat.playCount > 0;
+      return stat != null && stat.playCount >= 2 && stat.listenedSeconds >= 30;
     }).toList()
       ..sort((a, b) {
         final sa = statsById[a.videoId]!;
@@ -77,14 +96,16 @@ class SmartPlaylistService {
         if (plays != 0) return plays;
         final listened = sb.listenedSeconds.compareTo(sa.listenedSeconds);
         if (listened != 0) return listened;
+        final skipped = sa.skipCount.compareTo(sb.skipCount);
+        if (skipped != 0) return skipped;
         return a.title.toLowerCase().compareTo(b.title.toLowerCase());
       });
     final mostPlayedMix = uniqueTracks(mostPlayed);
     if (mostPlayedMix.isNotEmpty) {
-      result.add(SmartPlaylist(
+      result.insert(0, SmartPlaylist(
         id: 'smart_most_played',
-        title: 'Paling Sering Diputar',
-        subtitle: 'Diurutkan dari statistik pemutaran',
+        title: 'Mix Kamu',
+        subtitle: 'Dibentuk dari lagu yang sering kamu putar',
         songs: mostPlayedMix,
       ));
     }

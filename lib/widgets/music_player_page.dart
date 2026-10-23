@@ -312,10 +312,14 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                                     children: [
                                       if (!isWideLayout) ...[
                                         trackInfoPanel,
-                                        const SizedBox(height: 10),
+                                        // Keep metadata comfortable below the cover.
+                                        // This only affects vertical spacing, not cover geometry.
+                                        const SizedBox(height: 18),
                                       ],
                                       _buildCurrentLyricGlass(textTheme: theme.textTheme),
-                                      const SizedBox(height: 7),
+                                      // Give the actual playback controls more breathing room
+                                      // so the player does not feel top-heavy on tall phones.
+                                      SizedBox(height: isWideLayout ? 10 : 30),
                                     Wrap(
                                       alignment: WrapAlignment.center,
                                       spacing: 10,

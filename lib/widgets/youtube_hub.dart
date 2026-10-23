@@ -71,6 +71,7 @@ class YoutubeHub extends StatefulWidget {
   final ValueChanged<YoutubeSearchResult> onAddToQueue;
   final ValueChanged<YoutubeSearchResult>? onShowVideoMenu;
   final ValueChanged<String>? onSearchQueryChanged;
+  final VoidCallback? onOpenListeningRoom;
   final AppSettingsController settings;
 
   const YoutubeHub({
@@ -92,6 +93,7 @@ class YoutubeHub extends StatefulWidget {
     required this.onAddToQueue,
     this.onShowVideoMenu,
     this.onSearchQueryChanged,
+    this.onOpenListeningRoom,
     required this.settings,
   });
 

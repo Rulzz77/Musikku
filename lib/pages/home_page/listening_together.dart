@@ -17,12 +17,8 @@ extension _HomeListeningTogether on _HomePageState {
   }
 
   void _showListenTogetherSheet() {
-    if (_currentVideo == null) {
-      _toast('Putar lagu dulu sebelum membuat kamar dengar bareng.');
-      return;
-    }
-
-    final addressController = TextEditingController();
+    // The room can be opened from Beranda before a song is selected. If the
+    // host starts playing later, the existing broadcaster synchronizes it.
     final codeController = TextEditingController();
     showModalBottomSheet<void>(
       context: context,
@@ -43,6 +39,7 @@ extension _HomeListeningTogether on _HomePageState {
               final connected = _listenTogether.isConnected;
               final isHost = _listenTogether.isHost;
               final isGuest = _listenTogether.isGuest;
+              final onlineReady = _listenTogether.onlineConfigured;
               final scheme = Theme.of(context).colorScheme;
 
               return Column(
@@ -78,7 +75,7 @@ extension _HomeListeningTogether on _HomePageState {
                               style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900),
                             ),
                             SizedBox(height: 3),
-                            Text('Satu lagu, diputar serempak tanpa login.'),
+                            Text('Bagikan kode kamar sekali. Lagu tersinkron otomatis.'),
                           ],
                         ),
                       ),
@@ -95,13 +92,13 @@ extension _HomeListeningTogether on _HomePageState {
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(_listenTogether.onlineConfigured ? Icons.cloud_done_rounded : Icons.wifi_rounded, color: scheme.primary, size: 20),
+                        Icon(onlineReady ? Icons.cloud_done_rounded : Icons.cloud_off_rounded, color: scheme.primary, size: 20),
                         const SizedBox(width: 10),
                         Expanded(
                           child: Text(
-                            _listenTogether.onlineConfigured
-                                ? 'Mode online aktif. Teman bisa bergabung dari jaringan mana saja memakai undangan satu kali. Lagu berikutnya, play/pause, dan posisi tersinkron otomatis.'
-                                : 'Mode saat ini masih lokal. Agar teman beda Wi-Fi bisa bergabung, konfigurasi SUPABASE_URL dan SUPABASE_PUBLISHABLE_KEY saat build. Setelah aktif, undangan cukup dibagikan sekali.',
+                            onlineReady
+                                ? 'Online aktif. Teman dari Wi-Fi atau jaringan seluler mana pun cukup memasukkan kode 8 digit. Tidak perlu alamat IP atau login. Pergantian lagu, play/pause, dan posisi mengikuti host otomatis.'
+                                : 'Server online belum dikonfigurasi pada build ini. Tambahkan SUPABASE_URL dan SUPABASE_PUBLISHABLE_KEY di GitHub Actions, lalu buat APK baru. Alamat IP lokal tidak digunakan di layar ini.',
                             style: TextStyle(color: scheme.onSurfaceVariant, height: 1.35, fontSize: 12.5),
                           ),
                         ),
@@ -160,120 +157,37 @@ extension _HomeListeningTogether on _HomePageState {
                   if (isHost) ...[
                     const SizedBox(height: 12),
                     ValueListenableBuilder<String>(
-                      valueListenable: _listenTogether.inviteAddress,
-                      builder: (context, address, _) =>
-                          ValueListenableBuilder<String>(
-                        valueListenable: _listenTogether.roomCode,
-                        builder: (context, code, _) => Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                      valueListenable: _listenTogether.roomCode,
+                      builder: (context, code, _) => Container(
+                        padding: const EdgeInsets.all(18),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(color: scheme.outlineVariant),
+                        ),
+                        child: Column(
                           children: [
-                            Container(
-                              padding: const EdgeInsets.all(14),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(color: scheme.outlineVariant),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Undangan kamar • tempel di MusikKu teman',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: scheme.onSurfaceVariant,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 7),
-                                  SelectableText(
-                                    address.isEmpty
-                                        ? (_listenTogether.onlineConfigured ? 'Membuat undangan online…' : 'Alamat Wi-Fi belum ditemukan')
-                                        : address,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w900,
-                                      fontSize: 16,
-                                    ),
-                                  ),
-                                  if (!_listenTogether.onlineConfigured) ...[
-                                    const SizedBox(height: 12),
-                                    Row(
-                                    children: [
-                                      Icon(
-                                        Icons.password_rounded,
-                                        color: scheme.primary,
-                                        size: 22,
-                                      ),
-                                      const SizedBox(width: 9),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              'Kode kamar',
-                                              style: TextStyle(
-                                                fontSize: 11,
-                                                color: scheme.onSurfaceVariant,
-                                              ),
-                                            ),
-                                            const SizedBox(height: 2),
-                                            Text(
-                                              code.isEmpty
-                                                  ? '— — — — — —'
-                                                  : code,
-                                              style: const TextStyle(
-                                                fontSize: 24,
-                                                letterSpacing: 3,
-                                                fontWeight: FontWeight.w900,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  ],
-                                ],
-                              ),
+                            Text('KODE KAMAR', style: TextStyle(fontSize: 11, letterSpacing: 1.8, color: scheme.onSurfaceVariant, fontWeight: FontWeight.w800)),
+                            const SizedBox(height: 6),
+                            SelectableText(
+                              code.isEmpty ? '— — — — — — — —' : code,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(fontSize: 31, letterSpacing: 3.0, fontWeight: FontWeight.w900, color: scheme.primary),
                             ),
-                            const SizedBox(height: 10),
+                            const SizedBox(height: 9),
                             FilledButton.icon(
-                              onPressed: address.isEmpty || code.isEmpty
-                                  ? null
-                                  : () async {
-                                      final invite = _listenTogether.onlineConfigured
-                                          ? address
-                                          : <String>[
-                                              'MusikKu — Dengerin Bareng',
-                                              'Alamat kamar: $address',
-                                              'Kode kamar: $code',
-                                              '',
-                                              'Bagikan sekali. Lagu akan mengikuti host otomatis.',
-                                            ].join('\n');
-                                      await Clipboard.setData(
-                                        ClipboardData(text: invite),
-                                      );
-                                      _toast(
-                                        _listenTogether.onlineConfigured
-                                            ? 'Undangan online disalin. Teman cukup tempel sekali di MusikKu.'
-                                            : 'Undangan disalin. Bagikan sekali; pergantian lagu tersinkron otomatis.',
-                                      );
-                                    },
-                              icon: const Icon(Icons.share_rounded),
-                              label: const Text('Salin undangan (cukup sekali)'),
-                              style: FilledButton.styleFrom(
-                                minimumSize: const Size.fromHeight(46),
-                              ),
+                              onPressed: code.isEmpty ? null : () async {
+                                await Clipboard.setData(ClipboardData(text: code));
+                                _toast('Kode kamar disalin. Bagikan sekali saja ke teman.');
+                              },
+                              icon: const Icon(Icons.copy_rounded),
+                              label: const Text('Salin kode kamar'),
+                              style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(44)),
                             ),
                             const SizedBox(height: 5),
                             Text(
-                              _listenTogether.onlineConfigured
-                                  ? 'Teman cukup menempelkan undangan ini di kolom gabung. Tidak perlu salin ulang saat lagu berganti.'
-                                  : 'Tidak perlu membagikan ulang ketika lagu berganti.',
+                              'Teman cukup memasukkan kode ini di MusikKu. Tidak perlu IP atau menyalin ulang saat lagu berganti.',
                               textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: scheme.onSurfaceVariant,
-                                fontSize: 11,
-                              ),
+                              style: TextStyle(fontSize: 11, height: 1.35, color: scheme.onSurfaceVariant),
                             ),
                           ],
                         ),
@@ -283,7 +197,7 @@ extension _HomeListeningTogether on _HomePageState {
                       Padding(
                         padding: const EdgeInsets.only(top: 8),
                         child: Text(
-                          'Lagu lokal tidak dapat dibagikan ke perangkat lain. Putar lagu YouTube agar bisa disinkronkan.',
+                          'Lagu lokal tidak dapat dibagikan ke perangkat lain. Putar lagu YouTube agar tersinkron.',
                           style: TextStyle(color: scheme.error, fontSize: 12),
                         ),
                       ),
@@ -291,91 +205,49 @@ extension _HomeListeningTogether on _HomePageState {
                   if (!connected) ...[
                     const SizedBox(height: 14),
                     FilledButton.icon(
-                      onPressed: () async {
+                      onPressed: onlineReady ? () async {
                         try {
-                          final address = await _listenTogether.hostRoom();
+                          await _listenTogether.hostRoom();
                           _startListenTogetherBroadcast();
                           _refreshListeningTogetherUi();
-                          if (address.isEmpty) {
-                            _toast(_listenTogether.onlineConfigured
-                                ? 'Kamar online dibuat.'
-                                : 'Kamar dibuat, tetapi alamat Wi-Fi tidak ditemukan.');
-                          }
                         } catch (error) {
-                          _listenTogether.status.value = 'Gagal membuat kamar: $error';
+                          _listenTogether.status.value = 'Gagal membuat kamar online: $error';
                         }
-                      },
+                      } : null,
                       icon: const Icon(Icons.add_link_rounded),
-                      label: const Text('Buat kamar baru'),
+                      label: const Text('Buat kamar'),
                       style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
                     ),
-                    const SizedBox(height: 12),
-                    if (!_listenTogether.onlineConfigured) ...[
-                    OutlinedButton.icon(
-                      onPressed: () async {
-                        try {
-                          final room = await _listenTogether.discoverRoom();
-                          if (!mounted) return;
-                          if (room == null) {
-                            _listenTogether.status.value = 'Kamar tidak ditemukan. Mode lokal memerlukan Wi-Fi/hotspot yang sama.';
-                            return;
-                          }
-                          addressController.text = room.address;
-                          _listenTogether.status.value = 'Kamar ditemukan. Masukkan kode 6 digit dari host lalu gabung.';
-                        } catch (error) {
-                          _listenTogether.status.value = 'Pencarian kamar gagal: $error';
-                        }
-                      },
-                      icon: const Icon(Icons.radar_rounded),
-                      label: const Text('Temukan kamar di Wi-Fi ini'),
-                      style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(46)),
-                    ),
-                    const SizedBox(height: 12),
-                    ],
-                    TextField(
-                      controller: addressController,
-                      keyboardType: TextInputType.url,
-                      textInputAction: TextInputAction.done,
-                      autocorrect: false,
-                      decoration: InputDecoration(
-                        labelText: _listenTogether.onlineConfigured ? 'Undangan online teman' : 'Alamat kamar teman',
-                        hintText: _listenTogether.onlineConfigured
-                            ? 'Tempel undangan online dari host'
-                            : 'Alamat host, mis. 192.168.1.8:41773',
-                        prefixIcon: const Icon(Icons.link_rounded),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-                      ),
-                      onSubmitted: (_) => _joinListenTogetherRoom(addressController.text, codeController.text),
-                    ),
-                    if (!_listenTogether.onlineConfigured) ...[
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 14),
                     TextField(
                       controller: codeController,
                       keyboardType: TextInputType.number,
                       textInputAction: TextInputAction.done,
                       autocorrect: false,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      maxLength: 6,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(8),
+                      ],
                       decoration: InputDecoration(
-                        labelText: _listenTogether.onlineConfigured ? 'Kode (otomatis dari undangan)' : 'Kode kamar 6 digit',
-                        hintText: _listenTogether.onlineConfigured ? 'Tidak perlu diisi jika menempel undangan' : '123456',
-                        counterText: '',
+                        labelText: 'Kode kamar teman',
+                        hintText: '8 digit, mis. 58319427',
                         prefixIcon: const Icon(Icons.password_rounded),
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
                       ),
-                      onSubmitted: (_) => _joinListenTogetherRoom(addressController.text, codeController.text),
+                      onSubmitted: (_) {
+                        if (onlineReady) unawaited(_joinListenTogetherRoom(codeController.text));
+                      },
                     ),
-                    ],
                     const SizedBox(height: 8),
                     OutlinedButton.icon(
-                      onPressed: () => _joinListenTogetherRoom(addressController.text, codeController.text),
-                      icon: const Icon(Icons.group_add_rounded),
-                      label: const Text('Gabung kamar'),
+                      onPressed: onlineReady ? () => _joinListenTogetherRoom(codeController.text) : null,
+                      icon: const Icon(Icons.login_rounded),
+                      label: const Text('Gabung pakai kode'),
                       style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(46)),
                     ),
                   ] else ...[
-                    const SizedBox(height: 14),
-                    FilledButton.tonalIcon(
+                    const SizedBox(height: 12),
+                    FilledButton.icon(
                       onPressed: () async {
                         _listenTogetherSyncTimer?.cancel();
                         _listenTogetherSyncTimer = null;
@@ -402,20 +274,24 @@ extension _HomeListeningTogether on _HomePageState {
           ),
         ),
       ),
-    ).whenComplete(() {
-      addressController.dispose();
-      codeController.dispose();
-    });
+    ).whenComplete(codeController.dispose);
   }
 
-  Future<void> _joinListenTogetherRoom(String address, String code) async {
+  Future<void> _joinListenTogetherRoom(String code) async {
+    if (!_listenTogether.onlineConfigured) {
+      _listenTogether.status.value = 'Server online belum dikonfigurasi. Buat APK dengan variabel Supabase dari GitHub Actions.';
+      return;
+    }
+    final normalizedCode = code.trim();
+    if (!RegExp(r'^\d{8}$').hasMatch(normalizedCode)) {
+      _listenTogether.status.value = 'Masukkan kode kamar 8 digit dari host.';
+      return;
+    }
     try {
-      await _listenTogether.joinRoom(address, code: code);
+      await _listenTogether.joinRoom(normalizedCode, code: normalizedCode);
       _listenTogetherSyncTimer?.cancel();
       _listenTogetherSyncTimer = null;
       _lastRoomUnsupportedTrackId = '';
-      // A timer created before joining must not pause a guest and then be
-      // immediately undone by the next host sync packet.
       _clearSleepTimer();
       _refreshListeningTogetherUi();
     } catch (error) {

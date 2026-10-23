@@ -9,7 +9,6 @@ import '../models/native_youtube_state.dart';
 import '../models/player_ui_state.dart';
 import '../models/youtube_search_result.dart';
 import 'album_artwork_image.dart';
-import 'data_usage_card.dart';
 import 'lyrics_panel.dart';
 
 /// Audio-only full player. No YouTube video surface is mounted here; Media3
@@ -37,7 +36,6 @@ class MusicPlayerPage extends StatefulWidget {
     required this.onOpenListeningRoom,
     required this.followingRoom,
     required this.sleepActive,
-    required this.showDataUsageOnPlayer,
   });
 
   final YoutubeSearchResult video;
@@ -59,7 +57,6 @@ class MusicPlayerPage extends StatefulWidget {
   final VoidCallback onOpenListeningRoom;
   final bool followingRoom;
   final ValueListenable<bool> sleepActive;
-  final ValueListenable<bool> showDataUsageOnPlayer;
 
   @override
   State<MusicPlayerPage> createState() => _MusicPlayerPageState();
@@ -324,7 +321,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                         );
                         return SizedBox.expand(
                           child: Column(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              mainAxisAlignment: MainAxisAlignment.start,
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
                                 if (isWideLayout)
@@ -343,11 +340,11 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                                   Padding(
                                     // Compact top spacing: controls stay directly below
                                     // the artwork and the player never becomes a scroll page.
-                                    padding: const EdgeInsets.only(top: 10, bottom: 4),
+                                    padding: const EdgeInsets.only(top: 2, bottom: 2),
                                     child: Center(child: artworkPanel),
                                   ),
                                 Padding(
-                                  padding: EdgeInsets.fromLTRB(22, isWideLayout ? 8 : 0, 22, 8),
+                                  padding: EdgeInsets.fromLTRB(22, isWideLayout ? 6 : 0, 22, 4),
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.stretch,
                                     children: [
@@ -516,15 +513,6 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                                           style: theme.textTheme.bodySmall?.copyWith(color: scheme.error),
                                         ),
                                       ),
-                                    ValueListenableBuilder<bool>(
-                                      valueListenable: widget.showDataUsageOnPlayer,
-                                      builder: (context, visible, _) => visible
-                                          ? const Padding(
-                                              padding: EdgeInsets.only(top: 12),
-                                              child: DataUsageCard(),
-                                            )
-                                          : const SizedBox.shrink(),
-                                    ),
                                     ],
                                   ),
                                 ),

@@ -39,7 +39,6 @@ class AppSettingsController {
   static const _dataSaverModeKey = 'data_saver_mode_v1';
   static const _prefetchWifiOnlyKey = 'prefetch_wifi_only_v1';
   static const _bufferAlertSecondsKey = 'buffer_alert_seconds_v1';
-  static const _showDataUsageKey = 'show_data_usage_player_v1';
   static const _hidePauseOverlayKey = 'hide_pause_overlay_v1';
   static const _cropBrandingKey = 'crop_video_branding_v1';
   static const _autoUpdateEnabledKey = 'app_auto_update_enabled_v1';
@@ -52,7 +51,6 @@ class AppSettingsController {
       ValueNotifier(DataSaverMode.off);
   final ValueNotifier<bool> prefetchWifiOnly = ValueNotifier(true);
   final ValueNotifier<int> bufferAlertSeconds = ValueNotifier(8);
-  final ValueNotifier<bool> showDataUsageOnPlayer = ValueNotifier(true);
 
   /// Tutup overlay "video lainnya" bawaan YouTube saat pause dengan thumbnail.
   final ValueNotifier<bool> hidePauseOverlay = ValueNotifier(true);
@@ -88,7 +86,6 @@ class AppSettingsController {
       dataSaver.value = dataSaverMode.value != DataSaverMode.off;
       prefetchWifiOnly.value = prefs.getBool(_prefetchWifiOnlyKey) ?? true;
       bufferAlertSeconds.value = (prefs.getInt(_bufferAlertSecondsKey) ?? 8).clamp(3, 30).toInt();
-      showDataUsageOnPlayer.value = prefs.getBool(_showDataUsageKey) ?? true;
       hidePauseOverlay.value = prefs.getBool(_hidePauseOverlayKey) ?? true;
       cropVideoBranding.value = prefs.getBool(_cropBrandingKey) ?? false;
       autoUpdateEnabled.value = prefs.getBool(_autoUpdateEnabledKey) ?? true;
@@ -140,12 +137,6 @@ class AppSettingsController {
     cropVideoBranding.value = value;
     final prefs = await _prefsFuture;
     await prefs.setBool(_cropBrandingKey, value);
-  }
-
-  Future<void> setShowDataUsageOnPlayer(bool value) async {
-    showDataUsageOnPlayer.value = value;
-    final prefs = await _prefsFuture;
-    await prefs.setBool(_showDataUsageKey, value);
   }
 
   Future<void> setAutoUpdateEnabled(bool value) async {

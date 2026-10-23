@@ -6,6 +6,7 @@ import '../app_info.dart';
 import 'app_health_page.dart';
 import '../services/app_settings.dart';
 import '../widgets/app_update_sheet.dart';
+import '../widgets/data_usage_card.dart';
 
 /// Pengaturan global aplikasi. Semua opsi terhubung langsung ke controller
 /// dan disimpan lewat SharedPreferences.
@@ -208,34 +209,23 @@ class AppSettingsPage extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 26),
+          const SizedBox(height: 18),
+          _SectionLabel(icon: Icons.data_usage_rounded, title: 'Konsumsi data'),
+          const SizedBox(height: 8),
+          const DataUsageCard(),
+          const SizedBox(height: 12),
           _SectionLabel(icon: Icons.tune_rounded, title: 'Pemutar musik & tampilan'),
           const SizedBox(height: 8),
           Card(
-            child: Column(
-              children: [
-                ValueListenableBuilder<bool>(
-                  valueListenable: settings.showDataUsageOnPlayer,
-                  builder: (context, value, _) => SwitchListTile(
-                    secondary: const Icon(Icons.data_usage_rounded),
-                    title: const Text('Tampilkan penggunaan data', style: TextStyle(fontWeight: FontWeight.w700)),
-                    subtitle: const Text('Tampilkan ringkasan penggunaan data di layar pemutar.'),
-                    value: value,
-                    onChanged: (next) => unawaited(settings.setShowDataUsageOnPlayer(next)),
-                  ),
-                ),
-                const Divider(height: 1, indent: 16, endIndent: 16),
-                ValueListenableBuilder<bool>(
-                  valueListenable: settings.cropVideoBranding,
-                  builder: (context, value, _) => SwitchListTile(
-                    secondary: const Icon(Icons.crop_rounded),
-                    title: const Text('Potong tepi video', style: TextStyle(fontWeight: FontWeight.w700)),
-                    subtitle: const Text('Perbesar video sedikit; sebagian tepi dapat terpotong.'),
-                    value: value,
-                    onChanged: (next) => unawaited(settings.setCropVideoBranding(next)),
-                  ),
-                ),
-              ],
+            child: ValueListenableBuilder<bool>(
+              valueListenable: settings.cropVideoBranding,
+              builder: (context, value, _) => SwitchListTile(
+                secondary: const Icon(Icons.crop_rounded),
+                title: const Text('Potong tepi video', style: TextStyle(fontWeight: FontWeight.w700)),
+                subtitle: const Text('Perbesar video sedikit; sebagian tepi dapat terpotong.'),
+                value: value,
+                onChanged: (next) => unawaited(settings.setCropVideoBranding(next)),
+              ),
             ),
           ),
           const SizedBox(height: 26),

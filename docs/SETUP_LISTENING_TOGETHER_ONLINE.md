@@ -1,6 +1,6 @@
-# MusikKu — mengaktifkan Dengerin Bareng lintas jaringan
+# MusikKu — Dengerin Bareng online lintas jaringan
 
-Versi source: **5.0.32+10**. Koneksi online menggunakan Supabase Realtime Broadcast. Tidak memerlukan login pengguna, tetapi pemilik project perlu mengonfigurasi satu project Supabase terlebih dahulu.
+Versi source: **5.0.33+11**. Koneksi online memakai Supabase Realtime Broadcast. Pengguna tidak perlu login, tetapi pembuat APK perlu mengonfigurasi satu project Supabase.
 
 Dokumentasi vendor: [Realtime Broadcast](https://supabase.com/docs/guides/realtime/broadcast) dan [Getting Started](https://supabase.com/docs/guides/realtime/getting_started).
 
@@ -8,20 +8,24 @@ Dokumentasi vendor: [Realtime Broadcast](https://supabase.com/docs/guides/realti
 
 1. Buat project di https://supabase.com/dashboard.
 2. Di **Project Settings / Connect**, salin **Project URL** dan **Publishable key** (`sb_publishable_...`).
-3. Jangan pernah memasukkan `sb_secret_...` atau `service_role` ke aplikasi mobile. Hanya publishable key yang boleh dipakai di sisi klien.
-4. Pastikan Realtime aktif untuk project. Implementasi ini memakai public Broadcast channel dengan ID kamar acak 128-bit sebagai bagian rahasia undangan; tidak ada tabel database yang perlu dibuat. Siapa pun yang memperoleh seluruh undangan dapat masuk, jadi bagikan undangan hanya kepada teman yang dipercaya.
+3. Jangan memasukkan `sb_secret_...` atau `service_role` ke aplikasi mobile. Gunakan publishable key saja.
+4. Implementasi memakai public Realtime Broadcast channel; tidak perlu membuat tabel. Kode kamar 8 digit dipakai sebagai nama channel, jadi bagikan hanya kepada teman. Karena ini mode tanpa akun, siapa pun yang mengetahui/menebak kode dapat mencoba masuk.
 
-## 2. Ambil dependency
+## 2. Atur GitHub Actions Variables
+
+Di repository GitHub buka **Settings → Secrets and variables → Actions → Variables**, lalu tambahkan:
+
+- `SUPABASE_URL` — Project URL.
+- `SUPABASE_PUBLISHABLE_KEY` — Publishable key.
+
+Workflow release memerlukan dua variabel itu dan juga secret build/release yang sudah ada di repository.
+
+## 3. Buat APK
+
+Workflow release menjalankan `flutter pub get`, `flutter analyze`, tes, lalu build APK dengan variabel Supabase. Untuk build lokal:
 
 ```bash
 flutter pub get
-```
-
-## 3. Jalankan aplikasi dengan konfigurasi online
-
-Ganti nilai contoh dengan Project URL dan Publishable key milik project sendiri:
-
-```bash
 flutter run --dart-define=SUPABASE_URL=https://YOUR_PROJECT.supabase.co --dart-define=SUPABASE_PUBLISHABLE_KEY=sb_publishable_YOUR_KEY
 ```
 
@@ -31,15 +35,13 @@ Untuk APK release:
 flutter build apk --release --dart-define=SUPABASE_URL=https://YOUR_PROJECT.supabase.co --dart-define=SUPABASE_PUBLISHABLE_KEY=sb_publishable_YOUR_KEY
 ```
 
-Dua nilai ini harus dipakai pada setiap build aplikasi yang ingin memakai mode online. Jangan unggah nilai rahasia server ke APK. URL dan publishable key bukan password admin.
-
 ## 4. Cara memakai
 
-1. Host membuka Dengerin Bareng lalu memilih **Buat kamar baru**.
-2. Tekan **Salin undangan** satu kali dan kirim teks undangan kepada teman.
-3. Teman membuka menu yang sama dan menempelkan undangan ke kolom **Undangan online teman** lalu memilih **Gabung kamar**. Kode kamar sudah tertanam dalam undangan, jadi kolom kode boleh dibiarkan kosong.
-4. Selama koneksi internet aktif, host mengirim status lagu setiap dua detik dan tamu mengirim heartbeat agar jumlah perangkat tersambung dapat diperbarui. Tidak perlu menyalin undangan ulang saat lagu berganti.
+1. Dari Beranda pilih **Dengerin bareng**, lalu tekan **Buat kamar**.
+2. MusikKu menampilkan **kode 8 digit**. Salin kode itu sekali dan kirim ke teman.
+3. Teman membuka shortcut **Dengerin bareng** di Beranda, memasukkan kode 8 digit, lalu menekan **Gabung pakai kode**. Tidak perlu memasukkan alamat IP, alamat server, atau link undangan.
+4. Host dapat mulai memutar lagu setelah kamar dibuat. Pergantian lagu, play/pause, dan posisi akan disinkronkan otomatis selama koneksi internet aktif. Tidak perlu mengirim kode ulang setiap lagu berganti.
 
-Catatan: undangan adalah semacam kunci kamar—bagikan hanya kepada orang yang dipercaya. Di tahap ini string `musikku://...` harus ditempel ke aplikasi; belum menjadi universal/app link yang otomatis membuka aplikasi ketika diklik dari chat. Audio tetap diputar terpisah oleh setiap perangkat dari sumber lagu yang didukung MusikKu. Ketersediaan lagu/iklan/buffering dapat membuat sinkronisasi sedikit berbeda.
+Audio tetap diputar secara terpisah di masing-masing perangkat dari sumber yang didukung MusikKu. Ketersediaan lagu, iklan, atau buffering berbeda dapat membuat posisi pemutaran sedikit tidak sama. Kode kamar dipakai sebagai kunci akses praktis, bukan autentikasi akun yang kuat; jangan membagikannya secara publik.
 
-Jika Supabase belum dikonfigurasi pada saat build, aplikasi tetap berjalan dalam mode lokal Wi-Fi/hotspot.
+Jika URL atau publishable key tidak dimasukkan saat APK dibangun, panel Dengerin Bareng akan menunjukkan bahwa server online belum dikonfigurasi dan tidak menyediakan alur IP lokal.

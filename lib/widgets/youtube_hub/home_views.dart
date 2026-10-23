@@ -175,6 +175,7 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
           child: LayoutBuilder(
             builder: (context, constraints) {
               final columns = constraints.maxWidth >= 620 ? 4 : 2;
+              final openListeningRoom = widget.onOpenListeningRoom;
               final actions = <({String title, String subtitle, IconData icon, VoidCallback onTap})>[
                 (
                   title: 'Mix kamu',
@@ -187,6 +188,13 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
                 (title: 'Musik lokal', subtitle: 'File di perangkat', icon: Icons.library_music_rounded, onTap: _openLocalMusic),
                 (title: 'Riwayat', subtitle: '${widget.recentlyPlayed.length} lagu terakhir', icon: Icons.history_rounded, onTap: _openRecentHistory),
                 (title: 'Radio', subtitle: 'Lagu yang nyambung', icon: Icons.radio_rounded, onTap: _startRadioFromCollection),
+                if (openListeningRoom != null)
+                  (
+                    title: 'Dengerin bareng',
+                    subtitle: 'Satu kode, dengar serempak',
+                    icon: Icons.headphones_rounded,
+                    onTap: openListeningRoom,
+                  ),
               ];
               return GridView.count(
                 crossAxisCount: columns,

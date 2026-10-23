@@ -138,7 +138,7 @@ class ListeningTogetherService {
       }
       final embeddedPin = invite['code'] ?? '';
       final pin = (embeddedPin.isNotEmpty ? embeddedPin : code).trim();
-      if (!RegExp(r'^\d{6}$').hasMatch(pin)) {
+      if (!RegExp(r'^\d{8}$').hasMatch(pin)) {
         throw const FormatException('Undangan tidak berisi kode kamar yang valid.');
       }
       await closeRoom();
@@ -147,8 +147,8 @@ class ListeningTogetherService {
     }
 
     final pin = code.trim();
-    if (!RegExp(r'^\d{6}$').hasMatch(pin)) {
-      throw const FormatException('Masukkan kode kamar 6 digit dari host.');
+    if (!RegExp(r'^\d{8}$').hasMatch(pin)) {
+      throw const FormatException('Masukkan kode kamar 8 digit dari host.');
     }
     await closeRoom();
     var input = rawAddress.trim();
@@ -212,6 +212,11 @@ class ListeningTogetherService {
         return <String, String>{'room': token.toLowerCase(), 'code': pin};
       }
     }
+    final codeMatch = RegExp(r'^(\d{8})$').firstMatch(raw.trim());
+    if (codeMatch != null) {
+      final code = codeMatch.group(1)!;
+      return <String, String>{'room': code, 'code': code};
+    }
     final tokenMatch = RegExp(
       r'^(?:MKROOM:)?([a-f0-9]{32})$',
       caseSensitive: false,
@@ -223,8 +228,10 @@ class ListeningTogetherService {
   }
 
   Future<String> _hostOnlineRoom() async {
-    final token = _randomHexToken();
-    final pin = (Random.secure().nextInt(900000) + 100000).toString();
+    // Use an 8-digit numeric code as the channel key. Guests need no LAN IP or
+    // hidden room token; the code is enough to join from any internet network.
+    final pin = (Random.secure().nextInt(90000000) + 10000000).toString();
+    final token = pin;
     _onlineMode = true;
     _onlineClientId = _randomHexToken();
     _hosting = true;
@@ -232,11 +239,7 @@ class ListeningTogetherService {
     _onlinePeers.clear();
     _onlinePeerLastSeen.clear();
     roomCode.value = pin;
-    inviteAddress.value = Uri(
-      scheme: 'musikku',
-      host: 'room',
-      queryParameters: <String, String>{'room': token, 'code': pin},
-    ).toString();
+    inviteAddress.value = pin;
     status.value = 'Menghubungkan ke server online…';
 
     final channel = _createOnlineChannel(token, hosting: true);
@@ -257,11 +260,7 @@ class ListeningTogetherService {
     _hosting = false;
     _joined = false;
     roomCode.value = pin;
-    inviteAddress.value = Uri(
-      scheme: 'musikku',
-      host: 'room',
-      queryParameters: <String, String>{'room': token, 'code': pin},
-    ).toString();
+    inviteAddress.value = pin;
     status.value = 'Menghubungkan ke kamar online…';
 
     final channel = _createOnlineChannel(token, hosting: false);

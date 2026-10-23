@@ -42,6 +42,7 @@ extension _HomeUiLayout on _HomePageState {
                   onSearchQueryChanged: (query) {
                     _lastSearchQuery = query.trim();
                   },
+                  onOpenListeningRoom: _showListenTogetherSheet,
                   settings: widget.settings,
                 ),
               ),
@@ -106,7 +107,6 @@ extension _HomeUiLayout on _HomePageState {
                         onOpenListeningRoom: _showListenTogetherSheet,
                         followingRoom: _listenTogether.isGuest,
                         sleepActive: _sleepActive,
-                        showDataUsageOnPlayer: widget.settings.showDataUsageOnPlayer,
                       ),
               ),
             ),

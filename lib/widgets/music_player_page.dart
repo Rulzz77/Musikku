@@ -207,8 +207,8 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                         // metadata or remaining height), so the cover stays put when
                         // switching tracks. A compact cap avoids oversized album art.
                         final phoneArtSize = math.min(
-                          232.0,
-                          math.max(176.0, constraints.maxWidth * 0.62),
+                          292.0,
+                          math.max(200.0, constraints.maxWidth * 0.78),
                         ).toDouble();
                         final artWidth = isWideLayout
                             ? ((constraints.maxWidth - 68) / 2).clamp(220.0, 300.0).toDouble()
@@ -216,6 +216,13 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                         // Album covers are square. Keep a 1:1 hero instead of
                         // stretching a portrait crop into a tall rectangle.
                         final artHeight = artWidth;
+                        // Leftover vertical space on tall phones (screen-size only, so
+                        // nothing jumps when the track changes). A little goes above the
+                        // cover; more goes between the action buttons and the seekbar so
+                        // the player controls sit lower and breathe.
+                        final freeSpace = constraints.maxHeight - (artHeight + 320);
+                        final topGap = (freeSpace * 0.15).clamp(0.0, 40.0).toDouble();
+                        final playerGap = (freeSpace * 0.5).clamp(18.0, 90.0).toDouble();
                         final artworkPanel = SizedBox(
                           width: artWidth,
                           height: artHeight,
@@ -307,10 +314,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                                     // Depends only on screen size (not song metadata), so the
                                     // cover stays put when the track changes.
                                     padding: EdgeInsets.only(
-                                      top: 8 +
-                                          ((constraints.maxHeight - (artHeight + 320)) * 0.55)
-                                              .clamp(0.0, 180.0)
-                                              .toDouble(),
+                                      top: 8 + topGap,
                                       bottom: 4,
                                     ),
                                     child: Center(child: artworkPanel),
@@ -371,7 +375,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                                         ),
                                       ],
                                     ),
-                                    const SizedBox(height: 2),
+                                    SizedBox(height: isWideLayout ? 8 : playerGap),
                                     SliderTheme(
                                       data: SliderTheme.of(context).copyWith(
                                         // YouTube-style buffer bar:

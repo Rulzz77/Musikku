@@ -5,8 +5,8 @@ import 'package:flutter_application_5/app_info.dart';
 void main() {
   test('app version and build metadata are populated', () {
     expect(appName, 'MusikKu');
-    expect(appVersion, '5.0.25');
-    expect(appBuildNumber, '3');
+    expect(appVersion, '5.0.26');
+    expect(appBuildNumber, '4');
 
     expect(appVersion, isNotEmpty);
     expect(appBuildNumber, isNotEmpty);

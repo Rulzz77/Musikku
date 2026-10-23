@@ -427,6 +427,20 @@ class _AppUpdatePanelState extends State<AppUpdatePanel> with WidgetsBindingObse
                 icon: const Icon(Icons.open_in_new_rounded),
                 label: const Text('Buka GitHub Releases'),
               ),
+            ] else if (result?.status == AppUpdateStatus.releaseMissingDigest) ...[
+              _StatusPanel(
+                icon: Icons.gpp_bad_outlined,
+                color: colors.error,
+                title: 'Checksum rilis tidak tersedia',
+                message:
+                    'Versi ${release?.version ?? ''} tidak menyediakan SHA-256 dari metadata GitHub. Unduhan otomatis diblokir agar APK yang belum dapat diverifikasi tidak dipasang. Unggah kembali APK sebagai release asset yang memiliki digest SHA-256.',
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: _openReleasesPage,
+                icon: const Icon(Icons.open_in_new_rounded),
+                label: const Text('Buka GitHub Releases'),
+              ),
             ] else if (result?.status == AppUpdateStatus.available && release != null) ...[
               _StatusPanel(
                 icon: Icons.new_releases_outlined,

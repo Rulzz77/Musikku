@@ -20,6 +20,7 @@ import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
+import android.webkit.WebSettings
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
 
@@ -1752,60 +1753,42 @@ class YoutubePlatformView(
     private fun keepRendererImportant(
         root: View
     ) {
-
-        if (
-            Build.VERSION.SDK_INT <
-                Build.VERSION_CODES.O
-        ) {
-            return
-        }
-
-        val webView =
-            findWebView(
-                root
-            )
-
-        if (
-            webView == null
-        ) {
-
-            MusikKuLogger.w(
-                TAG,
-                "WEBVIEW TIDAK DITEMUKAN, PRIORITAS RENDERER TIDAK DIATUR"
-            )
-
+        val webView = findWebView(root)
+        if (webView == null) {
+            MusikKuLogger.w(TAG, "WEBVIEW TIDAK DITEMUKAN; PENGATURAN KEAMANAN TIDAK DITERAPKAN")
             return
         }
 
         try {
+            // The remote YouTube player needs JavaScript and DOM storage, but
+            // it does not need local-file/content URI access or mixed HTTP content.
+            webView.settings.apply {
+                javaScriptEnabled = true
+                domStorageEnabled = true
+                allowFileAccess = false
+                allowContentAccess = false
+                allowFileAccessFromFileURLs = false
+                allowUniversalAccessFromFileURLs = false
+                mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                setSupportMultipleWindows(false)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    safeBrowsingEnabled = true
+                }
+            }
 
-            webView.setRendererPriorityPolicy(
-                WebView.RENDERER_PRIORITY_IMPORTANT,
-                false
-            )
-
-            MusikKuLogger.d(
-                TAG,
-                "RENDERER PRIORITY = IMPORTANT (tidak di-waive saat background)"
-            )
-
-            // Tanpa handler ini, saat renderer dimatikan Android (OOM) Chromium
-            // ikut membunuh SELURUH aplikasi. Dengan handler, app tetap hidup
-            // dan player dibuat ulang lalu dilanjutkan dari posisi terakhir.
-            webView.webViewClient =
-                GuardedWebViewClient(
-                    webView.webViewClient
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                webView.setRendererPriorityPolicy(
+                    WebView.RENDERER_PRIORITY_IMPORTANT,
+                    false
                 )
+                MusikKuLogger.d(TAG, "RENDERER PRIORITY = IMPORTANT")
+            }
 
-        } catch (
-            e: Exception
-        ) {
-
-            MusikKuLogger.e(
-                TAG,
-                "GAGAL ATUR RENDERER PRIORITY",
-                e
-            )
+            // Preserve player navigation callbacks while adding crash recovery
+            // and a strict SSL-error handler.
+            webView.webViewClient = GuardedWebViewClient(webView.webViewClient)
+        } catch (e: Exception) {
+            MusikKuLogger.e(TAG, "PENGATURAN WEBVIEW GAGAL", e)
         }
     }
 
@@ -1882,7 +1865,10 @@ class YoutubePlatformView(
             handler: SslErrorHandler?,
             error: SslError?
         ) {
-            delegate.onReceivedSslError(view, handler, error)
+            // Never allow a WebView certificate error to be bypassed by a
+            // library callback; cancel the request and keep TLS strict.
+            handler?.cancel()
+            MusikKuLogger.w(TAG, "KONEKSI WEBVIEW DIBATALKAN KARENA ERROR SERTIFIKAT SSL")
         }
     }
 

@@ -1011,7 +1011,7 @@ class PlaybackService : MediaBrowserServiceCompat() {
             .setOnlyAlertOnce(true)
             .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
             .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setColor(0xFF5A52E8.toInt())
+            .setColor(0xFF087F79.toInt())
             .setColorized(false)
             .setShowWhen(false)
             .addAction(

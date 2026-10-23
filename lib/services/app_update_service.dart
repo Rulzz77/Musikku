@@ -14,6 +14,7 @@ enum AppUpdateStatus {
   upToDate,
   noRelease,
   releaseMissingApk,
+  releaseMissingDigest,
 }
 
 class AppUpdateRelease {
@@ -218,6 +219,17 @@ class AppUpdateService {
       );
     }
 
+    // Do not offer an automated APK install unless the release API provides
+    // its remote SHA-256 digest. A digest created locally after download only
+    // detects later cache corruption; it cannot authenticate the first payload.
+    if (release.sha256Digest == null) {
+      return AppUpdateCheckResult(
+        status: AppUpdateStatus.releaseMissingDigest,
+        currentVersion: appVersion,
+        release: release,
+      );
+    }
+
     return AppUpdateCheckResult(
       status: AppUpdateStatus.available,
       currentVersion: appVersion,
@@ -289,7 +301,11 @@ class AppUpdateService {
   /// Finds a complete, verified APK for the requested release without making
   /// a network request. Invalid or incomplete cached files are removed.
   Future<File?> findCachedApk(AppUpdateRelease release) async {
-    if (!release.hasApk || !_isAllowedReleaseAsset(release.apkUrl)) return null;
+    if (!release.hasApk ||
+        release.sha256Digest == null ||
+        !_isAllowedReleaseAsset(release.apkUrl)) {
+      return null;
+    }
     final directory = await _getUpdateDirectory();
     final file = File('${directory.path}/${_cacheFileNameFor(release)}');
     if (!await file.exists()) return null;
@@ -330,22 +346,12 @@ class AppUpdateService {
         return false;
       }
 
-      final actualDigest = await _sha256ForFile(file);
       final remoteDigest = release.sha256Digest?.toLowerCase();
-      if (remoteDigest != null) {
-        if (actualDigest != remoteDigest) return false;
-      } else {
-        // GitHub may not provide an asset digest for older releases. Persist a
-        // local digest alongside the verified APK to detect later corruption.
-        final marker = File('${file.path}.sha256');
-        if (!await marker.exists()) return false;
-        final localDigest = (await marker.readAsString()).trim().toLowerCase();
-        if (!RegExp(r'^[0-9a-f]{64}$').hasMatch(localDigest) ||
-            actualDigest != localDigest) {
-          return false;
-        }
+      if (remoteDigest == null || !RegExp(r'^[0-9a-f]{64}$').hasMatch(remoteDigest)) {
+        return false;
       }
-      return true;
+      final actualDigest = await _sha256ForFile(file);
+      return actualDigest == remoteDigest;
     } on FileSystemException {
       return false;
     }
@@ -392,6 +398,12 @@ class AppUpdateService {
         'Rilis belum memiliki URL APK GitHub yang valid.',
       );
     }
+    if (release.sha256Digest == null ||
+        !RegExp(r'^[0-9a-fA-F]{64}$').hasMatch(release.sha256Digest!)) {
+      throw const AppUpdateException(
+        'Checksum SHA-256 dari metadata GitHub tidak tersedia atau tidak valid. APK tidak diunduh demi keamanan.',
+      );
+    }
     if (release.apkSize < 0 || release.apkSize > _maxApkSizeBytes) {
       throw const AppUpdateException('Ukuran APK melebihi batas keamanan 250 MB.');
     }
@@ -429,10 +441,7 @@ class AppUpdateService {
     final updateDirectory = await _getUpdateDirectory();
     final file = File('${updateDirectory.path}/${_cacheFileNameFor(release)}');
     final partialFile = File('${file.path}.part');
-    final digestFile = File('${file.path}.sha256');
-    final partialDigestFile = File('${digestFile.path}.part');
     if (await partialFile.exists()) await partialFile.delete();
-    if (await partialDigestFile.exists()) await partialDigestFile.delete();
 
     final response = await _sendVerifiedAssetRequest(url);
     if (response.statusCode != 200) {
@@ -469,13 +478,11 @@ class AppUpdateService {
     } catch (_) {
       await sink.close();
       if (await partialFile.exists()) await partialFile.delete();
-      if (await partialDigestFile.exists()) await partialDigestFile.delete();
       rethrow;
     }
 
     if (received < 4 || (totalBytes > 0 && received != totalBytes)) {
       if (await partialFile.exists()) await partialFile.delete();
-      if (await partialDigestFile.exists()) await partialDigestFile.delete();
       throw const AppUpdateException(
         'Ukuran APK yang terunduh tidak cocok. Coba download ulang.',
       );
@@ -486,19 +493,16 @@ class AppUpdateService {
     await signatureHandle.close();
     if (signature.length < 4 || signature[0] != 0x50 || signature[1] != 0x4B) {
       await partialFile.delete();
-      if (await partialDigestFile.exists()) await partialDigestFile.delete();
       throw const AppUpdateException(
         'File dari GitHub bukan APK/ZIP yang valid. File dihapus demi keamanan.',
       );
     }
 
-    // Compute a local SHA-256 even if the GitHub API does not expose one, so
-    // the cached bytes can be checked on later attempts without downloading.
+    // Compare the complete download against the SHA-256 supplied by GitHub's
+    // release metadata before making it visible as a completed cache item.
     final actualDigest = await _sha256ForFile(partialFile);
-    if (release.sha256Digest != null &&
-        actualDigest != release.sha256Digest!.toLowerCase()) {
+    if (actualDigest != release.sha256Digest!.toLowerCase()) {
       await partialFile.delete();
-      if (await partialDigestFile.exists()) await partialDigestFile.delete();
       throw const AppUpdateException(
         'Verifikasi SHA-256 gagal. APK tidak akan diinstal.',
       );
@@ -509,16 +513,6 @@ class AppUpdateService {
     // survives app restarts and normal in-place application updates.
     if (await file.exists()) await file.delete();
     final verifiedFile = await partialFile.rename(file.path);
-    if (release.sha256Digest == null) {
-      try {
-        await digestFile.writeAsString(actualDigest, flush: true);
-      } on FileSystemException {
-        if (await verifiedFile.exists()) await verifiedFile.delete();
-        throw const AppUpdateException(
-          'APK berhasil diunduh tetapi checksum cache tidak bisa disimpan. Coba lagi.',
-        );
-      }
-    }
     await _removeOlderCachedApks(updateDirectory, verifiedFile);
     return verifiedFile;
   }

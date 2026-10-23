@@ -91,21 +91,17 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          // Album art fills the page behind the controls, softly blurred so the
-          // cover feels immersive without reducing text/control contrast.
+          // The album cover is the full-page canvas (not merely a blurred tint).
+          // A dark veil and the lower gradient maintain readable playback controls.
           Positioned.fill(
-            child: Opacity(
-              opacity: 0.64,
-              child: ImageFiltered(
-                imageFilter: ui.ImageFilter.blur(sigmaX: 28, sigmaY: 28),
-                child: AlbumArtworkImage(track: widget.video, fit: BoxFit.cover, iconSize: 100),
-              ),
+            child: AlbumArtworkImage(
+              track: widget.video,
+              fit: BoxFit.cover,
+              iconSize: 100,
             ),
           ),
-          // Darken the artwork just enough for legible controls while keeping
-          // its colours visibly present behind the entire player page.
           Positioned.fill(
-            child: ColoredBox(color: Colors.black.withValues(alpha: 0.25)),
+            child: ColoredBox(color: Colors.black.withValues(alpha: 0.42)),
           ),
           Positioned.fill(
             child: DecoratedBox(
@@ -114,9 +110,9 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    Colors.black.withValues(alpha: 0.45),
-                    Colors.transparent,
-                    scheme.surface.withValues(alpha: 0.48),
+                    Colors.black.withValues(alpha: 0.34),
+                    Colors.black.withValues(alpha: 0.10),
+                    scheme.surface.withValues(alpha: 0.72),
                   ],
                   stops: const [0.0, 0.48, 1.0],
                 ),
@@ -145,6 +141,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                     IconButton(
                       tooltip: 'Kembali ke beranda',
                       onPressed: widget.onBack,
+                      color: Colors.white,
                       icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 30),
                     ),
                     Expanded(
@@ -179,7 +176,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                         onPressed: widget.onToggleFavorite,
                         icon: Icon(
                           ui.isFavorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-                          color: ui.isFavorite ? scheme.primary : scheme.onSurface,
+                          color: ui.isFavorite ? const Color(0xFF55DCCB) : Colors.white,
                         ),
                       ),
                     ),
@@ -210,17 +207,19 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                     return LayoutBuilder(
                       builder: (context, constraints) {
                         final isWideLayout = constraints.maxWidth >= 760;
-                        // Near-full-width square artwork on phones, and a larger
-                        // immersive cover on tablets/landscape layouts.
-                        // Full-bleed cover on phones: sharp art dissolves at both top and bottom
-                        // into a soft blurred layer, rather than ending like a card.
-                        // Wide layouts keep a framed hero to preserve balanced spacing.
+                        // Use a square hero on every layout so a square album cover
+                        // is never stretched into a tall crop. Phone covers use the
+                        // full available width; wide layouts balance art and metadata.
+                        final phoneArtSize = math.min(
+                          constraints.maxWidth,
+                          math.max(220.0, constraints.maxHeight * 0.62),
+                        ).toDouble();
                         final artWidth = isWideLayout
                             ? ((constraints.maxWidth - 68) / 2).clamp(280.0, 560.0).toDouble()
-                            : constraints.maxWidth;
-                        final artHeight = isWideLayout
-                            ? (constraints.maxHeight * 0.72).clamp(300.0, 560.0).toDouble()
-                            : (constraints.maxHeight * 0.72).clamp(340.0, 620.0).toDouble();
+                            : phoneArtSize;
+                        // Album covers are square. Keep a 1:1 hero instead of
+                        // stretching a portrait crop into a tall rectangle.
+                        final artHeight = artWidth;
                         final artworkPanel = SizedBox(
                           width: artWidth,
                           height: artHeight,
@@ -244,7 +243,6 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                                   key: ValueKey<String>('art-${widget.video.videoId}'),
                                   isWideLayout: isWideLayout,
                                   track: widget.video,
-                                  surfaceColor: scheme.surface,
                                 ),
                               ),
                               if (!isWideLayout)
@@ -516,60 +514,23 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
     );
   }
 
-  /// Places sharp album art over the blurred full-page artwork in the root
-  /// Stack. The alpha mask dissolves the top and bottom edges into that shared
-  /// background, so the image never reads as a rectangular card.
+  /// Shows the complete square album cover in front of the full-page cover
+  /// canvas. No vertical alpha mask: it used to fade/crop the artwork so much
+  /// that the album image did not read as a proper cover.
   Widget _buildImmersiveArtwork({
     required Key key,
     required bool isWideLayout,
     required YoutubeSearchResult track,
-    required Color surfaceColor,
   }) {
-    final art = Stack(
-      fit: StackFit.expand,
-      children: [
-        ShaderMask(
-          blendMode: BlendMode.dstIn,
-          shaderCallback: (bounds) => const LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Colors.transparent,
-              Colors.white,
-              Colors.white,
-              Colors.transparent,
-            ],
-            stops: [0.0, 0.15, 0.79, 1.0],
-          ).createShader(bounds),
-          child: AlbumArtworkImage(track: track, fit: BoxFit.cover, iconSize: 88),
-        ),
-        // A very light vignette gently hides the fade boundary without putting
-        // an opaque surface-colour band over the cover.
-        IgnorePointer(
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Colors.black.withValues(alpha: 0.12),
-                  Colors.transparent,
-                  Colors.transparent,
-                  surfaceColor.withValues(alpha: 0.07),
-                ],
-                stops: const [0.0, 0.20, 0.76, 1.0],
-              ),
-            ),
-          ),
-        ),
-      ],
+    return ClipRRect(
+      key: key,
+      borderRadius: BorderRadius.circular(isWideLayout ? 28 : 4),
+      child: AlbumArtworkImage(
+        track: track,
+        fit: BoxFit.cover,
+        iconSize: 88,
+      ),
     );
-
-    // On phones the art touches the screen edges and fades vertically into the
-    // full-page blurred art. Wide layouts retain a restrained rounded frame.
-    return isWideLayout
-        ? ClipRRect(key: key, borderRadius: BorderRadius.circular(28), child: art)
-        : ClipRect(key: key, child: art);
   }
 
   /// Small glass lyric pill floating over the soft edge of the full-bleed art.

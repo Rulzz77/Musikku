@@ -258,7 +258,7 @@ extension _YoutubeHubVideoComponents on _YoutubeHubState {
                             margin: const EdgeInsets.all(7),
                             padding: const EdgeInsets.all(6),
                             decoration: BoxDecoration(color: isCurrent ? scheme.primary : Colors.white, shape: BoxShape.circle, boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.18), blurRadius: 8)]),
-                            child: Icon(isCurrent ? Icons.graphic_eq_rounded : Icons.play_arrow_rounded, color: isCurrent ? Colors.white : const Color(0xFF9F1F43), size: 18),
+                            child: Icon(isCurrent ? Icons.graphic_eq_rounded : Icons.play_arrow_rounded, color: isCurrent ? Colors.white : scheme.primary, size: 18),
                           ),
                         ),
                       ],

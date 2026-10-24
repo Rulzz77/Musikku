@@ -28,6 +28,21 @@ String? parseListeningRoomCode(String raw) {
 bool isValidSharedYouTubeVideoId(String raw) =>
     RegExp(r'^[A-Za-z0-9_-]{11}$').hasMatch(raw.trim());
 
+/// Returns true when the guest must load the host's track into its native
+/// audio player. UI metadata alone is not proof that Media3 actually has the
+/// source loaded: on startup `_currentVideo` and the state notifier can be
+/// restored from disk while the native audio player is still empty.
+bool shouldLoadListeningTogetherTrack({
+  required String currentVideoId,
+  required String targetVideoId,
+  required String nativeStateVideoId,
+  required bool nativeAudioLoaded,
+}) {
+  return currentVideoId != targetVideoId ||
+      nativeStateVideoId != targetVideoId ||
+      !nativeAudioLoaded;
+}
+
 const Set<String> listeningRoomControlActions = <String>{
   'play_pause',
   'play_track',

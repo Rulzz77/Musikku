@@ -1,11 +1,9 @@
-MusikKu 5.0.39+17 lint-fix patch files
-
+MusikKu 5.0.40+18 patch files
 - pubspec.yaml
 - lib/app_info.dart
+- lib/pages/home_page.dart
+- lib/pages/home_page/listening_together.dart
 - lib/services/listening_together_service.dart
 - test/app_info_test.dart
-- docs/PERUBAHAN_5.0.39.md
-- PATCH_FILES.txt
-
-Fix: use Dart's null-aware map element for optional durationSeconds, removing
-info - use_null_aware_elements in listening_together_service.dart.
+- test/listening_together_payload_test.dart
+- docs/PERUBAHAN_5.0.40.md

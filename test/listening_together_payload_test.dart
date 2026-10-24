@@ -13,12 +13,62 @@ void main() {
     });
   });
 
+  group('shared playback synchronization', () {
+    test(
+      'loads the host track when restored metadata matches but native audio is not loaded',
+      () {
+        expect(
+          shouldLoadListeningTogetherTrack(
+            currentVideoId: 'dQw4w9WgXcQ',
+            targetVideoId: 'dQw4w9WgXcQ',
+            nativeStateVideoId: 'dQw4w9WgXcQ',
+            nativeAudioLoaded: false,
+          ),
+          isTrue,
+        );
+      },
+    );
+
+    test(
+      'loads the host track when the native player still holds a different song',
+      () {
+        expect(
+          shouldLoadListeningTogetherTrack(
+            currentVideoId: 'dQw4w9WgXcQ',
+            targetVideoId: 'M7lc1UVf-VE',
+            nativeStateVideoId: 'dQw4w9WgXcQ',
+            nativeAudioLoaded: true,
+          ),
+          isTrue,
+        );
+      },
+    );
+
+    test(
+      'keeps an already loaded matching native song instead of reloading every heartbeat',
+      () {
+        expect(
+          shouldLoadListeningTogetherTrack(
+            currentVideoId: 'dQw4w9WgXcQ',
+            targetVideoId: 'dQw4w9WgXcQ',
+            nativeStateVideoId: 'dQw4w9WgXcQ',
+            nativeAudioLoaded: true,
+          ),
+          isFalse,
+        );
+      },
+    );
+  });
+
   group('shared YouTube track validation', () {
     test('accepts a standard YouTube video id only', () {
       expect(isValidSharedYouTubeVideoId('dQw4w9WgXcQ'), isTrue);
       expect(isValidSharedYouTubeVideoId('short'), isFalse);
       expect(isValidSharedYouTubeVideoId('local:track-1'), isFalse);
-      expect(isValidSharedYouTubeVideoId('https://youtube.com/watch?v=dQw4w9WgXcQ'), isFalse);
+      expect(
+        isValidSharedYouTubeVideoId('https://youtube.com/watch?v=dQw4w9WgXcQ'),
+        isFalse,
+      );
       expect(isValidSharedYouTubeVideoId('dQw4w9WgXcQxxx'), isFalse);
     });
   });
@@ -26,7 +76,15 @@ void main() {
   group('listening room remote controls', () {
     test('allows supported shared-player actions', () {
       for (final action in <String>[
-        'play_pause', 'play_track', 'stop', 'next', 'previous', 'seek', 'shuffle', 'smart_shuffle', 'loop',
+        'play_pause',
+        'play_track',
+        'stop',
+        'next',
+        'previous',
+        'seek',
+        'shuffle',
+        'smart_shuffle',
+        'loop',
       ]) {
         expect(isAllowedListeningRoomControlAction(action), isTrue, reason: action);
       }

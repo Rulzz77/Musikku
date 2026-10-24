@@ -105,6 +105,8 @@ class _HomePageState extends State<HomePage>
   bool _applyingListenTogetherState = false;
   bool _wasFollowingListenTogether = false;
   String _lastRoomUnsupportedTrackId = '';
+  String _lastListenTogetherLoadFailureVideoId = '';
+  DateTime? _lastListenTogetherLoadFailureAt;
 
   final Random _random = Random();
 

@@ -293,6 +293,8 @@ extension _HomeListeningTogether on _HomePageState {
       _listenTogetherSyncTimer?.cancel();
       _listenTogetherSyncTimer = null;
       _lastRoomUnsupportedTrackId = '';
+      _lastListenTogetherLoadFailureVideoId = '';
+      _lastListenTogetherLoadFailureAt = null;
       _clearSleepTimer();
       _refreshListeningTogetherUi();
     } catch (error) {
@@ -549,15 +551,39 @@ extension _HomeListeningTogether on _HomePageState {
       durationSeconds: durationSeconds,
     );
 
+    // A different host track clears the retry backoff for the previous track.
+    if (_lastListenTogetherLoadFailureVideoId != videoId) {
+      _lastListenTogetherLoadFailureVideoId = '';
+      _lastListenTogetherLoadFailureAt = null;
+    }
+
     _applyingListenTogetherState = true;
     try {
       final state = _nativeState;
-      // A guest can already have the same title selected while its native
-      // Media3 stream is not loaded (for example after joining from the home
-      // screen). In that case Play/Pause alone cannot start the room track.
-      final nativeTrackMatches = state.videoId == videoId ||
-          (state.videoId.isEmpty && _youtubeController.isUsingYoutubeAudio);
-      if (_currentVideo?.videoId != videoId || !nativeTrackMatches) {
+      // The restored UI metadata/state notifier may already contain this ID
+      // even though Media3 has not loaded any source yet. Require proof from
+      // both the native state ID and the controller's actual audio-source flag;
+      // otherwise playVideo() can target an empty/stale native item and the
+      // guest appears connected but never starts following the host.
+      final needsNativeLoad = shouldLoadListeningTogetherTrack(
+        currentVideoId: _currentVideo?.videoId ?? '',
+        targetVideoId: videoId,
+        nativeStateVideoId: state.videoId,
+        nativeAudioLoaded: _youtubeController.isUsingYoutubeAudio,
+      );
+      if (needsNativeLoad) {
+        // A failed NewPipe/audio resolution used to retry on every 2-second
+        // room heartbeat. That can flood the resolver and hide the real issue.
+        // Retry the same failed track only after a short cooldown; a new host
+        // track always gets an immediate attempt.
+        final lastFailureAt = _lastListenTogetherLoadFailureAt;
+        if (_lastListenTogetherLoadFailureVideoId == videoId &&
+            lastFailureAt != null &&
+            DateTime.now().difference(lastFailureAt) <
+                const Duration(seconds: 12)) {
+          return;
+        }
+
         await _playVideo(
           track,
           recordHistory: false,
@@ -565,6 +591,13 @@ extension _HomeListeningTogether on _HomePageState {
           restoreDurationSeconds: durationSeconds,
           autoPlay: playing,
         );
+        if (_youtubeController.isUsingYoutubeAudio) {
+          _lastListenTogetherLoadFailureVideoId = '';
+          _lastListenTogetherLoadFailureAt = null;
+        } else {
+          _lastListenTogetherLoadFailureVideoId = videoId;
+          _lastListenTogetherLoadFailureAt = DateTime.now();
+        }
         return;
       }
 

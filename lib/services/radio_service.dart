@@ -470,6 +470,19 @@ class RadioService {
         .trim();
   }
 
+  /// Seed pencarian berbasis lagu aktif, bukan genre/chart global.
+  /// Dipakai satu kali untuk membangun pool radio; kandidatnya lalu di-cache.
+  static String songRadioSearchSeedFor(YoutubeSearchResult video) {
+    final title = _cleanTitle(video.title);
+    final artist = _artistKey(video);
+    final parts = <String>[
+      if (title.isNotEmpty) title,
+      if (artist.isNotEmpty && artist != title) artist,
+      'similar songs',
+    ];
+    return parts.join(' ').replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
+
   static String _cleanTitle(String raw) {
     var title = raw.toLowerCase();
 
@@ -707,9 +720,38 @@ class RadioService {
       }
     }
 
-    // Prioritas pertama adalah katalog musik populer yang dapat digunakan ulang
-    // dari cache (videos.list, kuota umum), bukan Search API setiap kali Next.
-    // Jika kandidat satu bahasa/genre tersedia, antrean diisi dari sini dulu.
+    // Utamakan pencarian yang membawa konteks lagu/artis. Sebelumnya chart
+    // mostPopular dipakai pertama; akibatnya satu lagu Pop dapat melompat ke
+    // lagu populer acak meskipun pencarian berbasis lagu sebenarnya tersedia.
+    // searchLatest memiliki cache memory/disk, jadi Next berikutnya memakai
+    // pool/halaman yang sama dan tidak membuat request untuk setiap tombol Next.
+    try {
+      final page = await _searchService.searchLatest(seed, pageToken: _pageToken);
+      if (!isCurrentRequest()) return;
+      _pageToken = page.nextPageToken;
+
+      final newCandidates = page.results.where((video) => eligible(video)).toList();
+      final preferred = MusicStyleMatcher.rankForRadio(
+        newCandidates,
+        targetStyle: targetStyle,
+        targetLanguage: targetLanguage,
+        allowCrossLanguage: !_lockLanguage,
+      );
+      addCandidates(preferred.isNotEmpty ? preferred : newCandidates);
+
+      if (_pool.isNotEmpty) return;
+    } catch (e) {
+      if (!isCurrentRequest()) return;
+      // Kueri relevan gagal/offline? Baru turun ke chart umum sebagai fallback.
+      debugPrint('RADIO RELATED SEARCH: $e');
+      if (e is YoutubeSearchException) onError?.call(e.message);
+    }
+
+    if (!isCurrentRequest()) return;
+
+    // Fallback hemat kuota: chart musik kategori 10 hanya dipakai jika hasil
+    // yang terkait lagu tidak tersedia. Hasil chart tetap disaring/ranking
+    // dengan style/language serta riwayat lagu sebelum boleh diputar.
     try {
       final popular = await _searchService.mostPopular(
         categoryId: '10',
@@ -724,12 +766,10 @@ class RadioService {
         targetLanguage: targetLanguage,
         allowCrossLanguage: !_lockLanguage,
       );
-      // Keep a generous candidate pool so subsequent Next presses can produce
-      // variety across languages without issuing a new search on each click.
       addCandidates((preferred.isNotEmpty ? preferred : scoped).take(40));
 
-      // Kalau chart lokal tidak punya style yang cocok, coba genre/subgenre
-      // berdekatan dari chart yang sama; Radio boleh lintas bahasa.
+      // Kalau chart musik tak punya gaya terkait, gunakan kandidat kompatibel
+      // lintas bahasa. Lagu dengan genre eksplisit yang berbeda tetap ditolak.
       if (_pool.isEmpty && targetStyle != null && !_lockLanguage) {
         final relatedAcrossLanguages = popular.where((video) {
           if (!eligible(video, enforceContext: false)) return false;
@@ -747,11 +787,9 @@ class RadioService {
         );
       }
 
-      // Terakhir, bila katalog kategori Musik tidak punya kandidat yang cukup
-      // relevan, gunakan lagu populer lain supaya Next tidak langsung berhenti.
+      // Fallback terakhir bila katalog tak punya metadata style yang cukup.
+      // Bahasa eksplisit pengguna tetap dipatuhi; track radio biasa tidak dikunci.
       if (_pool.isEmpty) {
-        // Broad fallback may relax genre, but it must not bypass an explicit
-        // language request. Unknown language metadata is allowed as a fallback.
         addCandidates(
           popular.where((video) {
             if (!eligible(video, enforceContext: false)) return false;
@@ -762,63 +800,15 @@ class RadioService {
           enforceContext: false,
         );
       }
-
-      if (_pool.isNotEmpty) return;
-    } catch (e) {
-      // Katalog populer gagal/offline? Search API tetap tersedia sebagai fallback.
-      debugPrint('RADIO POPULAR CATALOG: $e');
-    }
-
-    if (!isCurrentRequest()) return;
-
-    // Fallback terakhir: satu halaman Search API. Tidak ada pengulangan halaman
-    // di satu tindakan Next; searchLatest punya cache hasil agar query yang sama
-    // dapat dipakai ulang selama masa cache.
-    try {
-      final page = await _searchService.searchLatest(seed, pageToken: _pageToken);
-      if (!isCurrentRequest()) return;
-      _pageToken = page.nextPageToken;
-
-      final newCandidates = page.results.where((video) => eligible(video)).toList();
-      final preferred = MusicStyleMatcher.rankForRadio(
-        newCandidates,
-        targetStyle: targetStyle,
-        targetLanguage: targetLanguage,
-        allowCrossLanguage: !_lockLanguage,
-      );
-      addCandidates(preferred.isNotEmpty ? preferred : newCandidates);
-
-      if (_pool.isEmpty && page.nextPageToken == null) {
-        // Ketika semua halaman telah habis, lupakan hanya bagian history yang
-        // paling lama agar radio dapat bersiklus kembali tanpa cepat mengulang.
-        final current = currentVideoId();
-        if (current != null) _playedIds.remove(current);
-        final keepIds = (_playedIds.length / 2).ceil();
-        if (_playedIds.length > keepIds) {
-          _playedIds.removeRange(0, _playedIds.length - keepIds);
-        }
-        final keepKeys = (_playedTrackKeys.length / 2).ceil();
-        if (_playedTrackKeys.length > keepKeys) {
-          _playedTrackKeys.removeRange(0, _playedTrackKeys.length - keepKeys);
-        }
-        if (current != null && !_playedIds.contains(current)) _playedIds.add(current);
-        _pageToken = null;
-      }
     } catch (e) {
       if (!isCurrentRequest()) return;
-      debugPrint('RADIO ERROR: $e');
-      _pageToken = null;
+      debugPrint('RADIO POPULAR CATALOG FALLBACK: $e');
       if (e is YoutubeSearchException) onError?.call(e.message);
     }
   }
 
-  /// Nama artis / kata kunci dari sebuah lagu, dipakai sebagai benih radio
-  /// saat playlist favorit habis.
-  static String seedFor(YoutubeSearchResult video) {
-    // Recomendasi berasal dari genre dan bahasa yang terdeteksi. Jangan selalu
-    // mengunci ke channel artis yang sedang diputar.
-    return MusicStyleMatcher.recommendationSeedFor(video);
-  }
+  /// Seed radio saat daftar sumber habis; tetap berbasis track/artis yang aktif.
+  static String seedFor(YoutubeSearchResult video) => songRadioSearchSeedFor(video);
 
 }
 

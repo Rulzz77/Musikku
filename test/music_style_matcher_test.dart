@@ -219,6 +219,42 @@ void main() {
       expect(MusicStyleMatcher.recommendationSeedFor(song), 'popular pop songs');
     });
 
+    test('song radio seed keeps the current title and artist for relevant Next', () {
+      final song = _video(
+        id: 'anti-hero',
+        title: 'Anti-Hero (Official Music Video)',
+        channel: 'Taylor Swift - Topic',
+      );
+      final seed = RadioService.songRadioSearchSeedFor(song);
+      expect(seed, contains('anti-hero'));
+      expect(seed, contains('taylor swift'));
+      expect(seed, contains('similar songs'));
+      expect(seed, isNot(contains('popular pop songs')));
+    });
+
+    test('large radio pools do not dilute one known matching style with unknowns', () {
+      final knownPop = _video(
+        id: 'known-pop',
+        title: 'Pop Ballad Official Audio',
+        channel: 'Unknown Artist',
+      );
+      final unknown = List<YoutubeSearchResult>.generate(
+        8,
+        (index) => _video(
+          id: 'unknown-$index',
+          title: 'Track With Unrecognized Metadata $index',
+          channel: 'Unknown Channel $index',
+        ),
+      );
+
+      final ranked = MusicStyleMatcher.rankForRadio(
+        [knownPop, ...unknown],
+        targetStyle: 'pop',
+        allowCrossLanguage: true,
+      );
+      expect(ranked.map((video) => video.videoId), ['known-pop']);
+    });
+
     test('an explicit broad language/genre query becomes a stable seed', () {
       expect(MusicStyleMatcher.hasExplicitStyleHint('Pop DJ Inggris'), isTrue);
       expect(MusicStyleMatcher.hasExplicitLanguageHint('Pop DJ Inggris'), isTrue);

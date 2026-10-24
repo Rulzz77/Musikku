@@ -6,22 +6,9 @@ part of '../home_page.dart';
 /// Radio / autoplay: bibit radio, pengisian antrean, dan pemilihan lagu berikutnya.
 extension _HomeRadio on _HomePageState {
   String _radioSeedFor(YoutubeSearchResult video) {
-    final query = _lastSearchQuery.trim();
-    final isTrackQuery = query.isNotEmpty &&
-        RadioService.queryLooksLikeCurrentTrack(query, video);
-    final explicitStyle = MusicStyleMatcher.hasExplicitStyleHint(query);
-
-    // Radio started from a selected song should behave like song-radio:
-    // preserve a requested genre, but do not lock recommendations to the
-    // language of the search query or the current track.
-    if (query.isNotEmpty && !isTrackQuery && explicitStyle) {
-      return MusicStyleMatcher.recommendationSeed(
-        style: MusicStyleMatcher.styleFromText(query) ??
-            MusicStyleMatcher.styleFromVideo(video),
-      );
-    }
-
-    return MusicStyleMatcher.recommendationSeedFor(video);
+    // Jangan gunakan _lastSearchQuery untuk seed karena nilainya dapat berasal
+    // dari pencarian lama. Radio harus mengikuti track yang sedang diputar.
+    return RadioService.songRadioSearchSeedFor(video);
   }
 
   String? _radioPreferredLanguageFor(YoutubeSearchResult video) =>

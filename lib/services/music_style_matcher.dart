@@ -426,7 +426,11 @@ class MusicStyleMatcher {
         final style = styleFromVideo(video);
         return style != null && isRelatedStyle(style, targetStyle);
       }).toList();
-      if (recognized.length >= 2) {
+      // If a large pool contains even one recognized compatible style, do
+      // not dilute it with dozens of unclassified uploads. In a tiny pool,
+      // retain unknowns as fallback so Radio does not stop unnecessarily.
+      if (recognized.isNotEmpty &&
+          (recognized.length >= 2 || list.length >= 5)) {
         list = recognized;
       }
     }

@@ -143,11 +143,12 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
           child: Column(
             children: [
               Padding(
-                padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
                 child: Row(
                   children: [
                     IconButton(
                       tooltip: 'Kembali ke beranda',
+                      constraints: const BoxConstraints.tightFor(width: 44, height: 44),
                       onPressed: widget.onBack,
                       color: Colors.white,
                       icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 30),
@@ -168,6 +169,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                     ),
                     IconButton(
                       tooltip: widget.followingRoom ? 'Mengikuti sesi host' : 'Dengerin bareng tanpa login',
+                      constraints: const BoxConstraints.tightFor(width: 44, height: 44),
                       onPressed: widget.onOpenListeningRoom,
                       icon: Icon(
                         widget.followingRoom ? Icons.headphones_rounded : Icons.groups_2_rounded,
@@ -178,6 +180,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                       valueListenable: widget.playerUiState,
                       builder: (context, ui, _) => IconButton(
                         tooltip: ui.isFavorite ? 'Hapus dari favorit' : 'Tambah ke favorit',
+                        constraints: const BoxConstraints.tightFor(width: 44, height: 44),
                         onPressed: widget.onToggleFavorite,
                         icon: Icon(
                           ui.isFavorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
@@ -212,6 +215,9 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                     return LayoutBuilder(
                       builder: (context, constraints) {
                         final isWideLayout = constraints.maxWidth >= 760;
+                        // Header is 8dp shorter. Subtract that gain from the artwork
+                        // sizing budget so the cover remains exactly the same size.
+                        final artworkLayoutHeight = math.max(0.0, constraints.maxHeight - 8.0);
                         // Keep the artwork fixed for a given device and available height.
                         // Old layout added two independent spacers from leftover height;
                         // on short/tall screens that caused controls to jump or leave a gap.
@@ -222,7 +228,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                         // Reserved space is independent of lyrics, buffering, and optional
                         // data cards. Dynamic reservations made the cover resize mid-song.
                         final reservedLowerHeight = isWideLayout ? 300.0 : 400.0;
-                        final heightLimitedArt = (constraints.maxHeight - reservedLowerHeight)
+                        final heightLimitedArt = (artworkLayoutHeight - reservedLowerHeight)
                             .clamp(145.0, 300.0)
                             .toDouble();
                         final artWidth = isWideLayout
@@ -230,7 +236,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                                 300.0,
                                 math.min(
                                   ((constraints.maxWidth - 68) / 2).clamp(180.0, 300.0).toDouble(),
-                                  (constraints.maxHeight * 0.54).clamp(145.0, 300.0).toDouble(),
+                                  (artworkLayoutHeight * 0.54).clamp(145.0, 300.0).toDouble(),
                                 ),
                               ).toDouble()
                             : math.min(phoneArtWidth, heightLimitedArt).toDouble();
@@ -340,7 +346,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                                   Padding(
                                     // Compact top spacing: controls stay directly below
                                     // the artwork and the player never becomes a scroll page.
-                                    padding: const EdgeInsets.only(top: 2, bottom: 2),
+                                    padding: const EdgeInsets.only(top: 0, bottom: 0),
                                     child: Center(child: artworkPanel),
                                   ),
                                 Padding(
@@ -353,11 +359,11 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                                         // Keep metadata close to the action buttons so the
                                         // title/artist and controls read as one group.
                                         // This only affects vertical spacing, not cover geometry.
-                                        const SizedBox(height: 8),
+                                        const SizedBox(height: 6),
                                       ],
                                       // Stable gap; synced lyrics live on the cover so this
                                       // control block does not move when lyrics load.
-                                      const SizedBox(height: 4),
+                                      const SizedBox(height: 2),
                                     Wrap(
                                       alignment: WrapAlignment.center,
                                       spacing: 10,

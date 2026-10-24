@@ -1,6 +1,6 @@
 # MusikKu — Dengerin Bareng online lintas jaringan
 
-Versi source: **5.0.33+11**. Koneksi online memakai Supabase Realtime Broadcast. Pengguna tidak perlu login, tetapi pembuat APK perlu mengonfigurasi satu project Supabase.
+Versi source: **5.0.34+12**. Koneksi online memakai Supabase Realtime Broadcast. Pengguna tidak perlu login, tetapi pembuat APK perlu mengonfigurasi satu project Supabase.
 
 Dokumentasi vendor: [Realtime Broadcast](https://supabase.com/docs/guides/realtime/broadcast) dan [Getting Started](https://supabase.com/docs/guides/realtime/getting_started).
 
@@ -41,6 +41,8 @@ flutter build apk --release --dart-define=SUPABASE_URL=https://YOUR_PROJECT.supa
 2. MusikKu menampilkan **kode 8 digit**. Salin kode itu sekali dan kirim ke teman.
 3. Teman membuka shortcut **Dengerin bareng** di Beranda, memasukkan kode 8 digit, lalu menekan **Gabung pakai kode**. Tidak perlu memasukkan alamat IP, alamat server, atau link undangan.
 4. Host dapat mulai memutar lagu setelah kamar dibuat. Pergantian lagu, play/pause, dan posisi akan disinkronkan otomatis selama koneksi internet aktif. Tidak perlu mengirim kode ulang setiap lagu berganti.
+
+Supabase berjalan di cloud, jadi laptop/PC pemilik project tidak harus menyala. Namun, HP host perlu menjalankan MusikKu dan tersambung ke internet selama sesi mendengarkan berlangsung. Pada paket Free, project dapat dijeda setelah sekitar 7 hari aktivitas database yang rendah. Karena event kamar memakai Broadcast dan tidak disimpan ke database, paket Free cocok untuk uji coba tetapi bukan jaminan selalu aktif untuk produksi; pertimbangkan paket berbayar jika butuh uptime yang lebih konsisten.
 
 Audio tetap diputar secara terpisah di masing-masing perangkat dari sumber yang didukung MusikKu. Ketersediaan lagu, iklan, atau buffering berbeda dapat membuat posisi pemutaran sedikit tidak sama. Kode kamar dipakai sebagai kunci akses praktis, bukan autentikasi akun yang kuat; jangan membagikannya secara publik.
 

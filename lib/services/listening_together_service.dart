@@ -6,6 +6,19 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+/// Supabase Realtime v2 may pass the broadcast body inside an outer `payload`
+/// field. Older versions and test doubles can pass the body directly. Normalize
+/// both shapes before reading room events so join/state messages aren't ignored.
+Map<String, dynamic> unwrapRealtimeBroadcastPayload(
+  Map<String, dynamic> frame,
+) {
+  final nested = frame['payload'];
+  if (nested is Map) {
+    return Map<String, dynamic>.from(nested);
+  }
+  return Map<String, dynamic>.from(frame);
+}
+
 /// Sinkronisasi sesi mendengarkan tanpa akun.
 ///
 /// Jika SUPABASE_URL dan SUPABASE_PUBLISHABLE_KEY disediakan saat build,
@@ -59,6 +72,7 @@ class ListeningTogetherService {
   bool _onlineMode = false;
   String _onlineClientId = '';
   Completer<bool>? _onlineJoinCompleter;
+  bool _onlineJoinAccepted = false;
   final Set<String> _onlinePeers = <String>{};
   final Map<String, DateTime> _onlinePeerLastSeen = <String, DateTime>{};
 
@@ -80,7 +94,7 @@ class ListeningTogetherService {
       shared: true,
     );
     _server = server;
-    roomCode.value = (Random.secure().nextInt(900000) + 100000).toString();
+    roomCode.value = (Random.secure().nextInt(90000000) + 10000000).toString();
     _hosting = true;
     server.listen(
       _handleIncomingPeer,
@@ -255,6 +269,7 @@ class ListeningTogetherService {
   }
 
   Future<void> _joinOnlineRoom(String token, String pin) async {
+    _onlineJoinAccepted = false;
     _onlineMode = true;
     _onlineClientId = _randomHexToken();
     _hosting = false;
@@ -282,13 +297,15 @@ class ListeningTogetherService {
       if (!accepted) {
         throw const FormatException('Kode kamar ditolak host.');
       }
+      _onlineJoinAccepted = true;
+      _onlineJoinCompleter = null;
       _onlineHeartbeatTimer?.cancel();
       _onlineHeartbeatTimer = Timer.periodic(const Duration(seconds: 5), (_) {
         if (!_joined || !_onlineMode) return;
-        unawaited(_sendOnline('room_heartbeat', <String, dynamic>{
+        _sendOnlineUnawaited('room_heartbeat', <String, dynamic>{
           'clientId': _onlineClientId,
           'code': roomCode.value,
-        }));
+        });
       });
       status.value = 'Terhubung online • mengikuti host';
     } catch (_) {
@@ -306,14 +323,15 @@ class ListeningTogetherService {
 
     channel.onBroadcast(event: 'music_state', callback: (payload) {
       if (hosting || !_onlineMode || !_joined || _disposed) return;
-      final message = Map<String, dynamic>.from(payload);
+      final message = unwrapRealtimeBroadcastPayload(payload);
       if (!_messages.isClosed) _messages.add(message);
     });
 
     channel.onBroadcast(event: 'room_join', callback: (payload) {
       if (!hosting || !_onlineMode || !_hosting) return;
-      final clientId = payload['clientId']?.toString() ?? '';
-      final incomingPin = payload['code']?.toString() ?? '';
+      final message = unwrapRealtimeBroadcastPayload(payload);
+      final clientId = message['clientId']?.toString() ?? '';
+      final incomingPin = message['code']?.toString() ?? '';
       if (clientId.isEmpty) return;
       final accepted = incomingPin == roomCode.value;
       if (accepted) {
@@ -330,13 +348,14 @@ class ListeningTogetherService {
 
     channel.onBroadcast(event: 'room_join_result', callback: (payload) {
       if (hosting || !_onlineMode) return;
-      if (payload['clientId']?.toString() != _onlineClientId) return;
-      final accepted = payload['accepted'] == true;
+      final message = unwrapRealtimeBroadcastPayload(payload);
+      if (message['clientId']?.toString() != _onlineClientId) return;
+      final accepted = message['accepted'] == true;
       if (accepted) {
         _joined = true;
         status.value = 'Terhubung online • mengikuti host';
       } else {
-        status.value = payload['message']?.toString() ?? 'Kode kamar ditolak host.';
+        status.value = message['message']?.toString() ?? 'Kode kamar ditolak host.';
       }
       final completer = _onlineJoinCompleter;
       if (completer != null && !completer.isCompleted) {
@@ -346,15 +365,17 @@ class ListeningTogetherService {
 
     channel.onBroadcast(event: 'room_heartbeat', callback: (payload) {
       if (!hosting || !_onlineMode || !_hosting) return;
-      final clientId = payload['clientId']?.toString() ?? '';
+      final message = unwrapRealtimeBroadcastPayload(payload);
+      final clientId = message['clientId']?.toString() ?? '';
       if (clientId.isEmpty || !_onlinePeers.contains(clientId)) return;
-      if (payload['code']?.toString() != roomCode.value) return;
+      if (message['code']?.toString() != roomCode.value) return;
       _onlinePeerLastSeen[clientId] = DateTime.now();
     });
 
     channel.onBroadcast(event: 'room_leave', callback: (payload) {
       if (!hosting || !_onlineMode || !_hosting) return;
-      final clientId = payload['clientId']?.toString() ?? '';
+      final message = unwrapRealtimeBroadcastPayload(payload);
+      final clientId = message['clientId']?.toString() ?? '';
       if (_onlinePeers.remove(clientId)) {
         _onlinePeerLastSeen.remove(clientId);
         _publishOnlinePeerCount();
@@ -363,6 +384,8 @@ class ListeningTogetherService {
 
     channel.onBroadcast(event: 'room_closed', callback: (payload) {
       if (hosting || !_onlineMode || !_joined) return;
+      final message = unwrapRealtimeBroadcastPayload(payload);
+      if (message['code']?.toString() != roomCode.value) return;
       _joined = false;
       _onlineHeartbeatTimer?.cancel();
       _onlineHeartbeatTimer = null;
@@ -382,6 +405,17 @@ class ListeningTogetherService {
     channel.subscribe((statusValue, error) {
       if (statusValue == RealtimeSubscribeStatus.subscribed) {
         if (!completer.isCompleted) completer.complete();
+        // If Supabase automatically rejoined the WebSocket after a transient
+        // loss, tell the host this guest is back. Initial join is still handled
+        // by _joinOnlineRoom, because _onlineJoinAccepted remains false here.
+        if (_onlineMode && !_hosting && _onlineJoinAccepted && !_disposed) {
+          unawaited(_sendOnline('room_join', <String, dynamic>{
+            'clientId': _onlineClientId,
+            'code': roomCode.value,
+          }).catchError((Object joinError) {
+            if (!_disposed) status.value = 'Gagal menyambung ulang: $joinError';
+          }));
+        }
         return;
       }
       if (!completer.isCompleted) {
@@ -410,7 +444,13 @@ class ListeningTogetherService {
   Future<void> _sendOnline(String event, Map<String, dynamic> payload) async {
     final channel = _onlineChannel;
     if (!_onlineMode || channel == null) return;
-    await channel.sendBroadcastMessage(event: event, payload: payload);
+    final response = await channel.sendBroadcastMessage(
+      event: event,
+      payload: payload,
+    );
+    if (response.name != 'ok') {
+      throw StateError('Pesan realtime gagal dikirim (${response.name}).');
+    }
   }
 
   void _sendOnlineUnawaited(String event, Map<String, dynamic> payload) {
@@ -541,7 +581,7 @@ class ListeningTogetherService {
               if (message['code']?.toString() != roomCode.value) {
                 _write(socket, <String, dynamic>{
                   'type': 'rejected',
-                  'message': 'Kode kamar salah. Masukkan kode 6 digit dari host.',
+                  'message': 'Kode kamar salah. Masukkan kode 8 digit dari host.',
                 });
                 unawaited(() async {
                   try {
@@ -657,6 +697,7 @@ class ListeningTogetherService {
     _onlineHeartbeatTimer?.cancel();
     _onlineHeartbeatTimer = null;
     _onlineJoinCompleter = null;
+    _onlineJoinAccepted = false;
     _onlineMode = false;
     _onlineClientId = '';
     _onlinePeers.clear();

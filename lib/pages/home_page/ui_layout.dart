@@ -72,16 +72,12 @@ extension _HomeUiLayout on _HomePageState {
                 reverseDuration: const Duration(milliseconds: 260),
                 switchInCurve: Curves.easeOutCubic,
                 switchOutCurve: Curves.easeInCubic,
-                transitionBuilder: (child, animation) {
-                  final slide = Tween<Offset>(
-                    begin: const Offset(0, 0.055),
-                    end: Offset.zero,
-                  ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic));
-                  return FadeTransition(
-                    opacity: animation,
-                    child: SlideTransition(position: slide, child: child),
-                  );
-                },
+                // Fade only: a vertical slide made the whole player appear to
+                // jump up/down when opening or switching the active player.
+                transitionBuilder: (child, animation) => FadeTransition(
+                  opacity: animation,
+                  child: child,
+                ),
                 child: watch == null
                     ? const SizedBox.shrink(key: ValueKey<String>('player-closed'))
                     : MusicPlayerPage(

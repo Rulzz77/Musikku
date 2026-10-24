@@ -455,18 +455,22 @@ class YoutubeSearchService {
     // kata yang bisa menggeser genre. Cukup arahkan ke konteks Indonesia bila
     // user belum menyebutkannya. Urutan hasil ditentukan oleh upload terbaru.
     final lowerKeyword = keyword.toLowerCase();
+    final isSongSimilarityQuery = RegExp(
+      r'\b(?:similar songs?|songs? like|similar music)\b',
+      caseSensitive: false,
+    ).hasMatch(lowerKeyword);
     final alreadyMusicWord = RegExp(
-      r'\b(?:lagu|musik|music|song|audio|remix|dj|dangdut|pop|rock|jazz|hip\s*hop|kpop|metal|indie|akustik|nostalgia|karaoke|cover|mix|album)\b',
+      r'\b(?:lagu|musik|music|songs?|audio|remix|dj|dangdut|pop|rock|jazz|hip\s*hop|kpop|metal|indie|akustik|nostalgia|karaoke|cover|mix|album)\b',
       caseSensitive: false,
     ).hasMatch(lowerKeyword);
 
-    // Arahkan radio ke konten lagu, bukan sekadar video yang kebetulan
-    // membahas artis/judul tersebut. Tetap pertahankan konteks asli dan
-    // urutan upload terbaru.
+    // Song Radio harus tetap mencari lagu/artis yang menjadi seed. Jangan
+    // menambahkan "lagu Indonesia" ke query track-specific, karena itu bisa
+    // menggeser hasil dari lagu asing atau gaya yang sedang diputar.
     final radioKeyword = [
       keyword,
-      if (!alreadyMusicWord) 'lagu',
-      if (!hasIndonesia) 'Indonesia',
+      if (!alreadyMusicWord && !isSongSimilarityQuery) 'lagu',
+      if (!hasIndonesia && !isSongSimilarityQuery) 'Indonesia',
     ].join(' ');
 
     final params = <String, String>{
@@ -549,6 +553,7 @@ class YoutubeSearchService {
     // semua kandidat tersaring, gunakan pool musik populer Indonesia sebagai
     // fallback. Ini lebih baik daripada memutar ulang video AI atau berhenti.
     if (results.isEmpty &&
+        !isSongSimilarityQuery &&
         !keyword.toLowerCase().contains('lagu indonesia') &&
         MusicStyleMatcher.styleFromText(keyword) == null) {
       final fallback = await _searchPopularMusicFallback();

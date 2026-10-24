@@ -679,21 +679,25 @@ extension _HomeListeningTogether on _HomePageState {
         return;
       }
 
+      // Pause/resume is more urgent than drift correction. Pause the local
+      // native player first so an awaited seek cannot make the guest keep
+      // playing after the host has already paused.
+      if (!playing && state.isEffectivelyPlaying) {
+        await _youtubeController.pauseVideo();
+      }
+
       if (state.duration > Duration.zero &&
           shouldCorrectListeningTogetherPosition(
             guestPositionMs: state.position.inMilliseconds,
             hostTargetPositionMs: positionMs,
           )) {
-        // Correct moderate drift earlier so the two independent audio streams
-        // do not remain noticeably out of step. The threshold avoids seeking
-        // for harmless sub-second buffering differences.
+        // Correct moderate drift after the urgent pause command (or before a
+        // resume). The threshold avoids seeks for harmless small differences.
         await _youtubeController.seekTo(seconds: positionMs / 1000.0);
       }
 
       if (playing && !state.isEffectivelyPlaying) {
         await _youtubeController.playVideo();
-      } else if (!playing && state.isEffectivelyPlaying) {
-        await _youtubeController.pauseVideo();
       }
       _listenTogether.syncStatus.value = 'Tersinkron: $title';
     } catch (error) {

@@ -1,8 +1,10 @@
 pubspec.yaml
 lib/app_info.dart
-lib/pages/home_page.dart
+lib/services/music_title_formatter.dart
+lib/services/youtube_controller.dart
 lib/pages/home_page/listening_together.dart
-lib/services/listening_together_service.dart
+lib/pages/home_page/state_sync.dart
+lib/widgets/music_player_page.dart
 test/app_info_test.dart
-test/listening_together_payload_test.dart
-docs/PERUBAHAN_5.0.41.md
+test/music_title_formatter_test.dart
+docs/PERUBAHAN_5.0.44.md

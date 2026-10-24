@@ -42,6 +42,12 @@ class NativeYoutubeController {
     _intentTimer?.cancel();
     _intent = playing;
 
+    // Publish the user intent immediately, before awaiting the native method
+    // channel. The room broadcaster listens to this state stream, so a pause
+    // is sent to guests at button time instead of waiting for the next native
+    // callback or the periodic two-second room snapshot.
+    _emit(_lastState);
+
     _intentTimer = Timer(_intentTimeout, () {
       if (_intent == null) {
         return;

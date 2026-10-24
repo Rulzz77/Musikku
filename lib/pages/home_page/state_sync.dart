@@ -86,7 +86,31 @@ extension _HomeStateSync on _HomePageState {
       }
     }
 
+    final previousNativeState = _nativeStateNotifier.value;
     _nativeStateNotifier.value = state;
+
+    // Broadcast pause intent immediately and confirmed native state changes
+    // as soon as they arrive. The periodic timer is only a recovery path; it
+    // must not add up to two seconds of pause latency for other devices.
+    if (_listenTogether.isHost) {
+      final currentVideoId = _currentVideo?.videoId ?? '';
+      final eventMatchesCurrentTrack = currentVideoId.isEmpty ||
+          (state.videoId.isNotEmpty && state.videoId == currentVideoId);
+      final pauseIntentChanged =
+          previousNativeState.requestedPlaying != false &&
+          state.requestedPlaying == false;
+      final confirmedPlaybackStateChanged =
+          previousNativeState.playbackState != state.playbackState &&
+          state.requestedPlaying == null;
+      final nativeTrackChanged = state.videoId.isNotEmpty &&
+          state.videoId == currentVideoId &&
+          previousNativeState.videoId != state.videoId;
+      if (eventMatchesCurrentTrack &&
+          (pauseIntentChanged || confirmedPlaybackStateChanged || nativeTrackChanged)) {
+        _broadcastListenTogetherState();
+      }
+    }
+
     _syncBufferAlert(state);
 
     _savePlaybackProgress(state);
@@ -192,7 +216,7 @@ extension _HomeStateSync on _HomePageState {
     final sample = _listeningPlaybackTracker.update(
       videoId: video.videoId,
       positionSeconds: position,
-      isPlaying: state.isPlaying,
+      isPlaying: state.isEffectivelyPlaying,
       isEnded: state.isEnded,
       timestamp: now,
     );

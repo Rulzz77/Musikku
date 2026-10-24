@@ -8,6 +8,7 @@ import '../models/loop_mode.dart';
 import '../models/native_youtube_state.dart';
 import '../models/player_ui_state.dart';
 import '../models/youtube_search_result.dart';
+import '../services/music_title_formatter.dart';
 import 'album_artwork_image.dart';
 import 'lyrics_panel.dart';
 
@@ -283,7 +284,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                                     child: Align(
                                       alignment: Alignment.centerLeft,
                                       child: Text(
-                                        widget.video.title,
+                                        MusicTitleFormatter.clean(widget.video.title),
                                         maxLines: 2,
                                         overflow: TextOverflow.ellipsis,
                                         style: theme.textTheme.titleLarge?.copyWith(
@@ -368,9 +369,10 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                                           // control row anchored at the bottom, but use the space
                                           // for a restrained animated audio visualizer instead.
                                           Expanded(
-                                            child: _NowPlayingVisualizer(
+                                            child: _NowPlayingSessionCard(
                                               playing: playing,
                                               followingRoom: widget.followingRoom,
+                                              track: widget.video,
                                             ),
                                           ),
                                         ] else
@@ -728,54 +730,119 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
 
 }
 
-/// Compact glass-style audio visualizer that gives the flexible player area a
-/// deliberate purpose instead of leaving a large empty region on tall phones.
-class _NowPlayingVisualizer extends StatefulWidget {
-  const _NowPlayingVisualizer({
+/// Decorative vinyl/session card. We intentionally avoid pretending to be a
+/// beat-reactive equalizer: the app does not currently expose PCM amplitude or
+/// beat timestamps from the native YouTube stream.
+class _NowPlayingSessionCard extends StatefulWidget {
+  const _NowPlayingSessionCard({
     required this.playing,
     required this.followingRoom,
+    required this.track,
   });
 
   final bool playing;
   final bool followingRoom;
+  final YoutubeSearchResult track;
 
   @override
-  State<_NowPlayingVisualizer> createState() => _NowPlayingVisualizerState();
+  State<_NowPlayingSessionCard> createState() => _NowPlayingSessionCardState();
 }
 
-class _NowPlayingVisualizerState extends State<_NowPlayingVisualizer>
+class _NowPlayingSessionCardState extends State<_NowPlayingSessionCard>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(
+  late final AnimationController _rotation = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 1100),
+    duration: const Duration(seconds: 16),
   );
 
   @override
   void initState() {
     super.initState();
     if (widget.playing) {
-      _controller.repeat();
+      _rotation.repeat();
     } else {
-      _controller.value = 0.12;
+      _rotation.value = 0.08;
     }
   }
 
   @override
-  void didUpdateWidget(covariant _NowPlayingVisualizer oldWidget) {
+  void didUpdateWidget(covariant _NowPlayingSessionCard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.playing == widget.playing) return;
-    if (widget.playing) {
-      _controller.repeat();
-    } else {
-      _controller.stop();
-      _controller.value = 0.12;
+    if (oldWidget.playing != widget.playing) {
+      if (widget.playing) {
+        _rotation.repeat();
+      } else {
+        _rotation.stop();
+      }
+    }
+    if (oldWidget.track.videoId != widget.track.videoId) {
+      _rotation.value = 0.0;
     }
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _rotation.dispose();
     super.dispose();
+  }
+
+  Widget _vinylDisc(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return RotationTransition(
+      turns: _rotation,
+      child: SizedBox(
+        width: 76,
+        height: 76,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: const RadialGradient(
+              colors: [Color(0xFF34383B), Color(0xFF121416), Color(0xFF050607)],
+              stops: [0.12, 0.72, 1.0],
+            ),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+            boxShadow: [
+              BoxShadow(
+                color: scheme.primary.withValues(alpha: widget.playing ? 0.20 : 0.08),
+                blurRadius: 20,
+                spreadRadius: 1,
+              ),
+            ],
+          ),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              for (final size in const [58.0, 46.0, 34.0])
+                Container(
+                  width: size,
+                  height: size,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.085)),
+                  ),
+                ),
+              Container(
+                width: 29,
+                height: 29,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: scheme.primary.withValues(alpha: 0.85), width: 1.5),
+                  color: scheme.surfaceContainerHighest,
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: AlbumArtworkImage(
+                  track: widget.track,
+                  fit: BoxFit.cover,
+                  width: 29,
+                  height: 29,
+                  iconSize: 18,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -792,71 +859,73 @@ class _NowPlayingVisualizerState extends State<_NowPlayingVisualizer>
             height: cardHeight,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(22),
+              borderRadius: BorderRadius.circular(24),
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  scheme.primary.withValues(alpha: 0.105),
+                  scheme.primary.withValues(alpha: 0.15),
+                  scheme.tertiary.withValues(alpha: 0.075),
                   scheme.surfaceContainerHighest.withValues(alpha: 0.12),
-                  Colors.white.withValues(alpha: 0.018),
                 ],
               ),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.075),
-              ),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.09)),
+              boxShadow: [
+                BoxShadow(
+                  color: scheme.primary.withValues(alpha: 0.055),
+                  blurRadius: 24,
+                  spreadRadius: 1,
+                ),
+              ],
             ),
             child: Column(
               children: [
                 Row(
                   children: [
-                    Icon(
-                      Icons.graphic_eq_rounded,
-                      size: 18,
-                      color: scheme.primary.withValues(alpha: 0.95),
+                    Container(
+                      width: 28,
+                      height: 28,
+                      decoration: BoxDecoration(
+                        color: scheme.primary.withValues(alpha: 0.13),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(Icons.album_rounded, size: 16, color: scheme.primary),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 9),
                     Expanded(
                       child: Text(
-                        widget.followingRoom ? 'DENGERIN BARENG' : 'MUSIKKU AUDIO',
+                        widget.followingRoom ? 'MUSIKKU • SESI BERSAMA' : 'MUSIKKU • RUANG AUDIO',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.labelSmall?.copyWith(
                           color: scheme.onSurfaceVariant,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 1.35,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 1.0,
                         ),
                       ),
                     ),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
                       decoration: BoxDecoration(
-                        color: scheme.primary.withValues(alpha: 0.10),
+                        color: scheme.surface.withValues(alpha: 0.52),
                         borderRadius: BorderRadius.circular(99),
-                        border: Border.all(
-                          color: scheme.primary.withValues(alpha: 0.22),
-                        ),
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Container(
-                            width: 6,
-                            height: 6,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: widget.playing
-                                  ? scheme.primary
-                                  : scheme.onSurfaceVariant.withValues(alpha: 0.65),
-                            ),
+                          Icon(
+                            widget.playing ? Icons.play_arrow_rounded : Icons.pause_rounded,
+                            size: 13,
+                            color: widget.playing ? scheme.primary : scheme.onSurfaceVariant,
                           ),
-                          const SizedBox(width: 6),
+                          const SizedBox(width: 4),
                           Text(
                             widget.playing ? 'DIPUTAR' : 'DIJEDA',
                             style: theme.textTheme.labelSmall?.copyWith(
+                              fontWeight: FontWeight.w800,
                               color: scheme.onSurfaceVariant,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 0.6,
+                              letterSpacing: 0.35,
                             ),
                           ),
                         ],
@@ -865,45 +934,74 @@ class _NowPlayingVisualizerState extends State<_NowPlayingVisualizer>
                   ],
                 ),
                 const Spacer(),
-                SizedBox(
-                  height: math.min(48.0, math.max(28.0, cardHeight * 0.34)).toDouble(),
-                  child: AnimatedBuilder(
-                    animation: _controller,
-                    builder: (context, _) => Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: List<Widget>.generate(25, (index) {
-                        final phase = (_controller.value * math.pi * 2) + index * 0.53;
-                        final activeHeight = (7.0 + (math.sin(phase).abs() * 33.0)).toDouble();
-                        final height = (widget.playing
-                                ? activeHeight
-                                : 5.0 + ((index % 3) * 1.5))
-                            .toDouble();
-                        return Container(
-                          width: 3.5,
-                          height: height,
-                          decoration: BoxDecoration(
-                            color: scheme.primary.withValues(
-                              alpha: widget.playing ? 0.78 : 0.24,
+                Row(
+                  children: [
+                    _vinylDisc(context),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            widget.followingRoom ? 'Sesi tersinkron' : 'Ruang musik kamu',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: -0.2,
                             ),
-                            borderRadius: BorderRadius.circular(99),
                           ),
-                        );
-                      }),
+                          const SizedBox(height: 4),
+                          Text(
+                            widget.followingRoom
+                                ? 'Lagu dan jeda mengikuti kontrol kamar'
+                                : 'Putar, nikmati, dan kendalikan dari satu tempat',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                              height: 1.25,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
+                    const SizedBox(width: 8),
+                    Icon(
+                      widget.followingRoom ? Icons.groups_2_rounded : Icons.headphones_rounded,
+                      color: scheme.primary.withValues(alpha: 0.9),
+                      size: 25,
+                    ),
+                  ],
                 ),
                 const Spacer(),
-                Text(
-                  widget.followingRoom
-                      ? 'Mengikuti sesi audio bersama'
-                      : 'Nikmati musik dengan tampilan yang lebih fokus',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: scheme.onSurfaceVariant.withValues(alpha: 0.76),
-                    fontSize: 11.5,
-                  ),
+                Row(
+                  children: [
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: widget.playing ? scheme.primary : scheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(width: 7),
+                    Expanded(
+                      child: Text(
+                        widget.followingRoom
+                            ? 'Kontrol bersama aktif'
+                            : 'Tampilan audio khusus MusikKu',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: scheme.onSurfaceVariant.withValues(alpha: 0.86),
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    Icon(Icons.music_note_rounded, size: 16, color: scheme.primary.withValues(alpha: 0.75)),
+                  ],
                 ),
               ],
             ),
@@ -913,4 +1011,3 @@ class _NowPlayingVisualizerState extends State<_NowPlayingVisualizer>
     );
   }
 }
-

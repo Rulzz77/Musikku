@@ -45,6 +45,28 @@ extension _HomePlayback on _HomePageState {
     double? restoreDurationSeconds,
     bool autoPlay = true,
   }) async {
+    // A guest's track selection is a shared-room command, not a local playback
+    // change. State snapshots from the host set _applyingListenTogetherState,
+    // so this guard does not echo the host's state back as another command.
+    if (_listenTogether.isGuest && !_applyingListenTogetherState) {
+      if (video.isLocal) {
+        if (mounted) _toast('File lokal hanya tersedia di perangkat masing-masing.');
+        return;
+      }
+      try {
+        await _listenTogether.requestTrackSelection(
+          videoId: video.videoId,
+          title: video.title,
+          artist: video.channelTitle,
+          thumbnailUrl: video.coverUrl,
+          durationSeconds: video.durationSeconds,
+        );
+      } catch (error) {
+        if (mounted) _toast('Tidak bisa memilih lagu untuk kamar: $error');
+      }
+      return;
+    }
+
     final requestId = _playbackSessionGuard.beginTrackChange();
 
     _youtubeAudioRetryVideoId = video.videoId;

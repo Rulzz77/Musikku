@@ -344,182 +344,187 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                                   )
                                 else
                                   Padding(
-                                    // Compact top spacing: controls stay directly below
-                                    // the artwork and the player never becomes a scroll page.
+                                    // Keep the cover position stable; the lower controls panel
+                                    // uses a flexible spacer to fill leftover screen height.
                                     padding: const EdgeInsets.only(top: 0, bottom: 0),
                                     child: Center(child: artworkPanel),
                                   ),
-                                Padding(
-                                  padding: EdgeInsets.fromLTRB(22, isWideLayout ? 6 : 0, 22, 4),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                                    children: [
-                                      if (!isWideLayout) ...[
-                                        trackInfoPanel,
-                                        // Keep metadata close to the action buttons so the
-                                        // title/artist and controls read as one group.
-                                        // This only affects vertical spacing, not cover geometry.
-                                        const SizedBox(height: 6),
-                                      ],
-                                      // Stable gap; synced lyrics live on the cover so this
-                                      // control block does not move when lyrics load.
-                                      const SizedBox(height: 2),
-                                    Wrap(
-                                      alignment: WrapAlignment.center,
-                                      spacing: 10,
-                                      runSpacing: 4,
+                                Expanded(
+                                  // Give the controls panel a bounded height. On phones the
+                                  // flexible gap below the title absorbs leftover screen space,
+                                  // placing the transport row near the bottom instead of leaving
+                                  // a giant empty block below it. Artwork dimensions above are
+                                  // intentionally unchanged.
+                                  child: Padding(
+                                    padding: EdgeInsets.fromLTRB(22, isWideLayout ? 6 : 0, 22, 4),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.stretch,
                                       children: [
-                                        _actionIcon(
-                                          context: context,
-                                          icon: Icons.playlist_add_rounded,
-                                          tooltip: 'Tambah ke playlist',
-                                          onPressed: widget.onAddToPlaylist,
-                                        ),
-                                        _actionIcon(
-                                          context: context,
-                                          icon: Icons.lyrics_rounded,
-                                          tooltip: 'Buka lirik karaoke',
-                                          onPressed: _openLyrics,
-                                        ),
-                                        _actionIcon(
-                                          context: context,
-                                          icon: Icons.queue_music_rounded,
-                                          tooltip: 'Buka antrean',
-                                          onPressed: widget.onOpenQueue,
-                                        ),
-                                        _actionIcon(
-                                          context: context,
-                                          icon: Icons.equalizer_rounded,
-                                          tooltip: 'Efek audio dan equalizer',
-                                          onPressed: widget.onOpenAudioSettings,
-                                        ),
-                                        ValueListenableBuilder<bool>(
-                                          valueListenable: widget.sleepActive,
-                                          builder: (context, active, _) => _actionIcon(
-                                            context: context,
-                                            icon: active ? Icons.timer_rounded : Icons.bedtime_outlined,
-                                            tooltip: active ? 'Timer tidur aktif' : 'Timer tidur',
-                                            onPressed: widget.followingRoom ? null : widget.onOpenSleepTimer,
-                                            selected: active,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 4),
-                                    SliderTheme(
-                                      data: SliderTheme.of(context).copyWith(
-                                        // YouTube-style buffer bar:
-                                        // red = already played, light gray = buffered ahead,
-                                        // dark gray = not buffered yet.
-                                        trackHeight: 3,
-                                        activeTrackColor: scheme.primary,
-                                        secondaryActiveTrackColor: scheme.onSurface.withValues(alpha: 0.46),
-                                        inactiveTrackColor: scheme.onSurface.withValues(alpha: 0.18),
-                                        thumbColor: scheme.primary,
-                                        overlayColor: scheme.primary.withValues(alpha: 0.12),
-                                        thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                                        overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
-                                      ),
-                                      child: Slider(
-                                        min: 0,
-                                        max: maxMs,
-                                        value: sliderValue,
-                                        secondaryTrackValue: bufferedTrackValue,
-                                        onChanged: duration <= Duration.zero || widget.followingRoom
-                                            ? null
-                                            : (value) => setState(() {
-                                                  _dragPositionMs = value;
-                                                }),
-                                        onChangeEnd: duration <= Duration.zero || widget.followingRoom
-                                            ? null
-                                            : (value) async {
-                                                setState(() {
-                                                  _dragPositionMs = null;
-                                                });
-                                                await widget.onSeek(Duration(milliseconds: value.round()));
-                                              },
-                                      ),
-                                    ),
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                                      child: Row(
-                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Text(_time(Duration(milliseconds: sliderValue.round())), style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
-                                          Text(_time(duration), style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
-                                        ],
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    ValueListenableBuilder<PlayerUiState>(
-                                      valueListenable: widget.playerUiState,
-                                      builder: (context, ui, _) {
-                                        return Row(
-                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        if (!isWideLayout) ...[
+                                          trackInfoPanel,
+                                          const Spacer(),
+                                        ] else
+                                          const SizedBox(height: 8),
+                                        // Lyrics are overlaid on the cover, so loading lyrics cannot
+                                        // alter this spacing or cause the controls to jump.
+                                        Wrap(
+                                          alignment: WrapAlignment.center,
+                                          spacing: 10,
+                                          runSpacing: 4,
                                           children: [
-                                            IconButton(
-                                              tooltip: ui.isSmartShuffle
-                                                  ? 'Smart Shuffle aktif • tekan lama untuk mematikan'
-                                                  : 'Shuffle • tekan lama untuk Smart Shuffle',
-                                              onPressed: widget.followingRoom ? null : widget.onToggleShuffle,
-                                              onLongPress: widget.followingRoom ? null : widget.onToggleSmartShuffle,
-                                              icon: Icon(
-                                                ui.isSmartShuffle
-                                                    ? Icons.auto_awesome_rounded
-                                                    : Icons.shuffle_rounded,
-                                                color: ui.isShuffle
-                                                    ? scheme.primary
-                                                    : scheme.onSurfaceVariant,
-                                              ),
+                                            _actionIcon(
+                                              context: context,
+                                              icon: Icons.playlist_add_rounded,
+                                              tooltip: 'Tambah ke playlist',
+                                              onPressed: widget.onAddToPlaylist,
                                             ),
-                                            IconButton(
-                                              tooltip: 'Lagu sebelumnya (MusikKu)',
-                                              onPressed: widget.followingRoom ? null : widget.onPrevious,
-                                              icon: const Icon(Icons.skip_previous_rounded, size: 31),
+                                            _actionIcon(
+                                              context: context,
+                                              icon: Icons.lyrics_rounded,
+                                              tooltip: 'Buka lirik karaoke',
+                                              onPressed: _openLyrics,
                                             ),
-                                            SizedBox(
-                                              width: 64,
-                                              height: 64,
-                                              child: FilledButton(
-                                                style: FilledButton.styleFrom(shape: const CircleBorder(), padding: EdgeInsets.zero),
-                                                onPressed: busy || widget.followingRoom ? null : () => widget.onPlayPause(),
-                                                child: Icon(
-                                                  busy ? Icons.hourglass_top_rounded : (playing ? Icons.pause_rounded : Icons.play_arrow_rounded),
-                                                  size: 36,
-                                                ),
-                                              ),
+                                            _actionIcon(
+                                              context: context,
+                                              icon: Icons.queue_music_rounded,
+                                              tooltip: 'Buka antrean',
+                                              onPressed: widget.onOpenQueue,
                                             ),
-                                            IconButton(
-                                              tooltip: 'Lagu berikutnya (MusikKu)',
-                                              onPressed: widget.followingRoom ? null : widget.onNext,
-                                              icon: const Icon(Icons.skip_next_rounded, size: 31),
+                                            _actionIcon(
+                                              context: context,
+                                              icon: Icons.equalizer_rounded,
+                                              tooltip: 'Efek audio dan equalizer',
+                                              onPressed: widget.onOpenAudioSettings,
                                             ),
-                                            IconButton(
-                                              tooltip: switch (ui.loopMode) {
-                                                LoopModeCustom.off => 'Aktifkan repeat',
-                                                LoopModeCustom.all => 'Repeat semua aktif',
-                                                LoopModeCustom.one => 'Repeat satu aktif',
-                                              },
-                                              onPressed: widget.followingRoom ? null : widget.onCycleLoop,
-                                              icon: Icon(
-                                                ui.loopMode == LoopModeCustom.one ? Icons.repeat_one_rounded : Icons.repeat_rounded,
-                                                color: ui.loopMode == LoopModeCustom.off ? scheme.onSurfaceVariant : scheme.primary,
+                                            ValueListenableBuilder<bool>(
+                                              valueListenable: widget.sleepActive,
+                                              builder: (context, active, _) => _actionIcon(
+                                                context: context,
+                                                icon: active ? Icons.timer_rounded : Icons.bedtime_outlined,
+                                                tooltip: active ? 'Timer tidur aktif' : 'Timer tidur',
+                                                onPressed: widget.followingRoom ? null : widget.onOpenSleepTimer,
+                                                selected: active,
                                               ),
                                             ),
                                           ],
-                                        );
-                                      },
-                                    ),
-                                    if (stateMatchesTrack && state.playbackState == NativePlaybackState.error)
-                                      Padding(
-                                        padding: const EdgeInsets.only(top: 12),
-                                        child: Text(
-                                          'Lagu ini gagal dimuat dari sumber audio. Tekan Putar ulang atau pilih lagu berikutnya.',
-                                          textAlign: TextAlign.center,
-                                          style: theme.textTheme.bodySmall?.copyWith(color: scheme.error),
                                         ),
-                                      ),
-                                    ],
+                                        const SizedBox(height: 4),
+                                        SliderTheme(
+                                          data: SliderTheme.of(context).copyWith(
+                                            // YouTube-style buffer bar:
+                                            // red = already played, light gray = buffered ahead,
+                                            // dark gray = not buffered yet.
+                                            trackHeight: 3,
+                                            activeTrackColor: scheme.primary,
+                                            secondaryActiveTrackColor: scheme.onSurface.withValues(alpha: 0.46),
+                                            inactiveTrackColor: scheme.onSurface.withValues(alpha: 0.18),
+                                            thumbColor: scheme.primary,
+                                            overlayColor: scheme.primary.withValues(alpha: 0.12),
+                                            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                                            overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+                                          ),
+                                          child: Slider(
+                                            min: 0,
+                                            max: maxMs,
+                                            value: sliderValue,
+                                            secondaryTrackValue: bufferedTrackValue,
+                                            onChanged: duration <= Duration.zero
+                                                ? null
+                                                : (value) => setState(() {
+                                                      _dragPositionMs = value;
+                                                    }),
+                                            onChangeEnd: duration <= Duration.zero
+                                                ? null
+                                                : (value) async {
+                                                    setState(() {
+                                                      _dragPositionMs = null;
+                                                    });
+                                                    await widget.onSeek(Duration(milliseconds: value.round()));
+                                                  },
+                                          ),
+                                        ),
+                                        Padding(
+                                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                                          child: Row(
+                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                            children: [
+                                              Text(_time(Duration(milliseconds: sliderValue.round())), style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
+                                              Text(_time(duration), style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
+                                            ],
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        ValueListenableBuilder<PlayerUiState>(
+                                          valueListenable: widget.playerUiState,
+                                          builder: (context, ui, _) {
+                                            return Row(
+                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                              children: [
+                                                IconButton(
+                                                  tooltip: ui.isSmartShuffle
+                                                      ? 'Smart Shuffle aktif • tekan lama untuk mematikan'
+                                                      : 'Shuffle • tekan lama untuk Smart Shuffle',
+                                                  onPressed: widget.onToggleShuffle,
+                                                  onLongPress: widget.onToggleSmartShuffle,
+                                                  icon: Icon(
+                                                    ui.isSmartShuffle
+                                                        ? Icons.auto_awesome_rounded
+                                                        : Icons.shuffle_rounded,
+                                                    color: ui.isShuffle
+                                                        ? scheme.primary
+                                                        : scheme.onSurfaceVariant,
+                                                  ),
+                                                ),
+                                                IconButton(
+                                                  tooltip: 'Lagu sebelumnya (MusikKu)',
+                                                  onPressed: widget.onPrevious,
+                                                  icon: const Icon(Icons.skip_previous_rounded, size: 31),
+                                                ),
+                                                SizedBox(
+                                                  width: 64,
+                                                  height: 64,
+                                                  child: FilledButton(
+                                                    style: FilledButton.styleFrom(shape: const CircleBorder(), padding: EdgeInsets.zero),
+                                                    onPressed: (busy && !widget.followingRoom) ? null : () => widget.onPlayPause(),
+                                                    child: Icon(
+                                                      busy ? Icons.hourglass_top_rounded : (playing ? Icons.pause_rounded : Icons.play_arrow_rounded),
+                                                      size: 36,
+                                                    ),
+                                                  ),
+                                                ),
+                                                IconButton(
+                                                  tooltip: 'Lagu berikutnya (MusikKu)',
+                                                  onPressed: widget.onNext,
+                                                  icon: const Icon(Icons.skip_next_rounded, size: 31),
+                                                ),
+                                                IconButton(
+                                                  tooltip: switch (ui.loopMode) {
+                                                    LoopModeCustom.off => 'Aktifkan repeat',
+                                                    LoopModeCustom.all => 'Repeat semua aktif',
+                                                    LoopModeCustom.one => 'Repeat satu aktif',
+                                                  },
+                                                  onPressed: widget.onCycleLoop,
+                                                  icon: Icon(
+                                                    ui.loopMode == LoopModeCustom.one ? Icons.repeat_one_rounded : Icons.repeat_rounded,
+                                                    color: ui.loopMode == LoopModeCustom.off ? scheme.onSurfaceVariant : scheme.primary,
+                                                  ),
+                                                ),
+                                              ],
+                                            );
+                                          },
+                                        ),
+                                        if (stateMatchesTrack && state.playbackState == NativePlaybackState.error)
+                                          Padding(
+                                            padding: const EdgeInsets.only(top: 12),
+                                            child: Text(
+                                              'Lagu ini gagal dimuat dari sumber audio. Tekan Putar ulang atau pilih lagu berikutnya.',
+                                              textAlign: TextAlign.center,
+                                              style: theme.textTheme.bodySmall?.copyWith(color: scheme.error),
+                                            ),
+                                          ),
+                                        const SizedBox(height: 12),
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ],

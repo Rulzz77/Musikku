@@ -97,8 +97,8 @@ class _HomePageState extends State<HomePage>
 
   final StorageService _storage = StorageService();
 
-  // Listen Together dapat memakai server realtime lintas jaringan bila dikonfigurasi;
-  // tanpa kredensial project, layanan mempertahankan mode lokal Wi-Fi/hotspot.
+  // Listen Together menggunakan Supabase Realtime lintas jaringan. Tidak ada
+  // fallback LAN/IP: build harus menyertakan URL dan publishable key Supabase.
   final ListeningTogetherService _listenTogether = ListeningTogetherService();
   StreamSubscription<Map<String, dynamic>>? _listenTogetherMessagesSubscription;
   Timer? _listenTogetherSyncTimer;
@@ -488,10 +488,10 @@ class _HomePageState extends State<HomePage>
     );
 
     _youtubeController.setNotificationCallbacks(
-      onNext: _next,
-      onPrevious: _previous,
-      onPlayPause: _togglePlayPause,
-      onStop: _stopPlayback,
+      onNext: () => _routeListenTogetherAction('next', () => _next()),
+      onPrevious: () => _routeListenTogetherAction('previous', _previous),
+      onPlayPause: () => _routeListenTogetherAction('play_pause', _togglePlayPause),
+      onStop: () => _routeListenTogetherAction('stop', _stopPlayback),
       onYoutubeAudioPlaybackError: (videoId, positionSeconds, shouldPlay) =>
           _fallbackFromYoutubeAudioError(
         videoId: videoId,

@@ -97,7 +97,7 @@ extension _HomeListeningTogether on _HomePageState {
                         Expanded(
                           child: Text(
                             onlineReady
-                                ? 'Online aktif. Teman dari Wi-Fi atau jaringan seluler mana pun cukup memasukkan kode 8 digit. Tidak perlu alamat IP atau login. Pergantian lagu, play/pause, dan posisi mengikuti host otomatis.'
+                                ? 'Online aktif. Teman dari Wi-Fi atau jaringan seluler mana pun cukup memasukkan kode 8 digit. Tidak perlu alamat IP atau login. Semua anggota bisa mengontrol pemutaran; status terbaru disinkronkan ke seluruh kamar.'
                                 : 'Server online belum dikonfigurasi pada build ini. Tambahkan SUPABASE_URL dan SUPABASE_PUBLISHABLE_KEY di GitHub Actions, lalu buat APK baru. Alamat IP lokal tidak digunakan di layar ini.',
                             style: TextStyle(color: scheme.onSurfaceVariant, height: 1.35, fontSize: 12.5),
                           ),
@@ -205,7 +205,9 @@ extension _HomeListeningTogether on _HomePageState {
                   if (!connected) ...[
                     const SizedBox(height: 14),
                     FilledButton.icon(
-                      onPressed: onlineReady ? () async {
+                      // Keep this tappable even when setup is missing so the
+                      // reason is shown in the room status instead of failing silently.
+                      onPressed: () async {
                         try {
                           await _listenTogether.hostRoom();
                           _startListenTogetherBroadcast();
@@ -213,7 +215,7 @@ extension _HomeListeningTogether on _HomePageState {
                         } catch (error) {
                           _listenTogether.status.value = 'Gagal membuat kamar online: $error';
                         }
-                      } : null,
+                      },
                       icon: const Icon(Icons.add_link_rounded),
                       label: const Text('Buat kamar'),
                       style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
@@ -234,13 +236,11 @@ extension _HomeListeningTogether on _HomePageState {
                         prefixIcon: const Icon(Icons.password_rounded),
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
                       ),
-                      onSubmitted: (_) {
-                        if (onlineReady) unawaited(_joinListenTogetherRoom(codeController.text));
-                      },
+                      onSubmitted: (_) => unawaited(_joinListenTogetherRoom(codeController.text)),
                     ),
                     const SizedBox(height: 8),
                     OutlinedButton.icon(
-                      onPressed: onlineReady ? () => _joinListenTogetherRoom(codeController.text) : null,
+                      onPressed: () => _joinListenTogetherRoom(codeController.text),
                       icon: const Icon(Icons.login_rounded),
                       label: const Text('Gabung pakai kode'),
                       style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(46)),
@@ -262,7 +262,7 @@ extension _HomeListeningTogether on _HomePageState {
                       Padding(
                         padding: const EdgeInsets.only(top: 8),
                         child: Text(
-                          'Pemutaran di perangkat ini mengikuti host. Kontrol lagu utama berada di perangkat host.',
+                          'Semua anggota bisa play/pause, Next/Previous, geser posisi, Shuffle, dan Repeat. Perintah dikirim ke host lalu tersinkron ke kamar.',
                           textAlign: TextAlign.center,
                           style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
                         ),
@@ -278,13 +278,14 @@ extension _HomeListeningTogether on _HomePageState {
   }
 
   Future<void> _joinListenTogetherRoom(String code) async {
+    final normalizedCode = code.trim();
     if (!_listenTogether.onlineConfigured) {
-      _listenTogether.status.value = 'Server online belum dikonfigurasi. Buat APK dengan variabel Supabase dari GitHub Actions.';
+      _listenTogether.status.value =
+          'Server online belum dikonfigurasi pada APK ini. Atur SUPABASE_URL dan SUPABASE_PUBLISHABLE_KEY di GitHub Actions, lalu build APK baru.';
       return;
     }
-    final normalizedCode = code.trim();
     if (!RegExp(r'^\d{8}$').hasMatch(normalizedCode)) {
-      _listenTogether.status.value = 'Masukkan kode kamar 8 digit dari host.';
+      _listenTogether.status.value = 'Masukkan kode kamar 8 digit. Tidak perlu alamat IP.';
       return;
     }
     try {
@@ -299,47 +300,184 @@ extension _HomeListeningTogether on _HomePageState {
     }
   }
 
+  Future<void> _routeListenTogetherAction(
+    String action,
+    Future<void> Function() localAction, {
+    Duration? position,
+  }) async {
+    if (_listenTogether.isGuest) {
+      try {
+        await _listenTogether.requestControl(
+          action,
+          positionMs: position?.inMilliseconds,
+        );
+      } catch (error) {
+        if (mounted) _toast('Kontrol kamar gagal dikirim: $error');
+      }
+      return;
+    }
+    await localAction();
+  }
+
+  void _routeListenTogetherModeAction(String action, VoidCallback localAction) {
+    if (_listenTogether.isGuest) {
+      unawaited(_requestListenTogetherControl(action));
+      return;
+    }
+    localAction();
+  }
+
+  Future<void> _requestListenTogetherControl(String action) async {
+    try {
+      await _listenTogether.requestControl(action);
+    } catch (error) {
+      if (mounted) _toast('Kontrol kamar gagal dikirim: $error');
+    }
+  }
+
+  Future<void> _applyListenTogetherRemoteControl(Map<String, dynamic> message) async {
+    if (!_listenTogether.isHost || message['type'] != 'control') return;
+    final action = message['action']?.toString() ?? '';
+    switch (action) {
+      case 'play_pause':
+        await _togglePlayPause();
+        break;
+      case 'play_track':
+        final videoId = message['videoId']?.toString().trim() ?? '';
+        final title = message['title']?.toString().trim() ?? '';
+        if (!isValidSharedYouTubeVideoId(videoId) || title.isEmpty) {
+          return;
+        }
+        final rawArtist = message['artist']?.toString().trim() ?? '';
+        final rawThumbnail = message['thumbnailUrl']?.toString().trim() ?? '';
+        final thumbnailUrl = rawThumbnail.startsWith('https://i.ytimg.com/') ||
+                rawThumbnail.startsWith('https://img.youtube.com/')
+            ? rawThumbnail
+            : '';
+        final rawDuration = message['durationSeconds'];
+        final durationSeconds = rawDuration is num &&
+                rawDuration.isFinite && rawDuration > 0
+            ? rawDuration.toDouble().clamp(0.0, 86400.0).toDouble()
+            : null;
+        // A guest choosing a song should establish a coherent Radio seed on
+        // the host, so the next song follows the newly selected track instead
+        // of the host's unrelated previous queue/search context.
+        await _startRadioFromVideo(
+          YoutubeSearchResult(
+            videoId: videoId,
+            title: title.substring(0, title.length.clamp(0, 180).toInt()),
+            channelTitle: rawArtist.substring(0, rawArtist.length.clamp(0, 160).toInt()),
+            thumbnailUrl: thumbnailUrl,
+            durationSeconds: durationSeconds,
+          ),
+        );
+        break;
+      case 'stop':
+        await _stopPlayback();
+        break;
+      case 'next':
+        await _next();
+        break;
+      case 'previous':
+        await _previous();
+        break;
+      case 'seek':
+        final current = _currentVideo;
+        if (current == null) return;
+        final requestedMs = (message['positionMs'] as num?)?.toInt() ?? 0;
+        final maxMs = _nativeState.duration > Duration.zero
+            ? _nativeState.duration.inMilliseconds
+            : 24 * 60 * 60 * 1000;
+        final targetMs = requestedMs.clamp(0, maxMs).toInt();
+        try {
+          await _youtubeController.seekTo(seconds: targetMs / 1000.0);
+        } catch (error) {
+          debugPrint('LISTEN TOGETHER REMOTE SEEK ERROR: $error');
+        }
+        break;
+      case 'shuffle':
+        _toggleShuffle();
+        break;
+      case 'smart_shuffle':
+        _toggleSmartShuffle();
+        break;
+      case 'loop':
+        _cycleLoopMode();
+        break;
+      default:
+        return;
+    }
+    // The regular 2-second heartbeat remains the authoritative correction;
+    // this immediate snapshot makes pause/seek/mode changes feel responsive.
+    if (action == 'play_pause' ||
+        action == 'play_track' ||
+        action == 'stop' ||
+        action == 'next' ||
+        action == 'previous' ||
+        action == 'seek' ||
+        action == 'shuffle' ||
+        action == 'smart_shuffle' ||
+        action == 'loop') {
+      // Push state immediately after every accepted host-side control. The
+      // periodic heartbeat remains a correction, not the primary response.
+      _broadcastListenTogetherState();
+    }
+  }
+
   void _startListenTogetherBroadcast() {
     _listenTogetherSyncTimer?.cancel();
-    _listenTogetherSyncTimer = Timer.periodic(const Duration(seconds: 2), (_) {
-      if (!_listenTogether.isHost) {
-        _listenTogetherSyncTimer?.cancel();
-        _listenTogetherSyncTimer = null;
-        return;
-      }
+    _listenTogetherSyncTimer = Timer.periodic(
+      const Duration(seconds: 2),
+      (_) => _broadcastListenTogetherState(),
+    );
+    _broadcastListenTogetherState();
+  }
 
-      final video = _currentVideo;
-      if (video == null) {
-        _listenTogether.broadcastState(<String, dynamic>{'type': 'idle'});
-        return;
-      }
-      if (video.isLocal) {
-        _listenTogether.broadcastState(<String, dynamic>{
-          'type': 'unsupported',
-          'videoId': video.videoId,
-          'message': 'Host sedang memutar file lokal. Pilih lagu YouTube untuk sinkronisasi.',
-        });
-        return;
-      }
-
-      final state = _nativeState;
-      final matchesTrack = state.videoId.isEmpty || state.videoId == video.videoId;
+  void _broadcastListenTogetherState() {
+    if (!_listenTogether.isHost) return;
+    final video = _currentVideo;
+    if (video == null) {
+      _listenTogether.broadcastState(<String, dynamic>{'type': 'idle'});
+      return;
+    }
+    if (video.isLocal) {
       _listenTogether.broadcastState(<String, dynamic>{
+        'type': 'unsupported',
         'videoId': video.videoId,
-        'title': video.title,
-        'artist': video.channelTitle,
-        'thumbnailUrl': video.coverUrl,
-        'durationSeconds': video.durationSeconds,
-        'positionMs': matchesTrack ? state.position.inMilliseconds : 0,
-        'playing': matchesTrack && state.isEffectivelyPlaying,
-        'sentAtMs': DateTime.now().millisecondsSinceEpoch,
+        'message': 'Host sedang memutar file lokal. Pilih lagu YouTube agar tersinkron.',
       });
+      return;
+    }
+
+    final state = _nativeState;
+    final matchesTrack = state.videoId.isEmpty || state.videoId == video.videoId;
+    _listenTogether.broadcastState(<String, dynamic>{
+      'videoId': video.videoId,
+      'title': video.title,
+      'artist': video.channelTitle,
+      'thumbnailUrl': video.coverUrl,
+      'durationSeconds': video.durationSeconds,
+      'positionMs': matchesTrack ? state.position.inMilliseconds : 0,
+      'playing': matchesTrack && state.isEffectivelyPlaying,
+      'isShuffle': _playerUiState.value.isShuffle,
+      'isSmartShuffle': _playerUiState.value.isSmartShuffle,
+      'loopModeIndex': _playerUiState.value.loopMode.index,
+      'sentAtMs': DateTime.now().millisecondsSinceEpoch,
     });
   }
 
   void _onListenTogetherMessage(Map<String, dynamic> message) {
-    if (!_listenTogether.isGuest) return;
     final type = message['type']?.toString() ?? '';
+    if (_listenTogether.isHost) {
+      if (type == 'control') unawaited(_applyListenTogetherRemoteControl(message));
+      return;
+    }
+    if (!_listenTogether.isGuest) return;
+    if (type == 'room_closed') {
+      _lastRoomUnsupportedTrackId = 'room_closed';
+      unawaited(_pauseListenTogetherGuest());
+      return;
+    }
     if (type == 'idle') {
       if (_lastRoomUnsupportedTrackId != 'idle') {
         _lastRoomUnsupportedTrackId = 'idle';
@@ -373,6 +511,19 @@ extension _HomeListeningTogether on _HomePageState {
     if (videoId.isEmpty || videoId.startsWith('local:')) return;
 
     _lastRoomUnsupportedTrackId = '';
+    final remoteShuffle = message['isShuffle'] as bool?;
+    final remoteSmartShuffle = message['isSmartShuffle'] as bool?;
+    final remoteLoopIndex = (message['loopModeIndex'] as num?)?.toInt();
+    if (remoteShuffle != null || remoteSmartShuffle != null || remoteLoopIndex != null) {
+      final safeLoopIndex = remoteLoopIndex == null
+          ? _playerUiState.value.loopMode.index
+          : remoteLoopIndex.clamp(0, LoopModeCustom.values.length - 1).toInt();
+      _playerUiState.value = _playerUiState.value.copyWith(
+        isShuffle: remoteShuffle,
+        isSmartShuffle: remoteSmartShuffle,
+        loopMode: LoopModeCustom.values[safeLoopIndex],
+      );
+    }
     final title = message['title']?.toString() ?? 'Lagu dari host';
     final artist = message['artist']?.toString() ?? 'Tidak diketahui';
     final thumbnail = message['thumbnailUrl']?.toString() ?? '';
@@ -400,7 +551,13 @@ extension _HomeListeningTogether on _HomePageState {
 
     _applyingListenTogetherState = true;
     try {
-      if (_currentVideo?.videoId != videoId) {
+      final state = _nativeState;
+      // A guest can already have the same title selected while its native
+      // Media3 stream is not loaded (for example after joining from the home
+      // screen). In that case Play/Pause alone cannot start the room track.
+      final nativeTrackMatches = state.videoId == videoId ||
+          (state.videoId.isEmpty && _youtubeController.isUsingYoutubeAudio);
+      if (_currentVideo?.videoId != videoId || !nativeTrackMatches) {
         await _playVideo(
           track,
           recordHistory: false,
@@ -411,9 +568,7 @@ extension _HomeListeningTogether on _HomePageState {
         return;
       }
 
-      final state = _nativeState;
-      final sameTrackState = state.videoId.isEmpty || state.videoId == videoId;
-      if (sameTrackState && state.duration > Duration.zero) {
+      if (state.duration > Duration.zero) {
         final driftMs = (state.position.inMilliseconds - positionMs).abs();
         if (driftMs > 2800) {
           await _youtubeController.seekTo(seconds: positionMs / 1000.0);

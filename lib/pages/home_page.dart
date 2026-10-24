@@ -103,6 +103,9 @@ class _HomePageState extends State<HomePage>
   StreamSubscription<Map<String, dynamic>>? _listenTogetherMessagesSubscription;
   Timer? _listenTogetherSyncTimer;
   bool _applyingListenTogetherState = false;
+  Map<String, dynamic>? _pendingListenTogetherState;
+  int _listenTogetherStateSequence = 0;
+  int _lastAppliedListenTogetherSequence = 0;
   bool _wasFollowingListenTogether = false;
   String _lastRoomUnsupportedTrackId = '';
   String _lastListenTogetherLoadFailureVideoId = '';

@@ -53,10 +53,29 @@ const Set<String> listeningRoomControlActions = <String>{
   'shuffle',
   'smart_shuffle',
   'loop',
+  'sync_request',
 };
 
 bool isAllowedListeningRoomControlAction(String action) =>
     listeningRoomControlActions.contains(action);
+
+/// Keeps the newest host snapshot while a guest is loading an audio source.
+/// Broadcast snapshots with no sequence (older clients) are accepted for
+/// backwards compatibility; the current client always sends a sequence.
+Map<String, dynamic> newestQueuedListeningState(
+  Map<String, dynamic>? pending,
+  Map<String, dynamic> incoming,
+) {
+  if (pending == null) return Map<String, dynamic>.from(incoming);
+  final incomingSequence = (incoming['sequence'] as num?)?.toInt() ?? 0;
+  final pendingSequence = (pending['sequence'] as num?)?.toInt() ?? 0;
+  if (incomingSequence == 0 ||
+      pendingSequence == 0 ||
+      incomingSequence > pendingSequence) {
+    return Map<String, dynamic>.from(incoming);
+  }
+  return pending;
+}
 
 /// Online synchronization for a shared music session.
 ///
@@ -88,6 +107,9 @@ class ListeningTogetherService {
   }
 
   final ValueNotifier<String> status = ValueNotifier<String>('Belum terhubung');
+  /// Explains whether the guest actually receives/applies the host's player state.
+  final ValueNotifier<String> syncStatus =
+      ValueNotifier<String>('Belum ada sesi sinkronisasi');
   final ValueNotifier<int> peerCount = ValueNotifier<int>(0);
   final ValueNotifier<String> inviteAddress = ValueNotifier<String>('');
   final ValueNotifier<String> roomCode = ValueNotifier<String>('');
@@ -171,12 +193,14 @@ class ListeningTogetherService {
     roomCode.value = pin;
     inviteAddress.value = pin;
     status.value = 'Menghubungkan ke server online…';
+    syncStatus.value = 'Menunggu musik dari host';
 
     final channel = _createOnlineChannel(pin, hosting: true);
     _onlineChannel = channel;
     try {
       await _subscribeOnlineChannel(channel);
       status.value = 'Kamar online aktif • menunggu teman';
+      syncStatus.value = 'Kamar siap • pilih lagu YouTube untuk dibagikan';
       _heartbeatTimer?.cancel();
       _heartbeatTimer = Timer.periodic(const Duration(seconds: 5), (_) {
         _pruneOnlinePeers();
@@ -209,6 +233,7 @@ class ListeningTogetherService {
     roomCode.value = pin;
     inviteAddress.value = pin;
     status.value = 'Menghubungkan ke kamar online…';
+    syncStatus.value = 'Menunggu status lagu dari host…';
 
     final channel = _createOnlineChannel(pin, hosting: false);
     _onlineChannel = channel;
@@ -256,6 +281,15 @@ class ListeningTogetherService {
         }());
       });
       status.value = 'Terhubung online • kontrol bersama aktif';
+      syncStatus.value = 'Meminta status lagu terbaru dari host…';
+      // Broadcast is not persisted. Ask for a fresh snapshot immediately instead
+      // of making the guest wait for the next periodic heartbeat. A failed request
+      // must not tear down a successfully joined room.
+      try {
+        await requestControl('sync_request');
+      } catch (error) {
+        syncStatus.value = 'Terhubung; menunggu pembaruan lagu (${error.runtimeType})';
+      }
     } catch (_) {
       _onlineJoinCompleter = null;
       await closeRoom();
@@ -611,6 +645,7 @@ class ListeningTogetherService {
     await _onlineClient?.dispose();
     _onlineClient = null;
     status.dispose();
+    syncStatus.dispose();
     peerCount.dispose();
     inviteAddress.dispose();
     roomCode.dispose();

@@ -85,6 +85,7 @@ void main() {
         'shuffle',
         'smart_shuffle',
         'loop',
+        'sync_request',
       ]) {
         expect(isAllowedListeningRoomControlAction(action), isTrue, reason: action);
       }
@@ -94,6 +95,27 @@ void main() {
       expect(isAllowedListeningRoomControlAction('delete_room'), isFalse);
       expect(isAllowedListeningRoomControlAction('execute'), isFalse);
       expect(isAllowedListeningRoomControlAction(''), isFalse);
+    });
+  });
+
+  group('queued shared playback snapshots', () {
+    test('keeps the newest snapshot while an older track is still loading', () {
+      final pending = newestQueuedListeningState(
+        <String, dynamic>{'sequence': 4, 'videoId': 'old-track'},
+        <String, dynamic>{'sequence': 7, 'videoId': 'new-track'},
+      );
+      expect(pending['sequence'], 7);
+      expect(pending['videoId'], 'new-track');
+    });
+
+    test('does not replace a newer pending snapshot with an older one', () {
+      final newest = <String, dynamic>{'sequence': 9, 'videoId': 'new-track'};
+      final pending = newestQueuedListeningState(
+        newest,
+        <String, dynamic>{'sequence': 6, 'videoId': 'old-track'},
+      );
+      expect(pending['sequence'], 9);
+      expect(pending['videoId'], 'new-track');
     });
   });
 

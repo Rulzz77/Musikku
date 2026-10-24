@@ -136,6 +136,22 @@ extension _HomeListeningTogether on _HomePageState {
                               ),
                               const SizedBox(height: 3),
                               Text(status, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12)),
+                              if (connected) ...[
+                                const SizedBox(height: 4),
+                                ValueListenableBuilder<String>(
+                                  valueListenable: _listenTogether.syncStatus,
+                                  builder: (context, syncStatus, _) => Text(
+                                    syncStatus,
+                                    style: TextStyle(
+                                      color: syncStatus.toLowerCase().contains('gagal')
+                                          ? scheme.error
+                                          : scheme.onSurfaceVariant,
+                                      fontSize: 11,
+                                      height: 1.25,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                         ),
@@ -288,12 +304,15 @@ extension _HomeListeningTogether on _HomePageState {
       _listenTogether.status.value = 'Masukkan kode kamar 8 digit. Tidak perlu alamat IP.';
       return;
     }
+    _pendingListenTogetherState = null;
+    _lastAppliedListenTogetherSequence = 0;
+    _lastRoomUnsupportedTrackId = '';
+    _lastListenTogetherLoadFailureVideoId = '';
+    _lastListenTogetherLoadFailureAt = null;
     try {
       await _listenTogether.joinRoom(normalizedCode, code: normalizedCode);
       _listenTogetherSyncTimer?.cancel();
       _listenTogetherSyncTimer = null;
-      _lastRoomUnsupportedTrackId = '';
-      _lastListenTogetherLoadFailureVideoId = '';
       _lastListenTogetherLoadFailureAt = null;
       _clearSleepTimer();
       _refreshListeningTogetherUi();
@@ -341,6 +360,9 @@ extension _HomeListeningTogether on _HomePageState {
     if (!_listenTogether.isHost || message['type'] != 'control') return;
     final action = message['action']?.toString() ?? '';
     switch (action) {
+      case 'sync_request':
+        _broadcastListenTogetherState();
+        return;
       case 'play_pause':
         await _togglePlayPause();
         break;
@@ -427,6 +449,7 @@ extension _HomeListeningTogether on _HomePageState {
   }
 
   void _startListenTogetherBroadcast() {
+    _listenTogetherStateSequence = 0;
     _listenTogetherSyncTimer?.cancel();
     _listenTogetherSyncTimer = Timer.periodic(
       const Duration(seconds: 2),
@@ -438,21 +461,32 @@ extension _HomeListeningTogether on _HomePageState {
   void _broadcastListenTogetherState() {
     if (!_listenTogether.isHost) return;
     final video = _currentVideo;
+    final sequence = ++_listenTogetherStateSequence;
     if (video == null) {
-      _listenTogether.broadcastState(<String, dynamic>{'type': 'idle'});
+      _listenTogether.syncStatus.value = 'Menunggu host memutar lagu';
+      _listenTogether.broadcastState(<String, dynamic>{
+        'type': 'idle',
+        'sequence': sequence,
+        'sentAtMs': DateTime.now().millisecondsSinceEpoch,
+      });
       return;
     }
     if (video.isLocal) {
+      _listenTogether.syncStatus.value = 'File lokal tidak bisa dikirim ke kamar';
       _listenTogether.broadcastState(<String, dynamic>{
         'type': 'unsupported',
         'videoId': video.videoId,
         'message': 'Host sedang memutar file lokal. Pilih lagu YouTube agar tersinkron.',
+        'sequence': sequence,
+        'sentAtMs': DateTime.now().millisecondsSinceEpoch,
       });
       return;
     }
 
     final state = _nativeState;
-    final matchesTrack = state.videoId.isEmpty || state.videoId == video.videoId;
+    final matchesTrack = state.videoId == video.videoId &&
+        _youtubeController.isUsingYoutubeAudio;
+    _listenTogether.syncStatus.value = 'Membagikan: ${video.title}';
     _listenTogether.broadcastState(<String, dynamic>{
       'videoId': video.videoId,
       'title': video.title,
@@ -465,6 +499,7 @@ extension _HomeListeningTogether on _HomePageState {
       'isSmartShuffle': _playerUiState.value.isSmartShuffle,
       'loopModeIndex': _playerUiState.value.loopMode.index,
       'sentAtMs': DateTime.now().millisecondsSinceEpoch,
+      'sequence': sequence,
     });
   }
 
@@ -480,7 +515,24 @@ extension _HomeListeningTogether on _HomePageState {
       unawaited(_pauseListenTogetherGuest());
       return;
     }
+    if (type == 'state' || type == 'idle' || type == 'unsupported') {
+      if (_applyingListenTogetherState) {
+        // Treat idle/unsupported as snapshots too. Otherwise a delayed idle event
+        // could pause the new track while its previous source is still resolving.
+        _pendingListenTogetherState = newestQueuedListeningState(
+          _pendingListenTogetherState,
+          message,
+        );
+        return;
+      }
+      final sequence = (message['sequence'] as num?)?.toInt() ?? 0;
+      if (sequence > 0 && sequence <= _lastAppliedListenTogetherSequence) return;
+      if (sequence > 0 && type != 'state') {
+        _lastAppliedListenTogetherSequence = sequence;
+      }
+    }
     if (type == 'idle') {
+      _listenTogether.syncStatus.value = 'Host belum memutar lagu';
       if (_lastRoomUnsupportedTrackId != 'idle') {
         _lastRoomUnsupportedTrackId = 'idle';
         unawaited(_pauseListenTogetherGuest());
@@ -488,6 +540,7 @@ extension _HomeListeningTogether on _HomePageState {
       return;
     }
     if (type == 'unsupported') {
+      _listenTogether.syncStatus.value = 'Lagu host tidak dapat disinkronkan';
       final trackId = message['videoId']?.toString() ?? 'unsupported';
       if (trackId != _lastRoomUnsupportedTrackId) {
         _lastRoomUnsupportedTrackId = trackId;
@@ -508,7 +561,27 @@ extension _HomeListeningTogether on _HomePageState {
   }
 
   Future<void> _applyListenTogetherState(Map<String, dynamic> message) async {
-    if (!_listenTogether.isGuest || _applyingListenTogetherState) return;
+    if (!_listenTogether.isGuest) return;
+
+    final incomingSequence = (message['sequence'] as num?)?.toInt() ?? 0;
+    if (_applyingListenTogetherState) {
+      // Audio resolution can take several seconds. Never discard the newest host
+      // state just because an older track is still loading; coalesce the queue to
+      // the most recent sequence and apply it immediately after the current load.
+      _pendingListenTogetherState = newestQueuedListeningState(
+        _pendingListenTogetherState,
+        message,
+      );
+      return;
+    }
+    if (incomingSequence > 0 &&
+        incomingSequence <= _lastAppliedListenTogetherSequence) {
+      return;
+    }
+    if (incomingSequence > 0) {
+      _lastAppliedListenTogetherSequence = incomingSequence;
+    }
+
     final videoId = message['videoId']?.toString().trim() ?? '';
     if (videoId.isEmpty || videoId.startsWith('local:')) return;
 
@@ -557,6 +630,7 @@ extension _HomeListeningTogether on _HomePageState {
       _lastListenTogetherLoadFailureAt = null;
     }
 
+    _listenTogether.syncStatus.value = 'Menerima lagu host: $title';
     _applyingListenTogetherState = true;
     try {
       final state = _nativeState;
@@ -591,12 +665,16 @@ extension _HomeListeningTogether on _HomePageState {
           restoreDurationSeconds: durationSeconds,
           autoPlay: playing,
         );
-        if (_youtubeController.isUsingYoutubeAudio) {
+        if (_youtubeController.isUsingYoutubeAudio &&
+            _nativeState.videoId == videoId) {
           _lastListenTogetherLoadFailureVideoId = '';
           _lastListenTogetherLoadFailureAt = null;
+          _listenTogether.syncStatus.value = 'Tersinkron: $title';
         } else {
           _lastListenTogetherLoadFailureVideoId = videoId;
           _lastListenTogetherLoadFailureAt = DateTime.now();
+          _listenTogether.syncStatus.value =
+              'Gagal memuat lagu host: $title. Periksa ketersediaan audio di perangkat ini.';
         }
         return;
       }
@@ -613,10 +691,22 @@ extension _HomeListeningTogether on _HomePageState {
       } else if (!playing && state.isEffectivelyPlaying) {
         await _youtubeController.pauseVideo();
       }
+      _listenTogether.syncStatus.value = 'Tersinkron: $title';
     } catch (error) {
       debugPrint('LISTEN TOGETHER SYNC ERROR: $error');
+      _listenTogether.syncStatus.value =
+          'Gagal menyinkronkan lagu: ${error.runtimeType}';
     } finally {
       _applyingListenTogetherState = false;
+      final pending = _pendingListenTogetherState;
+      _pendingListenTogetherState = null;
+      if (pending != null && _listenTogether.isGuest) {
+        final pendingSequence = (pending['sequence'] as num?)?.toInt() ?? 0;
+        if (pendingSequence == 0 ||
+            pendingSequence > _lastAppliedListenTogetherSequence) {
+          unawaited(Future<void>.sync(() => _onListenTogetherMessage(pending)));
+        }
+      }
     }
   }
 }

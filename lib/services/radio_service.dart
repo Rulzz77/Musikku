@@ -360,13 +360,14 @@ class RadioService {
   }
 
   static String _artistKey(YoutubeSearchResult video) {
-    return normalizePhrase(
-      video.channelTitle
-          .replaceAll(RegExp(r'\b(?:official|artist|channel|topic|vevo)\b', caseSensitive: false), ' ')
-          .replaceAll(RegExp(r'[^a-z0-9\s]'), ' ')
-          .replaceAll(RegExp(r'\s+'), ' ')
-          .trim(),
+    // Remove channel suffixes before normalizing. normalizePhrase lowercases
+    // first, so uppercase artist initials (e.g. "Taylor Swift - Topic") are
+    // preserved instead of being stripped by an [a-z] character filter.
+    final withoutChannelSuffix = video.channelTitle.replaceAll(
+      RegExp(r'\b(?:official|artist|channel|topic|vevo)\b', caseSensitive: false),
+      ' ',
     );
+    return normalizePhrase(withoutChannelSuffix);
   }
 
   void _rememberSelection(YoutubeSearchResult video) {

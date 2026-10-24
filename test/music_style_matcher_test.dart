@@ -226,6 +226,9 @@ void main() {
         channel: 'Taylor Swift - Topic',
       );
       final seed = RadioService.songRadioSearchSeedFor(song);
+      // Keep exact normalized output: uppercase initials must not be lost
+      // while stripping the YouTube "- Topic" channel suffix.
+      expect(seed, 'anti-hero taylor swift similar songs');
       expect(seed, contains('anti-hero'));
       expect(seed, contains('taylor swift'));
       expect(seed, contains('similar songs'));

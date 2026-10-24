@@ -1,0 +1,14 @@
+MusikKu 5.0.34+12 review/fix files:
+- pubspec.yaml
+- lib/app_info.dart
+- lib/services/listening_together_service.dart
+- lib/widgets/music_player_page.dart
+- lib/pages/home_page/ui_layout.dart
+- test/app_info_test.dart
+- test/listening_together_payload_test.dart
+- docs/PERUBAHAN_5.0.34.md
+- docs/REVIEW_CHECKLIST_5.0.34.md
+- docs/SETUP_LISTENING_TOGETHER_ONLINE.md
+- GITHUB_SUPABASE_SETUP.md
+
+Run `flutter pub get` before analyze/build to resolve the Supabase dependency and update pubspec.lock.

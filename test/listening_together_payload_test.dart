@@ -60,6 +60,36 @@ void main() {
     );
   });
 
+
+  group('shared playback drift correction', () {
+    test('ignores small position differences', () {
+      expect(
+        shouldCorrectListeningTogetherPosition(
+          guestPositionMs: 10000,
+          hostTargetPositionMs: 8500,
+        ),
+        isFalse,
+      );
+      expect(
+        shouldCorrectListeningTogetherPosition(
+          guestPositionMs: 10000,
+          hostTargetPositionMs: 8200,
+        ),
+        isFalse,
+      );
+    });
+
+    test('corrects noticeable drift over the threshold', () {
+      expect(
+        shouldCorrectListeningTogetherPosition(
+          guestPositionMs: 10000,
+          hostTargetPositionMs: 8199,
+        ),
+        isTrue,
+      );
+    });
+  });
+
   group('shared YouTube track validation', () {
     test('accepts a standard YouTube video id only', () {
       expect(isValidSharedYouTubeVideoId('dQw4w9WgXcQ'), isTrue);

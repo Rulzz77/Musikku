@@ -60,6 +60,19 @@ bool shouldLoadListeningTogetherTrack({
       !nativeAudioLoaded;
 }
 
+/// Correct noticeable playback drift, while avoiding repeated seek operations
+/// for small stream/buffer timing differences. Host snapshots arrive every
+/// two seconds; this threshold keeps normal correction responsive without
+/// seeking on every small clock difference.
+const int listeningTogetherDriftCorrectionThresholdMs = 1800;
+
+bool shouldCorrectListeningTogetherPosition({
+  required int guestPositionMs,
+  required int hostTargetPositionMs,
+}) =>
+    (guestPositionMs - hostTargetPositionMs).abs() >
+    listeningTogetherDriftCorrectionThresholdMs;
+
 const Set<String> listeningRoomControlActions = <String>{
   'play_pause',
   'play_track',

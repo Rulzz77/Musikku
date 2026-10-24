@@ -679,11 +679,15 @@ extension _HomeListeningTogether on _HomePageState {
         return;
       }
 
-      if (state.duration > Duration.zero) {
-        final driftMs = (state.position.inMilliseconds - positionMs).abs();
-        if (driftMs > 2800) {
-          await _youtubeController.seekTo(seconds: positionMs / 1000.0);
-        }
+      if (state.duration > Duration.zero &&
+          shouldCorrectListeningTogetherPosition(
+            guestPositionMs: state.position.inMilliseconds,
+            hostTargetPositionMs: positionMs,
+          )) {
+        // Correct moderate drift earlier so the two independent audio streams
+        // do not remain noticeably out of step. The threshold avoids seeking
+        // for harmless sub-second buffering differences.
+        await _youtubeController.seekTo(seconds: positionMs / 1000.0);
       }
 
       if (playing && !state.isEffectivelyPlaying) {

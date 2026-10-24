@@ -362,7 +362,17 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                                       children: [
                                         if (!isWideLayout) ...[
                                           trackInfoPanel,
-                                          const Spacer(),
+                                          const SizedBox(height: 8),
+                                          // The old spacer left a large, featureless black gap
+                                          // between metadata and playback controls. Keep the
+                                          // control row anchored at the bottom, but use the space
+                                          // for a restrained animated audio visualizer instead.
+                                          Expanded(
+                                            child: _NowPlayingVisualizer(
+                                              playing: playing,
+                                              followingRoom: widget.followingRoom,
+                                            ),
+                                          ),
                                         ] else
                                           const SizedBox(height: 8),
                                         // Lyrics are overlaid on the cover, so loading lyrics cannot
@@ -717,3 +727,190 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
   }
 
 }
+
+/// Compact glass-style audio visualizer that gives the flexible player area a
+/// deliberate purpose instead of leaving a large empty region on tall phones.
+class _NowPlayingVisualizer extends StatefulWidget {
+  const _NowPlayingVisualizer({
+    required this.playing,
+    required this.followingRoom,
+  });
+
+  final bool playing;
+  final bool followingRoom;
+
+  @override
+  State<_NowPlayingVisualizer> createState() => _NowPlayingVisualizerState();
+}
+
+class _NowPlayingVisualizerState extends State<_NowPlayingVisualizer>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1100),
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.playing) {
+      _controller.repeat();
+    } else {
+      _controller.value = 0.12;
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _NowPlayingVisualizer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.playing == widget.playing) return;
+    if (widget.playing) {
+      _controller.repeat();
+    } else {
+      _controller.stop();
+      _controller.value = 0.12;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final cardHeight = math.min(176.0, constraints.maxHeight).toDouble();
+        if (cardHeight < 100) return const SizedBox.shrink();
+        return Center(
+          child: Container(
+            width: double.infinity,
+            height: cardHeight,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(22),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  scheme.primary.withValues(alpha: 0.105),
+                  scheme.surfaceContainerHighest.withValues(alpha: 0.12),
+                  Colors.white.withValues(alpha: 0.018),
+                ],
+              ),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.075),
+              ),
+            ),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.graphic_eq_rounded,
+                      size: 18,
+                      color: scheme.primary.withValues(alpha: 0.95),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        widget.followingRoom ? 'DENGERIN BARENG' : 'MUSIKKU AUDIO',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1.35,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: scheme.primary.withValues(alpha: 0.10),
+                        borderRadius: BorderRadius.circular(99),
+                        border: Border.all(
+                          color: scheme.primary.withValues(alpha: 0.22),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: widget.playing
+                                  ? scheme.primary
+                                  : scheme.onSurfaceVariant.withValues(alpha: 0.65),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            widget.playing ? 'DIPUTAR' : 'DIJEDA',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.6,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const Spacer(),
+                SizedBox(
+                  height: math.min(48.0, math.max(28.0, cardHeight * 0.34)).toDouble(),
+                  child: AnimatedBuilder(
+                    animation: _controller,
+                    builder: (context, _) => Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: List<Widget>.generate(25, (index) {
+                        final phase = (_controller.value * math.pi * 2) + index * 0.53;
+                        final activeHeight = (7.0 + (math.sin(phase).abs() * 33.0)).toDouble();
+                        final height = (widget.playing
+                                ? activeHeight
+                                : 5.0 + ((index % 3) * 1.5))
+                            .toDouble();
+                        return Container(
+                          width: 3.5,
+                          height: height,
+                          decoration: BoxDecoration(
+                            color: scheme.primary.withValues(
+                              alpha: widget.playing ? 0.78 : 0.24,
+                            ),
+                            borderRadius: BorderRadius.circular(99),
+                          ),
+                        );
+                      }),
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  widget.followingRoom
+                      ? 'Mengikuti sesi audio bersama'
+                      : 'Nikmati musik dengan tampilan yang lebih fokus',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant.withValues(alpha: 0.76),
+                    fontSize: 11.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+

@@ -16,6 +16,23 @@ Map<String, dynamic> unwrapRealtimeBroadcastPayload(
   return Map<String, dynamic>.from(frame);
 }
 
+/// Pulls the latest playback snapshot out of a host heartbeat. This is a
+/// recovery path for transiently missed `music_state` broadcasts; heartbeats
+/// are already used to verify that the host is still online.
+Map<String, dynamic>? listeningSnapshotFromHostHeartbeat(
+  Map<String, dynamic> frame, {
+  required String expectedRoomCode,
+}) {
+  final message = unwrapRealtimeBroadcastPayload(frame);
+  if (message['code']?.toString() != expectedRoomCode) return null;
+  final rawSnapshot = message['snapshot'];
+  if (rawSnapshot is! Map) return null;
+  final snapshot = Map<String, dynamic>.from(rawSnapshot);
+  final type = snapshot['type']?.toString();
+  if (type != 'state' && type != 'idle' && type != 'unsupported') return null;
+  return snapshot;
+}
+
 /// Online room input is deliberately code-only: never interpret an IP address
 /// as a valid room invitation.
 String? parseListeningRoomCode(String raw) {
@@ -131,6 +148,7 @@ class ListeningTogetherService {
   final Set<String> _onlinePeers = <String>{};
   final Map<String, DateTime> _onlinePeerLastSeen = <String, DateTime>{};
   final Map<String, DateTime> _lastControlAt = <String, DateTime>{};
+  Map<String, dynamic>? _latestHostPlaybackState;
 
   Stream<Map<String, dynamic>> get messages => _messages.stream;
   bool get isHost => _hosting;
@@ -190,6 +208,7 @@ class ListeningTogetherService {
     _onlinePeers.clear();
     _onlinePeerLastSeen.clear();
     _lastControlAt.clear();
+    _latestHostPlaybackState = null;
     roomCode.value = pin;
     inviteAddress.value = pin;
     status.value = 'Menghubungkan ke server online…';
@@ -207,11 +226,15 @@ class ListeningTogetherService {
         _sendOnlineUnawaited('room_host_heartbeat', <String, dynamic>{
           'code': roomCode.value,
           'sentAtMs': DateTime.now().millisecondsSinceEpoch,
+          if (_latestHostPlaybackState != null)
+            'snapshot': Map<String, dynamic>.from(_latestHostPlaybackState!),
         });
       });
       _sendOnlineUnawaited('room_host_heartbeat', <String, dynamic>{
         'code': roomCode.value,
         'sentAtMs': DateTime.now().millisecondsSinceEpoch,
+        if (_latestHostPlaybackState != null)
+          'snapshot': Map<String, dynamic>.from(_latestHostPlaybackState!),
       });
       return pin;
     } catch (error) {
@@ -408,8 +431,20 @@ class ListeningTogetherService {
     channel.onBroadcast(event: 'room_host_heartbeat', callback: (frame) {
       if (hosting || !_onlineMode || !_joined || _disposed) return;
       final message = unwrapRealtimeBroadcastPayload(frame);
-      if (message['code']?.toString() == roomCode.value) {
-        _lastHostHeartbeatAt = DateTime.now();
+      if (message['code']?.toString() != roomCode.value) return;
+      _lastHostHeartbeatAt = DateTime.now();
+
+      // Host heartbeat is also a recovery transport for the latest player state.
+      // If a `music_state` broadcast was dropped during join/reconnect, the
+      // guest still receives the state through the heartbeat event.
+      final snapshot = listeningSnapshotFromHostHeartbeat(
+        frame,
+        expectedRoomCode: roomCode.value,
+      );
+      if (snapshot != null && !_messages.isClosed) {
+        _messages.add(snapshot);
+      } else if (syncStatus.value.startsWith('Meminta status lagu')) {
+        syncStatus.value = 'Host online • menunggu snapshot musik';
       }
     });
 
@@ -563,6 +598,9 @@ class ListeningTogetherService {
   void broadcastState(Map<String, dynamic> state) {
     if (!_hosting || !_onlineMode) return;
     final payload = <String, dynamic>{'type': 'state', ...state};
+    // Keep a compact copy for the host heartbeat, so a joining guest can
+    // recover even if a transient music_state broadcast is missed.
+    _latestHostPlaybackState = Map<String, dynamic>.from(payload);
     _sendOnlineUnawaited('music_state', payload);
   }
 
@@ -622,6 +660,7 @@ class ListeningTogetherService {
     _onlinePeers.clear();
     _onlinePeerLastSeen.clear();
     _lastControlAt.clear();
+    _latestHostPlaybackState = null;
     _onlineChannel = null;
     if (remoteChannel != null) {
       try {

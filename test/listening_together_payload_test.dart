@@ -148,4 +148,58 @@ void main() {
       expect(result['code'], '12345678');
     });
   });
+
+
+  group('host heartbeat playback recovery', () {
+    test('extracts host snapshot when the music_state event was missed', () {
+      final snapshot = listeningSnapshotFromHostHeartbeat(
+        <String, dynamic>{
+          'event': 'room_host_heartbeat',
+          'payload': <String, dynamic>{
+            'code': '58319427',
+            'snapshot': <String, dynamic>{
+              'type': 'state',
+              'videoId': 'dQw4w9WgXcQ',
+              'playing': true,
+              'sequence': 12,
+            },
+          },
+        },
+        expectedRoomCode: '58319427',
+      );
+      expect(snapshot, isNotNull);
+      expect(snapshot!['type'], 'state');
+      expect(snapshot['videoId'], 'dQw4w9WgXcQ');
+      expect(snapshot['playing'], isTrue);
+    });
+
+    test('does not apply snapshots from another room', () {
+      final snapshot = listeningSnapshotFromHostHeartbeat(
+        <String, dynamic>{
+          'payload': <String, dynamic>{
+            'code': '11112222',
+            'snapshot': <String, dynamic>{
+              'type': 'state',
+              'videoId': 'dQw4w9WgXcQ',
+            },
+          },
+        },
+        expectedRoomCode: '58319427',
+      );
+      expect(snapshot, isNull);
+    });
+
+    test('ignores heartbeat packets without a playback snapshot', () {
+      final snapshot = listeningSnapshotFromHostHeartbeat(
+        <String, dynamic>{
+          'payload': <String, dynamic>{
+            'code': '58319427',
+            'sentAtMs': 123456,
+          },
+        },
+        expectedRoomCode: '58319427',
+      );
+      expect(snapshot, isNull);
+    });
+  });
 }

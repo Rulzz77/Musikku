@@ -183,8 +183,8 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
       (title: 'Riwayat', subtitle: '${widget.recentlyPlayed.length} lagu', icon: Icons.history_rounded, onTap: _openRecentHistory),
     ];
 
-    // Urutan ala Spotify: sapaan -> filter -> pintasan (grid 2 kolom) ->
-    // sorotan -> koleksi -> lanjutkan -> rekomendasi.
+    // Urutan: sapaan -> filter -> pintasan -> sorotan -> koleksi ->
+    // lanjutkan -> rekomendasi.
     return [
       SliverToBoxAdapter(child: _modernWelcomeHeader()),
       _chipRow(),
@@ -194,12 +194,12 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
         _sectionHeader('Playlist pintar', action: 'Lihat semua', onAction: _showSmartPlaylistPicker),
         SliverToBoxAdapter(
           child: SizedBox(
-            height: 88,
+            height: 80,
             child: ListView.separated(
-              padding: const EdgeInsets.fromLTRB(14, 0, 14, 6),
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
               scrollDirection: Axis.horizontal,
               itemCount: smartPlaylists.length,
-              separatorBuilder: (_, _) => const SizedBox(width: 9),
+              separatorBuilder: (_, _) => const SizedBox(width: 10),
               itemBuilder: (context, index) => _smartPlaylistCard(smartPlaylists[index]),
             ),
           ),
@@ -217,7 +217,7 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
           child: SizedBox(
             height: 204,
             child: ListView.separated(
-              padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
               scrollDirection: Axis.horizontal,
               itemCount: recentlyPlayed.length,
               separatorBuilder: (_, _) => const SizedBox(width: 12),
@@ -241,7 +241,7 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
         )
       else
         _homeEmptyState(retry: () => _loadHome(force: true)),
-      const SliverToBoxAdapter(child: SizedBox(height: 8)),
+      const SliverToBoxAdapter(child: SizedBox(height: 16)),
     ];
   }
 
@@ -274,16 +274,20 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
       builder: (sheetContext) {
         final scheme = Theme.of(sheetContext).colorScheme;
         if (playlists.isEmpty) {
-          return const Padding(
-            padding: EdgeInsets.fromLTRB(24, 8, 24, 32),
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.auto_awesome_rounded, size: 42),
-                SizedBox(height: 10),
-                Text('Playlist pintar belum tersedia', style: TextStyle(fontWeight: FontWeight.w800)),
-                SizedBox(height: 6),
-                Text('Simpan lagu ke favorit atau dengarkan beberapa lagu dulu.'),
+                Icon(Icons.auto_awesome_rounded, size: 40, color: scheme.onSurfaceVariant),
+                const SizedBox(height: 12),
+                const Text('Playlist pintar belum tersedia', style: TextStyle(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 6),
+                Text(
+                  'Simpan lagu ke favorit atau dengarkan beberapa lagu dulu.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: scheme.onSurfaceVariant),
+                ),
               ],
             ),
           );
@@ -296,13 +300,13 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
             children: [
               const Padding(
                 padding: EdgeInsets.fromLTRB(8, 0, 8, 8),
-                child: Text('Playlist pintar', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+                child: Text('Playlist pintar', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
               ),
               for (final playlist in playlists)
                 ListTile(
                   leading: CircleAvatar(
-                    backgroundColor: scheme.primaryContainer,
-                    child: Icon(_smartPlaylistIcon(playlist.id), color: scheme.onPrimaryContainer),
+                    backgroundColor: scheme.surfaceContainerHigh,
+                    child: Icon(_smartPlaylistIcon(playlist.id), color: scheme.onSurface),
                   ),
                   title: Text(playlist.title),
                   subtitle: Text('${playlist.songs.length} lagu · ${playlist.subtitle}'),
@@ -336,21 +340,21 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
     final scheme = Theme.of(context).colorScheme;
     final first = playlist.songs.first;
     return SizedBox(
-      width: 186,
+      width: 176,
       child: Material(
         color: scheme.surfaceContainerLow,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: () => _playSmartPlaylist(playlist),
           onLongPress: () => _showSongList(playlist.title, playlist.songs),
           child: Padding(
-            padding: const EdgeInsets.all(11),
+            padding: const EdgeInsets.all(10),
             child: Row(
               children: [
                 ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: UnifiedArtwork(track: first, width: 60, height: 60, fit: BoxFit.cover, iconSize: 24),
+                  borderRadius: BorderRadius.circular(10),
+                  child: UnifiedArtwork(track: first, width: 56, height: 56, fit: BoxFit.cover, iconSize: 22),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -358,13 +362,20 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text(playlist.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900)),
-                      const SizedBox(height: 4),
-                      Text('${playlist.songs.length} lagu', style: TextStyle(fontSize: 10.5, color: scheme.onSurfaceVariant)),
+                      Text(
+                        playlist.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, height: 1.2),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        '${playlist.songs.length} lagu',
+                        style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+                      ),
                     ],
                   ),
                 ),
-                Icon(Icons.play_circle_fill_rounded, color: scheme.primary, size: 27),
               ],
             ),
           ),
@@ -421,20 +432,18 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
     _showSongList('Favorit MusikKu', songs);
   }
 
-  /// Pintasan: deretan ikon bulat dengan label di bawahnya, tanpa kotak dan
-  /// garis tepi. Lebih ringan dan lega dibanding kartu.
+  /// Pintasan: ikon bulat dengan satu baris label. Keterangan tambahan
+  /// (jumlah lagu, dll.) tampil sebagai tooltip saat ditekan lama.
   Widget _homeShortcutRow(
     List<({String title, String subtitle, IconData icon, VoidCallback onTap})> actions,
   ) {
-    // Tinggi diberi ruang lebih (ikon 54 + dua baris teks + jarak) supaya tidak
-    // overflow saat ukuran font sistem diperbesar.
     return SizedBox(
-      height: 120,
+      height: 96,
       child: ListView.separated(
-        padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
         scrollDirection: Axis.horizontal,
         itemCount: actions.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 6),
+        separatorBuilder: (_, _) => const SizedBox(width: 8),
         itemBuilder: (context, index) => _homeShortcutItem(
           title: actions[index].title,
           subtitle: actions[index].subtitle,
@@ -454,55 +463,44 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
     bool highlighted = false,
   }) {
     final scheme = Theme.of(context).colorScheme;
-    return SizedBox(
-      width: 88,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 54,
-              height: 54,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: highlighted
-                    ? scheme.primary
-                    : scheme.surfaceContainerHigh.withValues(alpha: 0.9),
-              ),
-              alignment: Alignment.center,
-              child: Icon(
-                icon,
-                size: 24,
-                color: highlighted ? scheme.onPrimary : scheme.onSurface,
-              ),
-            ),
-            const SizedBox(height: 7),
-            SizedBox(
-              width: 84,
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  title,
-                  maxLines: 1,
-                  style: TextStyle(color: scheme.onSurface, fontSize: 11.5, fontWeight: FontWeight.w800),
+    return Tooltip(
+      message: subtitle,
+      child: SizedBox(
+        width: 76,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: highlighted ? scheme.primary : scheme.surfaceContainerHigh,
+                ),
+                alignment: Alignment.center,
+                child: Icon(
+                  icon,
+                  size: 24,
+                  color: highlighted ? scheme.onPrimary : scheme.onSurface,
                 ),
               ),
-            ),
-            const SizedBox(height: 1),
-            SizedBox(
-              width: 84,
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  subtitle,
-                  maxLines: 1,
-                  style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 9.5, fontWeight: FontWeight.w500),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: 72,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    style: TextStyle(color: scheme.onSurface, fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -520,49 +518,31 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
                 ? 'Selamat sore'
                 : 'Selamat malam';
 
-    // Hanya teks besar dan satu tombol cari bulat: tanpa logo, kotak, atau garis.
+    // Hanya sapaan dan satu tombol cari: tanpa logo, label, atau garis.
     return Padding(
-      padding: EdgeInsets.fromLTRB(20, topInset + 16, 14, 6),
+      padding: EdgeInsets.fromLTRB(20, topInset + 12, 16, 4),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  appName.toUpperCase(),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: scheme.onSurfaceVariant,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 2.2,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  greeting,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: scheme.onSurface,
-                    fontSize: 30,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -1.1,
-                    height: 1.05,
-                  ),
-                ),
-              ],
+            child: Text(
+              greeting,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: scheme.onSurface,
+                fontSize: 28,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.9,
+                height: 1.1,
+              ),
             ),
           ),
           IconButton(
             tooltip: 'Cari musik',
-            constraints: const BoxConstraints.tightFor(width: 46, height: 46),
+            constraints: const BoxConstraints.tightFor(width: 44, height: 44),
             style: IconButton.styleFrom(
-              backgroundColor: scheme.surfaceContainerHigh.withValues(alpha: 0.9),
+              backgroundColor: scheme.surfaceContainerHigh,
               padding: EdgeInsets.zero,
             ),
             onPressed: _openSearch,
@@ -639,14 +619,14 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
       );
     }
 
-    // Satu sampul lebar dengan teks di atasnya, tanpa gradien warna-warni
-    // dan tanpa tombol berlabel: bersih dan fokus ke gambar.
+    // Satu sampul dengan judul dan dua tombol bulat di atasnya; tanpa label
+    // tambahan supaya fokus ke gambar.
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
       child: SizedBox(
-        height: 200,
+        height: 188,
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(26),
+          borderRadius: BorderRadius.circular(24),
           child: Material(
             color: scheme.primaryContainer,
             child: InkWell(
@@ -663,27 +643,13 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
                           begin: Alignment.topCenter,
                           end: Alignment.bottomCenter,
                           colors: [
-                            Colors.black.withValues(alpha: 0.10),
-                            Colors.black.withValues(alpha: 0.18),
-                            Colors.black.withValues(alpha: 0.78),
+                            Colors.transparent,
+                            Colors.black.withValues(alpha: 0.75),
                           ],
-                          stops: const [0.0, 0.40, 1.0],
+                          stops: const [0.35, 1.0],
                         ),
                       ),
                     ),
-                  Positioned(
-                    left: 16,
-                    top: 14,
-                    child: Text(
-                      'PILIHAN HARI INI',
-                      style: TextStyle(
-                        color: fg.withValues(alpha: 0.82),
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.6,
-                      ),
-                    ),
-                  ),
                   Positioned(
                     left: 16,
                     right: 14,
@@ -702,10 +668,10 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
                                   color: fg,
-                                  fontSize: 21,
+                                  fontSize: 20,
                                   fontWeight: FontWeight.w800,
-                                  letterSpacing: -0.6,
-                                  height: 1.1,
+                                  letterSpacing: -0.5,
+                                  height: 1.15,
                                 ),
                               ),
                               if (subtitle.isNotEmpty) ...[
@@ -756,25 +722,17 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
     final scheme = Theme.of(context).colorScheme;
     return SliverToBoxAdapter(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(28, 56, 28, 24),
+        padding: const EdgeInsets.fromLTRB(32, 48, 32, 24),
         child: Column(
           children: [
-            Container(
-              width: 84,
-              height: 84,
-              decoration: BoxDecoration(
-                color: scheme.primaryContainer.withValues(alpha: 0.55),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(Icons.video_library_rounded, size: 40, color: scheme.primary),
-            ),
-            const SizedBox(height: 18),
+            Icon(Icons.library_music_rounded, size: 44, color: scheme.onSurfaceVariant),
+            const SizedBox(height: 16),
             Text(
               _feedError.isNotEmpty ? 'Lagu belum bisa dimuat' : 'Beranda masih kosong',
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             Text(
               _feedError.isNotEmpty
                   ? _feedError
@@ -782,7 +740,7 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
               textAlign: TextAlign.center,
               style: TextStyle(color: scheme.onSurfaceVariant, height: 1.4),
             ),
-            const SizedBox(height: 18),
+            const SizedBox(height: 20),
             Wrap(
               spacing: 10,
               runSpacing: 8,

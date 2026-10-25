@@ -16,11 +16,28 @@ class MusicStyleMatcher {
       .replaceAll(RegExp(r'\s+'), ' ')
       .trim();
 
-  static bool _matches(String text, String pattern) =>
-      RegExp(pattern, caseSensitive: false).hasMatch(text);
+  // RegExp dikompilasi sekali. Sebelumnya setiap panggilan _matches membuat
+  // RegExp baru, padahal styleFromText/languageFromText dipanggil untuk setiap
+  // kandidat berkali-kali.
+  static final Map<String, RegExp> _regexCache = <String, RegExp>{};
 
-  static bool _containsAny(String text, Iterable<String> values) =>
-      values.any((value) => text.contains(value));
+  static bool _matches(String text, String pattern) =>
+      (_regexCache[pattern] ??= RegExp(pattern, caseSensitive: false)).hasMatch(text);
+
+  static final RegExp _hangul = RegExp(r'[\uAC00-\uD7AF]');
+  static final RegExp _kana = RegExp(r'[\u3040-\u30FF]');
+  static final RegExp _arabicScript = RegExp(r'[\u0600-\u06FF]');
+  static final RegExp _devanagari = RegExp(r'[\u0900-\u097F]');
+  static final RegExp _thaiScript = RegExp(r'[\u0E00-\u0E7F]');
+
+  /// Cocokkan sebagai frasa utuh (batas kata), bukan substring. Sebelumnya
+  /// 'ive' cocok dengan "live", 'sia' dengan "asia", 'ado' dengan "adorable",
+  /// 'iu' dengan "ciuman", sehingga judul biasa salah dianggap artis tertentu.
+  /// [text] harus sudah dinormalisasi.
+  static bool _containsAnyPhrase(String text, Iterable<String> phrases) {
+    final padded = ' $text ';
+    return phrases.any((phrase) => padded.contains(' $phrase '));
+  }
 
   static const Map<String, Set<String>> _relatedStyles = <String, Set<String>>{
     'pop': <String>{'pop', 'pop_dj', 'dj_remix', 'rnb', 'indie', 'acoustic', 'rock', 'kpop'},
@@ -56,6 +73,19 @@ class MusicStyleMatcher {
     'backstreet boys', 'westlife', 'queen', 'the beatles', 'elton john',
   };
 
+  static const Set<String> _javaneseArtists = <String>{
+    'denny caknan', 'ndarboy genk', 'guyon waton', 'aftershine',
+    'happy asmara', 'gilga sahid', 'niken salindry', 'jihan audy',
+    'difarina indra', 'farel prayoga', 'woro widowati', 'hendra kumbara',
+    'didi kempot',
+  };
+
+  static const Set<String> _dangdutArtists = <String>{
+    'nella kharisma', 'siti badriah', 'lesti kejora', 'rhoma irama',
+    'elvy sukaesih', 'tasya rosmala', 'via vallen', 'dewi perssik',
+    'inul daratista', 'zaskia gotik', 'ayu ting ting',
+  };
+
   static const Set<String> _indonesianArtists = <String>{
     'tulus', 'raisa', 'rossa', 'mahalini', 'tiara andini', 'rizky febian',
     'judika', 'afgan', 'andmesh kamaleng', 'lyodra', 'keisya levronka',
@@ -73,7 +103,7 @@ class MusicStyleMatcher {
   static const Set<String> _koreanArtists = <String>{
     'blackpink', 'stray kids', 'newjeans', 'seventeen', 'twice', 'exo',
     'bts', 'aespa', 'ive', 'le sserafim', 'red velvet', 'nct', 'iu',
-    'ps y', 'bigbang', 'girls generation', 'itzy', 'enhypen', 'txt',
+    'psy', 'bigbang', 'girls generation', 'itzy', 'enhypen', 'txt',
   };
 
   static const Set<String> _japaneseArtists = <String>{
@@ -81,11 +111,10 @@ class MusicStyleMatcher {
     'one ok rock', 'king gnu', 'radwimps',
   };
 
-  /// Mengembalikan genre yang terdeteksi secara eksplisit dari query/metadata.
+  /// Genre yang disebut eksplisit lewat kata kunci (tanpa petunjuk artis).
   /// Urutan penting: Pop DJ dipisahkan dari DJ/remix biasa, dan subgenre lokal
-  /// tidak boleh jatuh ke Pop umum.
-  static String? styleFromText(String raw) {
-    final text = normalize(raw);
+  /// tidak boleh jatuh ke Pop umum. [text] harus sudah dinormalisasi.
+  static String? _styleFromKeywords(String text) {
     if (text.isEmpty) return null;
 
     if (_matches(
@@ -128,12 +157,19 @@ class MusicStyleMatcher {
       return 'dangdut';
     }
 
+    // Harus sebelum 'rock': "slow rock malaysia" adalah Melayu, bukan rock.
+    if (_matches(text, r'\b(?:melayu|malaysia|slow rock malaysia|lagu malaysia)\b')) {
+      return 'melayu';
+    }
+
     if (_matches(text, r'\b(?:hip hop|hiphop|rap|rap indonesia)\b')) return 'hip_hop';
     if (_matches(text, r'\b(?:r&b|rnb|rhythm and blues|soul music)\b')) return 'rnb';
     if (_matches(text, r'\b(?:rock|hard rock|alternative rock|metal|heavy metal|punk rock)\b')) {
       return 'rock';
     }
-    if (_matches(text, r'\b(?:reggae|ska)\b')) return text.contains('ska') ? 'ska' : 'reggae';
+    // Word boundary: sebelumnya text.contains('ska') cocok dengan "baskara", "maskara", dll.
+    if (_matches(text, r'\bska\b')) return 'ska';
+    if (_matches(text, r'\breggae\b')) return 'reggae';
     if (_matches(text, r'\b(?:jazz|smooth jazz|bebop)\b')) return 'jazz';
     if (_matches(text, r'\bblues\b')) return 'blues';
     if (_matches(text, r'\b(?:country|bluegrass)\b')) return 'country';
@@ -142,66 +178,68 @@ class MusicStyleMatcher {
     if (_matches(text, r'\b(?:instrumental|piano instrumental|music without vocals)\b')) {
       return 'instrumental';
     }
-    if (_matches(text, r'\b(?:melayu|malaysia|slow rock malaysia|lagu malaysia)\b')) {
-      return 'melayu';
-    }
     if (_matches(text, r'\b(?:pop|ballad|top 40)\b')) return 'pop';
 
+    return null;
+  }
+
+  /// Mengembalikan genre yang terdeteksi dari query/metadata.
+  static String? styleFromText(String raw) {
+    final text = normalize(raw);
+    if (text.isEmpty) return null;
+
+    final explicit = _styleFromKeywords(text);
+    if (explicit != null) return explicit;
+
     // Artist cues help when a video title does not explicitly mention genre.
-    if (_containsAny(text, _englishArtists)) return 'pop';
-    if (_containsAny(text, _indonesianArtists)) {
-      if (_containsAny(text, const ['denny caknan', 'ndarboy genk', 'guyon waton', 'aftershine', 'happy asmara', 'gilga sahid', 'niken salindry', 'jihan audy', 'difarina indra', 'farel prayoga', 'woro widowati', 'hendra kumbara', 'didi kempot'])) {
-        return 'jawa';
-      }
-      if (_containsAny(text, const ['nella kharisma', 'siti badriah', 'lesti kejora', 'rhoma irama', 'elvy sukaesih', 'tasya rosmala', 'via vallen', 'dewi perssik', 'inul daratista', 'zaskia gotik', 'ayu ting ting'])) {
-        return 'dangdut';
-      }
+    if (_containsAnyPhrase(text, _englishArtists)) return 'pop';
+    if (_containsAnyPhrase(text, _indonesianArtists)) {
+      if (_containsAnyPhrase(text, _javaneseArtists)) return 'jawa';
+      if (_containsAnyPhrase(text, _dangdutArtists)) return 'dangdut';
       return 'pop';
     }
-    if (_containsAny(text, _koreanArtists)) return 'kpop';
+    if (_containsAnyPhrase(text, _koreanArtists)) return 'kpop';
 
     return null;
   }
 
   /// True only when the query explicitly names a genre, rather than merely
   /// mentioning an artist whose music style is known.
-  static bool hasExplicitStyleHint(String raw) {
-    final text = normalize(raw);
-    return _matches(
-      text,
-      r'\b(?:pop|ballad|top 40|pop dj|dj pop|pop remix|remix pop|dj|remix|funkot|jedag jedug|breakbeat|nightcore|slowed|sped up|bass boosted|slow bass|dangdut|koplo|pantura|tarling|campursari|langgam jawa|jawa|javanese|sunda|sundanese|jaipongan|degung|k pop|kpop|korean pop|hip hop|hiphop|rap|r&b|rnb|rhythm and blues|soul music|rock|metal|punk rock|reggae|ska|jazz|bebop|blues|country|bluegrass|acoustic|akustik|unplugged|indie|instrumental|melayu|lagu malaysia|sholawat|shalawat|qasidah|nasheed|nasyid|lagu religi|musik religi|lagu islami|rohani)\b',
-    );
-  }
+  /// Memakai aturan yang sama dengan [styleFromText] agar daftar kata kunci
+  /// tidak bisa menyimpang (sebelumnya ada dua daftar terpisah).
+  static bool hasExplicitStyleHint(String raw) =>
+      _styleFromKeywords(normalize(raw)) != null;
 
   /// Broad language hints used to understand seeds and metadata. Some hints
   /// also name music styles (for example K-pop or lagu Jawa).
   static bool hasExplicitLanguageHint(String raw) {
-    final lower = raw.toLowerCase();
+    // Pakai teks ternormalisasi: "K-Pop" menjadi "k pop". Sebelumnya `lower`
+    // dipakai sehingga "K-Pop"/"J-Pop" dengan tanda hubung tidak terdeteksi.
     final text = normalize(raw);
     return _matches(
-          lower,
+          text,
           r'\b(?:english|inggris|bahasa inggris|lagu barat|western music|western pop|american pop|british pop|us pop|uk pop|english songs?|songs in english)\b',
         ) ||
         _matches(
           text,
           r'\b(?:indonesia|indonesian|bahasa indonesia|lagu indo|pop indo|musik indonesia|lagu indonesia)\b',
         ) ||
-        _matches(lower, r'\b(?:korean|korea|k pop|kpop|lagu korea|japanese|jepang|anime song|spanish|spanyol|latin pop|hindi|bollywood|arabic|thai music|mandarin)\b') ||
-        _matches(lower, r'\b(?:javanese|lagu jawa|pop jawa|sundanese|lagu sunda|pop sunda)\b') ||
-        RegExp(r'[\uAC00-\uD7AF]').hasMatch(raw) ||
-        RegExp(r'[\u3040-\u30FF]').hasMatch(raw) ||
-        RegExp(r'[\u0600-\u06FF]').hasMatch(raw) ||
-        RegExp(r'[\u0900-\u097F]').hasMatch(raw) ||
-        RegExp(r'[\u0E00-\u0E7F]').hasMatch(raw);
+        _matches(text, r'\b(?:korean|korea|k pop|kpop|lagu korea|japanese|jepang|anime song|spanish|spanyol|latin pop|hindi|bollywood|arabic|thai music|mandarin)\b') ||
+        _matches(text, r'\b(?:javanese|lagu jawa|pop jawa|sundanese|lagu sunda|pop sunda)\b') ||
+        _hangul.hasMatch(raw) ||
+        _kana.hasMatch(raw) ||
+        _arabicScript.hasMatch(raw) ||
+        _devanagari.hasMatch(raw) ||
+        _thaiScript.hasMatch(raw);
   }
 
   /// True only when the user explicitly filters by a spoken/sung language.
   /// Style/culture terms such as K-pop, lagu Jawa, or anime song are not enough
   /// to lock an automatic Radio to one language.
   static bool hasExplicitLanguageFilter(String raw) {
-    final lower = raw.toLowerCase();
+    final text = normalize(raw);
     return _matches(
-      lower,
+      text,
       r'\b(?:english|inggris|bahasa inggris|english songs?|songs in english|korean language|bahasa korea|japanese language|bahasa jepang|spanish language|bahasa spanyol|hindi language|bahasa hindi|arabic language|bahasa arab|thai language|bahasa thai|mandarin language|bahasa mandarin)\b',
     );
   }
@@ -210,33 +248,40 @@ class MusicStyleMatcher {
   /// This is heuristic and may return null when there is not enough evidence.
   static String? languageFromText(String raw) {
     if (raw.trim().isEmpty) return null;
-    final lower = raw.toLowerCase();
     final text = normalize(raw);
 
-    if (RegExp(r'[\uAC00-\uD7AF]').hasMatch(raw) ||
-        _matches(lower, r'\b(?:korean|korea|k pop|kpop|lagu korea|korean song)\b')) {
+    if (_hangul.hasMatch(raw) ||
+        _matches(text, r'\b(?:korean|korea|k pop|kpop|lagu korea|korean song)\b')) {
       return 'korean';
     }
-    if (RegExp(r'[\u3040-\u30FF]').hasMatch(raw) ||
-        _matches(lower, r'\b(?:japanese|jepang|anime song|j pop|jpop)\b') ||
-        _containsAny(text, _japaneseArtists)) {
+    if (_kana.hasMatch(raw) ||
+        _matches(text, r'\b(?:japanese|jepang|anime song|j pop|jpop)\b') ||
+        _containsAnyPhrase(text, _japaneseArtists)) {
       return 'japanese';
     }
-    if (RegExp(r'[\u0600-\u06FF]').hasMatch(raw) || _matches(lower, r'\b(?:arabic|arab)\b')) {
+    if (_arabicScript.hasMatch(raw) || _matches(text, r'\b(?:arabic|arab)\b')) {
       return 'arabic';
     }
-    if (RegExp(r'[\u0900-\u097F]').hasMatch(raw) || _matches(lower, r'\b(?:hindi|bollywood)\b')) {
+    if (_devanagari.hasMatch(raw) || _matches(text, r'\b(?:hindi|bollywood)\b')) {
       return 'hindi';
     }
-    if (RegExp(r'[\u0E00-\u0E7F]').hasMatch(raw) || _matches(lower, r'\bthai music\b')) {
+    if (_thaiScript.hasMatch(raw) || _matches(text, r'\bthai music\b')) {
       return 'thai';
     }
 
     if (_matches(
-      lower,
+      text,
       r'\b(?:english|inggris|bahasa inggris|lagu barat|western music|western pop|american pop|british pop|us pop|uk pop|english songs?|songs in english)\b',
     )) {
       return 'english';
+    }
+    // Bahasa daerah dicek SEBELUM "indonesia": "lagu Jawa Indonesia" harus
+    // javanese, bukan indonesian.
+    if (_matches(text, r'\b(?:javanese|lagu jawa|pop jawa|campursari|koplo jawa)\b')) {
+      return 'javanese';
+    }
+    if (_matches(text, r'\b(?:sundanese|lagu sunda|pop sunda|jaipongan)\b')) {
+      return 'sundanese';
     }
     if (_matches(
       text,
@@ -244,19 +289,12 @@ class MusicStyleMatcher {
     )) {
       return 'indonesian';
     }
-    if (_matches(text, r'\b(?:javanese|lagu jawa|pop jawa|campursari|koplo jawa)\b')) {
-      return 'javanese';
-    }
-    if (_matches(text, r'\b(?:sundanese|lagu sunda|pop sunda|jaipongan)\b')) {
-      return 'sundanese';
-    }
-    if (_matches(lower, r'\b(?:spanish|spanyol|latin pop|reggaeton)\b')) return 'spanish';
-    if (_matches(lower, r'\bmandarin\b')) return 'mandarin';
+    if (_matches(text, r'\b(?:spanish|spanyol|latin pop|reggaeton)\b')) return 'spanish';
+    if (_matches(text, r'\bmandarin\b')) return 'mandarin';
 
-    if (_containsAny(text, _koreanArtists)) return 'korean';
-    if (_containsAny(text, _japaneseArtists)) return 'japanese';
-    if (_containsAny(text, _englishArtists)) return 'english';
-    if (_containsAny(text, _indonesianArtists)) return 'indonesian';
+    if (_containsAnyPhrase(text, _koreanArtists)) return 'korean';
+    if (_containsAnyPhrase(text, _englishArtists)) return 'english';
+    if (_containsAnyPhrase(text, _indonesianArtists)) return 'indonesian';
 
     return _languageFromWords(raw);
   }
@@ -325,9 +363,14 @@ class MusicStyleMatcher {
     return languageFromVideo(currentVideo) ?? languageFromText(query);
   }
 
+  /// Hubungan antar-gaya dibuat simetris. Sebelumnya tabel satu arah: target
+  /// pop_dj menerima dangdut, tetapi target dangdut menolak pop_dj (begitu
+  /// juga sunda/jawa, melayu/pop_dj, blues/rock, country/acoustic, dst.),
+  /// sehingga radio berperilaku berbeda tergantung lagu mana yang dimulai.
   static bool isRelatedStyle(String candidateStyle, String targetStyle) {
-    return _relatedStyles[targetStyle]?.contains(candidateStyle) ??
-        candidateStyle == targetStyle;
+    if (candidateStyle == targetStyle) return true;
+    return (_relatedStyles[targetStyle]?.contains(candidateStyle) ?? false) ||
+        (_relatedStyles[candidateStyle]?.contains(targetStyle) ?? false);
   }
 
   static bool isCompatible({
@@ -352,15 +395,12 @@ class MusicStyleMatcher {
     return candidateStyle == null || isRelatedStyle(candidateStyle, targetStyle);
   }
 
-  /// Scores candidates by musical compatibility and a small language hint.
-  /// Popularity/view count and freshness deliberately do not affect the score:
-  /// Radio must keep relevance to the current track ahead of chart rank.
-  static double radioSimilarityScore({
-    required YoutubeSearchResult video,
+  static double _similarityScore({
+    required String? candidateStyle,
+    required String? candidateLanguage,
     required String? targetStyle,
-    String? targetLanguage,
+    required String? targetLanguage,
   }) {
-    final candidateStyle = styleFromVideo(video);
     double score;
     if (targetStyle == null) {
       score = 22.0;
@@ -374,7 +414,6 @@ class MusicStyleMatcher {
       score = -100.0;
     }
 
-    final candidateLanguage = languageFromVideo(video);
     if (targetLanguage != null) {
       if (candidateLanguage == targetLanguage) {
         score += 2.5;
@@ -385,6 +424,21 @@ class MusicStyleMatcher {
     return score;
   }
 
+  /// Scores candidates by musical compatibility and a small language hint.
+  /// Popularity/view count and freshness deliberately do not affect the score:
+  /// Radio must keep relevance to the current track ahead of chart rank.
+  static double radioSimilarityScore({
+    required YoutubeSearchResult video,
+    required String? targetStyle,
+    String? targetLanguage,
+  }) =>
+      _similarityScore(
+        candidateStyle: styleFromVideo(video),
+        candidateLanguage: languageFromVideo(video),
+        targetStyle: targetStyle,
+        targetLanguage: targetLanguage,
+      );
+
   /// Returns compatible tracks from all languages sorted by similarity.
   /// Pass allowCrossLanguage=false only for an explicitly language-filtered
   /// search; ordinary Radio should leave it enabled.
@@ -394,40 +448,55 @@ class MusicStyleMatcher {
     String? targetLanguage,
     bool allowCrossLanguage = true,
   }) {
-    var list = videos.where((video) => isCompatible(
-      video: video,
-      targetStyle: targetStyle,
-      targetLanguage: targetLanguage,
-      allowCrossLanguage: allowCrossLanguage,
-    )).toList();
+    // Hitung gaya/bahasa tiap video sekali. Sebelumnya skor dihitung ulang
+    // (dengan puluhan regex) di dalam comparator sort pada setiap perbandingan.
+    var entries = <({YoutubeSearchResult video, String? style, String? language, int index})>[];
+    var index = 0;
+    for (final video in videos) {
+      final style = styleFromVideo(video);
+      final language = languageFromVideo(video);
+
+      if (!allowCrossLanguage &&
+          targetLanguage != null &&
+          language != null &&
+          language != targetLanguage) {
+        continue;
+      }
+      if (targetStyle != null && style != null && !isRelatedStyle(style, targetStyle)) {
+        continue;
+      }
+      entries.add((video: video, style: style, language: language, index: index++));
+    }
 
     // For a known current style, never dilute the radio with unclassified
     // tracks once at least one explicitly related candidate exists. If no
     // related style can be identified, the YouTube relevance order is the only
     // signal available; do not substitute a global popular-song catalogue.
     if (targetStyle != null) {
-      final recognized = list.where((video) {
-        final style = styleFromVideo(video);
-        return style != null && isRelatedStyle(style, targetStyle);
-      }).toList();
-      if (recognized.isNotEmpty) list = recognized;
+      final recognized = entries
+          .where((e) => e.style != null && isRelatedStyle(e.style!, targetStyle))
+          .toList();
+      if (recognized.isNotEmpty) entries = recognized;
     }
 
-    final indexed = list.asMap().entries.toList();
-    indexed.sort((a, b) {
-      final scoreOrder = radioSimilarityScore(
-        video: b.value,
-        targetStyle: targetStyle,
-        targetLanguage: targetLanguage,
-      ).compareTo(radioSimilarityScore(
-        video: a.value,
-        targetStyle: targetStyle,
-        targetLanguage: targetLanguage,
-      ));
+    final scored = entries
+        .map((e) => (
+              video: e.video,
+              index: e.index,
+              score: _similarityScore(
+                candidateStyle: e.style,
+                candidateLanguage: e.language,
+                targetStyle: targetStyle,
+                targetLanguage: targetLanguage,
+              ),
+            ))
+        .toList();
+    scored.sort((a, b) {
+      final scoreOrder = b.score.compareTo(a.score);
       // Keep YouTube relevance order for candidates with equal compatibility.
-      return scoreOrder != 0 ? scoreOrder : a.key.compareTo(b.key);
+      return scoreOrder != 0 ? scoreOrder : a.index.compareTo(b.index);
     });
-    return indexed.map((entry) => entry.value).toList(growable: false);
+    return scored.map((e) => e.video).toList(growable: false);
   }
 
   /// Filter bahasa keras untuk jalur yang memang meminta bahasa tertentu.
@@ -482,28 +551,30 @@ class MusicStyleMatcher {
     final titleKey = normalize(title);
     final artistKey = normalize(artist);
     if (title.isEmpty && artist.isEmpty) return '';
+    // Judul YouTube biasanya "Artis - Judul"; jangan tulis nama artis dua kali.
+    final artistAlreadyInTitle = artistKey.isEmpty ||
+        titleKey == artistKey ||
+        ' $titleKey '.contains(' $artistKey ');
     return <String>[
       if (title.isNotEmpty) title,
-      if (artist.isNotEmpty && artistKey != titleKey) artist,
+      if (artist.isNotEmpty && !artistAlreadyInTitle) artist,
       'similar songs',
     ].join(' ').replaceAll(RegExp(r'\s+'), ' ').trim();
   }
 
   static String _radioSeedTitle(String raw) {
     var title = raw.toLowerCase().replaceAll(RegExp(r'https?://\S+'), ' ');
+    // Word boundary pada penanda metadata: sebelumnya "hd" cocok sebagai
+    // substring sehingga kurung berisi judul/kata biasa ikut terhapus.
+    const marker =
+        r'(?:official|music video|official audio|lyrics?|visualizer|topic|4k|\bhd\b)';
     title = title
         .replaceAll(
-          RegExp(
-            r'\[(?=[^\]]*(?:official|music video|official audio|lyrics?|visualizer|topic|4k|hd))[^\]]*\]',
-            caseSensitive: false,
-          ),
+          RegExp(r'\[(?=[^\]]*' + marker + r')[^\]]*\]', caseSensitive: false),
           ' ',
         )
         .replaceAll(
-          RegExp(
-            r'\((?=[^)]*(?:official|music video|official audio|lyrics?|visualizer|topic|4k|hd))[^)]*\)',
-            caseSensitive: false,
-          ),
+          RegExp(r'\((?=[^)]*' + marker + r')[^)]*\)', caseSensitive: false),
           ' ',
         )
         .replaceAll(

@@ -44,14 +44,15 @@ class RadioService {
   /// Video yang sudah diputar sesi ini, supaya autoplay tidak mengulang ID yang sama.
   final List<String> _playedIds = <String>[];
 
-  /// Track-family keys yang sudah diputar. Satu video bisa menghasilkan
-  /// beberapa key (misalnya judul inti + variasi judul) agar cover/reupload
-  /// oleh vokalis/channel berbeda tetap dianggap lagu yang sama.
+  /// Track-family keys yang sudah diputar. Fingerprint judul dinormalisasi
+  /// tanpa memecah tanda hubung internal seperti Hati-Hati.
   final List<String> _playedTrackKeys = <String>[];
+  final List<YoutubeSearchResult> _playedVideos = <YoutubeSearchResult>[];
 
   // Selection cooldown agar auto-next tidak mengulang judul/artis yang sama
   // walaupun API mengembalikan upload atau kandidat serupa berulang kali.
   final List<String> _recentSelectionTrackKeys = <String>[];
+  final List<YoutubeSearchResult> _recentSelectionVideos = <YoutubeSearchResult>[];
   final List<String> _recentSelectionArtists = <String>[];
 
   static const int _maxPlayedIds = 1000;
@@ -161,8 +162,7 @@ class RadioService {
     final targetLanguage = _preferredLanguage ?? MusicStyleMatcher.languageFromText(_seed);
     _pool.removeWhere((video) =>
         video.videoId == currentVideoId() ||
-        _playedIds.contains(video.videoId) ||
-        trackKeysFor(video).any(_playedTrackKeys.contains) ||
+        wasPlayedRecently(video) ||
         _recentlySelected(video) ||
         _blockedIds().contains(video.videoId) ||
         ChannelBlockFilter.isBlocked(video, _blockedChannelKeys()) ||
@@ -245,8 +245,7 @@ class RadioService {
     final targetLanguage = _preferredLanguage ?? MusicStyleMatcher.languageFromText(_seed);
     _pool.removeWhere((video) =>
         video.videoId == currentVideoId() ||
-        _playedIds.contains(video.videoId) ||
-        trackKeysFor(video).any(_playedTrackKeys.contains) ||
+        wasPlayedRecently(video) ||
         _recentlySelected(video) ||
         _blockedIds().contains(video.videoId) ||
         ChannelBlockFilter.isBlocked(video, _blockedChannelKeys()) ||
@@ -344,27 +343,22 @@ class RadioService {
   }
 
   bool _recentlySelected(YoutubeSearchResult video) {
+    if (_recentSelectionVideos.any((selected) => isSameTrackFamily(selected, video))) {
+      return true;
+    }
     final keys = trackKeysFor(video);
     return keys.isNotEmpty && keys.any(_recentSelectionTrackKeys.contains);
   }
 
-  /// Remove duplicate uploads/versions of a selected song from the in-memory
-  /// pool too, so a batch queue cannot contain the same track twice merely
-  /// because YouTube returned different video IDs.
+  /// Remove every cached upload belonging to the same normalized song family.
+  /// Different singers/cover channels must not make the same song eligible again.
   void _removeTrackFamilyFromPool(YoutubeSearchResult selected) {
-    final selectedKeys = trackKeysFor(selected);
-    _pool.removeWhere((candidate) =>
-        candidate.videoId == selected.videoId ||
-        (selectedKeys.isNotEmpty &&
-            trackKeysFor(candidate).any(selectedKeys.contains)));
+    _pool.removeWhere((candidate) => isSameTrackFamily(candidate, selected));
   }
 
   static String _artistKey(YoutubeSearchResult video) {
-    // Remove channel suffixes before normalizing. normalizePhrase lowercases
-    // first, so uppercase artist initials (e.g. "Taylor Swift - Topic") are
-    // preserved instead of being stripped by an [a-z] character filter.
     final withoutChannelSuffix = video.channelTitle.replaceAll(
-      RegExp(r'\b(?:official|artist|channel|topic|vevo)\b', caseSensitive: false),
+      RegExp(r'\b(?:official|artist|channel|topic|vevo|covers?)\b', caseSensitive: false),
       ' ',
     );
     return normalizePhrase(withoutChannelSuffix);
@@ -385,6 +379,15 @@ class RadioService {
       }
     }
 
+    _recentSelectionVideos.removeWhere((item) => isSameTrackFamily(item, video));
+    _recentSelectionVideos.add(video);
+    if (_recentSelectionVideos.length > _selectionCooldownTracks) {
+      _recentSelectionVideos.removeRange(
+        0,
+        _recentSelectionVideos.length - _selectionCooldownTracks,
+      );
+    }
+
     if (artist.isNotEmpty) {
       _recentSelectionArtists.remove(artist);
       _recentSelectionArtists.add(artist);
@@ -398,12 +401,13 @@ class RadioService {
   }
 
   /// True jika ID atau keluarga judul lagu sudah diputar dalam sesi terbaru.
-  /// Digunakan saat fallback dari cache/hasil pencarian supaya lagu lama tidak
-  /// terus dipilih hanya karena berada paling awal di daftar.
+  /// Bandingkan video yang sudah diputar juga, bukan hanya exact ID, supaya
+  /// variasi judul/cover tidak lolos karena metadata penyanyinya berbeda.
   bool wasPlayedRecently(YoutubeSearchResult video) {
     final id = video.videoId.trim();
     if (id.isEmpty) return false;
     if (_playedIds.contains(id)) return true;
+    if (_playedVideos.any((played) => isSameTrackFamily(played, video))) return true;
     final keys = trackKeysFor(video);
     return keys.isNotEmpty && keys.any(_playedTrackKeys.contains);
   }
@@ -416,21 +420,12 @@ class RadioService {
   ) {
     final result = <YoutubeSearchResult>[];
     final seenIds = <String>{};
-    final seenTrackKeys = <String>{};
 
     for (final video in candidates) {
       final id = video.videoId.trim();
       if (id.isEmpty || !seenIds.add(id)) continue;
-
-      final keys = trackKeysFor(video);
-      final wasSelectedRecently =
-          keys.isNotEmpty && keys.any(_recentSelectionTrackKeys.contains);
-      if (wasPlayedRecently(video) ||
-          wasSelectedRecently ||
-          (keys.isNotEmpty && keys.any(seenTrackKeys.contains))) {
-        continue;
-      }
-      seenTrackKeys.addAll(keys);
+      if (wasPlayedRecently(video) || _recentlySelected(video)) continue;
+      if (result.any((existing) => isSameTrackFamily(existing, video))) continue;
       result.add(video);
     }
     return result;
@@ -447,6 +442,11 @@ class RadioService {
 
     _playedIds.remove(videoId);
     _playedIds.add(videoId);
+    _playedVideos.removeWhere((item) => item.videoId == videoId);
+    _playedVideos.add(video);
+    if (_playedVideos.length > _maxPlayedIds) {
+      _playedVideos.removeRange(0, _playedVideos.length - _maxPlayedIds);
+    }
 
     for (final key in trackKeysFor(video)) {
       _playedTrackKeys.remove(key);
@@ -477,132 +477,247 @@ class RadioService {
       MusicStyleMatcher.recommendationSeedFor(video);
 
   static String _cleanTitle(String raw) {
-    var title = raw.toLowerCase();
+    var title = raw
+        .toLowerCase()
+        .replaceAll(RegExp(r'<[^>]*>'), ' ')
+        .replaceAll(RegExp(r'https?://\S+'), ' ');
 
-    title = title
-        .replaceAll(RegExp(r'https?://\S+'), ' ')
-        .replaceAll(
-          RegExp(
-            r'\((?:(?:official|music\s*video|official\s*audio|official\s*video|lyrics?|lyric\s*video|visualizer|topic|4k|hd|full\s*hd|live|performance|mv|cover|versi|version|vocal|vocals|singer)[^)]*)\)',
-            caseSensitive: false,
-          ),
-          ' ',
-        )
-        .replaceAll(
-          RegExp(
-            r'\[(?:(?:official|music\s*video|official\s*audio|official\s*video|lyrics?|lyric\s*video|visualizer|topic|4k|hd|full\s*hd|live|performance|mv|cover|versi|version|vocal|vocals|singer)[^\]]*)\]',
-            caseSensitive: false,
-          ),
-          ' ',
-        )
-        .replaceAll(
-          RegExp(
-            r'\b(?:official\s+music\s+video|official\s+video|official\s+audio|music\s+video|lyric\s+video|official\s+lyric\s+video|visualizer|lyrics?|audio|topic|4k|full\s*hd|hd|live|performance|mv|cover|cover\s+version|versi\s+(?:cover|vocal)|version|vocal|vocals|singer|karaoke|instrumental|remix|remastered|remaster|radio\s+edit|extended\s+mix|official\s+visualizer)\b',
-            caseSensitive: false,
-          ),
-          ' ',
-        )
-        .replaceAll(
-          RegExp(r'\s+(?:ft\.?|feat\.?|featuring)\s+[^|\-â€“â€”]+$', caseSensitive: false),
-          ' ',
-        );
-
-    return title
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .replaceAll(RegExp(r'^[\s_-]+|[\s_-]+$'), '')
-        .trim();
-  }
-
-  static Set<String> trackKeysFor(YoutubeSearchResult video) {
-    final title = _cleanTitle(video.title);
-    final channel = normalizePhrase(
-      video.channelTitle
-          .replaceAll(RegExp(r'\s*[-|]\s*'), ' ')
-          .replaceAll(
-            RegExp(r'\b(?:official|artist|channel|topic|vevo)\b', caseSensitive: false),
-            ' ',
-          )
-          .replaceAll(RegExp(r'\s+'), ' '),
+    // Tag dalam kurung yang merupakan metadata/jenis upload, termasuk cover,
+    // dibuang tanpa menghilangkan tanda baca internal judul seperti Hati-Hati.
+    title = title.replaceAll(
+      RegExp(
+        r'[\(\[\{【][^\)\]\}】]*(?:official|music\s*video|official\s*audio|'
+        r'lyrics?|lyric\s*video|visualizer|topic|4k|8k|hd|fhd|uhd|1080p|720p|'
+        r'live|performance|cover|karaoke|instrumental|acoustic|remaster|remix|'
+        r'version|versi|shorts)[^\)\]\}】]*[\)\]\}】]',
+        caseSensitive: false,
+      ),
+      ' ',
     );
 
-    if (title.isEmpty) {
-      return <String>{};
-    }
+    // Hapus atribusi cover tanpa tanda kurung, misalnya "Judul - cover by X".
+    // Ini dilakukan setelah tag berkurung dihapus agar tidak menyisakan "(".
+    title = title.replaceAll(
+      RegExp(
+        r'\b(?:cover(?:ed)?(?:\s+version)?|cover\s+lagu|versi\s+cover)\s*'
+        r'(?:by|oleh|dari|from|performed\s+by|sung\s+by|with)\s+[^|:;–—-]*',
+        caseSensitive: false,
+      ),
+      ' ',
+    );
 
-    final rawParts = title
-        .split(RegExp(r'\s*[-â€“â€”|â€¢:]\s*'))
-        .map(normalizePhrase)
-        .where((part) => part.length >= 3)
-        .toList();
+    // Hapus dekorasi umum. Istilah yang penting untuk identitas lagu seperti
+    // nama artis, feat., dan apostrof tetap dipertahankan.
+    title = title
+        .replaceAll(
+          RegExp(
+            r'\b(?:official\s+music\s+video|official\s+video|official\s+audio|'
+            r'music\s+video|lyric\s+video|lyrics?|visualizer|audio\s+only|'
+            r'video\s+official|high\s+definition|full\s*hd|1080p|720p|8k|4k|'
+            r'fhd|uhd|hd|topic|vevo|karaoke|instrumental|cover(?:ed)?|'
+            r'cover\s+version|versi\s+cover|remastered?|radio\s+edit|'
+            r'official\s+visualizer)\b',
+            caseSensitive: false,
+          ),
+          ' ',
+        )
+        .replaceAll(RegExp(r'\s+#(?:shorts|ytshorts|viral|trending|fyp)\b.*$', caseSensitive: false), ' ')
+        .replaceAll(
+          RegExp(
+            r'\s*(?:[-|: ]\s*)?(?:live\s+performance|live\s+version|'
+            r'acoustic\s+(?:version|cover)|remix|remastered?|radio\s+edit|'
+            r'extended\s+mix|instrumental|karaoke|cover\s+version|versi\s+cover)\s*$',
+            caseSensitive: false,
+          ),
+          ' ',
+        )
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
 
-    bool looksLikeChannel(String part) {
-      if (part.isEmpty || channel.isEmpty) return false;
-      if (part == channel) return true;
+    // Kata "cover by" di awal judul (contoh "Cover by X - Judul") telah
+    // menghilangkan atribusinya; buang prefix cover yang masih tersisa.
+    title = title.replaceAll(
+      RegExp(r'^\s*(?:cover(?:ed)?|versi\s+cover|cover\s+lagu)\s*[-:|]*\s*', caseSensitive: false),
+      '',
+    );
+    return title.replaceAll(RegExp(r'^[\s|•–—:_-]+|[\s|•–—:_-]+$'), '').trim();
+  }
 
-      final partWords = part.split(' ').where((w) => w.length >= 3).toSet();
-      final channelWords = channel.split(' ').where((w) => w.length >= 3).toSet();
-      if (partWords.isEmpty || channelWords.isEmpty) return false;
+  static bool _looksLikeLabelChannel(String channelKey) => RegExp(
+        r'\b(?:production|prod|studio|studios|records?|music|entertainment|'
+        r'media|network|label|vevo|tv|distribution)\b',
+      ).hasMatch(channelKey);
 
-      final overlap = partWords.intersection(channelWords).length;
-      final ratio = overlap / partWords.length;
-      return ratio >= 0.75 || (partWords.length == 1 && overlap == 1);
-    }
+  /// Ambil nama penyanyi cover yang tertulis eksplisit di judul.
+  /// Ini membantu menyingkirkan nama vokalis dari fingerprint lagu meskipun
+  /// channel YouTube memakai nama label/akun lain.
+  static String _coverArtistKey(String rawTitle) {
+    final match = RegExp(
+      r'\b(?:cover(?:ed)?(?:\s+version)?|cover\s+lagu|versi\s+cover)\s*'
+      r'(?:by|oleh|dari|performed\s+by|sung\s+by|with)\s+'
+      r'([^()\[\]{}|:;–—-]+)',
+      caseSensitive: false,
+    ).firstMatch(rawTitle);
+    return normalizePhrase(match?.group(1) ?? '');
+  }
 
+  static bool _looksLikeChannelPart(String part, String channel) {
+    if (part.isEmpty || channel.isEmpty) return false;
+    if (part == channel) return true;
+
+    final partWords = part.split(' ').where((word) => word.length >= 3).toSet();
+    final channelWords = channel.split(' ').where((word) => word.length >= 3).toSet();
+    if (partWords.isEmpty || channelWords.isEmpty) return false;
+    final overlap = partWords.intersection(channelWords).length;
+    return overlap / partWords.length >= 0.75 ||
+        (partWords.length == 1 && overlap == 1);
+  }
+
+  /// Fingerprint berbasis judul lagu, bukan ID upload atau nama penyanyi.
+  /// Separator hanya dikenali bila berdiri sendiri (" - "), sehingga judul
+  /// ber-hyphen seperti "Hati-Hati di Jalan" tetap satu frasa utuh.
+  static Set<String> trackKeysFor(YoutubeSearchResult video) {
+    final rawTitle = video.title.trim();
+    final cleaned = _cleanTitle(rawTitle);
+    if (cleaned.isEmpty) return <String>{};
+
+    final channel = _artistKey(video);
+    final coverArtist = _coverArtistKey(rawTitle);
+    final hadCoverCue = RegExp(
+      r'\b(?:cover(?:ed)?|versi\s+cover|karaoke)\b',
+      caseSensitive: false,
+    ).hasMatch(rawTitle);
+    final chunks = cleaned
+        .split(RegExp(r'\s*(?:\||\u2022|;)\s*'))
+        .map((part) => part.trim())
+        .where((part) => part.isNotEmpty)
+        .toList(growable: false);
     final keys = <String>{};
 
-    // Judul utuh setelah nama channel dibuang.
-    var withoutChannel = title;
-    if (channel.isNotEmpty) {
-      withoutChannel = withoutChannel.replaceAll(channel, ' ');
-    }
-    withoutChannel = normalizePhrase(withoutChannel);
-    if (withoutChannel.length >= 3) {
-      keys.add(withoutChannel);
-    }
+    for (final chunk in chunks) {
+      final parts = chunk
+          .split(RegExp(r'\s+(?:-|\u2013|\u2014|:)\s+'))
+          .map((part) => normalizePhrase(part))
+          .where((part) => part.isNotEmpty)
+          .toList(growable: false);
+      if (parts.isEmpty) continue;
 
-    // Tangkap judul inti baik formatnya "Judul - Artis" maupun
-    // "Artis - Judul".
-    final usefulParts = rawParts.where((part) => !looksLikeChannel(part)).toList();
-    for (final part in usefulParts) {
-      if (part.length >= 4 && part.split(' ').length <= 8) {
-        keys.add(part);
+      final performerParts = parts.where((part) =>
+          _looksLikeChannelPart(part, channel) ||
+          _looksLikeChannelPart(part, coverArtist)).toSet();
+      List<String> songParts;
+      if (parts.length == 1) {
+        songParts = parts;
+      } else if (performerParts.isNotEmpty) {
+        // Buang segmen yang jelas merupakan nama channel/penyanyi cover.
+        // Ini bekerja untuk kedua format: "Penyanyi - Judul" dan "Judul - Penyanyi".
+        final remaining = parts.where((part) => !performerParts.contains(part)).toList();
+        songParts = remaining.isNotEmpty ? remaining : <String>[parts.first];
+      } else if (parts.length > 1 &&
+          RegExp(r'\b(?:ft\.?|feat\.?|featuring)\b', caseSensitive: false)
+              .hasMatch(parts.first)) {
+        // Format "Artis ft. Kolaborator - Judul": sisi kanan adalah lagu.
+        songParts = <String>[parts[1]];
+      } else if (hadCoverCue) {
+        // Jika akun yang mengunggah adalah label/produksi dan judul memakai
+        // format "Penyanyi - Judul (Cover)", segmen kanan sering merupakan
+        // judul lagu. Untuk judul normal "Judul - Penyanyi", tetap pilih kiri.
+        // Cover artist/channel yang diketahui sudah ditangani di atas.
+        final firstWords = parts.first.split(' ').length;
+        final secondWords = parts[1].split(' ').length;
+        songParts = <String>[
+          if (_looksLikeLabelChannel(channel) && firstWords > secondWords)
+            parts[1]
+          else
+            parts.first,
+        ];
+      } else if (_looksLikeLabelChannel(channel) && parts.length == 2) {
+        final firstWords = parts[0].split(' ').length;
+        final secondWords = parts[1].split(' ').length;
+        // Label musik sering memakai format "Artis - Judul". Satu kata di
+        // kiri tetap diperlakukan sebagai judul (mis. "Nemen - Gilga Sahid").
+        if (firstWords == 1) {
+          songParts = <String>[parts[0]];
+        } else if (firstWords == 2 && secondWords == 1) {
+          songParts = <String>[parts[1]];
+        } else if (secondWords >= firstWords) {
+          songParts = <String>[parts[1]];
+        } else {
+          songParts = <String>[parts[0]];
+        }
+      } else {
+        // Default untuk hasil search: format lagu biasanya "Judul - Artis".
+        songParts = <String>[parts.first];
+      }
+
+      for (var key in songParts) {
+        // Sufiks versi sering diletakkan sebelum nama penyanyi: "Judul Remix - Artis".
+        // Bersihkan modifier pada tiap segmen, bukan hanya di ujung keseluruhan judul.
+        key = key.replaceAll(
+          RegExp(
+            r'\b(?:official|music\s+video|official\s+audio|lyrics?|lirik|'
+            r'live|performance|acoustic|remix|remastered?|radio\s+edit|'
+            r'extended\s+mix|cover|karaoke|instrumental|version|versi|topic|vevo)\b',
+            caseSensitive: false,
+          ),
+          ' ',
+        );
+        if (channel.isNotEmpty) {
+          key = key.replaceAll(RegExp(r'\b' + RegExp.escape(channel) + r'\b'), ' ');
+        }
+        key = normalizePhrase(key);
+        if (key.length < 3) continue;
+        if (<String>{
+          'lagu', 'musik', 'song', 'songs', 'audio', 'video', 'official',
+          'remix', 'cover', 'live', 'karaoke', 'instrumental', 'mix',
+          'indonesia', 'terbaru', 'acoustic', 'version', 'versi',
+        }.contains(key)) {
+          continue;
+        }
+        keys.add(key);
       }
     }
 
-    // Jangan jadikan istilah generik sebagai fingerprint.
-    keys.removeWhere(
-      (key) => <String>{
-        'lagu',
-        'musik',
-        'song',
-        'audio',
-        'video',
-        'official',
-        'remix',
-        'cover',
-        'live',
-        'karaoke',
-        'mix',
-        'indonesia',
-        'terbaru',
-      }.contains(key),
-    );
-
+    if (keys.isEmpty) {
+      final fallback = normalizePhrase(cleaned);
+      if (fallback.length >= 3) keys.add(fallback);
+    }
     return keys;
   }
 
   static String trackKeyFor(YoutubeSearchResult video) {
-    final keys = trackKeysFor(video);
+    final keys = trackKeysFor(video).toList();
     if (keys.isEmpty) return '';
+    // Gunakan fingerprint judul yang paling informatif, bukan potongan kata
+    // satu kata dari tanda hubung internal.
+    keys.sort((a, b) {
+      final words = b.split(' ').length.compareTo(a.split(' ').length);
+      if (words != 0) return words;
+      return b.length.compareTo(a.length);
+    });
+    return keys.first;
+  }
 
-    final sorted = keys.toList()
-      ..sort((a, b) {
-        final wordCount = a.split(' ').length.compareTo(b.split(' ').length);
-        if (wordCount != 0) return wordCount;
-        return a.length.compareTo(b.length);
-      });
+  static Set<String> _meaningfulTrackTokens(String key) {
+    const stopWords = <String>{
+      'the', 'a', 'an', 'and', 'dan', 'di', 'ke', 'yang', 'of', 'by', 'from',
+      'ft', 'feat', 'featuring', 'official', 'music', 'video', 'audio',
+      'cover', 'version', 'versi', 'lagu', 'song', 'songs', 'lyrics', 'lirik',
+    };
+    return normalizePhrase(key)
+        .split(' ')
+        .where((token) => token.length >= 2 && !stopWords.contains(token))
+        .toSet();
+  }
 
-    return sorted.first;
+  static bool _similarTrackKey(String a, String b) {
+    if (a == b) return true;
+    final aTokens = _meaningfulTrackTokens(a);
+    final bTokens = _meaningfulTrackTokens(b);
+    if (aTokens.length < 2 || bTokens.length < 2) return false;
+    final overlap = aTokens.intersection(bTokens).length;
+    final shorter = aTokens.length < bTokens.length ? aTokens.length : bTokens.length;
+    return overlap >= 2 && overlap / shorter >= 0.8;
   }
 
   static bool isSameTrackFamily(
@@ -610,7 +725,15 @@ class RadioService {
     YoutubeSearchResult b,
   ) {
     if (a.videoId == b.videoId) return true;
-    return trackKeysFor(a).intersection(trackKeysFor(b)).isNotEmpty;
+    final aKeys = trackKeysFor(a);
+    final bKeys = trackKeysFor(b);
+    if (aKeys.isEmpty || bKeys.isEmpty) return false;
+    for (final aKey in aKeys) {
+      for (final bKey in bKeys) {
+        if (_similarTrackKey(aKey, bKey)) return true;
+      }
+    }
+    return false;
   }
 
   static bool queryLooksLikeCurrentTrack(
@@ -685,12 +808,10 @@ class RadioService {
       }
 
       final candidateKeys = trackKeysFor(video);
-      if (candidateKeys.isEmpty || candidateKeys.any(_playedTrackKeys.contains)) {
+      if (candidateKeys.isEmpty || wasPlayedRecently(video) || _recentlySelected(video)) {
         return false;
       }
-      if (_pool.any((pooled) =>
-          pooled.videoId == video.videoId ||
-          trackKeysFor(pooled).any(candidateKeys.contains))) {
+      if (_pool.any((pooled) => isSameTrackFamily(pooled, video))) {
         return false;
       }
 

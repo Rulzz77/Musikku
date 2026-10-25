@@ -383,6 +383,99 @@ void main() {
       radio.dispose();
     });
 
+    test('does not repeat a hyphenated title with a different cover singer', () {
+      final radio = RadioService(
+        YoutubeSearchService(),
+        currentVideoId: () => null,
+      );
+      final original = _video(
+        id: 'hati-original',
+        title: 'Hati-Hati di Jalan - Tulus (Official Music Video)',
+        channel: 'Tulus Official',
+      );
+      final cover = _video(
+        id: 'hati-cover',
+        title: 'Hati-Hati di Jalan (Cover by Rani Music)',
+        channel: 'Rani Music',
+      );
+      final differentSongBySameSinger = _video(
+        id: 'monokrom-cover',
+        title: 'Monokrom (Cover by Rani Music)',
+        channel: 'Rani Music',
+      );
+
+      expect(RadioService.isSameTrackFamily(original, cover), isTrue);
+      expect(RadioService.isSameTrackFamily(original, differentSongBySameSinger), isFalse);
+      radio.markPlayed(original);
+      expect(
+        radio.filterUnplayedCandidates([cover, differentSongBySameSinger])
+            .map((video) => video.videoId),
+        ['monokrom-cover'],
+      );
+      radio.dispose();
+    });
+
+    test('removes cover attribution and preserves internal hyphens in title keys', () {
+      final original = _video(
+        id: 'anti-hero-original',
+        title: 'Anti-Hero - Taylor Swift (Official Audio)',
+        channel: 'Taylor Swift Topic',
+      );
+      final cover = _video(
+        id: 'anti-hero-cover',
+        title: 'Anti-Hero - Cover by Naya Acoustic',
+        channel: 'Naya Acoustic',
+      );
+
+      expect(RadioService.trackKeysFor(original), contains('anti hero'));
+      expect(RadioService.trackKeysFor(original), isNot(contains('anti')));
+      expect(RadioService.isSameTrackFamily(original, cover), isTrue);
+    });
+
+    test('does not repeat a short song title when a cover lists singer first', () {
+      final radio = RadioService(
+        YoutubeSearchService(),
+        currentVideoId: () => null,
+      );
+      final original = _video(
+        id: 'kangen-original',
+        title: 'Kangen - Dewa 19 (Official Music Video)',
+        channel: 'Dewa 19 Official',
+      );
+      final coverWithAttribution = _video(
+        id: 'kangen-cover-attributed',
+        title: 'Nella Kharisma - Kangen (Cover by Nella Kharisma)',
+        channel: 'GMP Music',
+      );
+      final coverWithGenericTag = _video(
+        id: 'kangen-cover-generic',
+        title: 'Nella Kharisma - Kangen (Cover)',
+        channel: 'GMP Music',
+      );
+      final differentSongSameChannel = _video(
+        id: 'monokrom-cover',
+        title: 'Nella Kharisma - Monokrom (Cover)',
+        channel: 'GMP Music',
+      );
+
+      expect(RadioService.trackKeysFor(coverWithAttribution), contains('kangen'));
+      expect(RadioService.trackKeysFor(coverWithGenericTag), contains('kangen'));
+      expect(RadioService.isSameTrackFamily(original, coverWithAttribution), isTrue);
+      expect(RadioService.isSameTrackFamily(original, coverWithGenericTag), isTrue);
+      expect(RadioService.isSameTrackFamily(original, differentSongSameChannel), isFalse);
+
+      radio.markPlayed(original);
+      expect(
+        radio.filterUnplayedCandidates([
+          coverWithAttribution,
+          coverWithGenericTag,
+          differentSongSameChannel,
+        ]).map((video) => video.videoId),
+        ['monokrom-cover'],
+      );
+      radio.dispose();
+    });
+
     test('fallback candidate list excludes played songs and duplicate uploads', () {
       final radio = RadioService(
         YoutubeSearchService(),

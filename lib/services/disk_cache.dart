@@ -8,15 +8,20 @@ import 'package:shared_preferences/shared_preferences.dart';
 ///
 /// Nilai harus bisa di-encode JSON (List / Map / String / num / bool).
 class DiskCache {
-  final String namespace;
-  final int maxEntries;
-  final Duration ttl;
-
   const DiskCache({
     required this.namespace,
     required this.maxEntries,
     required this.ttl,
   });
+
+  final String namespace;
+  final int maxEntries;
+  final Duration ttl;
+
+  // Nama field di dalam JSON yang disimpan per entri.
+  static const String _keyField = 'k';
+  static const String _savedAtField = 't';
+  static const String _valueField = 'v';
 
   String get _indexKey => 'cache_index_$namespace';
 
@@ -25,50 +30,40 @@ class DiskCache {
   // FNV-1a 32-bit: stabil antar-sesi (String.hashCode tidak dijamin).
   static String _hash(String input) {
     var hash = 0x811c9dc5;
-
     for (final unit in input.codeUnits) {
       hash ^= unit;
       hash = (hash * 0x01000193) & 0xFFFFFFFF;
     }
-
     return hash.toRadixString(16);
   }
 
-  String _entryKey(String normalizedKey) =>
-      'cache_${namespace}_${_hash(normalizedKey)}';
+  String _entryKey(String normalizedKey) => 'cache_${namespace}_${_hash(normalizedKey)}';
 
+  /// Batas umur efektif: [maxAge] hanya boleh memperketat [ttl], bukan melonggarkannya.
+  Duration _effectiveTtl(Duration? maxAge) =>
+      maxAge != null && maxAge < ttl ? maxAge : ttl;
+
+  /// Mengembalikan nilai tersimpan, atau null jika tidak ada, kedaluwarsa,
+  /// rusak, atau bentrok hash dengan key lain.
   Future<Object?> get(String key, {Duration? maxAge}) async {
     try {
       final normalized = _normalize(key);
       final prefs = await SharedPreferences.getInstance();
       final raw = prefs.getString(_entryKey(normalized));
-
-      if (raw == null) {
-        return null;
-      }
+      if (raw == null) return null;
 
       final decoded = jsonDecode(raw);
+      if (decoded is! Map || decoded[_keyField] != normalized) return null;
 
-      if (decoded is! Map || decoded['k'] != normalized) {
-        return null;
-      }
+      final savedAt = decoded[_savedAtField];
+      if (savedAt is! int) return null;
 
-      final savedAt = decoded['t'];
-
-      if (savedAt is! int) {
-        return null;
-      }
-
-      final limit = maxAge != null && maxAge < ttl ? maxAge : ttl;
       final age = DateTime.now().difference(
         DateTime.fromMillisecondsSinceEpoch(savedAt),
       );
+      if (age > _effectiveTtl(maxAge)) return null;
 
-      if (age > limit) {
-        return null;
-      }
-
-      return decoded['v'];
+      return decoded[_valueField];
     } catch (e) {
       debugPrint('DISK CACHE READ ERROR [$namespace]: $e');
       return null;
@@ -84,15 +79,14 @@ class DiskCache {
       await prefs.setString(
         entryKey,
         jsonEncode({
-          'k': normalized,
-          't': DateTime.now().millisecondsSinceEpoch,
-          'v': value,
+          _keyField: normalized,
+          _savedAtField: DateTime.now().millisecondsSinceEpoch,
+          _valueField: value,
         }),
       );
 
-      final index = List<String>.from(
-        prefs.getStringList(_indexKey) ?? const <String>[],
-      )
+      // Urutan indeks = urutan tulis; entri yang ditulis ulang pindah ke akhir.
+      final index = List<String>.from(prefs.getStringList(_indexKey) ?? const <String>[])
         ..remove(entryKey)
         ..add(entryKey);
 

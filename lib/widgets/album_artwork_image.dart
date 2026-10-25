@@ -38,9 +38,11 @@ class _AlbumArtworkImageState extends State<AlbumArtworkImage> {
   @override
   void didUpdateWidget(covariant AlbumArtworkImage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.track.videoId != widget.track.videoId ||
-        oldWidget.track.title != widget.track.title ||
-        oldWidget.track.channelTitle != widget.track.channelTitle) {
+    final old = oldWidget.track;
+    final current = widget.track;
+    if (old.videoId != current.videoId ||
+        old.title != current.title ||
+        old.channelTitle != current.channelTitle) {
       _prepare();
     }
   }
@@ -49,17 +51,26 @@ class _AlbumArtworkImageState extends State<AlbumArtworkImage> {
     _coverFuture = AlbumArtworkService.resolveCoverUrl(widget.track);
   }
 
-  Widget _fallback(BuildContext context) {
+  Widget _placeholder(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return ColoredBox(
       color: scheme.surfaceContainerHighest,
       child: Center(
-        child: Icon(Icons.album_rounded, size: widget.iconSize, color: scheme.onSurfaceVariant),
+        child: Icon(
+          Icons.album_rounded,
+          size: widget.iconSize,
+          color: scheme.onSurfaceVariant,
+        ),
       ),
     );
   }
 
+  /// Memuat [url]. Jika gagal, coba sekali thumbnail bawaan track
+  /// (selama berbeda dari [url]), lalu terakhir placeholder.
   Widget _networkImage(BuildContext context, String url) {
+    final thumbnail = widget.track.coverUrl;
+    final canFallBack = thumbnail.isNotEmpty && thumbnail != url;
+
     return Image.network(
       url,
       width: widget.width,
@@ -67,28 +78,18 @@ class _AlbumArtworkImageState extends State<AlbumArtworkImage> {
       fit: widget.fit,
       filterQuality: FilterQuality.medium,
       gaplessPlayback: true,
-      errorBuilder: (context, error, stackTrace) {
-        final fallback = widget.track.coverUrl;
-        if (fallback.isNotEmpty && fallback != url) {
-          return Image.network(
-            fallback,
-            width: widget.width,
-            height: widget.height,
-            fit: widget.fit,
-            gaplessPlayback: true,
-            errorBuilder: (_, _, _) => _fallback(context),
-          );
-        }
-        return _fallback(context);
-      },
+      errorBuilder: (context, error, stackTrace) => canFallBack
+          ? _networkImage(context, thumbnail)
+          : _placeholder(context),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    if (widget.track.isLocal) {
+    final track = widget.track;
+    if (track.isLocal) {
       return UnifiedArtwork(
-        track: widget.track,
+        track: track,
         fit: widget.fit,
         width: widget.width,
         height: widget.height,
@@ -96,16 +97,18 @@ class _AlbumArtworkImageState extends State<AlbumArtworkImage> {
       );
     }
 
-    final fallback = widget.track.coverUrl;
+    final thumbnail = track.coverUrl;
     return FutureBuilder<String>(
       future: _coverFuture,
       builder: (context, snapshot) {
-        final url = snapshot.data;
-        // Show YouTube's image immediately; swap to matched square album art
-        // once MusicBrainz/Cover Art Archive resolves, avoiding a blank player.
-        final displayUrl = url != null && url.isNotEmpty ? url : fallback;
-        if (displayUrl.isEmpty) return _fallback(context);
-        return _networkImage(context, displayUrl);
+        // Tampilkan thumbnail YouTube dulu; ganti ke sampul album persegi
+        // begitu MusicBrainz/Cover Art Archive selesai, supaya player tidak
+        // sempat kosong. Jika future gagal, snapshot.data null dan thumbnail
+        // tetap dipakai.
+        final resolved = snapshot.data;
+        final url = (resolved != null && resolved.isNotEmpty) ? resolved : thumbnail;
+        if (url.isEmpty) return _placeholder(context);
+        return _networkImage(context, url);
       },
     );
   }

@@ -1,6 +1,7 @@
+
 name: MusikKu Secure Release
 
-# Push a new release when pubspec.yaml is bumped; allow manual runs from main too.
+# Build release saat pubspec.yaml berubah; manual run juga tersedia.
 on:
   push:
     branches: [main]
@@ -23,8 +24,8 @@ jobs:
     timeout-minutes: 10
     outputs:
       version_name: ${{ steps.version.outputs.version_name }}
-      build_number: ${{ steps.version.outputs.build_number }}
       tag: ${{ steps.version.outputs.tag }}
+
     steps:
       - name: Checkout full history and tags (pinned)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -43,26 +44,32 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
           VERSION_SPEC="$(python3 tool/sync_app_version.py --print-version)"
           VERSION_NAME="${VERSION_SPEC%%+*}"
           BUILD_NUMBER="${VERSION_SPEC##*+}"
+
           APP_VERSION="$(sed -n "s/^[[:space:]]*const String appVersion = '\\([^']*\\)';/\\1/p" lib/app_info.dart | head -n 1)"
           APP_BUILD_NUMBER="$(sed -n "s/^[[:space:]]*const String appBuildNumber = '\\([^']*\\)';/\\1/p" lib/app_info.dart | head -n 1)"
+
           if [[ "$APP_VERSION" != "$VERSION_NAME" || "$APP_BUILD_NUMBER" != "$BUILD_NUMBER" ]]; then
             echo "::error::Version sync failed: pubspec.yaml=$VERSION_SPEC; app_info.dart=$APP_VERSION+$APP_BUILD_NUMBER."
             exit 1
           fi
+
           TAG="v${VERSION_NAME}"
+
           if git tag --list "$TAG" | grep -Fxq "$TAG"; then
-            echo "::error::Tag $TAG already exists. Increment the VERSION_NAME in pubspec.yaml, not just BUILD. Example: 5.0.8+92 -> 5.0.9+93."
+            echo "::error::Tag $TAG already exists. Increment VERSION_NAME in pubspec.yaml."
             exit 1
           fi
+
           if gh release view "$TAG" --repo "$GH_REPO" >/dev/null 2>&1; then
-            echo "::error::Release $TAG already exists. Existing releases are immutable; increment VERSION_NAME."
+            echo "::error::Release $TAG already exists. Increment VERSION_NAME in pubspec.yaml."
             exit 1
           fi
+
           echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
-          echo "build_number=$BUILD_NUMBER" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "Preparing MusikKu $VERSION_NAME build $BUILD_NUMBER (tag $TAG)."
 
@@ -74,6 +81,7 @@ jobs:
     timeout-minutes: 60
     permissions:
       contents: read
+
     steps:
       - name: Checkout source (pinned)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -108,13 +116,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
           if [[ -z "$KEYSTORE_BASE64" || -z "$STORE_PASSWORD" || -z "$KEY_ALIAS" || -z "$KEY_PASSWORD" ]]; then
             echo "::error::Android signing secrets are incomplete."
             exit 1
           fi
+
           umask 077
           printf '%s' "$KEYSTORE_BASE64" | base64 --decode > android/app/musikku-upload-key.jks
           test -s android/app/musikku-upload-key.jks
+
           {
             printf 'storeFile=app/musikku-upload-key.jks\n'
             printf 'storePassword=%s\n' "$STORE_PASSWORD"
@@ -139,25 +150,29 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
           if [[ -z "$YOUTUBE_API_KEY" ]]; then
             echo "::error::GitHub Secret YOUTUBE_API_KEY is not configured."
             exit 1
           fi
+
           if [[ -z "$SUPABASE_URL" || -z "$SUPABASE_PUBLISHABLE_KEY" ]]; then
             echo "::error::GitHub Actions Variables SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY must be configured."
             exit 1
           fi
+
           if [[ "$SUPABASE_URL" != https://* ]]; then
             echo "::error::SUPABASE_URL must start with https://."
             exit 1
           fi
+
           flutter build apk --release \
             --dart-define="YOUTUBE_API_KEY=${YOUTUBE_API_KEY}" \
             --dart-define="SUPABASE_URL=${SUPABASE_URL}" \
             --dart-define="SUPABASE_PUBLISHABLE_KEY=${SUPABASE_PUBLISHABLE_KEY}"
+
           APK="build/app/outputs/flutter-apk/app-release.apk"
           test -s "$APK"
-          sha256sum "$APK" > "$APK.sha256"
 
       - name: Remove signing material
         if: always()
@@ -168,20 +183,19 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: musikku-release-apk
-          path: |
-            build/app/outputs/flutter-apk/app-release.apk
-            build/app/outputs/flutter-apk/app-release.apk.sha256
+          path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 1
 
   publish:
-    name: Publish immutable GitHub Release
+    name: Publish latest release and clean old versions
     needs: [prepare, build]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     permissions:
       contents: write
+
     steps:
       - name: Download built APK (pinned)
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -189,27 +203,76 @@ jobs:
           name: musikku-release-apk
           path: release-assets
 
-      - name: Publish new version without overwriting old releases
+      - name: Publish latest release and remove previous version releases/tags
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.prepare.outputs.tag }}
           VERSION_NAME: ${{ needs.prepare.outputs.version_name }}
-          BUILD_NUMBER: ${{ needs.prepare.outputs.build_number }}
           TARGET_SHA: ${{ github.sha }}
           GH_REPO: ${{ github.repository }}
         shell: bash
         run: |
           set -euo pipefail
+
           APK="release-assets/app-release.apk"
           test -s "$APK"
+
+          # Jangan timpa release atau tag yang kebetulan sudah ada.
           if gh release view "$TAG" --repo "$GH_REPO" >/dev/null 2>&1; then
             echo "::error::Release $TAG already exists; refusing to overwrite."
             exit 1
           fi
+
           if gh api "repos/$GH_REPO/git/ref/tags/$TAG" >/dev/null 2>&1; then
             echo "::error::Tag $TAG already exists; increment VERSION_NAME."
             exit 1
           fi
-          SHA256="$(sha256sum "$APK" | awk '{print $1}')"
-          NOTES="$(printf 'MusikKu %s (build %s).\\n\\nAPK: app-release.apk\\nSHA-256: %s\\n' "$VERSION_NAME" "$BUILD_NUMBER" "$SHA256")"
-          gh release create "$TAG" "$APK" "$APK.sha256" --repo "$GH_REPO" --title "MusikKu $VERSION_NAME" --notes "$NOTES" --target "$TARGET_SHA"
+
+          # Release hanya berisi APK dan catatan versi singkat.
+          NOTES="MusikKu ${VERSION_NAME}"
+
+          gh release create "$TAG" "$APK" \
+            --repo "$GH_REPO" \
+            --title "MusikKu $VERSION_NAME" \
+            --notes "$NOTES" \
+            --target "$TARGET_SHA"
+
+          echo "Release $TAG created successfully."
+          echo "Removing previous version releases and tags..."
+
+          # Hapus release versi lama dengan format tag vX.Y.Z
+          # atau versi prerelease seperti vX.Y.Z-beta.1.
+          RELEASE_TAGS="$(gh release list \
+            --repo "$GH_REPO" \
+            --limit 1000 \
+            --json tagName \
+            --jq '.[].tagName')"
+
+          while IFS= read -r OLD_TAG; do
+            [[ -n "$OLD_TAG" ]] || continue
+            [[ "$OLD_TAG" == "$TAG" ]] && continue
+
+            if [[ "$OLD_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+              echo "Deleting old release: $OLD_TAG"
+              gh release delete "$OLD_TAG" --repo "$GH_REPO" --yes
+            fi
+          done <<< "$RELEASE_TAGS"
+
+          # Hapus tag versi lama juga, termasuk tag yang tidak punya release.
+          TAG_REFS="$(gh api --paginate \
+            "repos/$GH_REPO/git/matching-refs/tags/" \
+            --jq '.[].ref')"
+
+          while IFS= read -r REF; do
+            [[ -n "$REF" ]] || continue
+
+            OLD_TAG="${REF#refs/tags/}"
+            [[ "$OLD_TAG" == "$TAG" ]] && continue
+
+            if [[ "$OLD_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+              echo "Deleting old tag: $OLD_TAG"
+              gh api --method DELETE "repos/$GH_REPO/git/refs/tags/$OLD_TAG"
+            fi
+          done <<< "$TAG_REFS"
+
+          echo "Cleanup complete. Current release: $TAG"

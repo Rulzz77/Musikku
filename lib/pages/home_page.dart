@@ -17,6 +17,7 @@ import '../services/lyrics_service.dart';
 import '../services/listening_playback_tracker.dart';
 import '../services/listening_together_service.dart';
 import '../services/music_style_matcher.dart';
+import '../services/original_track_resolver.dart';
 import '../services/app_settings.dart';
 import '../services/app_health_monitor.dart';
 import '../services/app_update_service.dart';
@@ -89,6 +90,8 @@ class _HomePageState extends State<HomePage>
   final YoutubeHubController _hubController = YoutubeHubController();
 
   final YoutubeSearchService _searchService = YoutubeSearchService();
+  late final OriginalTrackResolver _originalTrackResolver =
+      OriginalTrackResolver(_searchService);
 
   final QueueManager _queueManager = QueueManager();
 

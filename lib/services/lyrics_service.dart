@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 
 import '../models/lyric.dart';
 import 'disk_cache.dart';
+import 'music_title_formatter.dart';
 
 class _LyricsQuery {
   final String title;
@@ -21,7 +22,7 @@ class LyricsService {
 
   /// Cache di HP supaya lirik tidak diunduh ulang tiap app dibuka.
   static const DiskCache _disk = DiskCache(
-    namespace: 'lyrics',
+    namespace: 'lyrics_v2',
     maxEntries: 40,
     ttl: Duration(days: 14),
   );
@@ -130,10 +131,15 @@ class LyricsService {
     }
 
     final queries = _buildQueries(title, artist);
+    if (queries.isEmpty) {
+      _remember(cacheKey, null);
+      return null;
+    }
     var hadError = false;
 
-    // 1. Coba pencocokan persis (judul & artis sudah dibersihkan).
-    for (final query in queries) {
+    // 1. Coba paling banyak dua kombinasi judul/artis yang paling terpercaya.
+    // Batasi request agar lookup lirik tidak membuat UI menunggu terlalu lama.
+    for (final query in queries.take(2)) {
       try {
         final result = await _fetchExact(query);
 
@@ -147,10 +153,11 @@ class LyricsService {
       }
     }
 
-    // 2. Fallback: pencarian bebas.
+    // 2. Fallback: search results are scored against both track title and
+    // artist. Some lyric endpoints return a synced song for a similar title;
+    // never accept it just because it appears first in the response.
     try {
       final result = await _search(queries.first);
-
       if (result != null) {
         _remember(cacheKey, result);
         return result;
@@ -173,6 +180,7 @@ class LyricsService {
   // ==========================================================
 
   static Future<LyricsResult?> _fetchExact(_LyricsQuery query) async {
+    if (query.title.trim().isEmpty || query.artist.trim().isEmpty) return null;
     final uri = Uri.https('lrclib.net', '/api/get', {
       'track_name': query.title,
       'artist_name': query.artist,
@@ -195,56 +203,92 @@ class LyricsService {
       return null;
     }
 
+    // Some lyric services can return a nearby match for ambiguous titles.
+    // Validate the metadata even for the exact endpoint before caching it.
+    final returnedTitle = decoded['trackName']?.toString() ?? '';
+    final returnedArtist = decoded['artistName']?.toString() ?? '';
+    if (_metadataMatchScore(query.title, returnedTitle) < 80) return null;
+    if (query.artist.trim().isNotEmpty &&
+        (returnedArtist.trim().isEmpty ||
+            _metadataMatchScore(query.artist, returnedArtist) < 65)) {
+      return null;
+    }
+
     return _fromJson(decoded);
   }
 
   static Future<LyricsResult?> _search(_LyricsQuery query) async {
-    final uri = Uri.https('lrclib.net', '/api/search', {
-      'q': '${query.title} ${query.artist}',
-    });
-
-    final response =
-        await http.get(uri, headers: _headers).timeout(_timeout);
-
+    final params = <String, String>{'q': query.artist.trim().isEmpty ? query.title : '${query.title} ${query.artist}'};
+    final uri = Uri.https('lrclib.net', '/api/search', params);
+    final response = await http.get(uri, headers: _headers).timeout(_timeout);
     if (response.statusCode != 200) {
       throw Exception('Lyrics search error: ${response.statusCode}');
     }
-
     final decoded = jsonDecode(response.body);
+    if (decoded is! List) return null;
 
-    if (decoded is! List) {
-      return null;
-    }
+    LyricsResult? bestResult;
+    var bestScore = -1;
+    for (final item in decoded.take(12)) {
+      if (item is! Map) continue;
+      final trackName = item['trackName']?.toString() ?? '';
+      final artistName = item['artistName']?.toString() ?? '';
+      final titleScore = _metadataMatchScore(query.title, trackName);
+      if (titleScore < 80) continue;
 
-    LyricsResult? plainFallback;
-
-    for (final item in decoded.take(8)) {
-      if (item is! Map) {
-        continue;
+      final expectedArtist = _normalizeMetadata(query.artist);
+      final actualArtist = _normalizeMetadata(artistName);
+      var artistScore = 0;
+      if (expectedArtist.isNotEmpty) {
+        artistScore = _metadataMatchScore(query.artist, artistName);
+        // A title hit from a different artist can easily be a different song.
+        if (actualArtist.isNotEmpty && artistScore < 65) continue;
       }
 
       final result = _fromJson(item);
-
-      if (result == null) {
-        continue;
+      if (result == null) continue;
+      final score = titleScore + artistScore + (result.synced ? 10 : 0);
+      if (score > bestScore) {
+        bestScore = score;
+        bestResult = result;
       }
-
-      // Lirik bertimestamp lebih diutamakan.
-      if (result.synced) {
-        return result;
-      }
-
-      plainFallback ??= result;
     }
+    return bestResult;
+  }
 
-    return plainFallback;
+  static String _normalizeMetadata(String value) => value
+      .toLowerCase()
+      .replaceAll(RegExp(r'<[^>]*>'), ' ')
+      .replaceAll(RegExp(r'[^a-z0-9\s]'), ' ')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+
+  /// A high-confidence textual match; exposed so ranking can be regression-tested.
+  static int metadataMatchScoreForTesting(String expected, String actual) =>
+      _metadataMatchScore(expected, actual);
+
+  static int _metadataMatchScore(String expected, String actual) {
+    final left = _normalizeMetadata(expected);
+    final right = _normalizeMetadata(actual);
+    if (left.isEmpty || right.isEmpty) return 0;
+    if (left == right) return 100;
+    if (right.endsWith(' $left') || right.startsWith('$left ')) return 90;
+    if (right.contains(' $left ')) return 86;
+
+    final leftWords = left.split(' ').where((word) => word.isNotEmpty).toSet();
+    final rightWords = right.split(' ').where((word) => word.isNotEmpty).toSet();
+    if (leftWords.isEmpty) return 0;
+    final overlap = leftWords.intersection(rightWords).length / leftWords.length;
+    final extraWords = rightWords.length - leftWords.length;
+    if (overlap >= 0.9 && extraWords <= 2) return 80;
+    return 0;
   }
 
   static LyricsResult? _fromJson(Map decoded) {
     final syncedLyrics = decoded['syncedLyrics'];
 
     if (syncedLyrics is String && syncedLyrics.trim().isNotEmpty) {
-      final parsed = _parseSyncedLyrics(syncedLyrics);
+      final parsed = parseSyncedLyrics(syncedLyrics);
 
       if (parsed.isNotEmpty) {
         return LyricsResult(lines: parsed, synced: true);
@@ -280,107 +324,142 @@ class LyricsService {
 
   static List<_LyricsQuery> _buildQueries(String rawTitle, String rawArtist) {
     final channel = _cleanArtist(rawArtist);
-    final title = _cleanTitle(rawTitle);
+    final coverArtist = _coverArtistCue(rawTitle);
+    var source = rawTitle;
 
-    final queries = <_LyricsQuery>[];
-
-    final separator = RegExp(r'\s[-–—]\s');
-    final match = separator.firstMatch(title);
-
-    if (match != null) {
-      final left = title.substring(0, match.start).trim();
-      final right = title.substring(match.end).trim();
-
-      if (left.isNotEmpty && right.isNotEmpty) {
-        queries.add(_LyricsQuery(title: right, artist: left));
-      }
-    }
-
-    queries.add(_LyricsQuery(title: title, artist: channel));
-
-    return queries;
-  }
-
-  static String _cleanTitle(String raw) {
-    var text = raw.replaceAll(RegExp(r'\([^)]*\)|\[[^\]]*\]|【[^】]*】'), ' ');
-
-    text = text.split('|').first;
-
-    text = text.replaceAll(
+    // Remove only bracket groups that identify this upload as a cover. Other
+    // meaningful title info, such as a featured artist, remains available.
+    source = source.replaceAll(
+      RegExp(r'[\(\[\{【][^\)\]\}】]*\bcover\b[^\)\]\}】]*[\)\]\}】]', caseSensitive: false),
+      ' ',
+    );
+    source = source.replaceAll(
+      RegExp(r'\b(?:cover(?:ed)?(?:\s+(?:song|version|lagu))?|versi\s+cover)\s+(?:by|oleh|dari|performed\s+by|sung\s+by|with)\s+[^|;–—-]+$', caseSensitive: false),
+      ' ',
+    );
+    source = source.replaceAll(
       RegExp(
-        r'\b(official|lyrics?)\b(\s+(official|music|lyrics?|video|audio))*\s*$',
+        r'\s*[-–—|:]\s*(?:(?:acoustic|piano|guitar|gitar|live)\s+)?'
+        r'cover(?:\s+(?:version|song|lagu))?\s*$',
         caseSensitive: false,
       ),
       ' ',
     );
-
-    text = text.replaceAll(RegExp(r'\s+'), ' ').trim();
-
-    return text.isEmpty ? raw.trim() : text;
-  }
-
-  static String _cleanArtist(String raw) {
-    var text = raw.replaceAll(
-      RegExp(r'\s*-\s*Topic$', caseSensitive: false),
+    source = source.replaceAll(
+      RegExp(r'^\s*cover\s+by\s+.+?\s*[-–—]\s*', caseSensitive: false),
       '',
     );
+    var cleaned = _cleanTitle(source);
+    cleaned = cleaned
+        .replaceAll(RegExp(r'\s*[-–—|:]\s*$'), '')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
 
+    final queries = <_LyricsQuery>[];
+    final separator = RegExp(r'\s[-–—]\s').firstMatch(cleaned);
+    if (separator != null) {
+      final left = cleaned.substring(0, separator.start).trim();
+      final right = cleaned.substring(separator.end).trim();
+      if (left.isNotEmpty && right.isNotEmpty) {
+        final artistFromTitle = coverArtist ?? left;
+        queries.add(_LyricsQuery(title: right, artist: artistFromTitle));
+        if (channel.isNotEmpty && channel.toLowerCase() != artistFromTitle.toLowerCase()) {
+          queries.add(_LyricsQuery(title: right, artist: channel));
+        }
+        queries.add(_LyricsQuery(title: right, artist: ''));
+      }
+    }
+
+    if (cleaned.isNotEmpty) {
+      // A title such as "Kangen (Dewa 19 Cover)" contains the original
+      // performer even when it has no "Artist - Title" separator. Try that
+      // attribution before the channel name, which is usually the cover singer.
+      if (separator == null && coverArtist != null && coverArtist.trim().isNotEmpty) {
+        queries.add(_LyricsQuery(title: cleaned, artist: coverArtist.trim()));
+      }
+      if (channel.isNotEmpty) queries.add(_LyricsQuery(title: cleaned, artist: channel));
+      queries.add(_LyricsQuery(title: cleaned, artist: ''));
+    }
+
+    final seen = <String>{};
+    return queries.where((query) {
+      final key = '${query.title.toLowerCase().trim()}|${query.artist.toLowerCase().trim()}';
+      return query.title.trim().isNotEmpty && seen.add(key);
+    }).take(4).toList(growable: false);
+  }
+
+  static String? _coverArtistCue(String rawTitle) {
+    final bracketed = RegExp(r'[\(\[\{【]([^\)\]\}】]*\bcover\b[^\)\]\}】]*)[\)\]\}】]', caseSensitive: false);
+    for (final match in bracketed.allMatches(rawTitle)) {
+      final cue = (match.group(1) ?? '').trim();
+      final beforeCover = RegExp(r'^(.+?)\s+(?:acoustic\s+|piano\s+|guitar\s+|gitar\s+)?cover(?:\s+(?:song|version))?$', caseSensitive: false).firstMatch(cue);
+      final artist = beforeCover?.group(1)?.trim() ?? '';
+      if (artist.isEmpty) continue;
+      if (RegExp(r'^(?:acoustic|piano|guitar|gitar|live|female|male|instrumental|original|music)$', caseSensitive: false).hasMatch(artist)) continue;
+      return artist;
+    }
+    return null;
+  }
+
+  static String _cleanTitle(String raw) => MusicTitleFormatter.clean(raw);
+
+  static String _cleanArtist(String raw) {
+    var text = raw.replaceAll(RegExp(r'\s*-\s*Topic$', caseSensitive: false), '');
     text = text.replaceAll(RegExp(r'VEVO$', caseSensitive: false), '');
     text = text.replaceAll(RegExp(r'\s*Official$', caseSensitive: false), '');
-
     return text.trim();
   }
 
-  // ==========================================================
-  // PARSE LRC
-  // ==========================================================
-
-  static List<LyricLine> _parseSyncedLyrics(String raw) {
+  /// Parses timestamped lyric lines, including LRC lines with multiple time tags.
+  /// Public for deterministic regression tests and offline validation.
+  static List<LyricLine> parseSyncedLyrics(String raw) {
     final result = <LyricLine>[];
+    final timestampRegex = RegExp(r'\[(\d{1,3}):(\d{2})(?:[.:](\d{1,3}))?\]');
+    final source = raw.replaceAll('\uFEFF', '');
+    final offsetMatch = RegExp(r'^\[offset:([+-]?\d+)\]', caseSensitive: false, multiLine: true)
+        .firstMatch(source);
+    final offsetMs = int.tryParse(offsetMatch?.group(1) ?? '0') ?? 0;
 
-    final regex = RegExp(r'^\[(\d{1,3}):(\d{2})(?:\.(\d{1,3}))?\]\s*(.*)$');
-
-    for (final line in raw.split('\n')) {
-      final match = regex.firstMatch(line.trim());
-
-      if (match == null) {
+    for (final sourceLine in source.split('\n')) {
+      final line = sourceLine.trim();
+      if (line.isEmpty ||
+          RegExp(r'^\[(?:ar|al|ti|by|re|ve|offset):', caseSensitive: false).hasMatch(line)) {
         continue;
       }
+      final matches = timestampRegex.allMatches(line).toList(growable: false);
+      if (matches.isEmpty) continue;
+      // A line can carry multiple timestamps, e.g. [00:01.20][00:03.40]Words.
+      // All timestamps belong to the text after the final timestamp.
+      final text = line.substring(matches.last.end).trim();
+      if (text.isEmpty) continue;
 
-      final minutes = int.tryParse(match.group(1) ?? '0') ?? 0;
-      final seconds = int.tryParse(match.group(2) ?? '0') ?? 0;
-      final fraction = match.group(3) ?? '0';
-
-      int milliseconds;
-
-      if (fraction.length == 1) {
-        milliseconds = int.parse(fraction) * 100;
-      } else if (fraction.length == 2) {
-        milliseconds = int.parse(fraction) * 10;
-      } else {
-        milliseconds = int.tryParse(fraction) ?? 0;
-      }
-
-      final text = (match.group(4) ?? '').trim();
-
-      if (text.isEmpty) {
-        continue;
-      }
-
-      result.add(
-        LyricLine(
-          time: Duration(
-            minutes: minutes,
-            seconds: seconds,
-            milliseconds: milliseconds,
-          ),
+      for (final match in matches) {
+        final minutes = int.tryParse(match.group(1) ?? '0') ?? 0;
+        final seconds = int.tryParse(match.group(2) ?? '0') ?? 0;
+        final fraction = match.group(3) ?? '0';
+        final fractionalMs = fraction.length == 1
+            ? int.parse(fraction) * 100
+            : fraction.length == 2
+                ? int.parse(fraction) * 10
+                : (int.tryParse(fraction) ?? 0);
+        final timestampMs = (minutes * 60 + seconds) * 1000 + fractionalMs + offsetMs;
+        result.add(LyricLine(
+          time: Duration(milliseconds: timestampMs < 0 ? 0 : timestampMs),
           text: text,
-        ),
-      );
+        ));
+      }
     }
 
     result.sort((a, b) => a.time.compareTo(b.time));
-
-    return result;
+    final deduplicated = <LyricLine>[];
+    for (final line in result) {
+      if (deduplicated.isEmpty ||
+          deduplicated.last.time != line.time ||
+          deduplicated.last.text != line.text) {
+        deduplicated.add(line);
+      }
+    }
+    return deduplicated;
   }
+
 }

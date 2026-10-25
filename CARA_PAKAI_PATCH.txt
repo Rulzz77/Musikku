@@ -1,9 +1,0 @@
-PATCH MusikKu 5.0.48+26
-
-1. Buat salinan/commit checkpoint repository GitHub terlebih dahulu.
-2. Ekstrak isi ZIP patch ke folder root repository MusikKu.
-3. Timpa file yang memiliki jalur sama.
-4. Jalankan `flutter pub get`, `flutter analyze`, dan `flutter test`.
-5. Push ke branch main agar GitHub Actions mem-build APK.
-
-Patch ini ditujukan untuk source MusikKu versi 5.0.47+25. Jangan menganggap APK sudah teruji sebelum GitHub Actions selesai.

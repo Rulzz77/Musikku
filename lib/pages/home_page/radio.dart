@@ -330,7 +330,21 @@ extension _HomeRadio on _HomePageState {
       return;
     }
 
-    await _playVideo(next);
+    // A cover result can be replaced with a high-confidence official/original
+    // upload when the YouTube search API exposes one. The resolver is only
+    // called for explicit cover titles; ambiguous or unavailable originals keep
+    // the chosen result and never block playback.
+    final selected = next;
+    final resolved = await _originalTrackResolver.resolveIfCover(selected);
+    final playable = resolved.videoId != selected.videoId ? resolved : selected;
+    if (playable.videoId != selected.videoId) {
+      debugPrint(
+        'RADIO ORIGINAL RESOLVED: ${selected.title} -> ${playable.title} (${playable.videoId})',
+      );
+      if (!fromAutoNext) _toast('Menemukan rekaman asli: ${playable.title}');
+    }
+
+    await _playVideo(playable);
 
     // Tidak melakukan prefetch hanya karena pool tinggal beberapa lagu.
     // Request halaman baru dilakukan saat pool benar-benar habis di Next berikutnya.

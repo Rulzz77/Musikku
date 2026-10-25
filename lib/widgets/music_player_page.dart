@@ -1,6 +1,4 @@
 import 'dart:math' as math;
-import 'dart:ui' as ui;
-
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 
@@ -266,7 +264,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                                 left: 10,
                                 right: 10,
                                 bottom: 10,
-                                child: _buildCurrentLyricGlass(textTheme: theme.textTheme),
+                                child: _buildCurrentLyricText(textTheme: theme.textTheme),
                               ),
                             ],
                           ),
@@ -346,7 +344,12 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                                     // Keep the cover position stable; the lower controls panel
                                     // uses a flexible spacer to fill leftover screen height.
                                     padding: const EdgeInsets.only(top: 0, bottom: 0),
-                                    child: Center(child: artworkPanel),
+                                    child: Center(
+                                      child: Transform.translate(
+                                        offset: const Offset(0, 18),
+                                        child: artworkPanel,
+                                      ),
+                                    ),
                                   ),
                                 Expanded(
                                   // Give the controls panel a bounded height. On phones the
@@ -566,88 +569,77 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
     );
   }
 
-  /// Small glass lyric pill floating over the lower edge of the cover.
-  /// It is displayed only for real timestamped lyrics; unsynced text must not
-  /// pretend to follow playback position.
-  Widget _buildCurrentLyricGlass({
+  /// Current timestamped lyric displayed directly over artwork without a card.
+  /// It only appears after the first timestamp and after the native player has
+  /// confirmed that the active track matches this player.
+  Widget _buildCurrentLyricText({
     required TextTheme textTheme,
   }) {
     return ValueListenableBuilder<PlayerUiState>(
       valueListenable: widget.playerUiState,
       builder: (context, playerState, _) {
+        final lyrics = playerState.lyrics;
         if (playerState.video?.videoId != widget.video.videoId ||
             !playerState.lyricsSynced ||
-            playerState.lyrics.isEmpty) {
+            lyrics.isEmpty) {
           return const SizedBox.shrink();
         }
 
         return ValueListenableBuilder<NativeYoutubeState>(
           valueListenable: widget.nativeState,
           builder: (context, state, _) {
-            final matchesTrack = state.videoId.isEmpty || state.videoId == widget.video.videoId;
-            final position = matchesTrack ? state.position : Duration.zero;
-            var lineIndex = 0;
-            for (var i = 0; i < playerState.lyrics.length; i++) {
-              if (playerState.lyrics[i].time <= position) {
-                lineIndex = i;
+            if (state.videoId != widget.video.videoId) {
+              return const SizedBox.shrink();
+            }
+
+            // Binary search is cheaper than a full scan on every position tick
+            // and prevents showing the first lyric before its actual timestamp.
+            var low = 0;
+            var high = lyrics.length - 1;
+            var lineIndex = -1;
+            while (low <= high) {
+              final mid = (low + high) >> 1;
+              if (lyrics[mid].time <= state.position) {
+                lineIndex = mid;
+                low = mid + 1;
               } else {
-                break;
+                high = mid - 1;
               }
             }
-            final lyric = playerState.lyrics[lineIndex].text.trim();
+            if (lineIndex < 0) return const SizedBox.shrink();
+            final lyric = lyrics[lineIndex].text.trim();
             if (lyric.isEmpty) return const SizedBox.shrink();
 
             return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(28),
-                child: BackdropFilter(
-                  filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.105),
-                      borderRadius: BorderRadius.circular(28),
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.20)),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.12),
-                          blurRadius: 20,
-                          offset: const Offset(0, 8),
-                        ),
-                      ],
-                    ),
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 260),
-                      switchInCurve: Curves.easeOutCubic,
-                      switchOutCurve: Curves.easeInCubic,
-                      transitionBuilder: (child, animation) => FadeTransition(
-                        opacity: animation,
-                        child: SlideTransition(
-                          position: Tween<Offset>(
-                            begin: const Offset(0, 0.10),
-                            end: Offset.zero,
-                          ).animate(animation),
-                          child: child,
-                        ),
-                      ),
-                      child: Text(
-                        lyric,
-                        key: ValueKey<String>('lyric-$lineIndex-$lyric'),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.center,
-                        style: textTheme.titleSmall?.copyWith(
-                          color: Colors.white,
-                          height: 1.25,
-                          fontWeight: FontWeight.w700,
-                          shadows: [
-                            Shadow(color: Colors.black.withValues(alpha: 0.25), blurRadius: 8),
-                          ],
-                        ),
-                      ),
-                    ),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 220),
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                transitionBuilder: (child, animation) => FadeTransition(
+                  opacity: animation,
+                  child: SlideTransition(
+                    position: Tween<Offset>(
+                      begin: const Offset(0, 0.08),
+                      end: Offset.zero,
+                    ).animate(animation),
+                    child: child,
+                  ),
+                ),
+                child: Text(
+                  lyric,
+                  key: ValueKey<String>('lyric-$lineIndex-$lyric'),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: textTheme.titleSmall?.copyWith(
+                    color: Colors.white,
+                    height: 1.24,
+                    fontWeight: FontWeight.w800,
+                    shadows: const [
+                      Shadow(color: Colors.black, blurRadius: 10, offset: Offset(0, 1)),
+                      Shadow(color: Colors.black87, blurRadius: 3, offset: Offset(0, 1)),
+                    ],
                   ),
                 ),
               ),

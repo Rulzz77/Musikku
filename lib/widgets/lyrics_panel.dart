@@ -310,6 +310,18 @@ class _LyricsPanelState extends State<LyricsPanel> {
   }
 
   @override
+  void didUpdateWidget(covariant LyricsPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // A song change while the sheet stays open starts a fresh lyric timeline.
+    // Reset the scroll sentinel so the new current line can auto-center again.
+    if (!identical(oldWidget.lyrics, widget.lyrics) ||
+        oldWidget.synced != widget.synced ||
+        oldWidget.loading != widget.loading) {
+      _lastIndex = -1;
+    }
+  }
+
+  @override
   void dispose() {
     _scroll.dispose();
     super.dispose();

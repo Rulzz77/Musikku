@@ -84,6 +84,7 @@ extension _HomeUiLayout on _HomePageState {
                     : MusicPlayerPage(
                         key: const ValueKey<String>('music-player'),
                         video: watch,
+                        nextVideo: _queueManager.peekFirst()?.video,
                         nativeState: _nativeStateNotifier,
                         playerUiState: _playerUiState,
                         onBack: () => unawaited(_closeYoutubeWatch()),

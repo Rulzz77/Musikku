@@ -43,6 +43,7 @@ class AppSettingsController {
   static const _cropBrandingKey = 'crop_video_branding_v1';
   static const _autoUpdateEnabledKey = 'app_auto_update_enabled_v1';
   static const _autoInstallUpdatesKey = 'app_auto_install_updates_v1';
+  static const _backgroundDownloadUpdatesKey = 'app_background_download_updates_v1';
 
   final ValueNotifier<AppThemeChoice> theme =
       ValueNotifier(AppThemeChoice.dark);
@@ -65,6 +66,10 @@ class AppSettingsController {
   /// Automatically download a verified update and open Android's installer UI.
   /// Android/Play Protect still controls the final installation confirmation.
   final ValueNotifier<bool> autoInstallUpdates = ValueNotifier(false);
+
+  /// Download a verified APK quietly after the launch check, without opening a
+  /// modal or installer. User installs it later from the update screen.
+  final ValueNotifier<bool> backgroundDownloadUpdates = ValueNotifier(false);
 
   final Future<SharedPreferences> _prefsFuture =
       SharedPreferences.getInstance();
@@ -90,6 +95,14 @@ class AppSettingsController {
       cropVideoBranding.value = prefs.getBool(_cropBrandingKey) ?? false;
       autoUpdateEnabled.value = prefs.getBool(_autoUpdateEnabledKey) ?? true;
       autoInstallUpdates.value = prefs.getBool(_autoInstallUpdatesKey) ?? false;
+      backgroundDownloadUpdates.value =
+          prefs.getBool(_backgroundDownloadUpdatesKey) ?? false;
+      // The silent background-download mode and auto-open-installer mode are
+      // mutually exclusive, so an update never unexpectedly opens a system UI.
+      if (autoInstallUpdates.value && backgroundDownloadUpdates.value) {
+        backgroundDownloadUpdates.value = false;
+        await prefs.setBool(_backgroundDownloadUpdatesKey, false);
+      }
     } catch (_) {
       // Default aman: dark + data saver mati.
     }
@@ -149,6 +162,20 @@ class AppSettingsController {
     autoInstallUpdates.value = value;
     final prefs = await _prefsFuture;
     await prefs.setBool(_autoInstallUpdatesKey, value);
+    if (value && backgroundDownloadUpdates.value) {
+      backgroundDownloadUpdates.value = false;
+      await prefs.setBool(_backgroundDownloadUpdatesKey, false);
+    }
+  }
+
+  Future<void> setBackgroundDownloadUpdates(bool value) async {
+    backgroundDownloadUpdates.value = value;
+    final prefs = await _prefsFuture;
+    await prefs.setBool(_backgroundDownloadUpdatesKey, value);
+    if (value && autoInstallUpdates.value) {
+      autoInstallUpdates.value = false;
+      await prefs.setBool(_autoInstallUpdatesKey, false);
+    }
   }
 
   int get dataSaverLevel {

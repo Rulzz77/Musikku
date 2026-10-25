@@ -276,6 +276,23 @@ class AppSettingsPage extends StatelessWidget {
                   valueListenable: settings.autoUpdateEnabled,
                   builder: (context, autoUpdateEnabled, _) =>
                       ValueListenableBuilder<bool>(
+                    valueListenable: settings.backgroundDownloadUpdates,
+                    builder: (context, enabled, _) => SwitchListTile(
+                      secondary: const Icon(Icons.downloading_rounded),
+                      title: const Text('Unduh pembaruan di latar belakang', style: TextStyle(fontWeight: FontWeight.w700)),
+                      subtitle: const Text('Saat MusikKu dibuka, unduh APK terverifikasi diam-diam jika versi baru tersedia. Memakai kuota internet; unduhan dapat berhenti jika Android menutup aplikasi, dan pemasangan tetap perlu konfirmasi Android.'),
+                      value: enabled,
+                      onChanged: autoUpdateEnabled
+                          ? (next) => unawaited(settings.setBackgroundDownloadUpdates(next))
+                          : null,
+                    ),
+                  ),
+                ),
+                const Divider(height: 1, indent: 16, endIndent: 16),
+                ValueListenableBuilder<bool>(
+                  valueListenable: settings.autoUpdateEnabled,
+                  builder: (context, autoUpdateEnabled, _) =>
+                      ValueListenableBuilder<bool>(
                     valueListenable: settings.autoInstallUpdates,
                     builder: (context, enabled, _) => SwitchListTile(
                       secondary: const Icon(Icons.downloading_rounded),

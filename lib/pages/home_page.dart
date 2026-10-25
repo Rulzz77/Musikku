@@ -369,18 +369,30 @@ class _HomePageState extends State<HomePage>
     _launchUpdateCheckInProgress = true;
 
     try {
+      final backgroundDownloadEnabled =
+          widget.settings.backgroundDownloadUpdates.value;
       if (!mounted ||
-          ModalRoute.of(context)?.isCurrent != true ||
-          _youtubeWatchVideo != null ||
+          (!backgroundDownloadEnabled &&
+              ModalRoute.of(context)?.isCurrent != true) ||
           _youtubeSystemPipMode) {
+        return;
+      }
+      // Normal update prompts should never cover the player. When the user
+      // explicitly enables background downloads, however, allow the silent
+      // verified download to run while audio-only playback is open or another
+      // settings route is on top of HomePage.
+      if (_youtubeWatchVideo != null && !backgroundDownloadEnabled) {
         return;
       }
 
       if (!widget.settings.autoUpdateEnabled.value) return;
       final result = await AppUpdateService.instance.checkForUpdate();
       final release = result.release;
+      final backgroundDownloadStillEnabled =
+          widget.settings.backgroundDownloadUpdates.value;
       if (!mounted ||
-          ModalRoute.of(context)?.isCurrent != true ||
+          (!backgroundDownloadStillEnabled &&
+              ModalRoute.of(context)?.isCurrent != true) ||
           !widget.settings.autoUpdateEnabled.value ||
           !result.updateAvailable ||
           release == null) {
@@ -389,6 +401,36 @@ class _HomePageState extends State<HomePage>
 
       final preferences = await SharedPreferences.getInstance();
       final autoInstall = widget.settings.autoInstallUpdates.value;
+
+      // Optional silent background download. It deliberately does not open a
+      // modal or the Android installer, so music playback is not interrupted.
+      // Android still requires the user to confirm installation later. The
+      // service validates the release asset SHA-256 before caching it.
+      if (widget.settings.backgroundDownloadUpdates.value && !autoInstall) {
+        const readyVersionKey = 'musikku_background_update_ready_version_v1';
+        final alreadyNotified =
+            preferences.getString(readyVersionKey) == release.version;
+        try {
+          await AppUpdateService.instance.downloadAndVerify(
+            release,
+            onProgress: (_, _) {},
+          );
+          if (!mounted) return;
+          await preferences.setString(readyVersionKey, release.version);
+          if (!alreadyNotified) {
+            _toast(
+              'Pembaruan MusikKu ${release.version} sudah diunduh. Buka Pengaturan → Periksa pembaruan untuk memasangnya.',
+              duration: const Duration(seconds: 6),
+            );
+          }
+        } catch (error) {
+          // Keep the launch and current playback quiet if a background download
+          // fails; the Settings update screen can retry with visible progress.
+          debugPrint('BACKGROUND UPDATE DOWNLOAD: $error');
+        }
+        return;
+      }
+
       // Keep normal and auto-install prompt tracking separate: enabling the
       // opt-in auto-install mode should not be blocked by an older normal prompt.
       final promptKey = autoInstall
@@ -400,7 +442,11 @@ class _HomePageState extends State<HomePage>
       // A dialog/sheet could have opened while the GitHub request was running.
       // Do not stack the update prompt on another route; allow the next launch
       // to prompt again if this automatic presentation was deferred.
-      if (ModalRoute.of(context)?.isCurrent != true) {
+      if (ModalRoute.of(context)?.isCurrent != true ||
+          _youtubeWatchVideo != null) {
+        // If music playback began while the update check was in flight, defer
+        // the prompt/installer instead of covering Player. Background-download
+        // mode has already returned above and never opens a modal.
         await preferences.remove(promptKey);
         return;
       }

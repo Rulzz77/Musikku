@@ -234,77 +234,52 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
     final radioSeed = seedVideo ?? (videos.isEmpty ? null : videos.first);
     final scheme = Theme.of(context).colorScheme;
     return [
+      // Header teks saja (tanpa kartu gradien / kotak ikon).
       SliverToBoxAdapter(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-          child: Container(
-            padding: const EdgeInsets.all(19),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [scheme.primaryContainer.withValues(alpha: 0.92), scheme.surfaceContainerLow, scheme.secondaryContainer.withValues(alpha: 0.42)],
+          padding: const EdgeInsets.fromLTRB(20, 16, 16, 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'MUSIC DISCOVERY',
+                style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 2.2),
               ),
-              borderRadius: BorderRadius.circular(28),
-              border: Border.all(color: scheme.primary.withValues(alpha: 0.20)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 58,
-                      height: 58,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(colors: [scheme.primary, scheme.secondary]),
-                        borderRadius: BorderRadius.circular(19),
-                      ),
-                      child: Icon(Icons.radio_rounded, size: 30, color: scheme.onPrimary),
-                    ),
-                    const SizedBox(width: 13),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('MUSIC DISCOVERY', style: TextStyle(color: scheme.primary, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.35)),
-                          const SizedBox(height: 5),
-                          const Text('Radio untuk selera kamu', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900, letterSpacing: -0.65)),
-                          const SizedBox(height: 4),
-                          Text('Mulai dari satu lagu, lalu temukan lagu lain yang nyambung.', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12, height: 1.35)),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 15),
-                Text('Rekomendasi diacak berdasarkan gaya musik dan konteks lagu. Bahasa bisa berganti jika lagunya cocok.', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12.5, height: 1.4)),
-                const SizedBox(height: 15),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    FilledButton.icon(
-                      onPressed: videos.isEmpty ? null : () => unawaited(widget.onPlayFromList(videos.first, videos)),
-                      icon: const Icon(Icons.shuffle_rounded, size: 18),
-                      label: const Text('Putar mix'),
-                    ),
-                    OutlinedButton.icon(
-                      onPressed: radioSeed == null || widget.onStartRadio == null
-                          ? null
-                          : () => unawaited(widget.onStartRadio!(radioSeed)),
-                      icon: const Icon(Icons.radio_rounded, size: 18),
-                      label: const Text('Mulai radio'),
-                    ),
-                    OutlinedButton.icon(
-                      onPressed: _feedLoading ? null : () => unawaited(_loadHome(force: true)),
-                      icon: const Icon(Icons.refresh_rounded, size: 18),
-                      label: const Text('Segarkan'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+              const SizedBox(height: 4),
+              Text(
+                'Radio untuk selera kamu',
+                style: TextStyle(color: scheme.onSurface, fontSize: 28, fontWeight: FontWeight.w800, letterSpacing: -1.0, height: 1.05),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'Mulai dari satu lagu, lalu temukan lagu lain yang nyambung. Rekomendasi diacak berdasarkan gaya musik dan konteks lagu. Bahasa bisa berganti jika lagunya cocok.',
+                style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12.5, height: 1.4),
+              ),
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  FilledButton.icon(
+                    onPressed: videos.isEmpty ? null : () => unawaited(widget.onPlayFromList(videos.first, videos)),
+                    icon: const Icon(Icons.shuffle_rounded, size: 18),
+                    label: const Text('Putar mix'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: radioSeed == null || widget.onStartRadio == null
+                        ? null
+                        : () => unawaited(widget.onStartRadio!(radioSeed)),
+                    icon: const Icon(Icons.radio_rounded, size: 18),
+                    label: const Text('Mulai radio'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: _feedLoading ? null : () => unawaited(_loadHome(force: true)),
+                    icon: const Icon(Icons.refresh_rounded, size: 18),
+                    label: const Text('Segarkan'),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
       ),
@@ -314,7 +289,9 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
-            child: Card(
+            child: Material(
+              color: scheme.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(22),
               child: Padding(
                 padding: const EdgeInsets.all(20),
                 child: Column(
@@ -364,12 +341,12 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
     return [
       SliverToBoxAdapter(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
+          padding: const EdgeInsets.fromLTRB(20, 16, 16, 10),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Jelajahi musik', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900, letterSpacing: -0.7)),
-              const SizedBox(height: 6),
+              Text('Jelajahi musik', style: TextStyle(color: scheme.onSurface, fontSize: 28, fontWeight: FontWeight.w800, letterSpacing: -1.0, height: 1.05)),
+              const SizedBox(height: 8),
               Text('Pilih genre untuk mencari katalog musik yang relevan.', style: TextStyle(color: scheme.onSurfaceVariant, height: 1.35)),
               if (shownResults.isNotEmpty) ...[
                 const SizedBox(height: 12),
@@ -413,11 +390,11 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
                 onSelected: (value) {
                   if (value && category != _exploreCategory) unawaited(_loadExploreCategory(category));
                 },
-                backgroundColor: scheme.surfaceContainerLow,
-                selectedColor: scheme.primaryContainer,
-                side: BorderSide(color: selected ? scheme.primary.withValues(alpha: 0.32) : scheme.outlineVariant.withValues(alpha: 0.45)),
+                backgroundColor: scheme.surfaceContainerHigh.withValues(alpha: 0.9),
+                selectedColor: scheme.primary,
+                side: BorderSide.none,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
-                labelStyle: TextStyle(fontSize: 12, fontWeight: selected ? FontWeight.w800 : FontWeight.w600, color: selected ? scheme.onPrimaryContainer : scheme.onSurfaceVariant),
+                labelStyle: TextStyle(fontSize: 12, fontWeight: selected ? FontWeight.w800 : FontWeight.w600, color: selected ? scheme.onPrimary : scheme.onSurfaceVariant),
               );
             },
           ),
@@ -429,7 +406,9 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.all(18),
-            child: Card(
+            child: Material(
+              color: scheme.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(22),
               child: Padding(
                 padding: const EdgeInsets.all(20),
                 child: Column(
@@ -494,19 +473,15 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
               selected: selected,
               showCheckmark: false,
               visualDensity: VisualDensity.compact,
-              selectedColor: scheme.primaryContainer,
-              backgroundColor: scheme.surfaceContainerLow,
-              side: BorderSide(
-                color: selected
-                    ? scheme.primary.withValues(alpha: 0.22)
-                    : scheme.outlineVariant.withValues(alpha: 0.46),
-              ),
+              selectedColor: scheme.primary,
+              backgroundColor: scheme.surfaceContainerHigh.withValues(alpha: 0.9),
+              side: BorderSide.none,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(999),
               ),
               labelStyle: TextStyle(
                 color: selected
-                    ? scheme.onPrimaryContainer
+                    ? scheme.onPrimary
                     : scheme.onSurfaceVariant,
                 fontSize: 12.5,
                 fontWeight: selected ? FontWeight.w800 : FontWeight.w600,

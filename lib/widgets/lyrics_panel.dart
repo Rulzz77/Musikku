@@ -143,48 +143,36 @@ class _LyricsPanelState extends State<LyricsPanel> {
     final scheme = Theme.of(context).colorScheme;
     final index = widget.synced ? _currentIndex(position) : -1;
     final line = index >= 0 ? widget.lyrics[index].text : 'Lirik akan mengikuti pemutaran';
+    // Blok lembut tanpa gradien, garis tepi, atau bayangan.
     return AnimatedContainer(
       duration: const Duration(milliseconds: 240),
       curve: Curves.easeOutCubic,
-      margin: const EdgeInsets.fromLTRB(14, 2, 14, 10),
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      margin: const EdgeInsets.fromLTRB(16, 2, 16, 10),
+      padding: const EdgeInsets.fromLTRB(16, 12, 14, 13),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            scheme.primary.withValues(alpha: 0.19),
-            scheme.secondary.withValues(alpha: 0.09),
-            scheme.surfaceContainerHighest.withValues(alpha: 0.58),
-          ],
-        ),
+        color: scheme.surfaceContainerHigh.withValues(alpha: 0.85),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: scheme.primary.withValues(alpha: 0.22)),
-        boxShadow: [
-          BoxShadow(color: scheme.primary.withValues(alpha: 0.08), blurRadius: 22, offset: const Offset(0, 6)),
-        ],
       ),
       child: Row(
         children: [
-          Container(
-            width: 34,
-            height: 34,
-            decoration: BoxDecoration(
-              color: scheme.primary.withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(Icons.graphic_eq_rounded, color: scheme.primary, size: 19),
-          ),
-          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  widget.synced ? 'SEDANG DINYANYIKAN' : 'LIRIK LAGU',
-                  style: TextStyle(fontSize: 9.5, letterSpacing: 1.25, fontWeight: FontWeight.w900, color: scheme.primary),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (widget.synced) ...[
+                      Container(width: 6, height: 6, decoration: BoxDecoration(color: scheme.primary, shape: BoxShape.circle)),
+                      const SizedBox(width: 6),
+                    ],
+                    Text(
+                      widget.synced ? 'SEDANG DINYANYIKAN' : 'LIRIK LAGU',
+                      style: TextStyle(fontSize: 9.5, letterSpacing: 1.4, fontWeight: FontWeight.w800, color: scheme.primary),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 5),
+                const SizedBox(height: 6),
                 AnimatedSwitcher(
                   duration: const Duration(milliseconds: 220),
                   switchInCurve: Curves.easeOutCubic,
@@ -211,16 +199,6 @@ class _LyricsPanelState extends State<LyricsPanel> {
               ],
             ),
           ),
-          if (widget.synced)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-              decoration: BoxDecoration(color: scheme.primary.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(99)),
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                Container(width: 6, height: 6, decoration: BoxDecoration(color: scheme.primary, shape: BoxShape.circle)),
-                const SizedBox(width: 5),
-                Text('LIVE', style: TextStyle(fontSize: 9, letterSpacing: 0.6, color: scheme.primary, fontWeight: FontWeight.w900)),
-              ]),
-            ),
         ],
       ),
     );
@@ -273,16 +251,8 @@ class _LyricsPanelState extends State<LyricsPanel> {
           curve: Curves.easeOutCubic,
           margin: const EdgeInsets.symmetric(vertical: 3),
           decoration: BoxDecoration(
-            gradient: active
-                ? LinearGradient(
-                    begin: Alignment.centerLeft,
-                    end: Alignment.centerRight,
-                    colors: [scheme.primary.withValues(alpha: 0.20), scheme.secondary.withValues(alpha: 0.07)],
-                  )
-                : null,
-            color: active ? null : Colors.transparent,
+            color: active ? scheme.primary.withValues(alpha: 0.10) : Colors.transparent,
             borderRadius: BorderRadius.circular(17),
-            border: Border.all(color: active ? scheme.primary.withValues(alpha: 0.24) : Colors.transparent),
           ),
           child: InkWell(
             borderRadius: BorderRadius.circular(17),
@@ -338,56 +308,42 @@ class _LyricsPanelState extends State<LyricsPanel> {
       child: BackdropFilter(
         filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
         child: Container(
-      margin: widget.expandToAvailableHeight ? EdgeInsets.zero : const EdgeInsets.fromLTRB(14, 8, 14, 8),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [scheme.surfaceContainerLow.withValues(alpha: 0.78), scheme.surface.withValues(alpha: 0.64), scheme.surfaceContainerLow.withValues(alpha: 0.76)],
-        ),
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.22), width: 1.0),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 24, offset: const Offset(0, 8)),
-          BoxShadow(color: scheme.primary.withValues(alpha: 0.05), blurRadius: 22, offset: const Offset(0, -2)),
-        ],
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(18, 15, 16, 12),
-            child: Row(children: [
-              Container(
-                width: 43,
-                height: 43,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(colors: [scheme.primary, scheme.secondary]),
-                  borderRadius: BorderRadius.circular(15),
-                ),
-                child: Icon(Icons.lyrics_rounded, size: 22, color: scheme.onPrimary),
-              ),
-              const SizedBox(width: 12),
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text('Lirik', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: -0.45)),
-                const SizedBox(height: 3),
-                Text(widget.synced ? 'Lirik mengikuti posisi lagu' : 'Lirik untuk lagu ini', style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant)),
-              ])),
-              if (widget.synced)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                  decoration: BoxDecoration(color: scheme.primary.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(99)),
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.sync_rounded, size: 14, color: scheme.primary), const SizedBox(width: 5), Text('Sinkron', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: scheme.primary))]),
-                )
-              else
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                  decoration: BoxDecoration(color: scheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(99)),
-                  child: Text('TEKS', style: TextStyle(fontSize: 10, letterSpacing: 0.6, fontWeight: FontWeight.w900, color: scheme.onSurfaceVariant)),
-                ),
-            ]),
+          margin: widget.expandToAvailableHeight ? EdgeInsets.zero : const EdgeInsets.fromLTRB(14, 8, 14, 8),
+          decoration: BoxDecoration(
+            color: scheme.surfaceContainerLow.withValues(alpha: 0.94),
+            borderRadius: BorderRadius.circular(28),
           ),
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Header: judul besar + status kecil, tanpa kotak ikon gradien.
+              Padding(
+                padding: const EdgeInsets.fromLTRB(22, 18, 18, 10),
+                child: Row(children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Lirik', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, letterSpacing: -0.8)),
+                        const SizedBox(height: 2),
+                        Text(
+                          widget.synced ? 'Lirik mengikuti posisi lagu' : 'Lirik untuk lagu ini',
+                          style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (widget.synced)
+                    Row(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(Icons.sync_rounded, size: 15, color: scheme.primary),
+                      const SizedBox(width: 5),
+                      Text('Sinkron', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: scheme.primary)),
+                    ])
+                  else
+                    Text('TEKS', style: TextStyle(fontSize: 10.5, letterSpacing: 1.2, fontWeight: FontWeight.w800, color: scheme.onSurfaceVariant)),
+                ]),
+              ),
           if (widget.synced && widget.lyrics.isNotEmpty && liveState != null)
             ValueListenableBuilder<NativeYoutubeState>(
               valueListenable: liveState,
@@ -395,7 +351,7 @@ class _LyricsPanelState extends State<LyricsPanel> {
             ),
           if (widget.synced && widget.lyrics.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.fromLTRB(18, 0, 18, 7),
+              padding: const EdgeInsets.fromLTRB(22, 0, 22, 8),
               child: Row(children: [
                 Icon(Icons.touch_app_rounded, size: 14, color: scheme.onSurfaceVariant),
                 const SizedBox(width: 6),

@@ -47,12 +47,13 @@ class MiniMusicPlayer extends StatelessWidget {
         final buffered = bufferedRaw < progress ? progress : bufferedRaw;
 
         return Material(
-          color: scheme.surfaceContainerLow,
-          elevation: 9,
-          shadowColor: Colors.black.withValues(alpha: 0.22),
+          // Permukaan lembut tanpa garis tepi; bayangan tipis saja agar tetap
+          // terpisah dari konten di belakangnya.
+          color: scheme.surfaceContainerHigh,
+          elevation: 3,
+          shadowColor: Colors.black.withValues(alpha: 0.18),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(21),
-            side: BorderSide(color: scheme.primary.withValues(alpha: 0.16), width: 1.1),
+            borderRadius: BorderRadius.circular(22),
           ),
           clipBehavior: Clip.antiAlias,
           child: Stack(
@@ -60,9 +61,9 @@ class MiniMusicPlayer extends StatelessWidget {
               InkWell(
                 onTap: onOpen,
                 child: SizedBox(
-                  height: 76,
+                  height: 72,
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(11, 9, 6, 9),
+                    padding: const EdgeInsets.fromLTRB(10, 8, 8, 8),
                     child: Row(
                       children: [
                         ClipRRect(
@@ -86,12 +87,12 @@ class MiniMusicPlayer extends StatelessWidget {
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: theme.textTheme.bodyMedium?.copyWith(
-                                  fontWeight: FontWeight.w800,
+                                  fontWeight: FontWeight.w700,
                                   letterSpacing: -0.1,
                                   height: 1.15,
                                 ),
                               ),
-                              const SizedBox(height: 3),
+                              const SizedBox(height: 2),
                               Text(
                                 isBuffering
                                     ? 'Memuat audio…'
@@ -103,13 +104,15 @@ class MiniMusicPlayer extends StatelessWidget {
                             ],
                           ),
                         ),
-                        IconButton.filledTonal(
+                        IconButton.filled(
                           tooltip: isPlaying ? 'Jeda' : 'Putar',
                           visualDensity: VisualDensity.compact,
                           style: IconButton.styleFrom(
-                            backgroundColor: scheme.primaryContainer,
-                            foregroundColor: scheme.onPrimaryContainer,
+                            backgroundColor: scheme.onSurface,
+                            foregroundColor: scheme.surface,
                             minimumSize: const Size(40, 40),
+                            maximumSize: const Size(40, 40),
+                            padding: EdgeInsets.zero,
                           ),
                           onPressed: () => unawaited(onPlayPause()),
                           icon: Icon(
@@ -118,7 +121,7 @@ class MiniMusicPlayer extends StatelessWidget {
                                 : isPlaying
                                     ? Icons.pause_rounded
                                     : Icons.play_arrow_rounded,
-                            size: 27,
+                            size: 26,
                           ),
                         ),
                         IconButton(

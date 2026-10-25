@@ -90,6 +90,51 @@ void main() {
     });
   });
 
+  group('shared playback immediate acknowledgement', () {
+    test('pause and resume send a snapshot without waiting for heartbeat', () {
+      expect(shouldBroadcastListeningRoomSnapshotImmediately('set_playback'), isTrue);
+      expect(shouldBroadcastListeningRoomSnapshotImmediately('play_pause'), isTrue);
+      expect(shouldBroadcastListeningRoomSnapshotImmediately('next'), isTrue);
+      expect(shouldBroadcastListeningRoomSnapshotImmediately('sync_request'), isFalse);
+    });
+  });
+
+  group('shared playback command idempotency', () {
+    test('does not re-toggle when requested state already matches', () {
+      expect(
+        shouldApplyListeningRoomPlaybackCommand(
+          currentPlaying: false,
+          desiredPlaying: false,
+        ),
+        isFalse,
+      );
+      expect(
+        shouldApplyListeningRoomPlaybackCommand(
+          currentPlaying: true,
+          desiredPlaying: true,
+        ),
+        isFalse,
+      );
+    });
+
+    test('applies an explicit pause or resume target', () {
+      expect(
+        shouldApplyListeningRoomPlaybackCommand(
+          currentPlaying: true,
+          desiredPlaying: false,
+        ),
+        isTrue,
+      );
+      expect(
+        shouldApplyListeningRoomPlaybackCommand(
+          currentPlaying: false,
+          desiredPlaying: true,
+        ),
+        isTrue,
+      );
+    });
+  });
+
   group('shared YouTube track validation', () {
     test('accepts a standard YouTube video id only', () {
       expect(isValidSharedYouTubeVideoId('dQw4w9WgXcQ'), isTrue);
@@ -107,6 +152,7 @@ void main() {
     test('allows supported shared-player actions', () {
       for (final action in <String>[
         'play_pause',
+        'set_playback',
         'play_track',
         'stop',
         'next',

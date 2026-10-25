@@ -328,10 +328,19 @@ extension _HomeListeningTogether on _HomePageState {
   }) async {
     if (_listenTogether.isGuest) {
       try {
-        await _listenTogether.requestControl(
-          action,
-          positionMs: position?.inMilliseconds,
-        );
+        if (action == 'play_pause') {
+          // Send the desired state, not a remote toggle. A delayed/duplicated
+          // broadcast can then never invert the host state by accident.
+          await _listenTogether.requestControl(
+            'set_playback',
+            playing: !_nativeState.isEffectivelyPlaying,
+          );
+        } else {
+          await _listenTogether.requestControl(
+            action,
+            positionMs: position?.inMilliseconds,
+          );
+        }
       } catch (error) {
         if (mounted) _toast('Kontrol kamar gagal dikirim: $error');
       }
@@ -365,6 +374,35 @@ extension _HomeListeningTogether on _HomePageState {
         return;
       case 'play_pause':
         await _togglePlayPause();
+        break;
+      case 'set_playback':
+        final desiredPlaying = message['playing'];
+        if (desiredPlaying is! bool) return;
+        if (!shouldApplyListeningRoomPlaybackCommand(
+          currentPlaying: _nativeState.isEffectivelyPlaying,
+          desiredPlaying: desiredPlaying,
+        )) {
+          // A duplicate command is not executed again, but return a snapshot so
+          // the guest receives confirmation instead of waiting for heartbeat.
+          _broadcastListenTogetherState();
+          return;
+        }
+        if (!desiredPlaying) {
+          // Pause is urgent: do not wait for a toggle lock or queue transition.
+          await _youtubeController.pauseVideo();
+        } else {
+          final current = _currentVideo;
+          final nativeMatches = current != null &&
+              _nativeState.videoId == current.videoId &&
+              _youtubeController.isUsingYoutubeAudio &&
+              _nativeState.playbackState != NativePlaybackState.error;
+          if (nativeMatches && !_restoredNeedsLoad) {
+            await _setPlayerVolume(_playerVolumePercent);
+            await _youtubeController.playVideo();
+          } else {
+            await _togglePlayPause();
+          }
+        }
         break;
       case 'play_track':
         final videoId = message['videoId']?.toString().trim() ?? '';
@@ -433,15 +471,7 @@ extension _HomeListeningTogether on _HomePageState {
     }
     // The regular 2-second heartbeat remains the authoritative correction;
     // this immediate snapshot makes pause/seek/mode changes feel responsive.
-    if (action == 'play_pause' ||
-        action == 'play_track' ||
-        action == 'stop' ||
-        action == 'next' ||
-        action == 'previous' ||
-        action == 'seek' ||
-        action == 'shuffle' ||
-        action == 'smart_shuffle' ||
-        action == 'loop') {
+    if (shouldBroadcastListeningRoomSnapshotImmediately(action)) {
       // Push state immediately after every accepted host-side control. The
       // periodic heartbeat remains a correction, not the primary response.
       _broadcastListenTogetherState();

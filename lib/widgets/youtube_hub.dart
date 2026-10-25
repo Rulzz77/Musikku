@@ -10,6 +10,7 @@ import '../models/listening_stat.dart';
 import '../services/smart_playlist_service.dart';
 import '../services/storage_service.dart';
 import '../services/youtube_search_service.dart';
+import '../services/music_title_formatter.dart';
 import '../services/search_suggest_service.dart';
 import '../services/app_settings.dart';
 import '../pages/youtube_search_page.dart';
@@ -72,6 +73,7 @@ class YoutubeHub extends StatefulWidget {
   final ValueChanged<YoutubeSearchResult>? onShowVideoMenu;
   final ValueChanged<String>? onSearchQueryChanged;
   final VoidCallback? onOpenListeningRoom;
+  final VoidCallback? onOpenAudioSettings;
   final AppSettingsController settings;
 
   const YoutubeHub({
@@ -94,6 +96,7 @@ class YoutubeHub extends StatefulWidget {
     this.onShowVideoMenu,
     this.onSearchQueryChanged,
     this.onOpenListeningRoom,
+    this.onOpenAudioSettings,
     required this.settings,
   });
 

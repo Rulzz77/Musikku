@@ -75,6 +75,7 @@ bool shouldCorrectListeningTogetherPosition({
 
 const Set<String> listeningRoomControlActions = <String>{
   'play_pause',
+  'set_playback',
   'play_track',
   'stop',
   'next',
@@ -86,8 +87,35 @@ const Set<String> listeningRoomControlActions = <String>{
   'sync_request',
 };
 
+/// Controls that must broadcast a fresh snapshot immediately after the host
+/// processes them. A slow two-second heartbeat must never be the first ack for
+/// a pause/resume request.
+const Set<String> listeningRoomImmediateSnapshotActions = <String>{
+  'play_pause',
+  'set_playback',
+  'play_track',
+  'stop',
+  'next',
+  'previous',
+  'seek',
+  'shuffle',
+  'smart_shuffle',
+  'loop',
+};
+
 bool isAllowedListeningRoomControlAction(String action) =>
     listeningRoomControlActions.contains(action);
+
+bool shouldBroadcastListeningRoomSnapshotImmediately(String action) =>
+    listeningRoomImmediateSnapshotActions.contains(action);
+
+/// A requested playback state is idempotent: duplicate Realtime messages do
+/// not toggle a player back to its previous state.
+bool shouldApplyListeningRoomPlaybackCommand({
+  required bool currentPlaying,
+  required bool desiredPlaying,
+}) =>
+    currentPlaying != desiredPlaying;
 
 /// Keeps the newest host snapshot while a guest is loading an audio source.
 /// Broadcast snapshots with no sequence (older clients) are accepted for
@@ -426,6 +454,9 @@ class ListeningTogetherService {
         };
         // Track metadata is copied field-by-field; arbitrary client fields are
         // never forwarded into the player command handler.
+        if (action == 'set_playback' && message['playing'] is bool) {
+          forwarded['playing'] = message['playing'];
+        }
         if (action == 'play_track') {
           for (final key in const <String>[
             'videoId',
@@ -550,18 +581,22 @@ class ListeningTogetherService {
     }());
   }
 
-  Future<void> requestControl(String action, {int? positionMs}) async {
+  Future<void> requestControl(String action, {int? positionMs, bool? playing}) async {
     if (!_onlineMode || !_joined || _hosting) {
       throw StateError('Gabung kamar online dulu untuk mengirim kontrol.');
     }
     if (!isAllowedListeningRoomControlAction(action)) {
       throw ArgumentError.value(action, 'action', 'Kontrol kamar tidak dikenal.');
     }
+    if (action == 'set_playback' && playing == null) {
+      throw ArgumentError.value(playing, 'playing', 'Kontrol playback harus menyertakan state yang diinginkan.');
+    }
     await _sendOnline('room_control', <String, dynamic>{
       'clientId': _onlineClientId,
       'code': roomCode.value,
       'action': action,
       if (positionMs != null) 'positionMs': positionMs.clamp(0, 86400000),
+      'playing': ?playing,
     });
   }
 

@@ -10,6 +10,8 @@ YoutubeSearchResult _video({
   required String title,
   required String channel,
   String description = '',
+  int? viewCount,
+  DateTime? publishedAt,
 }) {
   return YoutubeSearchResult(
     videoId: id,
@@ -17,6 +19,8 @@ YoutubeSearchResult _video({
     channelTitle: channel,
     thumbnailUrl: '',
     description: description,
+    viewCount: viewCount,
+    publishedAt: publishedAt,
   );
 }
 
@@ -33,7 +37,7 @@ void main() {
       expect(MusicStyleMatcher.styleFromVideo(song), 'pop');
       expect(
         MusicStyleMatcher.recommendationSeedFor(song),
-        'popular pop songs',
+        'anti-hero taylor swift similar songs',
       );
     });
 
@@ -45,7 +49,10 @@ void main() {
       );
 
       expect(MusicStyleMatcher.languageFromVideo(song), 'indonesian');
-      expect(MusicStyleMatcher.recommendationSeedFor(song), 'popular pop songs');
+      expect(
+        MusicStyleMatcher.recommendationSeedFor(song),
+        'hati-hati di jalan tulus similar songs',
+      );
     });
 
     test('Pop DJ is a related style to Pop', () {
@@ -146,7 +153,7 @@ void main() {
           {'known-pop-en', 'known-pop-id'});
     });
 
-    test('Radio keeps unknown metadata as fallback when there is only one known style', () {
+    test('Radio excludes unknown styles when a known related style is available', () {
       final knownPop = _video(
         id: 'one-known-pop',
         title: 'Popular Pop Song',
@@ -165,7 +172,7 @@ void main() {
       );
 
       expect(ranked.map((video) => video.videoId).toSet(),
-          {'one-known-pop', 'one-unknown-style'});
+          {'one-known-pop'});
     });
 
     test('radio style score allows a related track in another language', () {
@@ -210,13 +217,61 @@ void main() {
       );
     });
 
-    test('track-based Radio seed does not hard-code its language', () {
+    test('Radio keeps YouTube relevance order when compatibility scores tie', () {
+      final first = _video(
+        id: 'relevance-first',
+        title: 'Connected Pop Song One',
+        channel: 'Armada',
+      );
+      final second = _video(
+        id: 'relevance-second',
+        title: 'Connected Pop Song Two',
+        channel: 'Armada',
+      );
+      final ranked = MusicStyleMatcher.rankForRadio(
+        [first, second],
+        targetStyle: 'pop',
+      );
+      expect(ranked.map((video) => video.videoId), [
+        'relevance-first',
+        'relevance-second',
+      ]);
+    });
+
+    test('Radio relevance score ignores raw view-count popularity', () {
+      final lowViews = _video(
+        id: 'low-views',
+        title: 'Connected Pop Song',
+        channel: 'Armada',
+        viewCount: 100,
+      );
+      final highViews = _video(
+        id: 'high-views',
+        title: 'Connected Pop Song',
+        channel: 'Armada',
+        viewCount: 90000000,
+      );
+      expect(
+        MusicStyleMatcher.radioSimilarityScore(
+          video: lowViews,
+          targetStyle: 'pop',
+        ),
+        MusicStyleMatcher.radioSimilarityScore(
+          video: highViews,
+          targetStyle: 'pop',
+        ),
+      );
+    });
+
+    test('track-based Radio seed is tied to current title and artist', () {
       final song = _video(
         id: 'english-track',
         title: 'Anti-Hero',
         channel: 'Taylor Swift',
       );
-      expect(MusicStyleMatcher.recommendationSeedFor(song), 'popular pop songs');
+      final seed = MusicStyleMatcher.recommendationSeedFor(song);
+      expect(seed, 'anti-hero taylor swift similar songs');
+      expect(seed, isNot(contains('popular')));
     });
 
     test('song radio seed keeps the current title and artist for relevant Next', () {
@@ -266,7 +321,7 @@ void main() {
           style: MusicStyleMatcher.styleFromText('Pop DJ Inggris'),
           language: MusicStyleMatcher.languageFromText('Pop DJ Inggris'),
         ),
-        'popular English pop DJ remix songs',
+        'English pop DJ remix songs similar',
       );
     });
   });

@@ -135,7 +135,7 @@ extension _YoutubeHubLibraryViews on _YoutubeHubState {
   }
 
   void _showAppSettings() {
-    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AppSettingsPage(settings: widget.settings)));
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AppSettingsPage(settings: widget.settings, onOpenAudioSettings: widget.onOpenAudioSettings)));
   }
 
   void _startRadioFromCollection() {

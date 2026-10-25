@@ -43,6 +43,7 @@ extension _HomeUiLayout on _HomePageState {
                     _lastSearchQuery = query.trim();
                   },
                   onOpenListeningRoom: _showListenTogetherSheet,
+                  onOpenAudioSettings: _showAudioSettingsSheet,
                   settings: widget.settings,
                 ),
               ),
@@ -102,7 +103,6 @@ extension _HomeUiLayout on _HomePageState {
                         onToggleFavorite: () => _toggleFavorite(watch),
                         onAddToPlaylist: () => _showAddToPlaylist(watch),
                         onOpenQueue: _showQueueSheet,
-                        onOpenAudioSettings: _showAudioSettingsSheet,
                         onOpenSleepTimer: _showSleepTimerSheet,
                         onOpenListeningRoom: _showListenTogetherSheet,
                         followingRoom: _listenTogether.isGuest,

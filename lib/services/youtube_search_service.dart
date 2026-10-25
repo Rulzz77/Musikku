@@ -7,7 +7,6 @@ import 'package:http/http.dart' as http;
 
 import '../models/youtube_search_result.dart';
 import 'disk_cache.dart';
-import 'music_style_matcher.dart';
 import 'youtube_search_query.dart';
 import 'youtube_music_policy.dart';
 import 'youtube_search_response_parser.dart';
@@ -400,7 +399,7 @@ class YoutubeSearchService {
       );
     }
 
-    final cacheKey = 'radioPopularV37|${keyword.toLowerCase()}|${pageToken ?? ''}';
+    final cacheKey = 'radioRelatedV40|${keyword.toLowerCase()}|${pageToken ?? ''}';
     final cached = _cache[cacheKey];
 
     if (cached != null &&
@@ -452,8 +451,8 @@ class YoutubeSearchService {
         RegExp(r'(^|\s)indo($|\s)').hasMatch(normalized);
 
     // Pertahankan konteks asli pencarian. Jangan tambahkan "populer" atau
-    // kata yang bisa menggeser genre. Cukup arahkan ke konteks Indonesia bila
-    // user belum menyebutkannya. Urutan hasil ditentukan oleh upload terbaru.
+    // kata yang bisa menggeser genre. Track-specific queries stay intact and
+    // use YouTube's relevance ordering instead of chart/view ordering.
     final lowerKeyword = keyword.toLowerCase();
     final isSongSimilarityQuery = RegExp(
       r'\b(?:similar songs?|songs? like|similar music)\b',
@@ -478,12 +477,14 @@ class YoutubeSearchService {
       'q': radioKeyword,
       'type': 'video',
       'maxResults': dataSaverLevel >= 2 ? '12' : (dataSaverLevel == 1 ? '20' : '50'),
-      'order': 'viewCount',
-      'regionCode': 'ID',
-      'relevanceLanguage': 'id',
+      'order': 'relevance',
       'videoCategoryId': '10', // Musik
       'key': _apiKey,
     };
+    if (!isSongSimilarityQuery) {
+      params['regionCode'] = 'ID';
+      params['relevanceLanguage'] = 'id';
+    }
 
     if (pageToken != null && pageToken.isNotEmpty) {
       params['pageToken'] = pageToken;
@@ -498,9 +499,8 @@ class YoutubeSearchService {
         ? _parseItems(items)
         : <YoutubeSearchResult>[];
 
-    // Tambahkan view count untuk sinyal kualitas ringan; radio tetap tidak
-    // diurutkan murni berdasarkan view. Urutan akhir menggabungkan kebaruan
-    // dan engagement agar hasil terasa lebih enak tanpa kehilangan konteks genre.
+    // Detail durasi tetap diperlukan untuk filter video pendek. View count
+    // tidak digunakan untuk menggeser relevansi hasil pencarian Radio.
     results = await _ensureViewCounts(results);
 
     // Kalau user memang mencari mix / nonstop, jangan buang video panjang.
@@ -511,9 +511,8 @@ class YoutubeSearchService {
         lower.contains('album');
 
     if (!wantsLong) {
-      // Filter durasi utama: pilih track yang cukup panjang untuk didengar,
-      // tetapi jangan sampai radio mati hanya karena halaman terbaru penuh
-      // upload pendek. Kalau hasil utama kosong, gunakan fallback bertahap.
+      // Filter durasi utama tanpa mengganti query track-specific dengan chart.
+      // Kalau metadata durasi kurang lengkap, pertahankan hasil query relevan.
       final originalResults = results;
       results = await _filterByDuration(
         results,
@@ -545,22 +544,9 @@ class YoutubeSearchService {
     results = _filterNonMusicCandidates(results);
     results = _filterAiMusicCandidates(results);
 
-    // Prefer popular songs strongly, while keeping a little freshness so the
-    // radio does not get stuck on an old catalog item forever.
+    // Pertahankan urutan relevansi dari YouTube dan batasi dominasi satu
+    // channel. Jangan mengganti hasil kosong dengan chart populer global.
     results = _rankRadio(results);
-
-    // Kalau seed terlalu spesifik ke sumber AI / channel non-musik sehingga
-    // semua kandidat tersaring, gunakan pool musik populer Indonesia sebagai
-    // fallback. Ini lebih baik daripada memutar ulang video AI atau berhenti.
-    if (results.isEmpty &&
-        !isSongSimilarityQuery &&
-        !keyword.toLowerCase().contains('lagu indonesia') &&
-        MusicStyleMatcher.styleFromText(keyword) == null) {
-      final fallback = await _searchPopularMusicFallback();
-      if (fallback.isNotEmpty) {
-        results = fallback;
-      }
-    }
 
     final token = data['nextPageToken']?.toString();
 
@@ -576,45 +562,6 @@ class YoutubeSearchService {
     }
 
     return RadioPage(results: results, nextPageToken: token);
-  }
-
-  Future<List<YoutubeSearchResult>> _searchPopularMusicFallback() async {
-    // Jangan membuat search.list kedua hanya untuk fallback radio. Gunakan
-    // katalog videos.list chart=mostPopular yang sudah dipakai feed beranda.
-    // Ini tidak mengonsumsi bucket search.list yang lebih kecil.
-    const cacheKey = 'radioPopularFallbackV38';
-    final cached = _cache[cacheKey];
-    if (cached != null &&
-        DateTime.now().difference(cached.time) < _radioCacheTtl) {
-      return cached.results;
-    }
-    final diskFallback = await _disk.get(cacheKey, maxAge: _radioCacheTtl);
-    if (diskFallback is List) {
-      final restored = _resultsFromJson(diskFallback);
-      if (diskFallback.isEmpty || restored.isNotEmpty) {
-        _cache[cacheKey] = _CacheEntry(DateTime.now(), restored);
-        return restored;
-      }
-    }
-
-    final popular = await mostPopular(categoryId: '10', maxResults: 50);
-    var results = popular.where((video) {
-      final seconds = video.durationSeconds;
-      return !video.isLive &&
-          !video.isUpcoming &&
-          (seconds == null || (seconds >= _radioMinSeconds && seconds <= _radioMaxSeconds));
-    }).toList(growable: false);
-    results = _filterShortFormCandidates(results);
-    results = _filterNonMusicCandidates(results);
-    results = _filterAiMusicCandidates(results);
-    results = _rankRadio(results);
-
-    _cache[cacheKey] = _CacheEntry(DateTime.now(), results);
-    unawaited(_disk.put(
-      cacheKey,
-      results.map((video) => video.toJson()).toList(),
-    ));
-    return results;
   }
 
   /// Musik yang sedang trending. Kategori 10 dipakai sebagai default agar
@@ -979,44 +926,14 @@ class YoutubeSearchService {
   }
 
   List<YoutubeSearchResult> _rankRadio(List<YoutubeSearchResult> videos) {
-    final now = DateTime.now();
-
-    double score(YoutubeSearchResult video) {
-      final published = video.publishedAt;
-      final ageHours = published == null
-          ? 240.0
-          : math.max(0.0, now.difference(published).inMinutes / 60.0);
-
-      // Popularitas menjadi sinyal utama. YouTube search.list dengan
-      // order=viewCount juga sudah mengurutkan dari view terbanyak; skor ini
-      // hanya menjaga sedikit bias ke konten yang relatif baru.
-      final freshness = 1.0 - (ageHours / (24.0 * 90.0)).clamp(0.0, 1.0);
-      final views = math.max(0, video.viewCount ?? 0);
-      final popularity =
-          (math.log(views + 1) / math.log(100000000)).clamp(0.0, 1.0);
-
-      var quality = 0.0;
-      final text = '${video.title} ${video.channelTitle}'.toLowerCase();
-      if (RegExp(r'\b(?:official|vevo|topic|official\s+artist)\b').hasMatch(text)) {
-        quality += 0.05;
-      }
-      if (RegExp(r'\b(?:cover|karaoke|instrumental|slowed|sped\s*up|nightcore|8d)\b')
-          .hasMatch(text)) {
-        quality -= 0.06;
-      }
-
-      return popularity * 0.78 + freshness * 0.17 + quality * 0.05;
-    }
-
-    final sorted = [...videos]
-      ..sort((a, b) => score(b).compareTo(score(a)));
-
-    // Hindari satu channel mendominasi radio awal.
+    // searchLatest requests order=relevance. Preserve that order rather than
+    // sorting by view count or freshness; Radio is related-song discovery,
+    // not a popularity chart. Defer a third item from the same channel only.
     final result = <YoutubeSearchResult>[];
     final channelCount = <String, int>{};
     final deferred = <YoutubeSearchResult>[];
 
-    for (final video in sorted) {
+    for (final video in videos) {
       final key = video.channelTitle.trim().toLowerCase();
       final count = channelCount[key] ?? 0;
       if (count < 2) {

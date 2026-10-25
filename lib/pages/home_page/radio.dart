@@ -205,6 +205,14 @@ extension _HomeRadio on _HomePageState {
         if (YoutubeSearchService.isLikelyShortForm(video)) return false;
         if (YoutubeSearchService.isLikelyNonMusicVideo(video)) return false;
         if (video.isLive || video.isUpcoming) return false;
+        // Cached non-radio lists may only backfill a known related genre;
+        // an old unclassified search result must not hijack song-specific Radio.
+        if (targetStyle == null) return false;
+        final candidateStyle = MusicStyleMatcher.styleFromVideo(video);
+        if (candidateStyle == null ||
+            !MusicStyleMatcher.isRelatedStyle(candidateStyle, targetStyle)) {
+          return false;
+        }
         if (!MusicStyleMatcher.isCompatible(
           video: video,
           targetStyle: targetStyle,
@@ -272,6 +280,7 @@ extension _HomeRadio on _HomePageState {
         ..._favorites,
         ..._recentlyPlayed,
       ].where((video) {
+        final candidateStyle = MusicStyleMatcher.styleFromVideo(video);
         return video.videoId != currentId &&
             (_currentVideo == null ||
                 !RadioService.isSameTrackFamily(video, _currentVideo!)) &&
@@ -281,6 +290,9 @@ extension _HomeRadio on _HomePageState {
             !YoutubeSearchService.isLikelyNonMusicVideo(video) &&
             !video.isLive &&
             !video.isUpcoming &&
+            targetStyle != null &&
+            candidateStyle != null &&
+            MusicStyleMatcher.isRelatedStyle(candidateStyle, targetStyle) &&
             MusicStyleMatcher.isCompatible(
               video: video,
               targetStyle: targetStyle,

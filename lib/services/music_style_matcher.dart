@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import '../models/youtube_search_result.dart';
 
 /// Heuristik internal genre, subgenre, dan bahasa untuk Smart Shuffle/Radio.
@@ -7,8 +5,8 @@ import '../models/youtube_search_result.dart';
 ///
 /// YouTube Data API tidak menyediakan genre atau bahasa lagu yang akurat untuk
 /// setiap video. Karena itu, hasil di bawah merupakan petunjuk dari query,
-/// judul, artis/channel, dan metadata yang tersedia; nilai "unknown" tetap
-/// diperbolehkan sebagai fallback agar antrean tidak mudah habis.
+/// judul, artis/channel, dan metadata yang tersedia. Saat genre terkait sudah
+/// teridentifikasi, kandidat tanpa gaya yang dikenal tidak boleh mencampur pool.
 class MusicStyleMatcher {
   MusicStyleMatcher._();
 
@@ -354,10 +352,9 @@ class MusicStyleMatcher {
     return candidateStyle == null || isRelatedStyle(candidateStyle, targetStyle);
   }
 
-  /// Ranks Radio candidates like a lightweight song-radio mix: musical style
-  /// dominates, language is only a small preference, and popularity helps
-  /// surface familiar tracks. This is metadata-based, not Spotify's private
-  /// audio/listening-history recommendation model.
+  /// Scores candidates by musical compatibility and a small language hint.
+  /// Popularity/view count and freshness deliberately do not affect the score:
+  /// Radio must keep relevance to the current track ahead of chart rank.
   static double radioSimilarityScore({
     required YoutubeSearchResult video,
     required String? targetStyle,
@@ -377,9 +374,6 @@ class MusicStyleMatcher {
       score = -100.0;
     }
 
-    // Do not hard-lock the language for a radio mix: same-language songs get
-    // only a modest bonus, so a popular connected song in another language can
-    // appear naturally instead of being rejected outright.
     final candidateLanguage = languageFromVideo(video);
     if (targetLanguage != null) {
       if (candidateLanguage == targetLanguage) {
@@ -387,15 +381,6 @@ class MusicStyleMatcher {
       } else if (candidateLanguage == null) {
         score += 1.25;
       }
-    }
-
-    final views = math.max(0, video.viewCount ?? 0);
-    score += ((math.log(views + 1) / math.log(100000000)).clamp(0.0, 1.0) * 8.0).toDouble();
-
-    final published = video.publishedAt;
-    if (published != null) {
-      final ageDays = math.max(0, DateTime.now().difference(published).inDays).toInt();
-      if (ageDays < 365) score += ((365 - ageDays) / 365.0 * 1.5).toDouble();
     }
     return score;
   }
@@ -416,35 +401,33 @@ class MusicStyleMatcher {
       allowCrossLanguage: allowCrossLanguage,
     )).toList();
 
-    // Unknown metadata is useful as a fallback, but if the pool already has
-    // several songs with a recognized matching/related style, mixing unknowns
-    // into the same shuffle makes Radio feel unrelated. Use metadata-known
-    // candidates first and only fall back to unknowns when the known pool is
-    // too small to form a useful next-song list.
+    // For a known current style, never dilute the radio with unclassified
+    // tracks once at least one explicitly related candidate exists. If no
+    // related style can be identified, the YouTube relevance order is the only
+    // signal available; do not substitute a global popular-song catalogue.
     if (targetStyle != null) {
       final recognized = list.where((video) {
         final style = styleFromVideo(video);
         return style != null && isRelatedStyle(style, targetStyle);
       }).toList();
-      // If a large pool contains even one recognized compatible style, do
-      // not dilute it with dozens of unclassified uploads. In a tiny pool,
-      // retain unknowns as fallback so Radio does not stop unnecessarily.
-      if (recognized.isNotEmpty &&
-          (recognized.length >= 2 || list.length >= 5)) {
-        list = recognized;
-      }
+      if (recognized.isNotEmpty) list = recognized;
     }
 
-    list.sort((a, b) => radioSimilarityScore(
-      video: b,
-      targetStyle: targetStyle,
-      targetLanguage: targetLanguage,
-    ).compareTo(radioSimilarityScore(
-      video: a,
-      targetStyle: targetStyle,
-      targetLanguage: targetLanguage,
-    )));
-    return list;
+    final indexed = list.asMap().entries.toList();
+    indexed.sort((a, b) {
+      final scoreOrder = radioSimilarityScore(
+        video: b.value,
+        targetStyle: targetStyle,
+        targetLanguage: targetLanguage,
+      ).compareTo(radioSimilarityScore(
+        video: a.value,
+        targetStyle: targetStyle,
+        targetLanguage: targetLanguage,
+      ));
+      // Keep YouTube relevance order for candidates with equal compatibility.
+      return scoreOrder != 0 ? scoreOrder : a.key.compareTo(b.key);
+    });
+    return indexed.map((entry) => entry.value).toList(growable: false);
   }
 
   /// Filter bahasa keras untuk jalur yang memang meminta bahasa tertentu.
@@ -491,18 +474,57 @@ class MusicStyleMatcher {
     return compatible.where((video) => styleFromVideo(video) == null).toList();
   }
 
-  /// Search seed untuk alur rekomendasi lagu, bukan untuk meniru judul track.
-  /// Radio dari satu track memakai seed genre/style, lalu bahasa hanya menjadi
-  /// sinyal lembut supaya lagu serupa lintas bahasa tetap dapat dipilih.
+  /// Seed Radio harus menyebut lagu dan artis yang sedang diputar agar
+  /// pencarian berikutnya tetap terkait track, bukan jatuh ke chart genre.
   static String recommendationSeedFor(YoutubeSearchResult video) {
-    final style = styleFromVideo(video);
-    // A track-started Radio should not turn detected language into a hard
-    // search constraint. Keep culturally specific styles, but let regular Pop,
-    // Rock, R&B, Indie, etc. discover connected tracks across languages.
-    if (style == 'jawa' || style == 'sunda') {
-      return recommendationSeed(style: style, language: languageFromVideo(video));
-    }
-    return recommendationSeed(style: style);
+    final title = _radioSeedTitle(video.title);
+    final artist = _radioSeedArtist(video.channelTitle);
+    final titleKey = normalize(title);
+    final artistKey = normalize(artist);
+    if (title.isEmpty && artist.isEmpty) return '';
+    return <String>[
+      if (title.isNotEmpty) title,
+      if (artist.isNotEmpty && artistKey != titleKey) artist,
+      'similar songs',
+    ].join(' ').replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
+
+  static String _radioSeedTitle(String raw) {
+    var title = raw.toLowerCase().replaceAll(RegExp(r'https?://\S+'), ' ');
+    title = title
+        .replaceAll(
+          RegExp(
+            r'\[(?=[^\]]*(?:official|music video|official audio|lyrics?|visualizer|topic|4k|hd))[^\]]*\]',
+            caseSensitive: false,
+          ),
+          ' ',
+        )
+        .replaceAll(
+          RegExp(
+            r'\((?=[^)]*(?:official|music video|official audio|lyrics?|visualizer|topic|4k|hd))[^)]*\)',
+            caseSensitive: false,
+          ),
+          ' ',
+        )
+        .replaceAll(
+          RegExp(
+            r'\b(?:official music video|official video|official audio|music video|lyric video|lyrics?|visualizer|topic|vevo)\b',
+            caseSensitive: false,
+          ),
+          ' ',
+        )
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    return title.replaceAll(RegExp(r'^[\s|:_-]+|[\s|:_-]+$'), '').trim();
+  }
+
+  static String _radioSeedArtist(String raw) {
+    return raw.toLowerCase()
+        .replaceAll(RegExp(r'\s*[-|]\s*(?:official(?:\s+(?:artist|channel))?|topic|vevo)\s*$', caseSensitive: false), ' ')
+        .replaceAll(RegExp(r'\b(?:official|artist|channel|topic|vevo)\b', caseSensitive: false), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .replaceAll(RegExp(r'^[\s|:_-]+|[\s|:_-]+$'), '')
+        .trim();
   }
 
   static String recommendationSeed({String? style, String? language}) {
@@ -510,13 +532,13 @@ class MusicStyleMatcher {
     final resolvedLanguage = language;
 
     if (resolvedStyle == 'jawa' || resolvedLanguage == 'javanese') {
-      return 'lagu Jawa populer';
+      return 'lagu Jawa serupa';
     }
     if (resolvedStyle == 'sunda' || resolvedLanguage == 'sundanese') {
-      return 'lagu Sunda populer';
+      return 'lagu Sunda serupa';
     }
     if (resolvedStyle == 'kpop' || resolvedLanguage == 'korean') {
-      return 'popular K-pop songs';
+      return 'K-pop songs similar';
     }
 
     final styleLabel = switch (resolvedStyle) {
@@ -542,58 +564,58 @@ class MusicStyleMatcher {
 
     if (resolvedLanguage == 'english') {
       return styleLabel == null
-          ? 'popular English songs'
-          : 'popular English $styleLabel songs';
+          ? 'English songs similar'
+          : 'English $styleLabel songs similar';
     }
     if (resolvedLanguage == 'indonesian') {
       return styleLabel == null
-          ? 'lagu Indonesia populer'
-          : 'lagu $styleLabel Indonesia populer';
+          ? 'lagu Indonesia serupa'
+          : 'lagu $styleLabel Indonesia serupa';
     }
     if (resolvedLanguage == 'japanese') {
       return styleLabel == null
-          ? 'popular Japanese songs'
-          : 'popular Japanese $styleLabel songs';
+          ? 'Japanese songs similar'
+          : 'Japanese $styleLabel songs similar';
     }
     if (resolvedLanguage == 'spanish') {
       return styleLabel == null
-          ? 'popular Spanish songs'
-          : 'popular Spanish $styleLabel songs';
+          ? 'Spanish songs similar'
+          : 'Spanish $styleLabel songs similar';
     }
     if (resolvedLanguage == 'hindi') {
       return styleLabel == null
-          ? 'popular Hindi songs'
-          : 'popular Hindi $styleLabel songs';
+          ? 'Hindi songs similar'
+          : 'Hindi $styleLabel songs similar';
     }
-    if (resolvedLanguage == 'arabic') return 'popular Arabic songs';
-    if (resolvedLanguage == 'thai') return 'popular Thai songs';
-    if (resolvedLanguage == 'mandarin') return 'popular Mandarin songs';
+    if (resolvedLanguage == 'arabic') return 'Arabic songs similar';
+    if (resolvedLanguage == 'thai') return 'Thai songs similar';
+    if (resolvedLanguage == 'mandarin') return 'Mandarin songs similar';
 
-    if (styleLabel != null) return 'popular $styleLabel songs';
-    return 'popular music songs';
+    if (styleLabel != null) return '$styleLabel songs similar';
+    return 'songs similar to this style';
   }
 
   static String seedForStyle(String style) => switch (style) {
-        'jawa' => 'lagu Jawa Indonesia',
-        'sunda' => 'lagu Sunda Indonesia',
-        'kpop' => 'K-pop songs',
-        'dj_remix' => 'DJ remix Indonesia',
-        'pop_dj' => 'pop DJ remix Indonesia',
-        'religi' => 'lagu religi Indonesia',
-        'dangdut' => 'lagu dangdut Indonesia',
-        'hip_hop' => 'hip hop Indonesia',
-        'rnb' => 'R&B music',
-        'rock' => 'lagu rock Indonesia',
-        'reggae' => 'lagu reggae Indonesia',
-        'ska' => 'lagu ska',
-        'jazz' => 'lagu jazz',
-        'blues' => 'lagu blues',
-        'country' => 'country music',
-        'acoustic' => 'lagu akustik Indonesia',
-        'indie' => 'lagu indie Indonesia',
-        'instrumental' => 'instrumental music',
-        'melayu' => 'lagu Melayu Malaysia',
-        'pop' => 'lagu pop Indonesia',
-        _ => 'lagu Indonesia',
+        'jawa' => 'lagu Jawa serupa Indonesia',
+        'sunda' => 'lagu Sunda serupa Indonesia',
+        'kpop' => 'K-pop songs similar',
+        'dj_remix' => 'DJ remix serupa Indonesia',
+        'pop_dj' => 'pop DJ remix serupa Indonesia',
+        'religi' => 'lagu religi serupa Indonesia',
+        'dangdut' => 'lagu dangdut serupa Indonesia',
+        'hip_hop' => 'hip hop serupa Indonesia',
+        'rnb' => 'R&B songs similar',
+        'rock' => 'lagu rock serupa Indonesia',
+        'reggae' => 'lagu reggae serupa Indonesia',
+        'ska' => 'lagu ska serupa',
+        'jazz' => 'lagu jazz serupa',
+        'blues' => 'lagu blues serupa',
+        'country' => 'country songs similar',
+        'acoustic' => 'lagu akustik serupa Indonesia',
+        'indie' => 'lagu indie serupa Indonesia',
+        'instrumental' => 'instrumental songs similar',
+        'melayu' => 'lagu Melayu serupa Malaysia',
+        'pop' => 'lagu pop serupa Indonesia',
+        _ => 'lagu Indonesia serupa',
       };
 }

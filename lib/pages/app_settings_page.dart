@@ -11,9 +11,10 @@ import '../widgets/data_usage_card.dart';
 /// Pengaturan global aplikasi. Semua opsi terhubung langsung ke controller
 /// dan disimpan lewat SharedPreferences.
 class AppSettingsPage extends StatelessWidget {
-  const AppSettingsPage({super.key, required this.settings});
+  const AppSettingsPage({super.key, required this.settings, this.onOpenAudioSettings});
 
   final AppSettingsController settings;
+  final VoidCallback? onOpenAudioSettings;
 
   String _themeLabel(AppThemeChoice choice) => switch (choice) {
         AppThemeChoice.system => 'Ikuti perangkat',
@@ -216,6 +217,18 @@ class AppSettingsPage extends StatelessWidget {
           const SizedBox(height: 12),
           _SectionLabel(icon: Icons.tune_rounded, title: 'Pemutar musik & tampilan'),
           const SizedBox(height: 8),
+          if (onOpenAudioSettings != null) ...[
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.graphic_eq_rounded),
+                title: const Text('Efek audio', style: TextStyle(fontWeight: FontWeight.w800)),
+                subtitle: const Text('Preset equalizer, volume, dan transisi antar lagu.'),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: onOpenAudioSettings,
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
           Card(
             child: ValueListenableBuilder<bool>(
               valueListenable: settings.cropVideoBranding,

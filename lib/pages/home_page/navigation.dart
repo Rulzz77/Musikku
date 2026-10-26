@@ -126,7 +126,7 @@ extension _HomeNavigation on _HomePageState {
     unawaited(_youtubeController.setVideoCrop(_videoCropZoom));
   }
 
-  void _openArtist(String artist) {
+  void _openArtist(String artist, {String channelId = ''}) {
     final name = artist.trim();
     if (name.isEmpty) return;
 
@@ -134,7 +134,9 @@ extension _HomeNavigation on _HomePageState {
       MaterialPageRoute(
         builder: (_) => ArtistPage(
           artist: name,
+          channelId: channelId,
           searchService: _searchService,
+          onPlayList: (selected, tracks) => _playFromCustomList(selected, tracks),
           onPlay: (video) {
             // Artist page is an explicit source change. Clear the old playlist
             // so Radio fallback cannot jump back into stale items or repeat them.

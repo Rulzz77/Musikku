@@ -284,7 +284,10 @@ extension _HomeQueue on _HomePageState {
       onLike: () => _toggleLike(video),
       onDislike: () => _toggleDislike(video),
       onToggleChannelBlock: () => _toggleChannelBlock(video),
-      onOpenArtist: () => _openArtist(video.channelTitle),
+      onOpenArtist: () => _openArtist(
+        video.channelTitle,
+        channelId: video.channelId,
+      ),
       onPlayNext: () => _playNext(video),
       onAddToQueue: () => _addToQueue(video),
       onToggleFavorite: () => _toggleFavorite(video),

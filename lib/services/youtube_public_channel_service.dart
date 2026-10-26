@@ -29,6 +29,11 @@ class YoutubePublicChannelService {
     maxEntries: 80,
     ttl: Duration(hours: 6),
   );
+  static const DiskCache _channelPlaylistCache = DiskCache(
+    namespace: 'yt_public_channel_playlists_v1',
+    maxEntries: 80,
+    ttl: Duration(hours: 12),
+  );
 
   Future<Map<String, dynamic>> _get(String path, Map<String, String> params) async {
     if (_apiKey.trim().isEmpty) {
@@ -49,6 +54,86 @@ class YoutubePublicChannelService {
       throw StateError('YouTube API ${response.statusCode}: ${response.body}');
     }
     return Map<String, dynamic>.from(jsonDecode(response.body) as Map);
+  }
+
+  /// Public playlists owned by a channel (often used by artists for albums
+  /// and singles). Results are cached to avoid repeating API calls when the
+  /// user reopens the artist page.
+  Future<({List<YoutubePublicPlaylist> items, String? nextPageToken})>
+      channelPlaylistsPage(
+    String channelId, {
+    String? pageToken,
+    int maxResults = 50,
+    bool forceRefresh = false,
+  }) async {
+    if (channelId.trim().isEmpty) {
+      return (items: const <YoutubePublicPlaylist>[], nextPageToken: null);
+    }
+
+    final safeMax = maxResults.clamp(1, 50).toInt();
+    final cacheKey = 'channel-playlists:$channelId:${pageToken ?? 'first'}:$safeMax';
+    if (!forceRefresh) {
+      final cached = await _channelPlaylistCache.get(
+        cacheKey,
+        maxAge: const Duration(hours: 12),
+      );
+      if (cached is Map && cached['items'] is List) {
+        final items = (cached['items'] as List)
+            .whereType<Map>()
+            .map((item) => YoutubePublicPlaylist.fromJson(
+                  Map<String, dynamic>.from(item),
+                ))
+            .where((item) => item.id.isNotEmpty)
+            .toList(growable: false);
+        final rawToken = cached['nextPageToken']?.toString();
+        return (
+          items: items,
+          nextPageToken: rawToken == null || rawToken.isEmpty ? null : rawToken,
+        );
+      }
+    }
+
+    final data = await _get(
+      'playlists',
+      <String, String>{
+        'part': 'snippet,contentDetails',
+        'channelId': channelId,
+        'maxResults': '$safeMax',
+        if (pageToken != null && pageToken.isNotEmpty) 'pageToken': pageToken,
+      },
+    );
+    final rawItems = data['items'];
+    final items = <YoutubePublicPlaylist>[];
+    if (rawItems is List) {
+      for (final raw in rawItems) {
+        if (raw is! Map) continue;
+        final item = Map<String, dynamic>.from(raw);
+        final snippet = Map<String, dynamic>.from(
+          item['snippet'] as Map? ?? const {},
+        );
+        final content = Map<String, dynamic>.from(
+          item['contentDetails'] as Map? ?? const {},
+        );
+        final id = item['id']?.toString() ?? '';
+        if (id.isEmpty) continue;
+        items.add(YoutubePublicPlaylist(
+          id: id,
+          title: snippet['title']?.toString() ?? 'Playlist',
+          description: snippet['description']?.toString() ?? '',
+          thumbnailUrl: YoutubePublicResponseParser.thumbnail(snippet['thumbnails']),
+          itemCount: int.tryParse(content['itemCount']?.toString() ?? '') ?? 0,
+          publishedAt: DateTime.tryParse(snippet['publishedAt']?.toString() ?? ''),
+        ));
+      }
+    }
+
+    final token = data['nextPageToken']?.toString();
+    final next = token == null || token.isEmpty ? null : token;
+    await _channelPlaylistCache.put(cacheKey, <String, dynamic>{
+      'items': items.map((item) => item.toJson()).toList(growable: false),
+      'nextPageToken': next,
+    });
+    return (items: items, nextPageToken: next);
   }
 
   Future<({List<YoutubeSearchResult> items, String? nextPageToken})> playlistItemsPage(

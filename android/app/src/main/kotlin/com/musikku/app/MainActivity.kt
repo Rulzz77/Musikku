@@ -2002,20 +2002,31 @@ class MainActivity : AudioServiceActivity() {
 
         MusikKuLogger.d(TAG, "MAIN ACTIVITY DESTROY (isFinishing=$isFinishing)")
 
-        // Activity benar-benar ditutup (task di-swipe dari recent apps atau
-        // Stop dari notifikasi): hentikan musik, lepas player, dan matikan service/notifikasi.
-        // Kalau bukan finishing (mis. sistem membuat ulang Activity),
-        // player dibiarkan supaya tidak putus.
+        // Saat Activity ditutup dari Recent Apps, playback audio tetap dimiliki
+        // oleh PlaybackService (ExoPlayer native). Jangan matikan service itu
+        // jika sumber aktif adalah youtube_audio atau local; service memakai
+        // foregroundServiceType=mediaPlayback dan stopWithTask=false.
+        // Video/WebView non-audio tetap dibersihkan seperti sebelumnya.
         if (isFinishing) {
+            val activeMedia = PlaybackService.currentMediaSnapshot()
+            val nativeAudioMustContinue = activeMedia?.sourceType == "youtube_audio" ||
+                activeMedia?.sourceType == "local"
 
             YoutubePlatformView.instance?.release()
 
-            stopService(
-                android.content.Intent(
-                    this,
-                    PlaybackService::class.java
+            if (!nativeAudioMustContinue) {
+                stopService(
+                    android.content.Intent(
+                        this,
+                        PlaybackService::class.java
+                    )
                 )
-            )
+            } else {
+                MusikKuLogger.d(
+                    TAG,
+                    "Activity selesai; PlaybackService dipertahankan untuk audio background."
+                )
+            }
 
             notificationMethodChannel = null
         }

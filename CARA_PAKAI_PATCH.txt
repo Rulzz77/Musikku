@@ -1,8 +1,0 @@
-PATCH MUSIKKU 5.0.52+30
-
-1. Ekstrak ZIP patch ke folder utama repository flutter_application_5.
-2. Izinkan file yang sama ditimpa.
-3. Commit dan push ke branch main. Perubahan pubspec.yaml akan memicu workflow release sesuai konfigurasi repository.
-4. Periksa hasil Analyze Dart source, Run tests, dan Build universal release APK.
-
-Untuk memastikan lint terselesaikan, jalankan flutter analyze. Perubahan hanya mengganti parameter callback yang tidak digunakan dari (_, __) menjadi (_, _); alur update latar belakang tidak berubah.

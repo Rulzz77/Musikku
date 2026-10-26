@@ -773,7 +773,19 @@ class PlaybackService : MediaBrowserServiceCompat() {
     ): Int {
         when (intent?.action) {
             ACTION_PLAY_PAUSE -> {
-                sendCommandToFlutter("notificationPlayPause")
+                // Play/Pause notifikasi harus tetap bekerja meskipun Flutter
+                // Activity sudah ditutup. Untuk sumber audio native, kendalikan
+                // ExoPlayer langsung dari service; sumber lain tetap memakai
+                // callback Flutter selama engine masih aktif.
+                if (isAudioPlayerSource()) {
+                    if (localPlayer?.isPlaying == true || currentPlaying) {
+                        pauseAudio()
+                    } else {
+                        playAudio()
+                    }
+                } else {
+                    sendCommandToFlutter("notificationPlayPause")
+                }
                 return START_NOT_STICKY
             }
 

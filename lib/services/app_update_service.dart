@@ -65,11 +65,11 @@ class AppUpdateService {
   static final AppUpdateService instance = AppUpdateService._();
 
   static const String owner = 'Rulzz77';
-  static const String repository = 'flutter_application_5';
+  static const String repository = 'Musikku';
   static const String releasesPageUrl =
-      'https://github.com/Rulzz77/flutter_application_5/releases';
+      'https://github.com/Rulzz77/Musikku/releases';
   static const String _latestReleaseApi =
-      'https://api.github.com/repos/Rulzz77/flutter_application_5/releases/latest';
+      'https://api.github.com/repos/Rulzz77/Musikku/releases/latest';
   static const int _maxApkSizeBytes = 250 * 1024 * 1024;
   static const MethodChannel _installerChannel =
       MethodChannel('musikku/app_update');
@@ -605,9 +605,10 @@ class AppUpdateService {
     }
 
     if (uri.host == 'github.com') {
-      return uri.path.toLowerCase().startsWith(
-        '/rulzz77/flutter_application_5/releases/download/',
-      );
+      final path = uri.path.toLowerCase();
+      // Accept the canonical repository path and the former alias.
+      return path.startsWith('/rulzz77/musikku/releases/download/') ||
+          path.startsWith('/rulzz77/flutter_application_5/releases/download/');
     }
 
     // Current GitHub Release asset delivery domains. Keep this exact allowlist
@@ -626,7 +627,8 @@ class AppUpdateService {
         uri.host == 'github.com' &&
         uri.port == 443 &&
         uri.userInfo.isEmpty &&
-        uri.path.toLowerCase().startsWith('/rulzz77/flutter_application_5/releases');
+        (uri.path.toLowerCase().startsWith('/rulzz77/musikku/releases') ||
+            uri.path.toLowerCase().startsWith('/rulzz77/flutter_application_5/releases'));
   }
 
   static bool _isAllowedReleaseAsset(String? value) {
@@ -638,7 +640,8 @@ class AppUpdateService {
         uri.port == 443 &&
         uri.userInfo.isEmpty &&
         uri.fragment.isEmpty &&
-        uri.path.toLowerCase().startsWith('/rulzz77/flutter_application_5/releases/download/');
+        (uri.path.toLowerCase().startsWith('/rulzz77/musikku/releases/download/') ||
+            uri.path.toLowerCase().startsWith('/rulzz77/flutter_application_5/releases/download/'));
   }
 
   static String _versionFrom(String value) {

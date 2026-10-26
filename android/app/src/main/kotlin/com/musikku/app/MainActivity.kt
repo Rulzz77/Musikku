@@ -315,7 +315,7 @@ class MainActivity : AudioServiceActivity() {
                         startActivity(
                             Intent(
                                 Intent.ACTION_VIEW,
-                                Uri.parse("https://github.com/Rulzz77/flutter_application_5/releases"),
+                                Uri.parse("https://github.com/Rulzz77/Musikku/releases"),
                             ),
                         )
                         result.success(true)

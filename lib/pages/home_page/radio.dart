@@ -32,6 +32,9 @@ extension _HomeRadio on _HomePageState {
       seed,
       preferredLanguage: _radioPreferredLanguageFor(video),
       lockLanguage: false,
+      // Artis sejenis + terpopuler di genre yang sama, dipakai bergantian
+      // dengan seed utama supaya lagu berikutnya tidak hanya dari satu artis.
+      alternateSeeds: MusicStyleMatcher.alternateSeedsFor(video),
     );
 
     // Start the selected song as the radio seed. Recommendations stay in the
@@ -92,6 +95,7 @@ extension _HomeRadio on _HomePageState {
       seed,
       preferredLanguage: _radioPreferredLanguageFor(current),
       lockLanguage: false,
+      alternateSeeds: MusicStyleMatcher.alternateSeedsFor(current),
     );
 
     await _nextFromRadio(fromAutoNext: fromAutoNext);
@@ -346,7 +350,12 @@ extension _HomeRadio on _HomePageState {
 
     await _playVideo(playable);
 
-    // Tidak melakukan prefetch hanya karena pool tinggal beberapa lagu.
-    // Request halaman baru dilakukan saat pool benar-benar habis di Next berikutnya.
+    // Isi ulang lebih awal saat pool tinggal sedikit. Jumlah request tetap sama
+    // (satu per halaman, dibatasi jeda 20 detik di RadioService), tetapi lagu
+    // dari artis/query berikutnya sempat bercampur dengan sisa pool, bukan baru
+    // muncul setelah pool habis.
+    if (_radio.poolLength <= 2) {
+      unawaited(_radio.refill());
+    }
   }
 }

@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import '../models/youtube_search_result.dart';
 
 /// Heuristik internal genre, subgenre, dan bahasa untuk Smart Shuffle/Radio.
@@ -71,19 +73,31 @@ class MusicStyleMatcher {
     'charlie puth', 'post malone', 'imagine dragons', 'linkin park',
     'eminem', 'drake', 'lana del rey', 'sia', 'avril lavigne',
     'backstreet boys', 'westlife', 'queen', 'the beatles', 'elton john',
-  };
+    'chappell roan', 'benson boone', 'teddy swims', 'lewis capaldi',
+    'gracie abrams', 'tate mcrae', 'doja cat', 'sza', 'david guetta',
+    'calvin harris', 'alan walker', 'martin garrix', 'marshmello',
+    'the chainsmokers', 'ellie goulding', 'noah kahan', 'david kushner',
+    'lauv', 'jvke', 'conan gray', 'tones and i', 'lizzo', 'ava max',
+    'meghan trainor', 'camila cabello', 'anne marie', 'zayn', 'niall horan',
+    'louis tomlinson', 'john legend', 'alicia keys', 'christina perri',
+    'david archuleta', 'jason mraz', 'john mayer', };
 
   static const Set<String> _javaneseArtists = <String>{
     'denny caknan', 'ndarboy genk', 'guyon waton', 'aftershine',
     'happy asmara', 'gilga sahid', 'niken salindry', 'jihan audy',
     'difarina indra', 'farel prayoga', 'woro widowati', 'hendra kumbara',
-    'didi kempot',
+    'didi kempot', 'mahesa', 'wandra', 'abah lala', 'sasya arkhisna',
+    'nazia marwiana', 'shepin misa', 'arlida putri', 'esa risty',
+    'kalia siska', 'syahiba saufa', 'cak sodiq', 'pendhoza', 'dike sabrina',
   };
 
   static const Set<String> _dangdutArtists = <String>{
     'nella kharisma', 'siti badriah', 'lesti kejora', 'rhoma irama',
     'elvy sukaesih', 'tasya rosmala', 'via vallen', 'dewi perssik',
-    'inul daratista', 'zaskia gotik', 'ayu ting ting',
+    'inul daratista', 'zaskia gotik', 'ayu ting ting', 'shinta arsinta',
+    'yeni inka', 'anggun pramudita', 'vita alvia', 'safira inema',
+    'arya galih', 'fendik adella', 'lala widy', 'alvi ananta',
+    'putri kristya', 'rita sugiarto', 'mansyur s', 'evie tamala',
   };
 
   static const Set<String> _indonesianArtists = <String>{
@@ -98,18 +112,72 @@ class MusicStyleMatcher {
     'didi kempot', 'nella kharisma', 'siti badriah', 'lesti kejora',
     'rhoma irama', 'elvy sukaesih', 'tasya rosmala', 'via vallen',
     'dewi perssik', 'inul daratista', 'zaskia gotik', 'ayu ting ting',
+    'bernadya', 'nadin amizah', 'sal priadi', 'hindia', 'feby putri',
+    'tri suaka', 'zinidin zidan', 'andra respati', 'pamungkas',
+    'ziva magnolya', 'fabio asher', 'arsy widianto', 'anggi marito',
+    'ghea indrawari', 'ardhito pramono', 'reality club', 'hivi', 'kahitna',
+    'juicy luicy', 'adera', 'fiersa besari', 'barasuara',
+    'efek rumah kaca', 'gigi', 'slank', 'padi', 'kerispatih', 'd masiv',
+    'st12', 'hijau daun', 'radja', 'vierra', 'repvblik', 'stinky', 'jamrud', 'base jam', 'iwan fals', 'god bless',
+    'chrisye', 'krisdayanti', 'agnez mo', 'anji', 'virgoun', 'glenn fredly',
+    'naff', 'seurieus', 'edane', 'young lex', 'ecko show',
+    'saykoji', 'iwa k', 'shinta arsinta', 'yeni inka', 'anggun pramudita',
+    'vita alvia', 'safira inema', 'arya galih', 'fendik adella',
+    'lala widy', 'alvi ananta', 'putri kristya', 'mahesa', 'wandra',
+    'abah lala', 'sasya arkhisna', 'nazia marwiana', 'shepin misa',
+    'arlida putri', 'esa risty', 'kalia siska', 'syahiba saufa',
+    'cak sodiq', 'pendhoza', 'dike sabrina',
   };
 
   static const Set<String> _koreanArtists = <String>{
     'blackpink', 'stray kids', 'newjeans', 'seventeen', 'twice', 'exo',
     'bts', 'aespa', 'ive', 'le sserafim', 'red velvet', 'nct', 'iu',
     'psy', 'bigbang', 'girls generation', 'itzy', 'enhypen', 'txt',
+    'babymonster', 'illit', 'riize', 'zerobaseone', 'ateez', 'jennie',
+    'jisoo', 'g dragon', 'taeyeon', 'jungkook', 'jimin', 'mamamoo', 'shinee', 'super junior', 'kep1er', 'nmixx', 'g i dle',
+    'tomorrow x together', 'day6', 'akmu', 'zico', 'sunmi',
+    'chungha', 'hwasa', 'heize', 'paul kim', '2ne1', 'wonder girls',
   };
 
   static const Set<String> _japaneseArtists = <String>{
     'yoasobi', 'ado', 'kenshi yonezu', 'official hige dandism', 'aimyon',
-    'one ok rock', 'king gnu', 'radwimps',
+    'one ok rock', 'king gnu', 'radwimps', 'yorushika', 'fujii kaze',
+    'zutomayo', 'vaundy', 'mrs green apple', 'back number',
+    'bump of chicken', 'spitz', 'utada hikaru', 'hikaru utada',
+    'creepy nuts', 'kana boon', 'sekai no owari',
   };
+
+  // Artis dengan genre yang jelas bukan pop. Tanpa ini semua artis Barat
+  // dianggap pop, sehingga radio rapper ikut memutar lagu pop.
+  static const Set<String> _hipHopArtists = <String>{
+    'eminem', 'drake', 'kendrick lamar', 'travis scott', 'jay z',
+    '21 savage', 'j cole', 'lil wayne', 'nicki minaj', 'cardi b', '50 cent',
+    'snoop dogg', 'kanye west', 'juice wrld', 'xxxtentacion', 'tyga',
+    'young lex', 'ecko show', 'saykoji', 'iwa k',
+  };
+
+  static const Set<String> _rockArtists = <String>{
+    'linkin park', 'nirvana', 'green day', 'metallica', 'guns n roses',
+    'ac dc', 'foo fighters', 'red hot chili peppers', 'bon jovi',
+    'scorpions', 'my chemical romance', 'paramore', 'fall out boy',
+    'blink 182', 'sum 41', 'slank', 'god bless', 'jamrud', 'seurieus',
+    'edane',
+  };
+
+  static final Set<String> _allKnownArtists = <String>{
+    ..._englishArtists,
+    ..._indonesianArtists,
+    ..._javaneseArtists,
+    ..._dangdutArtists,
+    ..._koreanArtists,
+    ..._japaneseArtists,
+    ..._hipHopArtists,
+    ..._rockArtists,
+  };
+
+  static bool _isKnownArtist(String normalizedText) =>
+      normalizedText.isNotEmpty &&
+      _containsAnyPhrase(normalizedText, _allKnownArtists);
 
   /// Genre yang disebut eksplisit lewat kata kunci (tanpa petunjuk artis).
   /// Urutan penting: Pop DJ dipisahkan dari DJ/remix biasa, dan subgenre lokal
@@ -192,13 +260,14 @@ class MusicStyleMatcher {
     if (explicit != null) return explicit;
 
     // Artist cues help when a video title does not explicitly mention genre.
-    if (_containsAnyPhrase(text, _englishArtists)) return 'pop';
-    if (_containsAnyPhrase(text, _indonesianArtists)) {
-      if (_containsAnyPhrase(text, _javaneseArtists)) return 'jawa';
-      if (_containsAnyPhrase(text, _dangdutArtists)) return 'dangdut';
-      return 'pop';
-    }
+    // Genre khusus dicek lebih dulu; pop hanya jadi default untuk artis umum.
+    if (_containsAnyPhrase(text, _javaneseArtists)) return 'jawa';
+    if (_containsAnyPhrase(text, _dangdutArtists)) return 'dangdut';
+    if (_containsAnyPhrase(text, _hipHopArtists)) return 'hip_hop';
+    if (_containsAnyPhrase(text, _rockArtists)) return 'rock';
     if (_containsAnyPhrase(text, _koreanArtists)) return 'kpop';
+    if (_containsAnyPhrase(text, _englishArtists)) return 'pop';
+    if (_containsAnyPhrase(text, _indonesianArtists)) return 'pop';
 
     return null;
   }
@@ -294,7 +363,11 @@ class MusicStyleMatcher {
 
     if (_containsAnyPhrase(text, _koreanArtists)) return 'korean';
     if (_containsAnyPhrase(text, _englishArtists)) return 'english';
-    if (_containsAnyPhrase(text, _indonesianArtists)) return 'indonesian';
+    if (_containsAnyPhrase(text, _indonesianArtists) ||
+        _containsAnyPhrase(text, _javaneseArtists) ||
+        _containsAnyPhrase(text, _dangdutArtists)) {
+      return 'indonesian';
+    }
 
     return _languageFromWords(raw);
   }
@@ -543,9 +616,317 @@ class MusicStyleMatcher {
     return compatible.where((video) => styleFromVideo(video) == null).toList();
   }
 
-  /// Seed Radio harus menyebut lagu dan artis yang sedang diputar agar
-  /// pencarian berikutnya tetap terkait track, bukan jatuh ke chart genre.
+  // ---------------------------------------------------------------------------
+  // SEED RADIO
+  //
+  // Cara kerja (mirip Radio lagu di Spotify, tetapi memakai pencarian YouTube):
+  //   1. Seed utama  = artis lagu yang sedang diputar + label genre.
+  //      Contoh: "denny caknan lagu jawa". Hasilnya lagu lain dari artis yang
+  //      sama, bukan unggahan ulang/cover dari judul yang sama.
+  //   2. Seed cadangan = artis sejenis (satu kelompok genre) lalu pencarian
+  //      "terpopuler" untuk genre itu. RadioService memakainya bergantian di
+  //      setiap isi ulang, jadi daftar putar bercampur antar artis.
+  // Semua kandidat tetap disaring oleh isCompatible/rankForRadio.
+  // ---------------------------------------------------------------------------
+
+  static final math.Random _random = math.Random();
+
+  /// Label yang ditambahkan ke seed. Setiap label HARUS terbaca kembali sebagai
+  /// genre yang sama oleh [styleFromText], karena RadioService menurunkan genre
+  /// target dari teks seed.
+  static const Map<String, String> _seedStyleLabels = <String, String>{
+    'jawa': 'lagu jawa',
+    'sunda': 'lagu sunda',
+    'kpop': 'kpop',
+    'pop_dj': 'pop dj remix',
+    'dj_remix': 'dj remix',
+    'religi': 'lagu religi',
+    'dangdut': 'dangdut',
+    'hip_hop': 'hip hop',
+    'rnb': 'r&b',
+    'rock': 'rock',
+    'reggae': 'reggae',
+    'ska': 'ska',
+    'jazz': 'jazz',
+    'blues': 'blues',
+    'country': 'country',
+    'acoustic': 'akustik',
+    'indie': 'indie',
+    'instrumental': 'instrumental',
+    'melayu': 'lagu melayu',
+    'pop': 'pop',
+  };
+
+  /// Kelompok artis yang saling mirip. Dipakai untuk "artis sejenis" dan
+  /// sebagai daftar artis yang paling sering dicari per genre.
+  static const Map<String, List<String>> _peerGroups = <String, List<String>>{
+    'jawa': <String>[
+      'denny caknan', 'happy asmara', 'guyon waton', 'ndarboy genk',
+      'gilga sahid', 'niken salindry', 'farel prayoga', 'difarina indra',
+      'mahesa', 'sasya arkhisna', 'nazia marwiana', 'shepin misa',
+      'arlida putri', 'didi kempot', 'woro widowati', 'jihan audy',
+    ],
+    'dangdut': <String>[
+      'nella kharisma', 'lesti kejora', 'tasya rosmala', 'via vallen',
+      'shinta arsinta', 'yeni inka', 'vita alvia', 'safira inema',
+      'ayu ting ting', 'siti badriah', 'rhoma irama', 'dewi perssik',
+      'zaskia gotik', 'elvy sukaesih',
+    ],
+    'pop_id': <String>[
+      'tulus', 'raisa', 'mahalini', 'tiara andini', 'lyodra',
+      'rizky febian', 'bernadya', 'nadin amizah', 'sal priadi', 'hindia',
+      'juicy luicy', 'pamungkas', 'ghea indrawari', 'yura yunita',
+      'isyana sarasvati', 'afgan', 'andmesh kamaleng', 'ardhito pramono',
+      'fiersa besari', 'hivi', 'adera', 'keisya levronka',
+    ],
+    'band_id': <String>[
+      'sheila on 7', 'dewa 19', 'noah', 'peterpan', 'ungu', 'kotak',
+      'armada', 'letto', 'nidji', 'd masiv', 'kerispatih', 'st12',
+      'hijau daun', 'slank', 'gigi', 'padi', 'naff', 'radja', 'vierra',
+      'repvblik', 'geisha', 'fourtwnty', 'payung teduh',
+    ],
+    'pop_en': <String>[
+      'taylor swift', 'sabrina carpenter', 'olivia rodrigo', 'dua lipa',
+      'billie eilish', 'ariana grande', 'harry styles', 'ed sheeran',
+      'bruno mars', 'the weeknd', 'charlie puth', 'shawn mendes',
+      'selena gomez', 'gracie abrams', 'benson boone', 'teddy swims',
+      'lewis capaldi', 'chappell roan', 'tate mcrae', 'justin bieber',
+    ],
+    'kpop': <String>[
+      'blackpink', 'newjeans', 'aespa', 'stray kids', 'seventeen', 'twice',
+      'bts', 'ive', 'le sserafim', 'itzy', 'enhypen', 'txt', 'nmixx',
+      'illit', 'babymonster', 'red velvet', 'iu', 'exo',
+    ],
+    'jpop': <String>[
+      'yoasobi', 'ado', 'kenshi yonezu', 'official hige dandism', 'aimyon',
+      'king gnu', 'radwimps', 'one ok rock', 'yorushika', 'fujii kaze',
+    ],
+    'rock_en': <String>[
+      'linkin park', 'nirvana', 'green day', 'foo fighters', 'metallica',
+      'red hot chili peppers', 'bon jovi', 'my chemical romance',
+      'paramore', 'fall out boy', 'blink 182', 'sum 41',
+    ],
+    'hip_hop_en': <String>[
+      'eminem', 'drake', 'kendrick lamar', 'travis scott', 'post malone',
+      'j cole', 'nicki minaj', 'cardi b', 'juice wrld', '50 cent',
+    ],
+    'hip_hop_id': <String>['young lex', 'ecko show', 'saykoji', 'iwa k'],
+  };
+
+  static String? _groupOfArtist(String artistKey) {
+    if (artistKey.isEmpty) return null;
+    final padded = ' $artistKey ';
+    for (final entry in _peerGroups.entries) {
+      if (entry.value.any((peer) => padded.contains(' $peer '))) {
+        return entry.key;
+      }
+    }
+    return null;
+  }
+
+  /// Kelompok bawaan untuk genre/bahasa tertentu ketika artisnya tidak dikenal.
+  static String? _groupForContext(String? style, String? language) {
+    switch (style) {
+      case 'jawa':
+        return 'jawa';
+      case 'dangdut':
+        return 'dangdut';
+      case 'kpop':
+        return 'kpop';
+      case 'hip_hop':
+        return language == 'indonesian' ? 'hip_hop_id' : 'hip_hop_en';
+      case 'rock':
+        return language == 'indonesian' ? 'band_id' : 'rock_en';
+    }
+    switch (language) {
+      case 'korean':
+        return 'kpop';
+      case 'japanese':
+        return 'jpop';
+      case 'english':
+        return 'pop_en';
+      case 'indonesian':
+        return 'pop_id';
+    }
+    return null;
+  }
+
+  static final RegExp _collabSplit = RegExp(
+    r'\s+(?:ft\.?|feat\.?|featuring|x)\s+|\s*,\s*',
+    caseSensitive: false,
+  );
+  static final RegExp _titleSplit = RegExp(r'\s+[-–—|]\s+');
+  static final RegExp _labelChannel = RegExp(
+    r'\b(?:production|productions|prod|studio|studios|records?|recordings?|'
+    r'music|musik|entertainment|media|network|labels?|tv|distribution|lirik|'
+    r'lyrics?|lagu|songs?|hits|group|digital)\b',
+  );
+
+  /// Nama channel yang seluruh katanya generik ("Remix Channel", "Lagu Pop
+  /// Terbaru") jelas bukan nama artis.
+  static const Set<String> _genericChannelWords = <String>{
+    'remix', 'dj', 'cover', 'karaoke', 'playlist', 'mix', 'nonstop',
+    'terbaru', 'populer', 'viral', 'trending', 'pop', 'indonesia', 'lirik',
+    'lyrics', 'lyric', 'lagu', 'musik', 'music', 'tv', 'video', 'audio',
+  };
+
+  static bool _isGenericChannel(String channelKey) => channelKey
+      .split(' ')
+      .where((word) => word.isNotEmpty)
+      .every(_genericChannelWords.contains);
+
+  static String _firstArtist(String raw) {
+    final parts = raw.split(_collabSplit);
+    return parts.isEmpty ? raw.trim() : parts.first.trim();
+  }
+
+  /// Artis utama lagu. Judul YouTube bisa "Artis - Judul" atau "Judul - Artis",
+  /// dan channel bisa berupa label/pengunggah ulang, jadi beberapa sumber
+  /// dicek berurutan dari yang paling dapat diandalkan.
+  static String _seedArtistFor(YoutubeSearchResult video) {
+    final channel = _firstArtist(_radioSeedArtist(video.channelTitle));
+    final channelKey = normalize(channel);
+    final title = _radioSeedTitle(video.title);
+    final parts = title
+        .split(_titleSplit)
+        .map((part) => part.trim())
+        .where((part) => part.isNotEmpty)
+        .toList(growable: false);
+
+    // 1. Nama artis yang sudah dikenal di salah satu sisi judul.
+    if (parts.length >= 2) {
+      for (final part in parts) {
+        final artist = _firstArtist(part);
+        if (_isKnownArtist(normalize(artist))) return artist;
+      }
+    }
+    // 2. Channel yang dikenal sebagai artis, atau channel yang bukan label.
+    if (channelKey.isNotEmpty) {
+      if (_isKnownArtist(channelKey)) return channel;
+      if (!_labelChannel.hasMatch(channelKey) && !_isGenericChannel(channelKey)) {
+        return channel;
+      }
+    }
+    // 3. Channel label: unggahan label umumnya berformat "Artis - Judul".
+    if (parts.length >= 2) {
+      final candidate = _firstArtist(parts.first);
+      if (candidate.split(' ').length <= 4) return candidate;
+    }
+    return '';
+  }
+
+  static String _composeSeed(String artist, String? style) {
+    final label = style == null ? '' : (_seedStyleLabels[style] ?? '');
+    final artistKey = normalize(artist);
+    final labelKey = normalize(label);
+    final alreadyHasLabel =
+        labelKey.isEmpty || ' $artistKey '.contains(' $labelKey ');
+    return <String>[artist.trim(), if (!alreadyHasLabel) label]
+        .join(' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+  }
+
+  /// Seed Radio: artis yang sedang diputar + genre. Bila artis tidak bisa
+  /// dikenali, kembali ke seed lama berbasis judul.
   static String recommendationSeedFor(YoutubeSearchResult video) {
+    final artist = _seedArtistFor(video);
+    if (artist.isNotEmpty) {
+      return _composeSeed(artist, styleFromVideo(video));
+    }
+    return _titleSeedFor(video);
+  }
+
+  /// Seed cadangan untuk dipakai bergantian oleh RadioService: beberapa artis
+  /// sejenis, lalu pencarian terpopuler untuk genre/bahasa lagu ini.
+  static List<String> alternateSeedsFor(
+    YoutubeSearchResult video, {
+    int maxPeers = 3,
+  }) {
+    final artist = _seedArtistFor(video);
+    final artistKey = normalize(artist);
+    final style = styleFromVideo(video);
+    final language = languageFromVideo(video);
+    final groupKey = _groupOfArtist(artistKey) ?? _groupForContext(style, language);
+
+    final seeds = <String>[];
+    final group = groupKey == null ? null : _peerGroups[groupKey];
+    if (group != null) {
+      final padded = ' $artistKey ';
+      final peers = group
+          .where((peer) => artistKey.isEmpty || !padded.contains(' $peer '))
+          .toList()
+        ..shuffle(_random);
+      for (final peer in peers.take(maxPeers)) {
+        seeds.add(_composeSeed(peer, style));
+      }
+    }
+    seeds.add(_popularQueryFor(style, language));
+    return seeds;
+  }
+
+  /// Pencarian "terpopuler" yang tetap spesifik ke genre, sebagai pengganti
+  /// chart global yang tidak nyambung.
+  static String _popularQueryFor(String? style, String? language) {
+    switch (style) {
+      case 'jawa':
+        return 'lagu jawa terpopuler';
+      case 'sunda':
+        return 'lagu sunda terpopuler';
+      case 'dangdut':
+        return 'dangdut koplo terpopuler';
+      case 'dj_remix':
+        return 'dj remix terpopuler';
+      case 'pop_dj':
+        return 'pop dj remix terpopuler';
+      case 'kpop':
+        return 'kpop popular songs';
+      case 'religi':
+        return 'lagu religi terpopuler';
+      case 'melayu':
+        return 'lagu melayu terpopuler';
+      case 'hip_hop':
+        return language == 'indonesian'
+            ? 'rap indonesia terpopuler'
+            : 'hip hop popular songs';
+      case 'rnb':
+        return 'r&b popular songs';
+      case 'rock':
+        return language == 'indonesian'
+            ? 'lagu rock indonesia terpopuler'
+            : 'rock popular songs';
+      case 'indie':
+        return 'lagu indie indonesia populer';
+      case 'acoustic':
+        return 'lagu akustik populer';
+      case 'reggae':
+        return 'lagu reggae populer';
+      case 'ska':
+        return 'lagu ska populer';
+      case 'jazz':
+        return 'jazz popular songs';
+      case 'blues':
+        return 'blues popular songs';
+      case 'country':
+        return 'country popular songs';
+      case 'instrumental':
+        return 'instrumental popular songs';
+    }
+    switch (language) {
+      case 'english':
+        return 'english pop hits';
+      case 'korean':
+        return 'kpop popular songs';
+      case 'japanese':
+        return 'japanese pop popular songs';
+      case 'indonesian':
+        return 'lagu pop indonesia terpopuler';
+    }
+    return 'lagu populer indonesia';
+  }
+
+  /// Seed lama: judul + artis + "similar songs". Hanya cadangan.
+  static String _titleSeedFor(YoutubeSearchResult video) {
     final title = _radioSeedTitle(video.title);
     final artist = _radioSeedArtist(video.channelTitle);
     final titleKey = normalize(title);

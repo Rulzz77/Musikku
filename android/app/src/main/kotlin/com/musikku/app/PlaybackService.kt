@@ -1019,6 +1019,9 @@ class PlaybackService : MediaBrowserServiceCompat() {
             .setContentTitle(currentTitle)
             .setContentText(currentArtist)
             .setContentIntent(contentPendingIntent)
+            // Jika sistem mengizinkan notifikasi ini di-dismiss, perlakukan sebagai Stop:
+            // hentikan service supaya notifikasi tidak langsung muncul kembali.
+            .setDeleteIntent(stopPendingIntent)
             .setOngoing(currentPlaying)
             .setOnlyAlertOnce(true)
             .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
@@ -1206,9 +1209,11 @@ class PlaybackService : MediaBrowserServiceCompat() {
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        // Audio foreground service harus terus hidup saat UI/task dihapus dari
-        // Recents. Hanya simpan snapshot; hentikan hanya lewat tombol Stop.
-        persistPlaybackSnapshot()
+        // Perilaku yang diminta: menutup task dari Recent Apps menghentikan musik
+        // dan menghapus notifikasi media. Saat pengguna memutar lagi di aplikasi,
+        // startForeground akan memunculkan notifikasi baru.
+        MusikKuLogger.d(TAG, "TASK REMOVED -> stop playback and remove notification")
+        stopPlaybackService()
         super.onTaskRemoved(rootIntent)
     }
 

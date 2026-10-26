@@ -315,7 +315,7 @@ class MainActivity : AudioServiceActivity() {
                         startActivity(
                             Intent(
                                 Intent.ACTION_VIEW,
-                                Uri.parse("https://github.com/Rulzz77/Musikku/releases"),
+                                Uri.parse("https://github.com/Rulzz77/flutter_application_5/releases"),
                             ),
                         )
                         result.success(true)
@@ -2002,32 +2002,18 @@ class MainActivity : AudioServiceActivity() {
 
         MusikKuLogger.d(TAG, "MAIN ACTIVITY DESTROY (isFinishing=$isFinishing)")
 
-        // Saat Activity ditutup dari Recent Apps, playback audio tetap dimiliki
-        // oleh PlaybackService (ExoPlayer native). Jangan matikan service itu
-        // jika sumber aktif adalah youtube_audio atau local; service memakai
-        // foregroundServiceType=mediaPlayback dan stopWithTask=false.
-        // Video/WebView non-audio tetap dibersihkan seperti sebelumnya.
+        // Jika pengguna benar-benar menutup task aplikasi (mis. swipe dari Recent Apps),
+        // hentikan playback service agar notifikasi media ikut hilang. Saat MusikKu dibuka
+        // dan pengguna menekan Play lagi, PlaybackService akan dimulai ulang dan
+        // notifikasi akan muncul kembali.
         if (isFinishing) {
-            val activeMedia = PlaybackService.currentMediaSnapshot()
-            val nativeAudioMustContinue = activeMedia?.sourceType == "youtube_audio" ||
-                activeMedia?.sourceType == "local"
-
             YoutubePlatformView.instance?.release()
-
-            if (!nativeAudioMustContinue) {
-                stopService(
-                    android.content.Intent(
-                        this,
-                        PlaybackService::class.java
-                    )
+            stopService(
+                android.content.Intent(
+                    this,
+                    PlaybackService::class.java
                 )
-            } else {
-                MusikKuLogger.d(
-                    TAG,
-                    "Activity selesai; PlaybackService dipertahankan untuk audio background."
-                )
-            }
-
+            )
             notificationMethodChannel = null
         }
 

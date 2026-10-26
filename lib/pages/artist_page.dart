@@ -59,6 +59,25 @@ class _ArtistPageState extends State<ArtistPage> {
       ? _details!.title
       : widget.artist;
 
+  // A channel can publish vlogs, interviews, podcasts, and music on the same
+  // account. Artist pages should expose music releases only, not every public
+  // playlist. Filter unambiguously non-music playlist names; generic album
+  // names are kept because many albums are named only after the record title.
+  static final RegExp _nonMusicContentTitle = RegExp(
+    r'\b(?:vlogs?|daily\s+vlog|podcasts?|interviews?|wawancara|reaction(?:s)?|reacts?\s+to|reviews?|tutorials?|how\s+to|behind\s+the\s+scenes|making\s+of|studio\s+tour|day\s+in\s+the\s+life|daily\s+life|life\s+update|career\s+update|channel\s+update|tour\s+diary|travel\s+(?:vlog|diary)|road\s+trip|gaming|gameplay|lets?\s+play|challenges?|unboxing|q\s*&\s*a|questions?\s+and\s+answers?|news\s+(?:update|report)|breaking\s+news|announcements?|pranks?|comedy|funny\s+moments?|shorts?|skits?|documentar(?:y|ies)|meet\s+and\s+greet|press\s+conference|livestreams?)\b',
+    caseSensitive: false,
+  );
+
+  bool _isMusicPlaylist(YoutubePublicPlaylist item) {
+    if (item.id.trim().isEmpty || item.itemCount <= 0) return false;
+    final title = item.title.trim();
+    if (title.isEmpty || _nonMusicContentTitle.hasMatch(title)) return false;
+    return true;
+  }
+
+  bool _isClearlyNonMusic(YoutubeSearchResult video) =>
+      _nonMusicContentTitle.hasMatch(video.title);
+
   @override
   void initState() {
     super.initState();
@@ -114,7 +133,7 @@ class _ArtistPageState extends State<ArtistPage> {
             );
             if (!mounted) return;
             _playlists = playlists.items
-                .where((item) => item.id.isNotEmpty && item.itemCount > 0)
+                .where(_isMusicPlaylist)
                 .toList(growable: false);
             _nextPlaylistsToken = playlists.nextPageToken;
           } catch (_) {
@@ -130,8 +149,28 @@ class _ArtistPageState extends State<ArtistPage> {
       // existing artist search as fallback so the page still works for them.
       if (_songs.isEmpty && _playlists.isEmpty) {
         _usedSearchFallback = true;
-        _songs = (await widget.searchService.search('${widget.artist} songs'))
-            .where((video) => video.videoId.isNotEmpty && !video.isLocal)
+        final searchResults = await widget.searchService.search(
+          '${widget.artist} songs',
+        );
+        List<YoutubeSearchResult> enrichedResults;
+        try {
+          enrichedResults = await _channelService.withViewCounts(searchResults);
+        } catch (_) {
+          // Keep the page usable when videos.list is unavailable; title and
+          // channel metadata are still filtered below.
+          enrichedResults = searchResults;
+        }
+        final musicResults = enrichedResults.where((video) =>
+            video.videoId.isNotEmpty &&
+            !video.isLocal &&
+            !video.isLive &&
+            !video.isUpcoming &&
+            !_isClearlyNonMusic(video) &&
+            YoutubeSearchService.isMusicChannelUpload(
+              video,
+              channelTitle: video.channelTitle,
+            )).toList(growable: false);
+        _songs = (await widget.searchService.removeShorts(musicResults))
             .take(30)
             .toList(growable: false);
       }
@@ -154,16 +193,26 @@ class _ArtistPageState extends State<ArtistPage> {
     required String channelTitle,
     required String channelDescription,
   }) async {
-    final tracks = source.where((video) =>
-        video.videoId.isNotEmpty && !video.isLocal && !video.isLive && !video.isUpcoming);
-    final music = tracks
-        .where((video) => YoutubeSearchService.isMusicChannelUpload(
-              video,
-              channelTitle: channelTitle,
-              channelDescription: channelDescription,
-            ))
-        .toList(growable: false);
-    return widget.searchService.removeShorts(music);
+    List<YoutubeSearchResult> enriched;
+    try {
+      // playlistItems.list does not include complete duration/category data.
+      // Enrich in batches so Shorts and non-music clips are easier to reject.
+      enriched = await _channelService.withViewCounts(source);
+    } catch (_) {
+      enriched = source;
+    }
+    final tracks = enriched.where((video) =>
+        video.videoId.isNotEmpty &&
+        !video.isLocal &&
+        !video.isLive &&
+        !video.isUpcoming &&
+        !_isClearlyNonMusic(video) &&
+        YoutubeSearchService.isMusicChannelUpload(
+          video,
+          channelTitle: channelTitle,
+          channelDescription: channelDescription,
+        )).toList(growable: false);
+    return widget.searchService.removeShorts(tracks);
   }
 
   Future<void> _loadMoreSongs() async {
@@ -214,9 +263,7 @@ class _ArtistPageState extends State<ArtistPage> {
         _playlists = [
           ..._playlists,
           ...page.items.where((playlist) =>
-              playlist.id.isNotEmpty &&
-              playlist.itemCount > 0 &&
-              !known.contains(playlist.id)),
+              _isMusicPlaylist(playlist) && !known.contains(playlist.id)),
         ];
         _nextPlaylistsToken = page.nextPageToken;
       });
@@ -409,8 +456,17 @@ class _ArtistPageState extends State<ArtistPage> {
     if (_songs.isEmpty) {
       return _EmptyState(
         icon: Icons.music_off_rounded,
-        title: 'Lagu belum ditemukan',
-        subtitle: 'Coba buka artis dari lagu atau channel musik lainnya.',
+        title: 'Lagu musik belum ditemukan',
+        subtitle: _nextSongsToken != null && _uploadsPlaylistId.isNotEmpty
+            ? 'Unggahan terbaru tidak berisi lagu yang cocok. Muat unggahan berikutnya untuk mencari rilisan musik.'
+            : 'Tidak ada unggahan yang dikenali sebagai lagu. Coba buka artis dari lagu atau channel musik lainnya.',
+        actionLabel: _nextSongsToken != null && _uploadsPlaylistId.isNotEmpty
+            ? 'Muat unggahan berikutnya'
+            : null,
+        onAction: _nextSongsToken != null && _uploadsPlaylistId.isNotEmpty
+            ? _loadMoreSongs
+            : null,
+        actionLoading: _loadingMoreSongs,
       );
     }
     final hasMore = _nextSongsToken != null && !_usedSearchFallback;
@@ -448,8 +504,13 @@ class _ArtistPageState extends State<ArtistPage> {
     if (_playlists.isEmpty) {
       return _EmptyState(
         icon: Icons.album_rounded,
-        title: 'Belum ada album atau playlist publik',
-        subtitle: 'Kalau channel memiliki playlist publik, daftar rilisan akan muncul di sini.',
+        title: 'Album musik belum ditemukan',
+        subtitle: _nextPlaylistsToken != null
+            ? 'Playlist pada halaman ini terfilter sebagai konten nonmusik. Muat daftar berikutnya untuk mencari album atau playlist lagu.'
+            : 'Channel ini tidak memiliki album atau playlist musik publik yang dikenali.',
+        actionLabel: _nextPlaylistsToken != null ? 'Muat playlist berikutnya' : null,
+        onAction: _nextPlaylistsToken != null ? _loadMorePlaylists : null,
+        actionLoading: _loadingMorePlaylists,
       );
     }
     final hasMore = _nextPlaylistsToken != null;
@@ -475,6 +536,9 @@ class _ArtistPageState extends State<ArtistPage> {
         return _AlbumPlaylistTile(
           playlist: _playlists[index],
           channelService: _channelService,
+          searchService: widget.searchService,
+          channelTitle: _artistTitle,
+          channelDescription: _details?.description ?? '',
           onPlay: widget.onPlay,
           onPlayList: widget.onPlayList,
           onLongPress: widget.onLongPress,
@@ -548,6 +612,9 @@ class _AlbumPlaylistTile extends StatefulWidget {
   const _AlbumPlaylistTile({
     required this.playlist,
     required this.channelService,
+    required this.searchService,
+    required this.channelTitle,
+    required this.channelDescription,
     required this.onPlay,
     required this.onPlayList,
     required this.onLongPress,
@@ -555,6 +622,9 @@ class _AlbumPlaylistTile extends StatefulWidget {
 
   final YoutubePublicPlaylist playlist;
   final YoutubePublicChannelService channelService;
+  final YoutubeSearchService searchService;
+  final String channelTitle;
+  final String channelDescription;
   final ValueChanged<YoutubeSearchResult> onPlay;
   final Future<void> Function(YoutubeSearchResult, List<YoutubeSearchResult>)? onPlayList;
   final ValueChanged<YoutubeSearchResult>? onLongPress;
@@ -587,14 +657,33 @@ class _AlbumPlaylistTileState extends State<_AlbumPlaylistTile> {
         pageToken: more ? _nextToken : null,
         maxResults: 50,
       );
-      if (!mounted) return;
-      final known = _tracks.map((track) => track.videoId).toSet();
-      final tracks = page.items.where((track) =>
+      List<YoutubeSearchResult> enriched;
+      try {
+        enriched = await widget.channelService.withViewCounts(page.items);
+      } catch (_) {
+        // Don't lose a playlist if metadata enrichment fails; the title-based
+        // music filter still excludes obvious vlogs/interviews/reactions.
+        enriched = page.items;
+      }
+      final filtered = enriched.where((track) =>
           track.videoId.isNotEmpty &&
           !track.isLocal &&
+          !track.isLive &&
+          !track.isUpcoming &&
           track.title.toLowerCase() != '[deleted video]' &&
           track.title.toLowerCase() != 'private video' &&
-          !known.contains(track.videoId)).toList(growable: false);
+          !_ArtistPageState._nonMusicContentTitle.hasMatch(track.title) &&
+          YoutubeSearchService.isMusicChannelUpload(
+            track,
+            channelTitle: widget.channelTitle,
+            channelDescription: widget.channelDescription,
+          )).toList(growable: false);
+      final musicTracks = await widget.searchService.removeShorts(filtered);
+      if (!mounted) return;
+      final known = _tracks.map((track) => track.videoId).toSet();
+      final tracks = musicTracks
+          .where((track) => !known.contains(track.videoId))
+          .toList(growable: false);
       setState(() {
         _tracks = [..._tracks, ...tracks];
         _nextToken = page.nextPageToken;
@@ -648,8 +737,12 @@ class _AlbumPlaylistTileState extends State<_AlbumPlaylistTile> {
         ),
         title: Text(widget.playlist.title, maxLines: 2, overflow: TextOverflow.ellipsis,
             style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
-        subtitle: Text('${widget.playlist.itemCount} lagu · playlist publik',
-            style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11.5)),
+        subtitle: Text(
+          _tracks.isEmpty
+              ? 'Playlist publik · ${widget.playlist.itemCount} video'
+              : '${_tracks.length} lagu musik',
+          style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11.5),
+        ),
         children: [
           if (_loading)
             const Padding(
@@ -667,9 +760,29 @@ class _AlbumPlaylistTileState extends State<_AlbumPlaylistTile> {
               ),
             )
           else if (_tracks.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(18),
-              child: Text('Belum ada lagu publik yang bisa ditampilkan.'),
+            Padding(
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                children: [
+                  const Text('Tidak ada lagu musik di halaman playlist ini.'),
+                  if (_nextToken != null)
+                    TextButton.icon(
+                      onPressed: _loadingMore
+                          ? null
+                          : () => unawaited(_load(more: true)),
+                      icon: _loadingMore
+                          ? const SizedBox(
+                              width: 15,
+                              height: 15,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.expand_more_rounded),
+                      label: Text(
+                        _loadingMore ? 'Memuat...' : 'Cari lagu di halaman berikutnya',
+                      ),
+                    ),
+                ],
+              ),
             )
           else ...[
             Align(
@@ -719,11 +832,21 @@ class _AlbumPlaylistTileState extends State<_AlbumPlaylistTile> {
 }
 
 class _EmptyState extends StatelessWidget {
-  const _EmptyState({required this.icon, required this.title, required this.subtitle});
+  const _EmptyState({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    this.actionLabel,
+    this.onAction,
+    this.actionLoading = false,
+  });
 
   final IconData icon;
   final String title;
   final String subtitle;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+  final bool actionLoading;
 
   @override
   Widget build(BuildContext context) {
@@ -741,6 +864,20 @@ class _EmptyState extends StatelessWidget {
             const SizedBox(height: 6),
             Text(subtitle, textAlign: TextAlign.center,
                 style: TextStyle(color: scheme.onSurfaceVariant, height: 1.4)),
+            if (actionLabel != null) ...[
+              const SizedBox(height: 14),
+              OutlinedButton.icon(
+                onPressed: actionLoading ? null : onAction,
+                icon: actionLoading
+                    ? const SizedBox(
+                        width: 15,
+                        height: 15,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.expand_more_rounded),
+                label: Text(actionLoading ? 'Memuat...' : actionLabel!),
+              ),
+            ],
           ],
         ),
       ),

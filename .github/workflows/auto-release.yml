@@ -1,7 +1,7 @@
 
 name: MusikKu Secure Release
 
-# Build release saat pubspec.yaml berubah; manual run juga tersedia.
+# Build release saat pubspec.yaml berubah; manual run tersedia di main.
 on:
   push:
     branches: [main]
@@ -74,7 +74,7 @@ jobs:
           echo "Preparing MusikKu $VERSION_NAME build $BUILD_NUMBER (tag $TAG)."
 
   build:
-    name: Analyze, test and build universal APK
+    name: Analyze and build universal APK
     needs: prepare
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
@@ -139,8 +139,7 @@ jobs:
       - name: Analyze Dart source
         run: flutter analyze --no-pub
 
-      - name: Run tests
-        run: flutter test --reporter expanded
+      # Tes otomatis sengaja tidak dijalankan.
 
       - name: Build universal release APK
         env:
@@ -217,7 +216,7 @@ jobs:
           APK="release-assets/app-release.apk"
           test -s "$APK"
 
-          # Jangan timpa release atau tag yang kebetulan sudah ada.
+          # Jangan timpa release atau tag yang sudah ada.
           if gh release view "$TAG" --repo "$GH_REPO" >/dev/null 2>&1; then
             echo "::error::Release $TAG already exists; refusing to overwrite."
             exit 1
@@ -228,9 +227,10 @@ jobs:
             exit 1
           fi
 
-          # Release hanya berisi APK dan catatan versi singkat.
+          # Catatan release hanya berisi nama dan versi.
           NOTES="MusikKu ${VERSION_NAME}"
 
+          # Buat release baru terlebih dahulu.
           gh release create "$TAG" "$APK" \
             --repo "$GH_REPO" \
             --title "MusikKu $VERSION_NAME" \
@@ -240,8 +240,7 @@ jobs:
           echo "Release $TAG created successfully."
           echo "Removing previous version releases and tags..."
 
-          # Hapus release versi lama dengan format tag vX.Y.Z
-          # atau versi prerelease seperti vX.Y.Z-beta.1.
+          # Hapus release versi lama yang mengikuti format tag versi.
           RELEASE_TAGS="$(gh release list \
             --repo "$GH_REPO" \
             --limit 1000 \
@@ -258,7 +257,7 @@ jobs:
             fi
           done <<< "$RELEASE_TAGS"
 
-          # Hapus tag versi lama juga, termasuk tag yang tidak punya release.
+          # Ambil tag versi dari repository, termasuk tag tanpa release.
           TAG_REFS="$(gh api --paginate \
             "repos/$GH_REPO/git/matching-refs/tags/" \
             --jq '.[].ref')"

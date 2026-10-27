@@ -107,6 +107,11 @@ extension _HomeUiLayout on _HomePageState {
                         onOpenSleepTimer: _showSleepTimerSheet,
                         onOpenListeningRoom: _showListenTogetherSheet,
                         followingRoom: _listenTogether.isGuest,
+                        // Recompute from the saved playlists so the button
+                        // updates immediately after a song is added or removed.
+                        inPlaylist: _playlists.any(
+                          (playlist) => playlist.contains(watch.videoId),
+                        ),
                         sleepActive: _sleepActive,
                       ),
               ),

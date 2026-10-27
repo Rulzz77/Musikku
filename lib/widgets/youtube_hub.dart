@@ -8,6 +8,7 @@ import '../app_info.dart';
 import '../models/listening_stat.dart';
 import '../models/youtube_search_result.dart';
 import '../pages/app_settings_page.dart';
+import '../pages/artist_page.dart';
 import '../pages/local_music_page.dart';
 import '../pages/stats_page.dart';
 import '../pages/youtube_channel_page.dart';
@@ -139,6 +140,7 @@ class _YoutubeHubState extends State<YoutubeHub> {
   List<YoutubeSearchResult> _searchResults = const [];
   List<YoutubeChannelSearchResult> _searchChannels = const [];
   bool _channelSearchLoading = false;
+  bool _artistChannelMode = false;
 
   /// true selama tarik-untuk-refresh: RefreshIndicator sudah punya spinner
   /// sendiri, jadi spinner inline disembunyikan supaya tidak muncul dobel.
@@ -246,6 +248,8 @@ class _YoutubeHubState extends State<YoutubeHub> {
         _query = '';
         _searchResults = const [];
         _searchChannels = const [];
+        _artistChannelMode = false;
+        _channelSearchLoading = false;
         _error = '';
         _loading = false;
       });
@@ -272,6 +276,8 @@ class _YoutubeHubState extends State<YoutubeHub> {
       _query = '';
       _searchResults = const [];
       _searchChannels = const [];
+      _artistChannelMode = false;
+      _channelSearchLoading = false;
       _loading = false;
       _error = '';
       if (nextSection == _YoutubeSection.home) {
@@ -453,7 +459,7 @@ class _YoutubeHubState extends State<YoutubeHub> {
   List<Widget> _hubSearchSlivers() {
     return [
       if (_searchChannels.isNotEmpty) ...[
-        _sectionHeader('Channel musik'),
+        _sectionHeader(_artistChannelMode ? 'Artis' : 'Channel musik'),
         SliverToBoxAdapter(
           child: SizedBox(
             // Tinggi cukup untuk avatar + nama + label channel bahkan saat
@@ -476,7 +482,7 @@ class _YoutubeHubState extends State<YoutubeHub> {
             child: Padding(
               padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
               child: TextButton.icon(
-                onPressed: _channelSearchLoading ? null : _searchChannelsForCurrentQuery,
+                onPressed: _channelSearchLoading ? null : () => _searchChannelsForCurrentQuery(),
                 icon: _channelSearchLoading
                     ? const SizedBox(
                         width: 16,
@@ -515,11 +521,17 @@ class _YoutubeHubState extends State<YoutubeHub> {
       width: 160,
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
-        onTap: () => _handleControllerOpenChannel(
-          channel.channelId,
-          channel.title,
-          channel.thumbnailUrl,
-        ),
+        onTap: () {
+          if (_artistChannelMode) {
+            _openArtistCatalogue(channel);
+          } else {
+            _handleControllerOpenChannel(
+              channel.channelId,
+              channel.title,
+              channel.thumbnailUrl,
+            );
+          }
+        },
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
           child: Column(
@@ -539,7 +551,10 @@ class _YoutubeHubState extends State<YoutubeHub> {
                 style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
               ),
               const SizedBox(height: 2),
-              const Text('Buka channel', style: TextStyle(fontSize: 10.5)),
+              Text(
+                _artistChannelMode ? 'Lihat daftar lagu' : 'Buka channel',
+                style: const TextStyle(fontSize: 10.5),
+              ),
             ],
           ),
         ),

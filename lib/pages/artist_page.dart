@@ -18,12 +18,14 @@ class ArtistPage extends StatefulWidget {
     required this.searchService,
     required this.onPlay,
     this.channelId = '',
+    this.initialSearchResults = const [],
     this.onLongPress,
     this.onPlayList,
   });
 
   final String artist;
   final String channelId;
+  final List<YoutubeSearchResult> initialSearchResults;
   final YoutubeSearchService searchService;
   final ValueChanged<YoutubeSearchResult> onPlay;
   final ValueChanged<YoutubeSearchResult>? onLongPress;
@@ -78,6 +80,98 @@ class _ArtistPageState extends State<ArtistPage> {
   bool _isClearlyNonMusic(YoutubeSearchResult video) =>
       _nonMusicContentTitle.hasMatch(video.title);
 
+  String _normalizeArtistText(String value) => value
+      .toLowerCase()
+      .replaceAll(
+        RegExp(
+          r'\b(?:official(?:\s+music)?(?:\s+channel)?|vevo|topic|music\s+channel|channel)\b',
+          caseSensitive: false,
+        ),
+        ' ',
+      )
+      .replaceAll(RegExp(r'[^a-z0-9\s]'), ' ')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+
+  bool _containsArtistPhrase(String text, String artist) =>
+      text == artist ||
+      text.startsWith('$artist ') ||
+      text.endsWith(' $artist') ||
+      text.contains(' $artist ');
+
+  /// Use the current search response to seed the artist catalogue. That means
+  /// official releases uploaded by a label (not only tracks uploaded directly
+  /// to the artist's own channel) can appear without an additional search.list
+  /// request. Covers, karaoke, fan edits, and reactions are filtered out.
+  List<YoutubeSearchResult> _filterArtistSearchResults(
+    List<YoutubeSearchResult> source,
+  ) {
+    final artist = _normalizeArtistText(widget.artist);
+    if (artist.isEmpty) return const [];
+
+    final seen = <String>{};
+    final tracks = <YoutubeSearchResult>[];
+    final unofficialPattern = RegExp(
+      r'\b(?:cover(?:ed)?|karaoke|fan[ -]?made|unofficial|reaction|reacts?|tribute|slowed|sped\s*up|nightcore|dance\s+practice)\b',
+      caseSensitive: false,
+    );
+    final officialPattern = RegExp(
+      r'\b(?:official|vevo|topic|official\s+audio|official\s+(?:music\s+)?video|official\s+lyrics?|official\s+visualizer|visualizer|records?|recordings?|label|entertainment|production|productions|music|musik|vibe)\b',
+      caseSensitive: false,
+    );
+
+    for (final video in source) {
+      if (video.videoId.isEmpty ||
+          video.isLocal ||
+          video.isLive ||
+          video.isUpcoming ||
+          _isClearlyNonMusic(video) ||
+          !seen.add(video.videoId)) {
+        continue;
+      }
+
+      final title = _normalizeArtistText(video.title);
+      final channel = _normalizeArtistText(video.channelTitle);
+      final artistInTitle = _containsArtistPhrase(title, artist);
+      final artistChannel = _containsArtistPhrase(channel, artist) ||
+          _containsArtistPhrase(artist, channel);
+      if (!artistInTitle && !artistChannel) continue;
+
+      // Upload dari channel artis sendiri dipercaya (artis cover memang
+      // mengunggah cover). Untuk channel lain, cek hanya judul + nama channel:
+      // deskripsi resmi sering memuat "cover art" / "karaoke version available".
+      final rawMetadata = '${video.title} ${video.description} ${video.channelTitle}';
+      if (!artistChannel) {
+        final titleAndChannel = '${video.title} ${video.channelTitle}';
+        if (unofficialPattern.hasMatch(titleAndChannel)) continue;
+        if (!officialPattern.hasMatch(rawMetadata)) continue;
+      }
+      if (!YoutubeSearchService.isMusicChannelUpload(
+        video,
+        channelTitle: video.channelTitle,
+      )) {
+        continue;
+      }
+      tracks.add(video);
+    }
+
+    return tracks.take(50).toList(growable: false);
+  }
+
+  List<YoutubeSearchResult> _mergeTracks(
+    List<YoutubeSearchResult> primary,
+    List<YoutubeSearchResult> secondary,
+  ) {
+    final seen = <String>{};
+    final merged = <YoutubeSearchResult>[];
+    for (final track in [...primary, ...secondary]) {
+      if (track.videoId.isNotEmpty && seen.add(track.videoId)) {
+        merged.add(track);
+      }
+    }
+    return merged;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -88,7 +182,12 @@ class _ArtistPageState extends State<ArtistPage> {
     setState(() {
       _loading = true;
       _error = null;
+      _usedSearchFallback = false;
+      _nextSongsToken = null;
+      _nextPlaylistsToken = null;
+      _playlists = const [];
     });
+    _songs = _filterArtistSearchResults(widget.initialSearchResults);
     try {
       final channelId = widget.channelId.trim();
       if (channelId.isNotEmpty) {
@@ -118,7 +217,7 @@ class _ArtistPageState extends State<ArtistPage> {
                 channelDescription: description,
               );
               if (!mounted) return;
-              _songs = songs;
+              _songs = _mergeTracks(songs, _songs);
               _nextSongsToken = uploads.nextPageToken;
             } catch (_) {
               // A channel can still expose albums/playlists even if uploads
@@ -170,9 +269,11 @@ class _ArtistPageState extends State<ArtistPage> {
               video,
               channelTitle: video.channelTitle,
             )).toList(growable: false);
-        _songs = (await widget.searchService.removeShorts(musicResults))
-            .take(30)
-            .toList(growable: false);
+        final cleanResults = await widget.searchService.removeShorts(musicResults);
+        final artistReleases = _filterArtistSearchResults(cleanResults);
+        _songs = artistReleases.isNotEmpty
+            ? _mergeTracks(artistReleases, _songs)
+            : _mergeTracks(cleanResults.take(30).toList(growable: false), _songs);
       }
       if (!mounted) return;
       setState(() {
@@ -638,6 +739,7 @@ class _AlbumPlaylistTileState extends State<_AlbumPlaylistTile> {
   String? _nextToken;
   bool _loading = false;
   bool _loadingMore = false;
+  bool _loaded = false;
   Object? _error;
 
   Future<void> _load({bool more = false}) async {
@@ -687,6 +789,7 @@ class _AlbumPlaylistTileState extends State<_AlbumPlaylistTile> {
       setState(() {
         _tracks = [..._tracks, ...tracks];
         _nextToken = page.nextPageToken;
+        _loaded = true;
       });
     } catch (error) {
       if (mounted) setState(() => _error = error);
@@ -719,7 +822,7 @@ class _AlbumPlaylistTileState extends State<_AlbumPlaylistTile> {
         key: PageStorageKey<String>('artist-playlist-${widget.playlist.id}'),
         initiallyExpanded: false,
         onExpansionChanged: (expanded) {
-          if (expanded && _tracks.isEmpty && !_loading) unawaited(_load());
+          if (expanded && !_loaded && !_loading) unawaited(_load());
         },
         leading: ClipRRect(
           borderRadius: BorderRadius.circular(10),

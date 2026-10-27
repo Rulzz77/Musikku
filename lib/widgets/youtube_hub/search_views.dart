@@ -25,27 +25,117 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
     await _search();
   }
 
-  Future<void> _searchChannelsForCurrentQuery() async {
+  Future<void> _searchChannelsForCurrentQuery({bool artistMode = false}) async {
     final query = _query.trim();
     if (!mounted || query.isEmpty || _channelSearchLoading) return;
     final requestId = _searchRequestId;
-    setState(() => _channelSearchLoading = true);
+    setState(() {
+      _channelSearchLoading = true;
+      _artistChannelMode = artistMode;
+    });
     try {
-      final channels = await _searchService.searchChannels(query);
+      var channels = await _searchService.searchChannels(query);
       if (!mounted || requestId != _searchRequestId || query != _query.trim()) return;
-      setState(() => _searchChannels = channels.take(8).toList(growable: false));
+      if (artistMode) {
+        // Automatic artist discovery only keeps channels whose names actually
+        // match the query (e.g. "Raisa Official" for "Raisa"). This avoids
+        // showing unrelated channels and avoids a second search for ordinary
+        // song/genre queries.
+        channels = channels
+            .where((channel) => _channelNameMatchesArtistQuery(channel.title, query))
+            .toList(growable: false);
+      }
+      setState(() {
+        _searchChannels = channels.take(8).toList(growable: false);
+        _artistChannelMode = artistMode && _searchChannels.isNotEmpty;
+      });
     } catch (error) {
       if (!mounted || requestId != _searchRequestId || query != _query.trim()) return;
       setState(() {
-        _error = error is YoutubeSearchException
-            ? error.message
-            : 'Pencarian channel gagal. Coba lagi nanti.';
+        _artistChannelMode = false;
+        // Pencarian artis otomatis bersifat opsional: lagu sudah tampil, jadi
+        // jangan menimpa hasil dengan pesan error. Hanya tombol manual yang
+        // menampilkan error.
+        if (!artistMode) {
+          _error = error is YoutubeSearchException
+              ? error.message
+              : 'Pencarian channel gagal. Coba lagi nanti.';
+        }
       });
     } finally {
       if (mounted && requestId == _searchRequestId && query == _query.trim()) {
         setState(() => _channelSearchLoading = false);
       }
     }
+  }
+
+  String _normalizeArtistChannelName(String value) => value
+      .toLowerCase()
+      .replaceAll(
+        RegExp(r'\b(?:official(?:\s+music)?(?:\s+channel)?|vevo|topic|music\s+channel|channel)\b', caseSensitive: false),
+        ' ',
+      )
+      .replaceAll(RegExp(r'[^a-z0-9\s]'), ' ')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+
+  bool _channelNameMatchesArtistQuery(String channelTitle, String query) {
+    final normalizedQuery = _normalizeArtistChannelName(query);
+    final normalizedChannel = _normalizeArtistChannelName(channelTitle);
+    if (normalizedQuery.isEmpty || normalizedChannel.length < 2) return false;
+    return normalizedChannel == normalizedQuery ||
+        normalizedChannel.startsWith('$normalizedQuery ') ||
+        normalizedQuery.startsWith('$normalizedChannel ');
+  }
+
+  bool _isLikelyArtistNameSearch(String query, List<YoutubeSearchResult> videos) {
+    final trimmed = query.trim();
+    if (trimmed.isEmpty || trimmed.length > 36) return false;
+    final words = trimmed.split(RegExp(r'\s+'));
+    if (words.isEmpty || words.length > 3) return false;
+    if (RegExp(
+      r'\b(?:lagu|musik|music|song|songs|official|video|mv|lyrics?|lirik|audio|cover|remix|album|playlist|radio|mix|karaoke|soundtrack|terbaru|latest|hits|popular|populer)\b',
+      caseSensitive: false,
+    ).hasMatch(trimmed)) {
+      return false;
+    }
+
+    final normalizedQuery = _normalizeArtistChannelName(trimmed);
+    const genericGenreQueries = <String>{
+      'pop', 'rock', 'jazz', 'metal', 'indie', 'dangdut', 'koplo', 'dj',
+      'remix', 'k pop', 'hip hop', 'lofi', 'lo fi', 'radio', 'soundtrack',
+      'instrumental', 'karaoke', 'chill', 'blues', 'reggae', 'classical',
+      'country', 'folk', 'edm', 'house', 'techno', 'trance', 'ambient',
+      'pop indonesia', 'rock indonesia', 'lagu inggris', 'lagu indonesia',
+      'lagu jawa', 'lagu akustik', 'dangdut koplo', 'dj remix',
+    };
+    if (genericGenreQueries.contains(normalizedQuery) ||
+        RegExp(r'\b(?:indonesia|inggris|english|jawa|akustik|acoustic)\b', caseSensitive: false)
+            .hasMatch(normalizedQuery)) {
+      return false;
+    }
+    if (normalizedQuery.isEmpty) return false;
+    // Don't spend a channel-search request on obvious exact track-title queries.
+    final exactSongTitle = videos.take(12).any((video) =>
+        _normalizeArtistChannelName(video.title) == normalizedQuery);
+    return !exactSongTitle;
+  }
+
+  void _openArtistCatalogue(YoutubeChannelSearchResult channel) {
+    if (!mounted) return;
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ArtistPage(
+          artist: channel.title.trim().isNotEmpty ? channel.title.trim() : _query.trim(),
+          channelId: channel.channelId,
+          searchService: _searchService,
+          initialSearchResults: _searchResults,
+          onPlayList: widget.onPlayFromList,
+          onPlay: (video) => unawaited(widget.onPlay(video)),
+          onLongPress: widget.onShowVideoMenu,
+        ),
+      ),
+    );
   }
 
   Future<void> _deleteSearchHistory(String? query) async {
@@ -70,6 +160,7 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
       _searchResults = const [];
       _searchChannels = const [];
       _channelSearchLoading = false;
+      _artistChannelMode = false;
     });
     unawaited(_loadHome());
   }
@@ -90,6 +181,7 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
         _searchResults = const [];
         _searchChannels = const [];
         _channelSearchLoading = false;
+        _artistChannelMode = false;
         _section = _YoutubeSection.home;
         _loading = false;
       });
@@ -102,10 +194,11 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
       if (!keepResults) {
         _searchResults = const [];
       }
-      // Channel search is requested only when the user taps its button;
-      // do not spend a second search.list call for every song query.
+      // The secondary channel lookup is deferred until we know whether this
+      // query looks like an artist name, to avoid extra requests for songs/genres.
       _searchChannels = const [];
       _channelSearchLoading = false;
+      _artistChannelMode = false;
       _section = _YoutubeSection.home;
       _loading = true;
       _error = '';
@@ -122,11 +215,19 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
         updatedHistory.removeRange(StorageService.maxHistory, updatedHistory.length);
       }
 
+      final visibleVideos = videos.take(30).toList(growable: false);
       setState(() {
-        _searchResults = videos.take(30).toList(growable: false);
+        _searchResults = visibleVideos;
         _searchHistory = updatedHistory;
       });
       unawaited(_storage.saveHistory(updatedHistory));
+
+      // Artist-name searches get an artist entry automatically, like a music
+      // catalogue. Song titles and genre queries keep the single search.list
+      // request path; channel discovery is only triggered for likely names.
+      if (_isLikelyArtistNameSearch(query, visibleVideos)) {
+        unawaited(_searchChannelsForCurrentQuery(artistMode: true));
+      }
     } catch (e) {
       if (!mounted || requestId != _searchRequestId) return;
       debugPrint('YOUTUBE SEARCH ERROR: $e');

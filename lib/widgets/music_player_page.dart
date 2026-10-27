@@ -608,11 +608,11 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
             child: _actionIcon(
               context: context,
               icon: widget.inPlaylist
-                  ? Icons.playlist_add_check_rounded
+                  ? Icons.check_circle_rounded
                   : Icons.playlist_add_rounded,
               label: 'Playlist',
               tooltip: widget.inPlaylist
-                  ? 'Sudah ada di playlist • tambah ke playlist lain'
+                  ? 'Lagu sudah ada di playlist • ketuk untuk mengelola playlist'
                   : 'Tambah ke playlist',
               onPressed: widget.onAddToPlaylist,
               selected: widget.inPlaylist,

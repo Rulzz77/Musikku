@@ -3,6 +3,16 @@ part of '../home_page.dart';
 // Extension ini bagian dari _HomePageState; setState aman dipakai di sini.
 // ignore_for_file: invalid_use_of_protected_member
 
+/// Jarak minimum antar penyimpanan posisi saat lagu sedang diputar.
+/// saveLastPlayed menulis beberapa key SharedPreferences sekaligus, jadi jangan
+/// terlalu sering. Posisi terakhir tetap aman karena snapshot lifecycle
+/// (background/keluar) mengambil posisi native terbaru.
+const Duration _positionSaveInterval = Duration(seconds: 5);
+
+/// Saat paused, simpan posisi di event pertama tetapi jangan menulis ulang
+/// di setiap event berikutnya.
+const Duration _pausedPositionSaveMinGap = Duration(seconds: 1);
+
 /// Sinkronisasi state native, progres, statistik, snapshot, dan notifikasi media.
 extension _HomeStateSync on _HomePageState {
   Future<void> _saveCurrentPlaybackSnapshot({
@@ -11,52 +21,65 @@ extension _HomeStateSync on _HomePageState {
     // Semua snapshot diproses berurutan supaya write yang lebih lama tidak
     // pernah selesai setelah write terbaru dan menimpa posisi yang benar.
     _snapshotSaveChain = _snapshotSaveChain.then((_) async {
-      if (_isRestoringLastPlayback) {
-        return;
+      try {
+        await _writePlaybackSnapshot(queryNativePosition: queryNativePosition);
+      } finally {
+        // Statistik dengar yang tertunda harus ikut ditulis walau tidak ada
+        // lagu aktif atau sedang restore, supaya tidak hilang saat app di-kill.
+        await _storage.flushPendingWrites();
       }
-
-      final video = _currentVideo;
-
-      if (video == null) {
-        return;
-      }
-
-      var positionSeconds = _pendingSavedPosition;
-
-      // Lagu hasil restore belum di-load ke player native, jadi currentTime
-      // pasti 0. Kalau dipakai, posisi tersimpan tertimpa 0 setiap app
-      // dibuka lalu langsung ditutup tanpa menekan Play.
-      if (queryNativePosition &&
-          !_nativeState.isEnded &&
-          !_restoredNeedsLoad) {
-        try {
-          final nativeSeconds = await _youtubeController.currentTime;
-
-          if (nativeSeconds.isFinite && nativeSeconds >= 0) {
-            positionSeconds = nativeSeconds;
-            _pendingSavedPosition = nativeSeconds;
-          }
-        } catch (e) {
-          debugPrint('CURRENT TIME SNAPSHOT ERROR: $e');
-        }
-      }
-
-      if (_nativeState.isEnded) {
-        positionSeconds = 0.0;
-      }
-
-      _lastPositionSaveAt = DateTime.now();
-
-      await _storage.saveLastPlayed(
-        video,
-        positionSeconds: positionSeconds,
-        durationSeconds:
-            _nativeState.duration.inMilliseconds / 1000.0,
-      );
-      await _storage.flushPendingWrites();
+    }).catchError((Object error, StackTrace stackTrace) {
+      // Rantai tidak boleh berhenti selamanya karena satu kegagalan.
+      debugPrint('SNAPSHOT SAVE ERROR: $error');
     });
 
     return _snapshotSaveChain;
+  }
+
+  Future<void> _writePlaybackSnapshot({
+    required bool queryNativePosition,
+  }) async {
+    if (_isRestoringLastPlayback) {
+      return;
+    }
+
+    final video = _currentVideo;
+
+    if (video == null) {
+      return;
+    }
+
+    var positionSeconds = _pendingSavedPosition;
+
+    // Lagu hasil restore belum di-load ke player native, jadi currentTime
+    // pasti 0. Kalau dipakai, posisi tersimpan tertimpa 0 setiap app
+    // dibuka lalu langsung ditutup tanpa menekan Play.
+    if (queryNativePosition &&
+        !_nativeState.isEnded &&
+        !_restoredNeedsLoad) {
+      try {
+        final nativeSeconds = await _youtubeController.currentTime;
+
+        if (nativeSeconds.isFinite && nativeSeconds >= 0) {
+          positionSeconds = nativeSeconds;
+          _pendingSavedPosition = nativeSeconds;
+        }
+      } catch (e) {
+        debugPrint('CURRENT TIME SNAPSHOT ERROR: $e');
+      }
+    }
+
+    if (_nativeState.isEnded) {
+      positionSeconds = 0.0;
+    }
+
+    _lastPositionSaveAt = DateTime.now();
+
+    await _storage.saveLastPlayed(
+      video,
+      positionSeconds: positionSeconds,
+      durationSeconds: _nativeState.duration.inMilliseconds / 1000.0,
+    );
   }
 
   void _onYoutubeState(NativeYoutubeState state) {
@@ -113,7 +136,7 @@ extension _HomeStateSync on _HomePageState {
 
     _syncBufferAlert(state);
 
-    _savePlaybackProgress(state);
+    unawaited(_savePlaybackProgress(state));
     _recordListeningStats(state);
 
     if (state.isPlaying || state.isBuffering) {
@@ -287,12 +310,18 @@ extension _HomeStateSync on _HomePageState {
     _pendingSavedPosition =
         state.position.inMilliseconds / 1000.0;
 
-    final now = DateTime.now();
+    // Salin sekarang: setelah await di bawah, _pendingSavedPosition bisa saja
+    // sudah milik lagu berikutnya.
+    final savedPosition = _pendingSavedPosition;
 
-    final shouldSave =
-        now.difference(_lastPositionSaveAt) >= const Duration(seconds: 2) ||
+    final now = DateTime.now();
+    final sinceLastSave = now.difference(_lastPositionSaveAt);
+
+    // Saat paused, jangan melewati batas waktu sama sekali: event paused bisa
+    // datang berulang dan tiap penyimpanan menulis beberapa key sekaligus.
+    final shouldSave = sinceLastSave >= _positionSaveInterval ||
         state.isEnded ||
-        state.isPaused;
+        (state.isPaused && sinceLastSave >= _pausedPositionSaveMinGap);
 
     if (!shouldSave) {
       return;
@@ -307,14 +336,14 @@ extension _HomeStateSync on _HomePageState {
 
     await _storage.saveLastPlayed(
       video,
-      positionSeconds: state.isEnded ? 0.0 : _pendingSavedPosition,
+      positionSeconds: state.isEnded ? 0.0 : savedPosition,
       durationSeconds: durationSeconds,
     );
 
     if (durationSeconds > 0.0) {
       final positionSeconds = state.isEnded
           ? durationSeconds
-          : _pendingSavedPosition.clamp(0.0, durationSeconds).toDouble();
+          : savedPosition.clamp(0.0, durationSeconds).toDouble();
       var progress = (positionSeconds / durationSeconds).clamp(0.0, 1.0).toDouble();
       if (state.isEnded || positionSeconds >= durationSeconds - 2.0) {
         progress = 1.0;

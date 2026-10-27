@@ -61,10 +61,14 @@ bool shouldLoadListeningTogetherTrack({
 }
 
 /// Correct noticeable playback drift, while avoiding repeated seek operations
-/// for small stream/buffer timing differences. Host snapshots arrive every
-/// two seconds; this threshold keeps normal correction responsive without
-/// seeking on every small clock difference.
-const int listeningTogetherDriftCorrectionThresholdMs = 1800;
+/// for small stream/buffer timing differences. Snapshots now carry a host
+/// timestamp and are latency-compensated, so the threshold can be much
+/// tighter than before (was 1800 ms).
+const int listeningTogetherDriftCorrectionThresholdMs = 500;
+
+/// Minimum time between two corrective seeks on the guest. Seeking a YouTube
+/// stream causes buffering, so repeated seeks make the delay worse.
+const int listeningTogetherSeekCooldownMs = 3000;
 
 bool shouldCorrectListeningTogetherPosition({
   required int guestPositionMs,
@@ -72,6 +76,32 @@ bool shouldCorrectListeningTogetherPosition({
 }) =>
     (guestPositionMs - hostTargetPositionMs).abs() >
     listeningTogetherDriftCorrectionThresholdMs;
+
+/// True when enough time has passed since the last corrective seek.
+bool isListeningTogetherSeekCooldownOver({
+  required DateTime? lastSeekAt,
+  DateTime? now,
+}) {
+  if (lastSeekAt == null) return true;
+  return (now ?? DateTime.now()).difference(lastSeekAt).inMilliseconds >=
+      listeningTogetherSeekCooldownMs;
+}
+
+/// Where the guest should be *right now*, given a snapshot taken at
+/// [capturedAtHostMs] (host clock). [clockOffsetMs] = hostTime - guestTime.
+int listeningTogetherTargetPositionMs({
+  required int snapshotPositionMs,
+  required bool playing,
+  required int? capturedAtHostMs,
+  required int clockOffsetMs,
+  int? guestNowMs,
+}) {
+  if (!playing || capturedAtHostMs == null) return snapshotPositionMs;
+  final hostNow =
+      (guestNowMs ?? DateTime.now().millisecondsSinceEpoch) + clockOffsetMs;
+  final elapsed = (hostNow - capturedAtHostMs).clamp(0, 30000).toInt();
+  return max(0, snapshotPositionMs + elapsed);
+}
 
 const Set<String> listeningRoomControlActions = <String>{
   'play_pause',
@@ -88,7 +118,7 @@ const Set<String> listeningRoomControlActions = <String>{
 };
 
 /// Controls that must broadcast a fresh snapshot immediately after the host
-/// processes them. A slow two-second heartbeat must never be the first ack for
+/// processes them. A slow heartbeat must never be the first ack for
 /// a pause/resume request.
 const Set<String> listeningRoomImmediateSnapshotActions = <String>{
   'play_pause',
@@ -135,6 +165,22 @@ Map<String, dynamic> newestQueuedListeningState(
   return pending;
 }
 
+/// True when [incoming] is older than the newest snapshot already accepted.
+/// Snapshots without a sequence are never considered stale. Equal sequences
+/// are accepted: a heartbeat snapshot re-projects the same state to "now",
+/// which is useful for drift correction and is idempotent.
+bool isStaleListeningSnapshot({
+  required int lastAcceptedSequence,
+  required Map<String, dynamic> incoming,
+}) {
+  final seq = (incoming['sequence'] as num?)?.toInt() ?? 0;
+  if (seq == 0 || lastAcceptedSequence == 0) return false;
+  return seq < lastAcceptedSequence;
+}
+
+bool _snapshotIsPlaying(Map<String, dynamic> s) =>
+    s['playing'] == true || s['isPlaying'] == true;
+
 /// Online synchronization for a shared music session.
 ///
 /// The room is code-only and uses Supabase Realtime. No local sockets or IP
@@ -143,6 +189,12 @@ class ListeningTogetherService {
   static const String _supabaseUrl = String.fromEnvironment('SUPABASE_URL');
   static const String _supabasePublishableKey =
       String.fromEnvironment('SUPABASE_PUBLISHABLE_KEY');
+
+  /// Host heartbeat interval. Also carries a projected playback snapshot, so
+  /// keep it short for faster recovery of missed `music_state` broadcasts.
+  static const Duration _hostHeartbeatInterval = Duration(seconds: 2);
+  static const Duration _guestHeartbeatInterval = Duration(seconds: 5);
+  static const Duration _timeSyncInterval = Duration(seconds: 30);
 
   bool get onlineConfigured {
     if (!_supabaseUrl.startsWith('https://') ||
@@ -165,6 +217,7 @@ class ListeningTogetherService {
   }
 
   final ValueNotifier<String> status = ValueNotifier<String>('Belum terhubung');
+
   /// Explains whether the guest actually receives/applies the host's player state.
   final ValueNotifier<String> syncStatus =
       ValueNotifier<String>('Belum ada sesi sinkronisasi');
@@ -178,6 +231,7 @@ class ListeningTogetherService {
   RealtimeChannel? _onlineChannel;
   Timer? _heartbeatTimer;
   Timer? _hostWatchdogTimer;
+  Timer? _timeSyncTimer;
   DateTime? _lastHostHeartbeatAt;
   bool _hosting = false;
   bool _joined = false;
@@ -190,6 +244,19 @@ class ListeningTogetherService {
   final Map<String, DateTime> _onlinePeerLastSeen = <String, DateTime>{};
   final Map<String, DateTime> _lastControlAt = <String, DateTime>{};
   Map<String, dynamic>? _latestHostPlaybackState;
+
+  // ---- Clock sync (guest side) ----
+  /// hostTime - guestTime, in ms. Measured with NTP-style ping/pong and the
+  /// sample with the smallest round-trip time (most accurate).
+  int _clockOffsetMs = 0;
+  int _bestRttMs = 1 << 30;
+  int _lastAcceptedSequence = 0;
+
+  /// hostTime - guestTime in milliseconds (0 until the first pong arrives).
+  int get clockOffsetMs => _clockOffsetMs;
+
+  /// Round-trip time of the best clock-sync sample, or null if not measured.
+  int? get bestRttMs => _bestRttMs == (1 << 30) ? null : _bestRttMs;
 
   Stream<Map<String, dynamic>> get messages => _messages.stream;
   bool get isHost => _hosting;
@@ -217,7 +284,8 @@ class ListeningTogetherService {
       );
     }
     final parsedCode = parseListeningRoomCode(rawCode);
-    if (parsedCode == null || (code.trim().isNotEmpty && code.trim() != parsedCode)) {
+    if (parsedCode == null ||
+        (code.trim().isNotEmpty && code.trim() != parsedCode)) {
       throw const FormatException(
         'Masukkan kode kamar 8 digit. Alamat IP tidak digunakan.',
       );
@@ -238,6 +306,41 @@ class ListeningTogetherService {
       (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0'),
       growable: false,
     ).join();
+  }
+
+  void _cancelTimers() {
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = null;
+    _hostWatchdogTimer?.cancel();
+    _hostWatchdogTimer = null;
+    _timeSyncTimer?.cancel();
+    _timeSyncTimer = null;
+  }
+
+  /// Latest host snapshot, with its position moved forward to "now" when the
+  /// track is playing. Without this, a heartbeat can carry a position that is
+  /// several seconds old and make the guest jump backwards.
+  Map<String, dynamic>? _projectedHostSnapshot() {
+    final s = _latestHostPlaybackState;
+    if (s == null) return null;
+    final copy = Map<String, dynamic>.from(s);
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final captured = (s['capturedAtMs'] as num?)?.toInt();
+    if (captured != null && _snapshotIsPlaying(s) && s['positionMs'] is num) {
+      final elapsed = (nowMs - captured).clamp(0, 30000).toInt();
+      copy['positionMs'] = (s['positionMs'] as num).toInt() + elapsed;
+    }
+    copy['capturedAtMs'] = nowMs;
+    return copy;
+  }
+
+  Map<String, dynamic> _hostHeartbeatPayload() {
+    final snapshot = _projectedHostSnapshot();
+    return <String, dynamic>{
+      'code': roomCode.value,
+      'sentAtMs': DateTime.now().millisecondsSinceEpoch,
+      'snapshot': ?snapshot,
+    };
   }
 
   Future<String> _hostOnlineRoom() async {
@@ -262,21 +365,11 @@ class ListeningTogetherService {
       status.value = 'Kamar online aktif • menunggu teman';
       syncStatus.value = 'Kamar siap • pilih lagu YouTube untuk dibagikan';
       _heartbeatTimer?.cancel();
-      _heartbeatTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      _heartbeatTimer = Timer.periodic(_hostHeartbeatInterval, (_) {
         _pruneOnlinePeers();
-        _sendOnlineUnawaited('room_host_heartbeat', <String, dynamic>{
-          'code': roomCode.value,
-          'sentAtMs': DateTime.now().millisecondsSinceEpoch,
-          if (_latestHostPlaybackState != null)
-            'snapshot': Map<String, dynamic>.from(_latestHostPlaybackState!),
-        });
+        _sendOnlineUnawaited('room_host_heartbeat', _hostHeartbeatPayload());
       });
-      _sendOnlineUnawaited('room_host_heartbeat', <String, dynamic>{
-        'code': roomCode.value,
-        'sentAtMs': DateTime.now().millisecondsSinceEpoch,
-        if (_latestHostPlaybackState != null)
-          'snapshot': Map<String, dynamic>.from(_latestHostPlaybackState!),
-      });
+      _sendOnlineUnawaited('room_host_heartbeat', _hostHeartbeatPayload());
       return pin;
     } catch (error) {
       await closeRoom();
@@ -293,6 +386,9 @@ class ListeningTogetherService {
     _onlineClientId = _randomHexToken();
     _hosting = false;
     _joined = false;
+    _clockOffsetMs = 0;
+    _bestRttMs = 1 << 30;
+    _lastAcceptedSequence = 0;
     _onlinePeers.clear();
     roomCode.value = pin;
     inviteAddress.value = pin;
@@ -321,7 +417,7 @@ class ListeningTogetherService {
       _onlineJoinCompleter = null;
       _heartbeatTimer?.cancel();
       _lastHostHeartbeatAt = DateTime.now();
-      _heartbeatTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      _heartbeatTimer = Timer.periodic(_guestHeartbeatInterval, (_) {
         if (!_joined || !_onlineMode) return;
         _sendOnlineUnawaited('room_heartbeat', <String, dynamic>{
           'clientId': _onlineClientId,
@@ -333,32 +429,109 @@ class ListeningTogetherService {
         if (!_joined || !_onlineMode) return;
         final lastHeartbeat = _lastHostHeartbeatAt;
         if (lastHeartbeat == null ||
-            DateTime.now().difference(lastHeartbeat) <= const Duration(seconds: 18)) {
+            DateTime.now().difference(lastHeartbeat) <=
+                const Duration(seconds: 18)) {
           return;
         }
         _joined = false;
         status.value = 'Host terputus • sesi dengerin bareng dihentikan';
-        if (!_messages.isClosed) _messages.add(<String, dynamic>{'type': 'room_closed'});
+        if (!_messages.isClosed) {
+          _messages.add(<String, dynamic>{'type': 'room_closed'});
+        }
         unawaited(() async {
           await closeRoom();
-          if (!_disposed) status.value = 'Host terputus • sesi dengerin bareng dihentikan';
+          if (!_disposed) {
+            status.value = 'Host terputus • sesi dengerin bareng dihentikan';
+          }
         }());
       });
       status.value = 'Terhubung online • kontrol bersama aktif';
       syncStatus.value = 'Meminta status lagu terbaru dari host…';
+
+      // Measure the clock offset to the host: a quick burst of pings first
+      // (the lowest-RTT sample wins), then a periodic refresh.
+      _startTimeSync();
+
       // Broadcast is not persisted. Ask for a fresh snapshot immediately instead
       // of making the guest wait for the next periodic heartbeat. A failed request
       // must not tear down a successfully joined room.
       try {
         await requestControl('sync_request');
       } catch (error) {
-        syncStatus.value = 'Terhubung; menunggu pembaruan lagu (${error.runtimeType})';
+        syncStatus.value =
+            'Terhubung; menunggu pembaruan lagu (${error.runtimeType})';
       }
     } catch (_) {
       _onlineJoinCompleter = null;
       await closeRoom();
       rethrow;
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Clock sync (NTP-style)
+  // ---------------------------------------------------------------------------
+
+  void _sendTimePing() {
+    if (!_joined || !_onlineMode) return;
+    _sendOnlineUnawaited('time_ping', <String, dynamic>{
+      'clientId': _onlineClientId,
+      'code': roomCode.value,
+      't0': DateTime.now().millisecondsSinceEpoch,
+    });
+  }
+
+  void _startTimeSync() {
+    _timeSyncTimer?.cancel();
+    var burst = 0;
+    _sendTimePing();
+    _timeSyncTimer = Timer.periodic(const Duration(milliseconds: 300), (timer) {
+      if (!_joined || !_onlineMode) {
+        timer.cancel();
+        return;
+      }
+      burst++;
+      if (burst < 5) {
+        _sendTimePing();
+        return;
+      }
+      timer.cancel();
+      _timeSyncTimer = Timer.periodic(_timeSyncInterval, (_) => _sendTimePing());
+    });
+  }
+
+  /// Adds `hostTargetPositionMs` (where the guest should be right now) to a
+  /// host snapshot, compensating for network latency and clock offset.
+  Map<String, dynamic> _decorateGuestSnapshot(Map<String, dynamic> message) {
+    final type = message['type']?.toString();
+    if (type != 'state') return message;
+    final position = (message['positionMs'] as num?)?.toInt();
+    if (position == null) return message;
+    final captured = (message['capturedAtMs'] as num?)?.toInt();
+    final target = listeningTogetherTargetPositionMs(
+      snapshotPositionMs: position,
+      playing: _snapshotIsPlaying(message),
+      capturedAtHostMs: captured,
+      clockOffsetMs: _clockOffsetMs,
+    );
+    return <String, dynamic>{...message, 'hostTargetPositionMs': target};
+  }
+
+  /// Drops snapshots older than the newest one already delivered, then
+  /// forwards the rest (with the compensated target position) to listeners.
+  void _deliverHostSnapshot(Map<String, dynamic> message) {
+    if (_messages.isClosed) return;
+    if (message['type']?.toString() == 'state') {
+      if (isStaleListeningSnapshot(
+        lastAcceptedSequence: _lastAcceptedSequence,
+        incoming: message,
+      )) {
+        return;
+      }
+      final seq = (message['sequence'] as num?)?.toInt() ?? 0;
+      if (seq > _lastAcceptedSequence) _lastAcceptedSequence = seq;
+    }
+    _messages.add(_decorateGuestSnapshot(message));
   }
 
   RealtimeChannel _createOnlineChannel(String pin, {required bool hosting}) {
@@ -370,7 +543,7 @@ class ListeningTogetherService {
     channel.onBroadcast(event: 'music_state', callback: (frame) {
       if (hosting || !_onlineMode || !_joined || _disposed) return;
       final message = unwrapRealtimeBroadcastPayload(frame);
-      if (!_messages.isClosed) _messages.add(message);
+      _deliverHostSnapshot(message);
     });
 
     channel.onBroadcast(event: 'room_join', callback: (frame) {
@@ -416,6 +589,41 @@ class ListeningTogetherService {
       _onlinePeerLastSeen[clientId] = DateTime.now();
     });
 
+    // Host answers clock-sync pings with its own current time.
+    channel.onBroadcast(event: 'time_ping', callback: (frame) {
+      if (!hosting || !_onlineMode || !_hosting || _disposed) return;
+      final message = unwrapRealtimeBroadcastPayload(frame);
+      final clientId = message['clientId']?.toString() ?? '';
+      if (!_onlinePeers.contains(clientId) ||
+          message['code']?.toString() != roomCode.value ||
+          message['t0'] is! num) {
+        return;
+      }
+      _sendOnlineUnawaited('time_pong', <String, dynamic>{
+        'clientId': clientId,
+        'code': roomCode.value,
+        't0': message['t0'],
+        't1': DateTime.now().millisecondsSinceEpoch, // host clock
+      });
+    });
+
+    channel.onBroadcast(event: 'time_pong', callback: (frame) {
+      if (hosting || !_onlineMode || !_joined || _disposed) return;
+      final message = unwrapRealtimeBroadcastPayload(frame);
+      if (message['clientId']?.toString() != _onlineClientId) return;
+      if (message['t0'] is! num || message['t1'] is! num) return;
+      final t2 = DateTime.now().millisecondsSinceEpoch;
+      final t0 = (message['t0'] as num).toInt();
+      final t1 = (message['t1'] as num).toInt();
+      final rtt = t2 - t0;
+      if (rtt < 0) return;
+      // The sample with the smallest RTT has the least asymmetric-delay error.
+      if (rtt < _bestRttMs) {
+        _bestRttMs = rtt;
+        _clockOffsetMs = t1 - ((t0 + t2) ~/ 2);
+      }
+    });
+
     channel.onBroadcast(event: 'room_leave', callback: (frame) {
       if (!hosting || !_onlineMode || !_hosting) return;
       final message = unwrapRealtimeBroadcastPayload(frame);
@@ -439,7 +647,8 @@ class ListeningTogetherService {
       }
       final now = DateTime.now();
       final last = _lastControlAt[clientId];
-      if (last != null && now.difference(last) < const Duration(milliseconds: 180)) {
+      if (last != null &&
+          now.difference(last) < const Duration(milliseconds: 180)) {
         return;
       }
       _lastControlAt[clientId] = now;
@@ -485,8 +694,8 @@ class ListeningTogetherService {
         frame,
         expectedRoomCode: roomCode.value,
       );
-      if (snapshot != null && !_messages.isClosed) {
-        _messages.add(snapshot);
+      if (snapshot != null) {
+        _deliverHostSnapshot(snapshot);
       } else if (syncStatus.value.startsWith('Meminta status lagu')) {
         syncStatus.value = 'Host online • menunggu snapshot musik';
       }
@@ -497,10 +706,7 @@ class ListeningTogetherService {
       final message = unwrapRealtimeBroadcastPayload(frame);
       if (message['code']?.toString() != roomCode.value) return;
       _joined = false;
-      _heartbeatTimer?.cancel();
-      _heartbeatTimer = null;
-      _hostWatchdogTimer?.cancel();
-      _hostWatchdogTimer = null;
+      _cancelTimers();
       status.value = 'Host menutup kamar';
       if (!_messages.isClosed) {
         _messages.add(<String, dynamic>{'type': 'room_closed'});
@@ -536,10 +742,7 @@ class ListeningTogetherService {
         status.value = 'Koneksi server online terputus';
         if (_joined) {
           _joined = false;
-          _heartbeatTimer?.cancel();
-          _heartbeatTimer = null;
-          _hostWatchdogTimer?.cancel();
-          _hostWatchdogTimer = null;
+          _cancelTimers();
           if (!_messages.isClosed) {
             _messages.add(<String, dynamic>{'type': 'room_closed'});
           }
@@ -581,15 +784,18 @@ class ListeningTogetherService {
     }());
   }
 
-  Future<void> requestControl(String action, {int? positionMs, bool? playing}) async {
+  Future<void> requestControl(String action,
+      {int? positionMs, bool? playing}) async {
     if (!_onlineMode || !_joined || _hosting) {
       throw StateError('Gabung kamar online dulu untuk mengirim kontrol.');
     }
     if (!isAllowedListeningRoomControlAction(action)) {
-      throw ArgumentError.value(action, 'action', 'Kontrol kamar tidak dikenal.');
+      throw ArgumentError.value(
+          action, 'action', 'Kontrol kamar tidak dikenal.');
     }
     if (action == 'set_playback' && playing == null) {
-      throw ArgumentError.value(playing, 'playing', 'Kontrol playback harus menyertakan state yang diinginkan.');
+      throw ArgumentError.value(playing, 'playing',
+          'Kontrol playback harus menyertakan state yang diinginkan.');
     }
     await _sendOnline('room_control', <String, dynamic>{
       'clientId': _onlineClientId,
@@ -614,7 +820,8 @@ class ListeningTogetherService {
     }
     final id = videoId.trim();
     if (!isValidSharedYouTubeVideoId(id)) {
-      throw const FormatException('Hanya lagu/video YouTube yang bisa dipilih bersama.');
+      throw const FormatException(
+          'Hanya lagu/video YouTube yang bisa dipilih bersama.');
     }
     final cleanTitle = title.trim();
     if (cleanTitle.isEmpty) {
@@ -627,7 +834,8 @@ class ListeningTogetherService {
         ? cleanThumbnail
         : '';
     final safeDuration = durationSeconds != null &&
-            durationSeconds.isFinite && durationSeconds > 0
+            durationSeconds.isFinite &&
+            durationSeconds > 0
         ? durationSeconds.clamp(0.0, 86400.0).toDouble()
         : null;
 
@@ -637,15 +845,24 @@ class ListeningTogetherService {
       'action': 'play_track',
       'videoId': id,
       'title': cleanTitle.substring(0, cleanTitle.length.clamp(0, 180).toInt()),
-      'artist': cleanArtist.substring(0, cleanArtist.length.clamp(0, 160).toInt()),
+      'artist':
+          cleanArtist.substring(0, cleanArtist.length.clamp(0, 160).toInt()),
       'thumbnailUrl': safeThumbnail,
       'durationSeconds': ?safeDuration,
     });
   }
 
+  /// Called by the host's player controller whenever playback state changes.
+  /// The state should include `positionMs` and `playing` (or `isPlaying`).
   void broadcastState(Map<String, dynamic> state) {
     if (!_hosting || !_onlineMode) return;
-    final payload = <String, dynamic>{'type': 'state', ...state};
+    final payload = <String, dynamic>{
+      'type': 'state',
+      ...state,
+      // Host clock at the moment this state was captured. Guests use it to
+      // compensate for network latency and to project stale heartbeats.
+      'capturedAtMs': DateTime.now().millisecondsSinceEpoch,
+    };
     // Keep a compact copy for the host heartbeat, so a joining guest can
     // recover even if a transient music_state broadcast is missed.
     _latestHostPlaybackState = Map<String, dynamic>.from(payload);
@@ -696,10 +913,7 @@ class ListeningTogetherService {
       }
     }
 
-    _heartbeatTimer?.cancel();
-    _heartbeatTimer = null;
-    _hostWatchdogTimer?.cancel();
-    _hostWatchdogTimer = null;
+    _cancelTimers();
     _lastHostHeartbeatAt = null;
     _onlineJoinCompleter = null;
     _onlineJoinAccepted = false;
@@ -709,6 +923,9 @@ class ListeningTogetherService {
     _onlinePeerLastSeen.clear();
     _lastControlAt.clear();
     _latestHostPlaybackState = null;
+    _clockOffsetMs = 0;
+    _bestRttMs = 1 << 30;
+    _lastAcceptedSequence = 0;
     _onlineChannel = null;
     if (remoteChannel != null) {
       try {

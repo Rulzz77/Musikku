@@ -9,6 +9,7 @@ extension _HomeListeningTogether on _HomePageState {
       // If the host leaves or the socket drops, don't let a guest keep playing
       // the last received song as if it were still synchronized.
       _wasFollowingListenTogether = false;
+      _lastListenTogetherSeekAt = null;
       unawaited(_pauseListenTogetherGuest());
     } else if (isGuest) {
       _wasFollowingListenTogether = true;
@@ -309,11 +310,13 @@ extension _HomeListeningTogether on _HomePageState {
     _lastRoomUnsupportedTrackId = '';
     _lastListenTogetherLoadFailureVideoId = '';
     _lastListenTogetherLoadFailureAt = null;
+    _lastListenTogetherSeekAt = null;
     try {
       await _listenTogether.joinRoom(normalizedCode, code: normalizedCode);
       _listenTogetherSyncTimer?.cancel();
       _listenTogetherSyncTimer = null;
       _lastListenTogetherLoadFailureAt = null;
+      _lastListenTogetherSeekAt = null;
       _clearSleepTimer();
       _refreshListeningTogetherUi();
     } catch (error) {
@@ -517,6 +520,8 @@ extension _HomeListeningTogether on _HomePageState {
     final matchesTrack = state.videoId == video.videoId &&
         _youtubeController.isUsingYoutubeAudio;
     _listenTogether.syncStatus.value = 'Membagikan: ${video.title}';
+    // broadcastState() in the service adds `capturedAtMs` (host clock). Guests
+    // use it with the measured clock offset to compute `hostTargetPositionMs`.
     _listenTogether.broadcastState(<String, dynamic>{
       'videoId': video.videoId,
       'title': video.title,
@@ -556,7 +561,16 @@ extension _HomeListeningTogether on _HomePageState {
         return;
       }
       final sequence = (message['sequence'] as num?)?.toInt() ?? 0;
-      if (sequence > 0 && sequence <= _lastAppliedListenTogetherSequence) return;
+      // A `state` snapshot with the same sequence is a heartbeat re-projection
+      // of the current host state. It is idempotent and needed for drift
+      // correction, so only strictly older state snapshots are dropped.
+      // idle/unsupported keep the strict (<=) duplicate check.
+      if (sequence > 0) {
+        final stale = type == 'state'
+            ? sequence < _lastAppliedListenTogetherSequence
+            : sequence <= _lastAppliedListenTogetherSequence;
+        if (stale) return;
+      }
       if (sequence > 0 && type != 'state') {
         _lastAppliedListenTogetherSequence = sequence;
       }
@@ -604,8 +618,9 @@ extension _HomeListeningTogether on _HomePageState {
       );
       return;
     }
+    // Equal sequence = heartbeat re-projection of the same host state: accept.
     if (incomingSequence > 0 &&
-        incomingSequence <= _lastAppliedListenTogetherSequence) {
+        incomingSequence < _lastAppliedListenTogetherSequence) {
       return;
     }
     if (incomingSequence > 0) {
@@ -634,12 +649,14 @@ extension _HomeListeningTogether on _HomePageState {
     final thumbnail = message['thumbnailUrl']?.toString() ?? '';
     final durationSeconds = (message['durationSeconds'] as num?)?.toDouble();
     final playing = message['playing'] == true;
-    var positionMs = (message['positionMs'] as num?)?.toInt() ?? 0;
-    final sentAtMs = (message['sentAtMs'] as num?)?.toInt();
-    if (playing && sentAtMs != null) {
-      final age = (DateTime.now().millisecondsSinceEpoch - sentAtMs).clamp(0, 5000).toInt();
-      positionMs += age;
-    }
+
+    // `hostTargetPositionMs` is computed by ListeningTogetherService: it is the
+    // host position projected to "now" using the measured host/guest clock
+    // offset. Do NOT subtract the host's `sentAtMs` from the guest clock here;
+    // the two phone clocks are not synchronized.
+    var positionMs = (message['hostTargetPositionMs'] as num?)?.toInt() ??
+        (message['positionMs'] as num?)?.toInt() ??
+        0;
     if (durationSeconds != null && durationSeconds > 0) {
       positionMs = positionMs.clamp(0, (durationSeconds * 1000).round()).toInt();
     } else {
@@ -695,6 +712,8 @@ extension _HomeListeningTogether on _HomePageState {
           restoreDurationSeconds: durationSeconds,
           autoPlay: playing,
         );
+        // A new track must not be held back by the previous track's seek cooldown.
+        _lastListenTogetherSeekAt = null;
         if (_youtubeController.isUsingYoutubeAudio &&
             _nativeState.videoId == videoId) {
           _lastListenTogetherLoadFailureVideoId = '';
@@ -722,8 +741,17 @@ extension _HomeListeningTogether on _HomePageState {
             hostTargetPositionMs: positionMs,
           )) {
         // Correct moderate drift after the urgent pause command (or before a
-        // resume). The threshold avoids seeks for harmless small differences.
-        await _youtubeController.seekTo(seconds: positionMs / 1000.0);
+        // resume). Seeking a stream causes buffering, so repeated corrective
+        // seeks are rate-limited; a very large drift (e.g. the host just
+        // seeked) bypasses the cooldown.
+        final drift = (state.position.inMilliseconds - positionMs).abs();
+        if (drift > 5000 ||
+            isListeningTogetherSeekCooldownOver(
+              lastSeekAt: _lastListenTogetherSeekAt,
+            )) {
+          _lastListenTogetherSeekAt = DateTime.now();
+          await _youtubeController.seekTo(seconds: positionMs / 1000.0);
+        }
       }
 
       if (playing && !state.isEffectivelyPlaying) {
@@ -741,7 +769,7 @@ extension _HomeListeningTogether on _HomePageState {
       if (pending != null && _listenTogether.isGuest) {
         final pendingSequence = (pending['sequence'] as num?)?.toInt() ?? 0;
         if (pendingSequence == 0 ||
-            pendingSequence > _lastAppliedListenTogetherSequence) {
+            pendingSequence >= _lastAppliedListenTogetherSequence) {
           unawaited(Future<void>.sync(() => _onListenTogetherMessage(pending)));
         }
       }

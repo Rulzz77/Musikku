@@ -25,6 +25,12 @@ class StorageService {
   Timer? _statsFlushTimer;
   bool _statsDirty = false;
   int _statsChangeGeneration = 0;
+
+  /// Antrean penulisan watch progress. Operasinya read-modify-write pada satu
+  /// key JSON, jadi harus berjalan satu per satu agar update tidak saling
+  /// menimpa.
+  Future<void> _watchWriteChain = Future<void>.value();
+
   static const String _favoritesKey = 'favorites_v2';
   static const String _playlistsKey = 'playlists_v1';
   static const String _historyKey = 'search_history_v2';
@@ -48,7 +54,9 @@ class StorageService {
 
   static const int maxHistory = 12;
   static const int maxRecentlyPlayed = 30;
-
+  static const int maxIdSetSize = 1000;
+  static const int maxWatchProgressEntries = 200;
+  static const int maxTrackEqualizerPresets = 300;
 
   Future<Set<String>> loadLikedIds() async => _loadIdSet(_likedKey);
 
@@ -164,10 +172,12 @@ class StorageService {
     }
   }
 
+  /// Pembatasan jumlah ([maxHistory]) dilakukan di sini supaya riwayat
+  /// pencarian tidak bisa membengkak walau pemanggil lupa memotongnya.
   Future<void> saveHistory(List<String> history) async {
     try {
       final prefs = await _prefsFuture;
-      await prefs.setStringList(_historyKey, history);
+      await prefs.setStringList(_historyKey, history.take(maxHistory).toList());
     } catch (e) {
       debugPrint('SAVE SEARCH HISTORY ERROR: $e');
     }
@@ -261,19 +271,45 @@ class StorageService {
     }
   }
 
+  /// Menyimpan progres tonton/dengar. Pemanggilan diantre supaya dua update
+  /// yang berdekatan tidak saling menimpa (read-modify-write).
   Future<void> saveWatchProgress(
     String videoId, {
     required double positionSeconds,
     required double durationSeconds,
-  }) async {
+  }) {
     if (videoId.isEmpty || durationSeconds <= 0) {
-      return;
+      return Future<void>.value();
     }
 
+    final next = _watchWriteChain.then((_) => _saveWatchProgressNow(
+          videoId,
+          positionSeconds: positionSeconds,
+          durationSeconds: durationSeconds,
+        ));
+    // Jaga rantai tetap hidup walau satu penulisan gagal.
+    _watchWriteChain = next.catchError((Object error, StackTrace stackTrace) {
+      debugPrint('WATCH PROGRESS CHAIN ERROR: $error');
+    });
+    return next;
+  }
+
+  Future<void> _saveWatchProgressNow(
+    String videoId, {
+    required double positionSeconds,
+    required double durationSeconds,
+  }) async {
     try {
       final prefs = await _prefsFuture;
       final raw = prefs.getString(_watchProgressKey);
-      final decoded = raw == null || raw.isEmpty ? null : jsonDecode(raw);
+      dynamic decoded;
+      if (raw != null && raw.isNotEmpty) {
+        try {
+          decoded = jsonDecode(raw);
+        } catch (e) {
+          debugPrint('WATCH PROGRESS JSON CORRUPT, RESETTING: $e');
+        }
+      }
 
       final data = <String, dynamic>{};
       if (decoded is Map) {
@@ -292,20 +328,21 @@ class StorageService {
         'updatedAt': DateTime.now().toIso8601String(),
       };
 
-      final entries = data.entries.toList();
-      entries.sort((a, b) {
-        final aTime = a.value is Map
-            ? a.value['updatedAt']?.toString() ?? ''
-            : '';
-        final bTime = b.value is Map
-            ? b.value['updatedAt']?.toString() ?? ''
-            : '';
-        return bTime.compareTo(aTime);
-      });
+      Map<String, dynamic> limited = data;
+      if (data.length > maxWatchProgressEntries) {
+        final entries = data.entries.toList();
+        entries.sort((a, b) {
+          final aTime =
+              a.value is Map ? a.value['updatedAt']?.toString() ?? '' : '';
+          final bTime =
+              b.value is Map ? b.value['updatedAt']?.toString() ?? '' : '';
+          return bTime.compareTo(aTime);
+        });
 
-      final limited = <String, dynamic>{};
-      for (final entry in entries.take(200)) {
-        limited[entry.key] = entry.value;
+        limited = <String, dynamic>{};
+        for (final entry in entries.take(maxWatchProgressEntries)) {
+          limited[entry.key] = entry.value;
+        }
       }
 
       await prefs.setString(_watchProgressKey, jsonEncode(limited));
@@ -313,7 +350,6 @@ class StorageService {
       debugPrint('SAVE WATCH PROGRESS ERROR: $e');
     }
   }
-
 
   Future<int> loadCrossfadeSeconds() async {
     try {
@@ -371,7 +407,8 @@ class StorageService {
     }
   }
 
-  Future<void> saveEqualizerPresetForTrack(String videoId, String preset) async {
+  Future<void> saveEqualizerPresetForTrack(
+      String videoId, String preset) async {
     final id = videoId.trim();
     if (id.isEmpty) return saveEqualizerPreset(preset);
     try {
@@ -380,11 +417,18 @@ class StorageService {
       final decoded = raw == null || raw.isEmpty ? null : jsonDecode(raw);
       final map = <String, dynamic>{};
       if (decoded is Map) map.addAll(Map<String, dynamic>.from(decoded));
+
+      // Hapus dulu supaya key ini pindah ke posisi paling baru. Tanpa ini,
+      // menulis ulang key lama tidak mengubah urutan Map, dan preset yang
+      // baru diubah bisa ikut terbuang saat batas tercapai.
+      map.remove(id);
       map[id] = preset;
-      // Jaga backup dan SharedPreferences tetap kecil.
-      if (map.length > 300) {
+
+      // Jaga backup dan SharedPreferences tetap kecil. Yang dibuang adalah
+      // entri paling lama (urutan paling depan).
+      if (map.length > maxTrackEqualizerPresets) {
         final keys = map.keys.toList();
-        for (final oldKey in keys.take(map.length - 300)) {
+        for (final oldKey in keys.take(map.length - maxTrackEqualizerPresets)) {
           map.remove(oldKey);
         }
       }
@@ -402,15 +446,15 @@ class StorageService {
     try {
       final prefs = await _prefsFuture;
 
-      final safePosition =
-          positionSeconds.clamp(0.0, 86400.0).toDouble();
+      final safePosition = positionSeconds.isFinite
+          ? positionSeconds.clamp(0.0, 86400.0).toDouble()
+          : 0.0;
 
       // Satu snapshot untuk menghindari kondisi video sudah tersimpan
       // tetapi posisi belum tersimpan (atau sebaliknya).
-      final safeDuration =
-          durationSeconds.isFinite
-              ? durationSeconds.clamp(0.0, 86400.0).toDouble()
-              : 0.0;
+      final safeDuration = durationSeconds.isFinite
+          ? durationSeconds.clamp(0.0, 86400.0).toDouble()
+          : 0.0;
 
       final snapshot = <String, dynamic>{
         'video': video.toJson(),
@@ -451,8 +495,7 @@ class StorageService {
       final prefs = await _prefsFuture;
 
       // Prioritaskan snapshot baru yang berisi lagu + posisi secara atomik.
-      final snapshotRaw =
-          prefs.getString(_lastPlaybackSnapshotKey);
+      final snapshotRaw = prefs.getString(_lastPlaybackSnapshotKey);
 
       if (snapshotRaw != null && snapshotRaw.isNotEmpty) {
         final snapshot = jsonDecode(snapshotRaw);
@@ -496,8 +539,7 @@ class StorageService {
     try {
       final prefs = await _prefsFuture;
 
-      final snapshotRaw =
-          prefs.getString(_lastPlaybackSnapshotKey);
+      final snapshotRaw = prefs.getString(_lastPlaybackSnapshotKey);
 
       if (snapshotRaw != null && snapshotRaw.isNotEmpty) {
         final snapshot = jsonDecode(snapshotRaw);
@@ -506,9 +548,7 @@ class StorageService {
           final value = snapshot['positionSeconds'];
 
           if (value is num) {
-            return value
-                .clamp(0.0, 86400.0)
-                .toDouble();
+            return value.clamp(0.0, 86400.0).toDouble();
           }
         }
       }
@@ -522,7 +562,6 @@ class StorageService {
       return 0.0;
     }
   }
-
 
   Future<double> loadLastDuration() async {
     try {
@@ -550,7 +589,6 @@ class StorageService {
       return 0.0;
     }
   }
-
 
   Future<Map<String, ListeningStat>> _ensureStatsCache() async {
     if (_statsCache != null) {
@@ -600,16 +638,12 @@ class StorageService {
                         : statDate == null || previousDate.isAfter(statDate)
                             ? previousDate
                             : statDate;
+                    final statIsNewer = statDate != null &&
+                        (previousDate == null || statDate.isAfter(previousDate));
                     loaded[stat.videoId] = ListeningStat(
                       videoId: stat.videoId,
-                      title: statDate != null &&
-                              (previousDate == null || statDate.isAfter(previousDate))
-                          ? stat.title
-                          : previous.title,
-                      artist: statDate != null &&
-                              (previousDate == null || statDate.isAfter(previousDate))
-                          ? stat.artist
-                          : previous.artist,
+                      title: statIsNewer ? stat.title : previous.title,
+                      artist: statIsNewer ? stat.artist : previous.artist,
                       thumbnailUrl: stat.thumbnailUrl.isNotEmpty
                           ? stat.thumbnailUrl
                           : previous.thumbnailUrl,
@@ -619,9 +653,10 @@ class StorageService {
                       skipCount: stat.skipCount > previous.skipCount
                           ? stat.skipCount
                           : previous.skipCount,
-                      listenedSeconds: stat.listenedSeconds > previous.listenedSeconds
-                          ? stat.listenedSeconds
-                          : previous.listenedSeconds,
+                      listenedSeconds:
+                          stat.listenedSeconds > previous.listenedSeconds
+                              ? stat.listenedSeconds
+                              : previous.listenedSeconds,
                       lastPlayedAt: latest,
                     );
                   }
@@ -695,34 +730,25 @@ class StorageService {
     });
 
     final encoded = jsonEncode(list.map((e) => e.toJson()).toList());
-    var savedToFile = false;
     try {
       final file = await _listeningStatsFile();
       await file.parent.create(recursive: true);
       final temp = File('${file.path}.tmp');
       await temp.writeAsString(encoded, flush: true);
       await temp.rename(file.path);
-      savedToFile = true;
     } catch (e) {
       debugPrint('WRITE LISTENING STATS FILE ERROR: $e');
     }
 
+    // Salinan kecil untuk kompatibilitas/pemulihan versi lama. Riwayat penuh
+    // ada di file dan tidak pernah dipotong menjadi 200 entri ini. Kalau file
+    // gagal ditulis, salinan ini jadi fallback satu-satunya.
     final prefs = await _prefsFuture;
-    if (savedToFile) {
-      // Keep a small compatibility/recovery copy for older builds. The full
-      // history lives in the file and is never truncated to these 200 entries.
-      await prefs.setString(
-        _listeningStatsKey,
-        jsonEncode(list.take(200).map((e) => e.toJson()).toList()),
-      );
-    } else {
-      // Fallback for platforms where the app support directory is unavailable.
-      // Android builds use the file above, avoiding the former 200-track cap.
-      await prefs.setString(
-        _listeningStatsKey,
-        jsonEncode(list.take(200).map((e) => e.toJson()).toList()),
-      );
-    }
+    await prefs.setString(
+      _listeningStatsKey,
+      jsonEncode(list.take(200).map((e) => e.toJson()).toList()),
+    );
+
     if (_statsChangeGeneration == generationAtStart) {
       _statsDirty = false;
     } else {
@@ -756,11 +782,15 @@ class StorageService {
     });
   }
 
+  /// Tulis semua data tertunda ke disk. Panggil saat app masuk background
+  /// (`AppLifecycleState.paused` / `detached`) agar statistik tidak hilang
+  /// kalau proses di-kill sebelum timer 3 detik berjalan.
   Future<void> flushPendingWrites() async {
     _statsFlushTimer?.cancel();
     _statsFlushTimer = null;
     _enqueueStatsWrite();
     await _statsWriteChain;
+    await _watchWriteChain;
   }
 
   Future<void> recordListening({
@@ -808,25 +838,47 @@ class StorageService {
     _scheduleStatsFlush();
   }
 
+  /// Decode JSON dari string dengan fallback, supaya satu key yang rusak tidak
+  /// menggagalkan seluruh ekspor backup.
+  dynamic _safeDecode(String? raw, dynamic fallback) {
+    if (raw == null || raw.isEmpty) return fallback;
+    try {
+      return jsonDecode(raw);
+    } catch (e) {
+      debugPrint('SAFE DECODE ERROR: $e');
+      return fallback;
+    }
+  }
+
   Future<String> exportBackupJson() async {
+    // Pastikan statistik terbaru sudah di cache/disk sebelum diekspor.
+    await _watchWriteChain;
     final prefs = await _prefsFuture;
     final data = <String, dynamic>{
       'version': 2,
       'createdAt': DateTime.now().toIso8601String(),
-      'favorites': await loadFavorites().then((v) => v.map((e) => e.toJson()).toList()),
-      'playlists': await loadPlaylists().then((v) => v.map((e) => e.toJson()).toList()),
+      'favorites':
+          await loadFavorites().then((v) => v.map((e) => e.toJson()).toList()),
+      'playlists':
+          await loadPlaylists().then((v) => v.map((e) => e.toJson()).toList()),
       'history': await loadHistory(),
-      'queue': await loadQueue().then((v) => v.map((e) => e.video.toJson()).toList()),
-      'recentlyPlayed': await loadRecentlyPlayed().then((v) => v.map((e) => e.toJson()).toList()),
-      'watchProgress': jsonDecode(prefs.getString(_watchProgressKey) ?? '{}'),
-      'listeningStats': await loadListeningStats().then((v) => v.map((e) => e.toJson()).toList()),
-      'lastPlayed': jsonDecode(prefs.getString(_lastPlayedKey) ?? 'null'),
-      'lastPlaybackSnapshot': jsonDecode(prefs.getString(_lastPlaybackSnapshotKey) ?? 'null'),
+      'queue': await loadQueue()
+          .then((v) => v.map((e) => e.video.toJson()).toList()),
+      'recentlyPlayed': await loadRecentlyPlayed()
+          .then((v) => v.map((e) => e.toJson()).toList()),
+      'watchProgress':
+          _safeDecode(prefs.getString(_watchProgressKey), <String, dynamic>{}),
+      'listeningStats': await loadListeningStats()
+          .then((v) => v.map((e) => e.toJson()).toList()),
+      'lastPlayed': _safeDecode(prefs.getString(_lastPlayedKey), null),
+      'lastPlaybackSnapshot':
+          _safeDecode(prefs.getString(_lastPlaybackSnapshotKey), null),
       'lastPosition': await loadLastPosition(),
       'lastDuration': await loadLastDuration(),
       'crossfadeSeconds': await loadCrossfadeSeconds(),
       'equalizerPreset': await loadEqualizerPreset(),
-      'equalizerTrackPresets': jsonDecode(prefs.getString(_equalizerTrackPresetsKey) ?? '{}'),
+      'equalizerTrackPresets': _safeDecode(
+          prefs.getString(_equalizerTrackPresetsKey), <String, dynamic>{}),
       'themeChoice': prefs.getString(_themeKey) ?? 'dark',
       'dataSaver': prefs.getBool(_dataSaverKey) ?? false,
       'dataSaverMode': prefs.getString(_dataSaverModeKey) ??
@@ -848,12 +900,26 @@ class StorageService {
     Future<void> write(String key, dynamic value) async {
       await prefs.setString(key, jsonEncode(value));
     }
-    if (decoded['favorites'] is List) await write(_favoritesKey, decoded['favorites']);
-    if (decoded['playlists'] is List) await write(_playlistsKey, decoded['playlists']);
-    if (decoded['history'] is List) await prefs.setStringList(_historyKey, List<String>.from(decoded['history'].map((e) => e.toString())));
+
+    if (decoded['favorites'] is List) {
+      await write(_favoritesKey, decoded['favorites']);
+    }
+    if (decoded['playlists'] is List) {
+      await write(_playlistsKey, decoded['playlists']);
+    }
+    if (decoded['history'] is List) {
+      await prefs.setStringList(
+        _historyKey,
+        List<String>.from(decoded['history'].map((e) => e.toString())),
+      );
+    }
     if (decoded['queue'] is List) await write(_queueKey, decoded['queue']);
-    if (decoded['recentlyPlayed'] is List) await write(_recentlyPlayedKey, decoded['recentlyPlayed']);
-    if (decoded['watchProgress'] is Map) await write(_watchProgressKey, decoded['watchProgress']);
+    if (decoded['recentlyPlayed'] is List) {
+      await write(_recentlyPlayedKey, decoded['recentlyPlayed']);
+    }
+    if (decoded['watchProgress'] is Map) {
+      await write(_watchProgressKey, decoded['watchProgress']);
+    }
     if (decoded['listeningStats'] is List) {
       await write(_listeningStatsKey, decoded['listeningStats']);
       try {
@@ -868,16 +934,45 @@ class StorageService {
     _statsCache = null;
     _statsDirty = false;
     _statsChangeGeneration++;
-    if (decoded['lastPlayed'] is Map) await prefs.setString(_lastPlayedKey, jsonEncode(decoded['lastPlayed']));
-    if (decoded['lastPlaybackSnapshot'] is Map) {
-      await prefs.setString(_lastPlaybackSnapshotKey, jsonEncode(decoded['lastPlaybackSnapshot']));
+    if (decoded['lastPlayed'] is Map) {
+      await prefs.setString(_lastPlayedKey, jsonEncode(decoded['lastPlayed']));
     }
-    if (decoded['lastPosition'] is num) await prefs.setDouble(_lastPositionKey, decoded['lastPosition'].toDouble());
-    if (decoded['lastDuration'] is num) await prefs.setDouble(_lastDurationKey, decoded['lastDuration'].toDouble());
-    if (decoded['crossfadeSeconds'] is num) await prefs.setInt(_crossfadeSecondsKey, decoded['crossfadeSeconds'].toInt().clamp(0, 6).toInt());
-    if (decoded['equalizerPreset'] is String) await prefs.setString(_equalizerPresetKey, decoded['equalizerPreset']);
-    if (decoded['equalizerTrackPresets'] is Map) await prefs.setString(_equalizerTrackPresetsKey, jsonEncode(decoded['equalizerTrackPresets']));
-    if (decoded['themeChoice'] is String) await prefs.setString(_themeKey, decoded['themeChoice']);
+    if (decoded['lastPlaybackSnapshot'] is Map) {
+      await prefs.setString(
+        _lastPlaybackSnapshotKey,
+        jsonEncode(decoded['lastPlaybackSnapshot']),
+      );
+    }
+    if (decoded['lastPosition'] is num) {
+      await prefs.setDouble(
+        _lastPositionKey,
+        (decoded['lastPosition'] as num).toDouble(),
+      );
+    }
+    if (decoded['lastDuration'] is num) {
+      await prefs.setDouble(
+        _lastDurationKey,
+        (decoded['lastDuration'] as num).toDouble(),
+      );
+    }
+    if (decoded['crossfadeSeconds'] is num) {
+      await prefs.setInt(
+        _crossfadeSecondsKey,
+        (decoded['crossfadeSeconds'] as num).toInt().clamp(0, 6).toInt(),
+      );
+    }
+    if (decoded['equalizerPreset'] is String) {
+      await prefs.setString(_equalizerPresetKey, decoded['equalizerPreset']);
+    }
+    if (decoded['equalizerTrackPresets'] is Map) {
+      await prefs.setString(
+        _equalizerTrackPresetsKey,
+        jsonEncode(decoded['equalizerTrackPresets']),
+      );
+    }
+    if (decoded['themeChoice'] is String) {
+      await prefs.setString(_themeKey, decoded['themeChoice']);
+    }
     if (decoded['dataSaverMode'] is String) {
       await prefs.setString(_dataSaverModeKey, decoded['dataSaverMode']);
       await prefs.setBool(_dataSaverKey, decoded['dataSaverMode'] != 'off');
@@ -888,12 +983,23 @@ class StorageService {
         decoded['dataSaver'] == true ? 'saver' : 'off',
       );
     }
-    if (decoded['likedIds'] is List) await _saveIdSet(_likedKey, Set<String>.from(decoded['likedIds'].map((e) => e.toString())));
-    if (decoded['dislikedIds'] is List) await _saveIdSet(_dislikedKey, Set<String>.from(decoded['dislikedIds'].map((e) => e.toString())));
+    if (decoded['likedIds'] is List) {
+      await _saveIdSet(
+        _likedKey,
+        Set<String>.from(decoded['likedIds'].map((e) => e.toString())),
+      );
+    }
+    if (decoded['dislikedIds'] is List) {
+      await _saveIdSet(
+        _dislikedKey,
+        Set<String>.from(decoded['dislikedIds'].map((e) => e.toString())),
+      );
+    }
     if (decoded['blockedChannelKeys'] is List) {
       await _saveIdSet(
         _blockedChannelKeysKey,
-        Set<String>.from(decoded['blockedChannelKeys'].map((e) => e.toString())),
+        Set<String>.from(
+            decoded['blockedChannelKeys'].map((e) => e.toString())),
       );
     }
   }
@@ -910,10 +1016,17 @@ class StorageService {
     }
   }
 
+  /// Set di Dart menyimpan urutan penambahan, jadi item terbaru ada di akhir.
+  /// Saat melebihi batas, yang dibuang adalah yang paling lama (di depan),
+  /// bukan yang paling baru.
   Future<void> _saveIdSet(String key, Set<String> ids) async {
     try {
       final prefs = await _prefsFuture;
-      await prefs.setStringList(key, ids.take(1000).toList());
+      final list = ids.toList();
+      final limited = list.length > maxIdSetSize
+          ? list.sublist(list.length - maxIdSetSize)
+          : list;
+      await prefs.setStringList(key, limited);
     } catch (e) {
       debugPrint('SAVE ID SET ERROR [$key]: $e');
     }

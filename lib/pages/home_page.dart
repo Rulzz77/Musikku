@@ -113,6 +113,8 @@ class _HomePageState extends State<HomePage>
   String _lastRoomUnsupportedTrackId = '';
   String _lastListenTogetherLoadFailureVideoId = '';
   DateTime? _lastListenTogetherLoadFailureAt;
+  // Cooldown untuk seek koreksi drift di sisi guest.
+  DateTime? _lastListenTogetherSeekAt;
 
   final Random _random = Random();
 

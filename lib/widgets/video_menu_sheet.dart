@@ -6,6 +6,9 @@ import '../theme/app_colors.dart';
 import 'unified_artwork.dart';
 
 /// Menu yang muncul saat kartu lagu ditekan lama.
+///
+/// Semua callback dipanggil setelah sheet ditutup. Kalau callback membuka
+/// dialog/sheet lain, gunakan `context` halaman pemanggil, bukan context sheet.
 void showVideoMenuSheet(
   BuildContext context, {
   required YoutubeSearchResult video,
@@ -30,7 +33,20 @@ void showVideoMenuSheet(
     showDragHandle: true,
     isScrollControlled: true,
     builder: (sheetContext) {
+      final theme = Theme.of(sheetContext);
+      final colors = theme.colorScheme;
       final maxHeight = MediaQuery.of(sheetContext).size.height * 0.88;
+
+      // Aksi yang bergantung pada data YouTube hanya tampil untuk lagu non-lokal.
+      final isRemote = !video.isLocal;
+      final hasChannel = video.channelTitle.trim().isNotEmpty;
+
+      // Helper agar tiap aksi konsisten: tutup sheet dulu, lalu jalankan callback.
+      void closeThen(VoidCallback action) {
+        Navigator.pop(sheetContext);
+        action();
+      }
+
       return SafeArea(
         child: ConstrainedBox(
           constraints: BoxConstraints(maxHeight: maxHeight),
@@ -47,30 +63,64 @@ void showVideoMenuSheet(
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                         colors: [
-                          Theme.of(sheetContext).colorScheme.primary.withValues(alpha: 0.16),
-                          Theme.of(sheetContext).colorScheme.surfaceContainerLow,
-                          Theme.of(sheetContext).colorScheme.secondary.withValues(alpha: 0.08),
+                          colors.primary.withValues(alpha: 0.16),
+                          colors.surfaceContainerLow,
+                          colors.secondary.withValues(alpha: 0.08),
                         ],
                       ),
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Theme.of(sheetContext).colorScheme.outlineVariant.withValues(alpha: 0.55)),
+                      border: Border.all(
+                        color: colors.outlineVariant.withValues(alpha: 0.55),
+                      ),
                     ),
                     child: Row(
                       children: [
                         ClipRRect(
                           borderRadius: BorderRadius.circular(14),
-                          child: UnifiedArtwork(track: video, width: 70, height: 70, iconSize: 28),
+                          child: UnifiedArtwork(
+                            track: video,
+                            width: 70,
+                            height: 70,
+                            iconSize: 28,
+                          ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(video.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 14, height: 1.2, fontWeight: FontWeight.w900)),
+                              Text(
+                                video.title,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  height: 1.2,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
                               const SizedBox(height: 5),
-                              Text(video.channelTitle.isEmpty ? 'Artis tidak diketahui' : video.channelTitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11.5, color: Theme.of(sheetContext).colorScheme.onSurfaceVariant)),
+                              Text(
+                                video.channelTitle.isEmpty
+                                    ? 'Artis tidak diketahui'
+                                    : video.channelTitle,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  color: colors.onSurfaceVariant,
+                                ),
+                              ),
                               const SizedBox(height: 7),
-                              Text('PILIH AKSI LAGU', style: TextStyle(fontSize: 9, letterSpacing: 1.0, fontWeight: FontWeight.w900, color: Theme.of(sheetContext).colorScheme.secondary)),
+                              Text(
+                                isRemote ? 'YOUTUBE' : 'LOKAL',
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  letterSpacing: 1.0,
+                                  fontWeight: FontWeight.w900,
+                                  color: colors.secondary,
+                                ),
+                              ),
                             ],
                           ),
                         ),
@@ -78,47 +128,53 @@ void showVideoMenuSheet(
                     ),
                   ),
                 ),
-                if (!video.isLocal)
+                if (isRemote)
                   ListTile(
                     leading: const Icon(Icons.share_outlined),
                     title: const Text('Salin tautan lagu'),
-                    subtitle: const Text('Salin tautan publik agar mudah dibagikan.'),
+                    subtitle:
+                        const Text('Salin tautan publik agar mudah dibagikan.'),
                     onTap: () async {
                       Navigator.pop(sheetContext);
-                      await Clipboard.setData(ClipboardData(text: 'https://youtu.be/${video.videoId}'));
+                      await Clipboard.setData(
+                        ClipboardData(
+                          text: 'https://youtu.be/${video.videoId}',
+                        ),
+                      );
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Tautan lagu disalin.')),
+                          const SnackBar(
+                            content: Text('Tautan lagu disalin.'),
+                          ),
                         );
                       }
                     },
                   ),
                 ListTile(
-                  leading: const Icon(Icons.thumb_up_outlined),
+                  leading: Icon(
+                    isLiked ? Icons.thumb_up : Icons.thumb_up_outlined,
+                    color: isLiked ? colors.primary : null,
+                  ),
                   title: Text(isLiked ? 'Batal suka' : 'Saya suka'),
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    onLike();
-                  },
+                  onTap: () => closeThen(onLike),
                 ),
                 ListTile(
                   leading: Icon(
                     isDisliked ? Icons.thumb_down : Icons.thumb_down_outlined,
-                    color: isDisliked ? Colors.redAccent : null,
+                    color: isDisliked ? colors.error : null,
                   ),
                   title: Text(
                     isDisliked ? 'Batal tidak suka' : 'Jangan rekomendasikan',
                   ),
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    onDislike();
-                  },
+                  onTap: () => closeThen(onDislike),
                 ),
-                if (!video.isLocal && video.channelTitle.trim().isNotEmpty)
+                if (isRemote && hasChannel)
                   ListTile(
                     leading: Icon(
-                      isChannelBlocked ? Icons.check_circle_outline : Icons.block_rounded,
-                      color: isChannelBlocked ? Theme.of(sheetContext).colorScheme.primary : null,
+                      isChannelBlocked
+                          ? Icons.check_circle_outline
+                          : Icons.block_rounded,
+                      color: isChannelBlocked ? colors.primary : null,
                     ),
                     title: Text(
                       isChannelBlocked
@@ -129,35 +185,26 @@ void showVideoMenuSheet(
                       isChannelBlocked
                           ? 'Channel ini akan bisa muncul lagi di Radio.'
                           : 'Sembunyikan ${video.channelTitle} dari Radio berikutnya.',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    onTap: () {
-                      Navigator.pop(sheetContext);
-                      onToggleChannelBlock();
-                    },
+                    onTap: () => closeThen(onToggleChannelBlock),
                   ),
-                ListTile(
-                  leading: const Icon(Icons.person_outline),
-                  title: const Text('Lihat artis / channel'),
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    onOpenArtist();
-                  },
-                ),
+                if (isRemote)
+                  ListTile(
+                    leading: const Icon(Icons.person_outline),
+                    title: const Text('Lihat artis / channel'),
+                    onTap: () => closeThen(onOpenArtist),
+                  ),
                 ListTile(
                   leading: const Icon(Icons.playlist_play),
                   title: const Text('Putar berikutnya'),
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    onPlayNext();
-                  },
+                  onTap: () => closeThen(onPlayNext),
                 ),
                 ListTile(
                   leading: const Icon(Icons.add),
                   title: const Text('Tambah ke antrean'),
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    onAddToQueue();
-                  },
+                  onTap: () => closeThen(onAddToQueue),
                 ),
                 ListTile(
                   leading: Icon(
@@ -167,36 +214,26 @@ void showVideoMenuSheet(
                   title: Text(
                     isFavorite ? 'Hapus dari favorit' : 'Tambah ke favorit',
                   ),
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    onToggleFavorite();
-                  },
+                  onTap: () => closeThen(onToggleFavorite),
                 ),
-                ListTile(
-                  leading: const Icon(Icons.auto_awesome),
-                  title: const Text('Radio dari lagu ini'),
-                  subtitle: const Text('Buat antrean lagu terbaru yang sejenis'),
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    onStartRadio();
-                  },
-                ),
+                if (isRemote)
+                  ListTile(
+                    leading: const Icon(Icons.auto_awesome),
+                    title: const Text('Radio dari lagu ini'),
+                    subtitle:
+                        const Text('Buat antrean lagu terbaru yang sejenis'),
+                    onTap: () => closeThen(onStartRadio),
+                  ),
                 ListTile(
                   leading: const Icon(Icons.library_add),
                   title: const Text('Tambah ke playlist'),
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    onAddToPlaylist();
-                  },
+                  onTap: () => closeThen(onAddToPlaylist),
                 ),
                 if (onRemoveFromPlaylist != null)
                   ListTile(
                     leading: const Icon(Icons.remove_circle_outline),
                     title: const Text('Hapus dari playlist ini'),
-                    onTap: () {
-                      Navigator.pop(sheetContext);
-                      onRemoveFromPlaylist();
-                    },
+                    onTap: () => closeThen(onRemoveFromPlaylist),
                   ),
               ],
             ),

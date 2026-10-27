@@ -35,6 +35,12 @@ class RadioService {
   String? _preferredLanguage;
   bool _lockLanguage = false;
   final List<YoutubeSearchResult> _pool = [];
+  // Kandidat layak yang tertahan batas per-artis. Dipakai lebih dulu sebelum
+  // memanggil API lagi, supaya satu halaman hasil (hingga 50 video) tidak
+  // terbuang dan kuota tidak habis cepat.
+  final List<YoutubeSearchResult> _reserve = [];
+  static const int _maxReserve = 150;
+  DateTime? _lastNetworkFetchAt;
   // Seed cadangan (artis sejenis / terpopuler) dipakai bergantian dengan seed
   // utama di setiap isi ulang. Setiap query punya token halamannya sendiri.
   List<String> _alternateSeeds = const <String>[];
@@ -78,6 +84,11 @@ class RadioService {
   static const int _selectionCooldownTracks = 10;
   static const int _selectionCooldownArtists = 5;
 
+  /// Batas lagu dari satu artis di dalam pool. Satu halaman hasil pencarian
+  /// "artis X" berisi lagu artis X semua; tanpa batas, pool terisi satu
+  /// penyanyi saja dan Next terus memutar dia.
+  static const int _maxPerArtistInPool = 4;
+
   bool get hasSeed => _seed.isNotEmpty;
 
   String get seed => _seed;
@@ -116,6 +127,7 @@ class RadioService {
       _fetchGeneration++;
       _seed = normalized;
       _pool.clear();
+      _reserve.clear();
       _pageTokens.clear();
       _queryCursor = 0;
       _fetch = null;
@@ -149,6 +161,7 @@ class RadioService {
     _preferredLanguage ??= MusicStyleMatcher.languageFromText(normalized);
     if (lockLanguage != null) _lockLanguage = lockLanguage;
     _pool.clear();
+    _reserve.clear();
     _pageTokens.clear();
     _queryCursor = 0;
     _fetch = null;
@@ -169,7 +182,9 @@ class RadioService {
     // pengganti; pencarian berikutnya hanya memakai halaman query yang relevan.
     final now = DateTime.now();
     final lastStarted = _lastRefillStartedAt;
-    if (lastStarted != null && now.difference(lastStarted) < _minimumRefillInterval) {
+    if (_reserve.isEmpty &&
+        lastStarted != null &&
+        now.difference(lastStarted) < _minimumRefillInterval) {
       return Future<void>.value();
     }
     _lastRefillStartedAt = now;
@@ -868,6 +883,7 @@ class RadioService {
     _fetchGeneration++;
     _fetch = null;
     _pool.clear();
+    _reserve.clear();
   }
 
   Future<void> _fetchPage(int generation) async {
@@ -917,57 +933,128 @@ class RadioService {
       );
     }
 
+    int artistCountInPool(String artist) => artist.isEmpty
+        ? 0
+        : _pool.where((pooled) => _artistKey(pooled) == artist).length;
+
+    // [capPerArtist] menjaga pool tetap beragam. Dilonggarkan hanya saat pool
+    // kosong, supaya Next tidak mati kalau hanya satu artis yang tersedia.
     void addCandidates(
       Iterable<YoutubeSearchResult> videos, {
       bool enforceContext = true,
+      bool capPerArtist = true,
     }) {
       for (final video in videos) {
         if (!eligible(video, enforceContext: enforceContext)) continue;
+        if (capPerArtist &&
+            artistCountInPool(_artistKey(video)) >= _maxPerArtistInPool) {
+          if (_reserve.length < _maxReserve &&
+              !_reserve.any((item) => item.videoId == video.videoId)) {
+            _reserve.add(video);
+          }
+          continue;
+        }
         _pool.add(video);
       }
     }
 
-    // Radio hanya memakai query berbasis artis/genre lagu yang sedang diputar.
-    // Setiap isi ulang memakai query berikutnya (seed utama -> artis sejenis ->
-    // terpopuler di genre itu) sehingga daftar putar bercampur antar artis.
-    // Tidak ada fallback ke chart global. Jika query pertama tidak menghasilkan
-    // kandidat, satu query lain dicoba sebelum menyerah.
+    // Radio memakai query berbasis artis/genre lagu yang sedang diputar.
+    // Isi pertama memakai DUA query sekaligus (seed utama + satu artis sejenis)
+    // supaya lagu berikutnya langsung bercampur antar-artis, bukan baru
+    // bercampur setelah pool satu artis habis. Isi ulang berikutnya bergilir
+    // antar seed cadangan (artis sejenis -> terpopuler di genre -> seed utama).
+    // Tidak ada fallback ke chart global.
+    // Pakai cadangan dulu. Jika pool sudah cukup, atau request jaringan baru
+    // saja dilakukan, tidak perlu memanggil API.
+    if (_reserve.isNotEmpty) {
+      final pending = List<YoutubeSearchResult>.from(_reserve);
+      _reserve.clear();
+      addCandidates(pending);
+      final lastNetwork = _lastNetworkFetchAt;
+      final recentNetwork = lastNetwork != null &&
+          DateTime.now().difference(lastNetwork) < _minimumRefillInterval;
+      if (_pool.length >= 6 || (_pool.isNotEmpty && recentNetwork)) return;
+    }
+
     final queries = <String>[seed, ..._alternateSeeds];
+    final firstFill = _queryCursor == 0 && queries.length > 1;
     final maxAttempts = queries.length > 1 ? 2 : 1;
     for (var attempt = 0; attempt < maxAttempts; attempt++) {
       if (attempt > 0 && _pool.isNotEmpty) break;
-      final query = queries[(_queryCursor++) % queries.length];
-      try {
-        final page = await _searchService.searchLatest(
-          query,
-          pageToken: _pageTokens[query],
-        );
-        if (!isCurrentRequest()) return;
-        _pageTokens[query] = page.nextPageToken;
+      final batchSize = (attempt == 0 && firstFill) ? 2 : 1;
+      final batch = <String>[
+        for (var i = 0; i < batchSize; i++)
+          queries[(_queryCursor++) % queries.length],
+      ];
 
-        final relatedCandidates = page.results.where((video) => eligible(video)).toList();
-        final rankedRelated = MusicStyleMatcher.rankForRadio(
-          relatedCandidates,
+      _lastNetworkFetchAt = DateTime.now();
+      YoutubeSearchException? apiError;
+      Object? otherError;
+      final pages = await Future.wait(batch.map((query) async {
+        try {
+          return await _searchService.searchLatest(
+            query,
+            pageToken: _pageTokens[query],
+          );
+        } on YoutubeSearchException catch (e) {
+          apiError ??= e;
+        } catch (e) {
+          otherError ??= e;
+        }
+        return null;
+      }));
+      if (!isCurrentRequest()) return;
+
+      var gotPage = false;
+      for (var i = 0; i < batch.length; i++) {
+        final page = pages[i];
+        if (page == null) continue;
+        gotPage = true;
+        _pageTokens[batch[i]] = page.nextPageToken;
+
+        final related = page.results.where((video) => eligible(video)).toList();
+        final ranked = MusicStyleMatcher.rankForRadio(
+          related,
           targetStyle: targetStyle,
           targetLanguage: targetLanguage,
           allowCrossLanguage: !_lockLanguage,
         );
-        addCandidates(rankedRelated.isNotEmpty ? rankedRelated : relatedCandidates);
+        addCandidates(ranked.isNotEmpty ? ranked : related);
+      }
 
-        if (_pool.isEmpty) {
-          debugPrint('RADIO: no related candidates for query="$query"');
-          final lastAttempt = attempt == maxAttempts - 1;
-          if (lastAttempt &&
-              (page.nextPageToken == null || page.nextPageToken!.isEmpty)) {
-            onError?.call('Belum menemukan lagu yang cukup terkait dengan lagu sekarang.');
-          }
+      // Pool masih kosong karena batas per-artis? Longgarkan batas itu.
+      if (_pool.isEmpty && gotPage) {
+        for (var i = 0; i < batch.length; i++) {
+          final page = pages[i];
+          if (page == null) continue;
+          addCandidates(
+            page.results.where((video) => eligible(video)),
+            capPerArtist: false,
+          );
         }
-      } catch (e) {
-        if (!isCurrentRequest()) return;
-        debugPrint('RADIO RELATED SEARCH: $e');
-        if (e is YoutubeSearchException) onError?.call(e.message);
+      }
+
+      if (!gotPage) {
+        final error = apiError;
+        if (error != null) {
+          onError?.call(error.message);
+        } else if (otherError != null) {
+          debugPrint('RADIO RELATED SEARCH: $otherError');
+        }
         // Query berikutnya hanya dicoba bila bukan kegagalan API/kuota.
         break;
+      }
+
+      if (_pool.isEmpty) {
+        debugPrint('RADIO: no related candidates for query="${batch.join(' | ')}"');
+        final lastAttempt = attempt == maxAttempts - 1;
+        final noMorePages = batch.every((query) {
+          final token = _pageTokens[query];
+          return token == null || token.isEmpty;
+        });
+        if (lastAttempt && noMorePages) {
+          onError?.call('Belum menemukan lagu yang cukup terkait dengan lagu sekarang.');
+        }
       }
     }
   }

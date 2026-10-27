@@ -354,7 +354,7 @@ extension _HomeRadio on _HomePageState {
     // (satu per halaman, dibatasi jeda 20 detik di RadioService), tetapi lagu
     // dari artis/query berikutnya sempat bercampur dengan sisa pool, bukan baru
     // muncul setelah pool habis.
-    if (_radio.poolLength <= 2) {
+    if (_radio.poolLength <= 3) {
       unawaited(_radio.refill());
     }
   }

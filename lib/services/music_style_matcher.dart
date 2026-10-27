@@ -713,6 +713,21 @@ class MusicStyleMatcher {
     'hip_hop_id': <String>['young lex', 'ecko show', 'saykoji', 'iwa k'],
   };
 
+  /// Kelompok yang pendengarnya biasanya tumpang tindih. Radio menyisipkan
+  /// satu artis terkenal dari kelompok terkait supaya tidak berputar di
+  /// lingkaran artis yang sama.
+  static const Map<String, List<String>> _relatedGroups = <String, List<String>>{
+    'pop_id': <String>['band_id'],
+    'band_id': <String>['pop_id'],
+    'jawa': <String>['dangdut'],
+    'dangdut': <String>['jawa'],
+    'pop_en': <String>['rock_en'],
+    'rock_en': <String>['pop_en'],
+    'hip_hop_en': <String>['pop_en'],
+    'kpop': <String>['jpop'],
+    'jpop': <String>['kpop'],
+  };
+
   static String? _groupOfArtist(String artistKey) {
     if (artistKey.isEmpty) return null;
     final padded = ' $artistKey ';
@@ -857,8 +872,21 @@ class MusicStyleMatcher {
           .where((peer) => artistKey.isEmpty || !padded.contains(' $peer '))
           .toList()
         ..shuffle(_random);
-      for (final peer in peers.take(maxPeers)) {
+      // Satu slot dicadangkan untuk artis terkenal dari kelompok terkait.
+      final related = _relatedGroups[groupKey];
+      final relatedGroup = related == null || related.isEmpty
+          ? null
+          : _peerGroups[related[_random.nextInt(related.length)]];
+      final sameGroupCount =
+          relatedGroup == null ? maxPeers : (maxPeers > 1 ? maxPeers - 1 : 1);
+      for (final peer in peers.take(sameGroupCount)) {
         seeds.add(_composeSeed(peer, style));
+      }
+      if (relatedGroup != null && relatedGroup.isNotEmpty) {
+        final crossPeer = relatedGroup[_random.nextInt(relatedGroup.length)];
+        // Tanpa label gaya: gaya artis terkait bisa berbeda, dan kecocokan
+        // genre tetap disaring oleh MusicStyleMatcher.isCompatible.
+        if (!padded.contains(' $crossPeer ')) seeds.add(crossPeer);
       }
     }
     seeds.add(_popularQueryFor(style, language));

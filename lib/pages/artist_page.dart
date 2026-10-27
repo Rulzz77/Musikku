@@ -137,15 +137,9 @@ class _ArtistPageState extends State<ArtistPage> {
           _containsArtistPhrase(artist, channel);
       if (!artistInTitle && !artistChannel) continue;
 
-      // Upload dari channel artis sendiri dipercaya (artis cover memang
-      // mengunggah cover). Untuk channel lain, cek hanya judul + nama channel:
-      // deskripsi resmi sering memuat "cover art" / "karaoke version available".
       final rawMetadata = '${video.title} ${video.description} ${video.channelTitle}';
-      if (!artistChannel) {
-        final titleAndChannel = '${video.title} ${video.channelTitle}';
-        if (unofficialPattern.hasMatch(titleAndChannel)) continue;
-        if (!officialPattern.hasMatch(rawMetadata)) continue;
-      }
+      if (unofficialPattern.hasMatch(rawMetadata)) continue;
+      if (!artistChannel && !officialPattern.hasMatch(rawMetadata)) continue;
       if (!YoutubeSearchService.isMusicChannelUpload(
         video,
         channelTitle: video.channelTitle,
@@ -182,10 +176,6 @@ class _ArtistPageState extends State<ArtistPage> {
     setState(() {
       _loading = true;
       _error = null;
-      _usedSearchFallback = false;
-      _nextSongsToken = null;
-      _nextPlaylistsToken = null;
-      _playlists = const [];
     });
     _songs = _filterArtistSearchResults(widget.initialSearchResults);
     try {
@@ -739,7 +729,6 @@ class _AlbumPlaylistTileState extends State<_AlbumPlaylistTile> {
   String? _nextToken;
   bool _loading = false;
   bool _loadingMore = false;
-  bool _loaded = false;
   Object? _error;
 
   Future<void> _load({bool more = false}) async {
@@ -789,7 +778,6 @@ class _AlbumPlaylistTileState extends State<_AlbumPlaylistTile> {
       setState(() {
         _tracks = [..._tracks, ...tracks];
         _nextToken = page.nextPageToken;
-        _loaded = true;
       });
     } catch (error) {
       if (mounted) setState(() => _error = error);
@@ -822,7 +810,7 @@ class _AlbumPlaylistTileState extends State<_AlbumPlaylistTile> {
         key: PageStorageKey<String>('artist-playlist-${widget.playlist.id}'),
         initiallyExpanded: false,
         onExpansionChanged: (expanded) {
-          if (expanded && !_loaded && !_loading) unawaited(_load());
+          if (expanded && _tracks.isEmpty && !_loading) unawaited(_load());
         },
         leading: ClipRRect(
           borderRadius: BorderRadius.circular(10),

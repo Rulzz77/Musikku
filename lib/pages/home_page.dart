@@ -109,6 +109,16 @@ class _HomePageState extends State<HomePage>
   Map<String, dynamic>? _pendingListenTogetherState;
   int _listenTogetherStateSequence = 0;
   int _lastAppliedListenTogetherSequence = 0;
+  // Incremented whenever a newer pause/resume intent arrives. An older async
+  // seek must not resume playback after a newer pause command has arrived.
+  int _listenTogetherPlaybackCommandRevision = 0;
+  String _listenTogetherUrgentPlaybackVideoId = '';
+  bool? _listenTogetherUrgentPlaybackTarget;
+  // Guests optimistically update their own already-loaded player while the
+  // command is travelling to the host, avoiding one full network round trip.
+  String _listenTogetherOptimisticVideoId = '';
+  bool? _listenTogetherOptimisticPlaying;
+  int _listenTogetherOptimisticSinceMs = 0;
   bool _wasFollowingListenTogether = false;
   String _lastRoomUnsupportedTrackId = '';
   String _lastListenTogetherLoadFailureVideoId = '';

@@ -53,14 +53,9 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
       if (!mounted || requestId != _searchRequestId || query != _query.trim()) return;
       setState(() {
         _artistChannelMode = false;
-        // Pencarian artis otomatis bersifat opsional: lagu sudah tampil, jadi
-        // jangan menimpa hasil dengan pesan error. Hanya tombol manual yang
-        // menampilkan error.
-        if (!artistMode) {
-          _error = error is YoutubeSearchException
-              ? error.message
-              : 'Pencarian channel gagal. Coba lagi nanti.';
-        }
+        _error = error is YoutubeSearchException
+            ? error.message
+            : 'Pencarian channel gagal. Coba lagi nanti.';
       });
     } finally {
       if (mounted && requestId == _searchRequestId && query == _query.trim()) {
@@ -82,7 +77,7 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
   bool _channelNameMatchesArtistQuery(String channelTitle, String query) {
     final normalizedQuery = _normalizeArtistChannelName(query);
     final normalizedChannel = _normalizeArtistChannelName(channelTitle);
-    if (normalizedQuery.isEmpty || normalizedChannel.length < 2) return false;
+    if (normalizedQuery.isEmpty || normalizedChannel.isEmpty) return false;
     return normalizedChannel == normalizedQuery ||
         normalizedChannel.startsWith('$normalizedQuery ') ||
         normalizedQuery.startsWith('$normalizedChannel ');
@@ -92,7 +87,7 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
     final trimmed = query.trim();
     if (trimmed.isEmpty || trimmed.length > 36) return false;
     final words = trimmed.split(RegExp(r'\s+'));
-    if (words.isEmpty || words.length > 3) return false;
+    if (words.isEmpty || words.length > 2) return false;
     if (RegExp(
       r'\b(?:lagu|musik|music|song|songs|official|video|mv|lyrics?|lirik|audio|cover|remix|album|playlist|radio|mix|karaoke|soundtrack|terbaru|latest|hits|popular|populer)\b',
       caseSensitive: false,
@@ -126,7 +121,7 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => ArtistPage(
-          artist: channel.title.trim().isNotEmpty ? channel.title.trim() : _query.trim(),
+          artist: _query.trim().isNotEmpty ? _query.trim() : channel.title,
           channelId: channel.channelId,
           searchService: _searchService,
           initialSearchResults: _searchResults,

@@ -10,6 +10,12 @@ extension _HomeListeningTogether on _HomePageState {
       // the last received song as if it were still synchronized.
       _wasFollowingListenTogether = false;
       _lastListenTogetherSeekAt = null;
+      _listenTogetherPlaybackCommandRevision++;
+      _listenTogetherUrgentPlaybackVideoId = '';
+      _listenTogetherUrgentPlaybackTarget = null;
+      _listenTogetherOptimisticVideoId = '';
+      _listenTogetherOptimisticPlaying = null;
+      _listenTogetherOptimisticSinceMs = 0;
       unawaited(_pauseListenTogetherGuest());
     } else if (isGuest) {
       _wasFollowingListenTogether = true;
@@ -328,6 +334,12 @@ extension _HomeListeningTogether on _HomePageState {
     }
     _pendingListenTogetherState = null;
     _lastAppliedListenTogetherSequence = 0;
+    _listenTogetherPlaybackCommandRevision++;
+    _listenTogetherUrgentPlaybackVideoId = '';
+    _listenTogetherUrgentPlaybackTarget = null;
+    _listenTogetherOptimisticVideoId = '';
+    _listenTogetherOptimisticPlaying = null;
+    _listenTogetherOptimisticSinceMs = 0;
     _lastRoomUnsupportedTrackId = '';
     _lastListenTogetherLoadFailureVideoId = '';
     _lastListenTogetherLoadFailureAt = null;
@@ -351,22 +363,79 @@ extension _HomeListeningTogether on _HomePageState {
     Duration? position,
   }) async {
     if (_listenTogether.isGuest) {
-      try {
-        if (action == 'play_pause') {
-          // Send the desired state, not a remote toggle. A delayed/duplicated
-          // broadcast can then never invert the host state by accident.
-          await _listenTogether.requestControl(
-            'set_playback',
-            playing: !_nativeState.isEffectivelyPlaying,
-          );
-        } else {
+      if (action == 'play_pause') {
+        final current = _currentVideo;
+        final state = _nativeState;
+        final nativeTrackReady = current != null &&
+            state.videoId == current.videoId &&
+            _youtubeController.isUsingYoutubeAudio;
+        final optimisticAgeMs = DateTime.now().millisecondsSinceEpoch -
+            _listenTogetherOptimisticSinceMs;
+        final optimisticIsFresh = _listenTogetherOptimisticSinceMs > 0 &&
+            optimisticAgeMs < 1800;
+        final lastOptimistic = optimisticIsFresh &&
+                _listenTogetherOptimisticVideoId == current?.videoId
+            ? _listenTogetherOptimisticPlaying
+            : null;
+        if (!optimisticIsFresh && _listenTogetherOptimisticSinceMs > 0) {
+          _listenTogetherOptimisticVideoId = '';
+          _listenTogetherOptimisticPlaying = null;
+          _listenTogetherOptimisticSinceMs = 0;
+        }
+        final desiredPlaying = !(lastOptimistic ?? state.isEffectivelyPlaying);
+
+        // Start the online request first, without waiting for its response.
+        // The local device should not need a full network round trip to pause
+        // or resume an already-loaded track.
+        final request = _listenTogether.requestControl(
+          'set_playback',
+          playing: desiredPlaying,
+        );
+
+        if (nativeTrackReady) {
+          // Apply locally first for a responsive button, then let the host
+          // confirm the same desired state. Don't call _togglePlayPause here:
+          // it intentionally ignores direct local actions while we're a guest.
+          _listenTogetherOptimisticVideoId = current.videoId;
+          _listenTogetherOptimisticPlaying = desiredPlaying;
+          _listenTogetherOptimisticSinceMs =
+              DateTime.now().millisecondsSinceEpoch;
+          _listenTogetherPlaybackCommandRevision++;
+          _listenTogetherUrgentPlaybackVideoId = current.videoId;
+          _listenTogetherUrgentPlaybackTarget = desiredPlaying;
+          _lastListenTogetherSeekAt = DateTime.now();
+          try {
+            if (desiredPlaying) {
+              unawaited(() async {
+                try {
+                  await _setPlayerVolume(_playerVolumePercent);
+                } catch (error) {
+                  debugPrint('LISTEN TOGETHER VOLUME ERROR: $error');
+                }
+              }());
+              await _youtubeController.playVideo();
+            } else {
+              await _youtubeController.pauseVideo();
+            }
+          } catch (error) {
+            debugPrint('LISTEN TOGETHER OPTIMISTIC PLAYBACK ERROR: $error');
+          }
+        }
+
+        try {
+          await request;
+        } catch (error) {
+          if (mounted) _toast('Kontrol kamar gagal dikirim: $error');
+        }
+      } else {
+        try {
           await _listenTogether.requestControl(
             action,
             positionMs: position?.inMilliseconds,
           );
+        } catch (error) {
+          if (mounted) _toast('Kontrol kamar gagal dikirim: $error');
         }
-      } catch (error) {
-        if (mounted) _toast('Kontrol kamar gagal dikirim: $error');
       }
       return;
     }
@@ -559,6 +628,96 @@ extension _HomeListeningTogether on _HomePageState {
     });
   }
 
+  /// Prevent a pre-click host snapshot from immediately undoing a guest's
+  /// optimistic pause/resume. A conflicting snapshot is accepted again after
+  /// a short timeout, so the host remains authoritative if the command fails.
+  bool _shouldHoldConflictingListenTogetherSnapshot(
+    Map<String, dynamic> message,
+  ) {
+    if (!_listenTogether.isGuest || message['type'] != 'state') return false;
+    final optimisticSince = _listenTogetherOptimisticSinceMs;
+    final optimisticPlaying = _listenTogetherOptimisticPlaying;
+    final videoId = message['videoId']?.toString() ?? '';
+    if (optimisticSince <= 0 ||
+        optimisticPlaying == null ||
+        videoId != _listenTogetherOptimisticVideoId) {
+      return false;
+    }
+
+    final ageMs = DateTime.now().millisecondsSinceEpoch - optimisticSince;
+    if (ageMs >= 1800) {
+      _listenTogetherOptimisticSinceMs = 0;
+      _listenTogetherOptimisticPlaying = null;
+      _listenTogetherOptimisticVideoId = '';
+      return false;
+    }
+
+    final conflictsWithOptimisticTarget = message['playing'] is bool &&
+        message['playing'] != optimisticPlaying;
+    // A host heartbeat can already be in flight when the guest taps the button.
+    // Ignore a conflicting snapshot briefly; a matching host state confirms the
+    // command, and after the timeout the host becomes authoritative again.
+    return conflictsWithOptimisticTarget;
+  }
+
+  /// Apply same-track pause/resume before any drift-correction seek or queued
+  /// snapshot work. Seeking a streaming source can buffer; it must not delay
+  /// a user's play/pause action or let an older async apply reverse it later.
+  void _applyUrgentListenTogetherPlayback(Map<String, dynamic> message) {
+    if (!_listenTogether.isGuest || message['type'] != 'state') return;
+    final desiredPlaying = message['playing'];
+    if (desiredPlaying is! bool) return;
+
+    final videoId = message['videoId']?.toString().trim() ?? '';
+    final current = _currentVideo;
+    final state = _nativeState;
+    if (videoId.isEmpty ||
+        current == null ||
+        current.videoId != videoId ||
+        state.videoId != videoId ||
+        !_youtubeController.isUsingYoutubeAudio) {
+      return;
+    }
+
+    if (state.isEffectivelyPlaying == desiredPlaying) {
+      if (_listenTogetherUrgentPlaybackVideoId == videoId &&
+          _listenTogetherUrgentPlaybackTarget == desiredPlaying) {
+        // The optimistic/urgent action has now been reflected by native state.
+        // Treat this confirmation as a transition snapshot too: don't follow it
+        // with an immediate seek that could buffer playback again.
+        message['_listenTogetherUrgentPlaybackHandled'] = true;
+        _lastListenTogetherSeekAt = DateTime.now();
+        _listenTogetherUrgentPlaybackVideoId = '';
+        _listenTogetherUrgentPlaybackTarget = null;
+      }
+      return;
+    }
+
+    final sameUrgentCommand =
+        _listenTogetherUrgentPlaybackVideoId == videoId &&
+            _listenTogetherUrgentPlaybackTarget == desiredPlaying;
+    message['_listenTogetherUrgentPlaybackHandled'] = true;
+    if (sameUrgentCommand) return;
+
+    _listenTogetherPlaybackCommandRevision++;
+    _listenTogetherUrgentPlaybackVideoId = videoId;
+    _listenTogetherUrgentPlaybackTarget = desiredPlaying;
+    _lastListenTogetherSeekAt = DateTime.now();
+
+    unawaited(() async {
+      try {
+        if (desiredPlaying) {
+          unawaited(_setPlayerVolume(_playerVolumePercent));
+          await _youtubeController.playVideo();
+        } else {
+          await _youtubeController.pauseVideo();
+        }
+      } catch (error) {
+        debugPrint('LISTEN TOGETHER URGENT PLAYBACK ERROR: $error');
+      }
+    }());
+  }
+
   void _onListenTogetherMessage(Map<String, dynamic> message) {
     final type = message['type']?.toString() ?? '';
     if (_listenTogether.isHost) {
@@ -570,6 +729,22 @@ extension _HomeListeningTogether on _HomePageState {
       // Catat kapan snapshot tiba. Snapshot yang sempat mengantre selama lagu
       // dimuat harus digeser maju sebesar waktu tunggunya.
       message['guestReceivedAtMs'] ??= DateTime.now().millisecondsSinceEpoch;
+      if (_shouldHoldConflictingListenTogetherSnapshot(message)) return;
+      _applyUrgentListenTogetherPlayback(message);
+      final optimisticSince = _listenTogetherOptimisticSinceMs;
+      final capturedAtHostMs = (message['capturedAtMs'] as num?)?.toInt();
+      final capturedAtGuestMs = capturedAtHostMs == null
+          ? null
+          : capturedAtHostMs - _listenTogether.clockOffsetMs;
+      if (optimisticSince > 0 &&
+          message['videoId']?.toString() == _listenTogetherOptimisticVideoId &&
+          message['playing'] == _listenTogetherOptimisticPlaying &&
+          capturedAtGuestMs != null &&
+          capturedAtGuestMs >= optimisticSince - 120) {
+        _listenTogetherOptimisticSinceMs = 0;
+        _listenTogetherOptimisticPlaying = null;
+        _listenTogetherOptimisticVideoId = '';
+      }
     }
     if (type == 'room_closed') {
       _lastRoomUnsupportedTrackId = 'room_closed';
@@ -633,6 +808,9 @@ extension _HomeListeningTogether on _HomePageState {
   Future<void> _applyListenTogetherState(Map<String, dynamic> message) async {
     if (!_listenTogether.isGuest) return;
 
+    final playbackRevisionAtStart = _listenTogetherPlaybackCommandRevision;
+    final urgentPlaybackHandled =
+        message['_listenTogetherUrgentPlaybackHandled'] == true;
     final incomingSequence = (message['sequence'] as num?)?.toInt() ?? 0;
     if (_applyingListenTogetherState) {
       // Audio resolution can take several seconds. Never discard the newest host
@@ -779,18 +957,29 @@ extension _HomeListeningTogether on _HomePageState {
         return;
       }
 
-      // Pause/resume is more urgent than drift correction. Pause the local
-      // native player first so an awaited seek cannot make the guest keep
-      // playing after the host has already paused.
-      if (!playing && state.isEffectivelyPlaying) {
+      // A newer pause/resume can arrive while the previous snapshot is in an
+      // awaited native operation. Do not let the older snapshot continue.
+      if (_listenTogetherPlaybackCommandRevision !=
+          playbackRevisionAtStart) {
+        return;
+      }
+
+      // Urgent same-track playback changes were already applied before this
+      // async sync path. Never put a seek in front of a fresh resume/pause.
+      if (!urgentPlaybackHandled && !playing && state.isEffectivelyPlaying) {
         await _youtubeController.pauseVideo();
+        if (_listenTogetherPlaybackCommandRevision !=
+            playbackRevisionAtStart) {
+          return;
+        }
       }
 
       // Bandingkan dengan posisi guest yang diperkirakan "sekarang", bukan nilai
       // native mentah yang bisa tertinggal ~1 detik (itu memicu seek palsu).
       final guestPositionMs = _estimatedNativePositionMs();
       final driftMs = guestPositionMs - positionMs;
-      if (state.duration > Duration.zero &&
+      if (!urgentPlaybackHandled &&
+          state.duration > Duration.zero &&
           shouldCorrectListeningTogetherPosition(
             guestPositionMs: guestPositionMs,
             hostTargetPositionMs: positionMs,
@@ -809,10 +998,21 @@ extension _HomeListeningTogether on _HomePageState {
           final seekMs =
               playing ? positionMs + _listenTogetherSeekLeadMs : positionMs;
           await _youtubeController.seekTo(seconds: seekMs / 1000.0);
+          if (_listenTogetherPlaybackCommandRevision !=
+              playbackRevisionAtStart) {
+            return;
+          }
         }
       }
 
-      if (playing && !state.isEffectivelyPlaying) {
+      if (!urgentPlaybackHandled &&
+          playing &&
+          !_nativeState.isEffectivelyPlaying) {
+        if (_listenTogetherPlaybackCommandRevision !=
+            playbackRevisionAtStart) {
+          return;
+        }
+        unawaited(_setPlayerVolume(_playerVolumePercent));
         await _youtubeController.playVideo();
       }
       _listenTogether.syncStatus.value =

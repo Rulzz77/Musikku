@@ -805,6 +805,13 @@ extension _HomeListeningTogether on _HomePageState {
     }
   }
 
+  /// Perbarui lead seek dari durasi seek terakhir (EMA, dibatasi 300–1200 ms).
+  void _updateListenTogetherSeekLead(int seekElapsedMs) {
+    final target = seekElapsedMs.clamp(300, 1200).toInt();
+    _listenTogetherSeekLeadMs =
+        ((_listenTogetherSeekLeadMs * 2 + target) / 3).round();
+  }
+
   Future<void> _applyListenTogetherState(Map<String, dynamic> message) async {
     if (!_listenTogether.isGuest) return;
 
@@ -997,7 +1004,9 @@ extension _HomeListeningTogether on _HomePageState {
           // waktu buffering setelah seek.
           final seekMs =
               playing ? positionMs + _listenTogetherSeekLeadMs : positionMs;
+          final seekWatch = Stopwatch()..start();
           await _youtubeController.seekTo(seconds: seekMs / 1000.0);
+          _updateListenTogetherSeekLead(seekWatch.elapsedMilliseconds);
           if (_listenTogetherPlaybackCommandRevision !=
               playbackRevisionAtStart) {
             return;

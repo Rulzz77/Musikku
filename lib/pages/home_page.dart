@@ -129,7 +129,9 @@ class _HomePageState extends State<HomePage>
   // tiap detik, jadi dipakai untuk memperkirakan posisi sebenarnya saat ini.
   DateTime _nativeStateStampedAt = DateTime.fromMillisecondsSinceEpoch(0);
   // Seek koreksi sengaja melompat sedikit ke depan untuk mengimbangi buffering.
-  final int _listenTogetherSeekLeadMs = 300;
+  /// Lead seek adaptif: dasar 300 ms, naik mengikuti lama seekTo di perangkat
+  /// ini (EMA) supaya HP lambat tidak selalu tertinggal setelah koreksi.
+  int _listenTogetherSeekLeadMs = 300;
 
   final Random _random = Random();
 

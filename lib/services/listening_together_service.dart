@@ -63,8 +63,8 @@ bool shouldLoadListeningTogetherTrack({
 /// Correct noticeable playback drift, while avoiding repeated seek operations
 /// for small stream/buffer timing differences. Snapshots now carry a host
 /// timestamp and are latency-compensated, so the threshold can be much
-/// tighter than before (was 1800 ms).
-const int listeningTogetherDriftCorrectionThresholdMs = 500;
+/// tighter than before (was 1800 ms, then 500 ms).
+const int listeningTogetherDriftCorrectionThresholdMs = 350;
 
 /// Minimum time between two corrective seeks on the guest. Seeking a YouTube
 /// stream causes buffering, so repeated seeks make the delay worse.
@@ -252,6 +252,16 @@ class ListeningTogetherService {
   int _bestRttMs = 1 << 30;
   int _lastAcceptedSequence = 0;
 
+  /// Sampel sinkronisasi jam terbaru (rtt, offset). Hanya jendela kecil yang
+  /// disimpan supaya offset ikut mengikuti drift jam kedua HP; sampel terbaik
+  /// sepanjang sesi dulu tidak pernah diperbarui.
+  final List<({int rtt, int offset})> _clockSamples = [];
+  static const int _clockSampleWindow = 8;
+
+  /// True setelah minimal satu pong diterima. Sebelum itu offset = 0 hanya
+  /// tebakan, dan jam dua HP bisa beda detik-an.
+  bool get hasClockSync => _clockSamples.isNotEmpty;
+
   /// hostTime - guestTime in milliseconds (0 until the first pong arrives).
   int get clockOffsetMs => _clockOffsetMs;
 
@@ -388,6 +398,7 @@ class ListeningTogetherService {
     _joined = false;
     _clockOffsetMs = 0;
     _bestRttMs = 1 << 30;
+    _clockSamples.clear();
     _lastAcceptedSequence = 0;
     _onlinePeers.clear();
     roomCode.value = pin;
@@ -507,7 +518,11 @@ class ListeningTogetherService {
     if (type != 'state') return message;
     final position = (message['positionMs'] as num?)?.toInt();
     if (position == null) return message;
-    final captured = (message['capturedAtMs'] as num?)?.toInt();
+    // Tanpa sampel jam, offset 0 bisa meleset beberapa detik. Lebih aman
+    // memakai posisi mentah daripada memproyeksikan dengan jam yang salah.
+    final captured = hasClockSync
+        ? (message['capturedAtMs'] as num?)?.toInt()
+        : null;
     final target = listeningTogetherTargetPositionMs(
       snapshotPositionMs: position,
       playing: _snapshotIsPlaying(message),
@@ -617,11 +632,19 @@ class ListeningTogetherService {
       final t1 = (message['t1'] as num).toInt();
       final rtt = t2 - t0;
       if (rtt < 0) return;
-      // The sample with the smallest RTT has the least asymmetric-delay error.
-      if (rtt < _bestRttMs) {
-        _bestRttMs = rtt;
-        _clockOffsetMs = t1 - ((t0 + t2) ~/ 2);
+      // Sampel dengan RTT terkecil paling sedikit terkena error asimetris,
+      // tapi hanya dipilih dari jendela sampel terbaru agar offset tidak
+      // membusuk saat jam HP bergeser selama sesi panjang.
+      _clockSamples.add((rtt: rtt, offset: t1 - ((t0 + t2) ~/ 2)));
+      if (_clockSamples.length > _clockSampleWindow) {
+        _clockSamples.removeAt(0);
       }
+      var best = _clockSamples.first;
+      for (final sample in _clockSamples) {
+        if (sample.rtt < best.rtt) best = sample;
+      }
+      _bestRttMs = best.rtt;
+      _clockOffsetMs = best.offset;
     });
 
     channel.onBroadcast(event: 'room_leave', callback: (frame) {
@@ -925,6 +948,7 @@ class ListeningTogetherService {
     _latestHostPlaybackState = null;
     _clockOffsetMs = 0;
     _bestRttMs = 1 << 30;
+    _clockSamples.clear();
     _lastAcceptedSequence = 0;
     _onlineChannel = null;
     if (remoteChannel != null) {

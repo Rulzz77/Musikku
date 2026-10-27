@@ -38,6 +38,7 @@ class MusicPlayerPage extends StatefulWidget {
     required this.onOpenSleepTimer,
     required this.onOpenListeningRoom,
     required this.followingRoom,
+    this.inPlaylist = false,
     required this.sleepActive,
   });
 
@@ -62,6 +63,11 @@ class MusicPlayerPage extends StatefulWidget {
   final VoidCallback onOpenSleepTimer;
   final VoidCallback onOpenListeningRoom;
   final bool followingRoom;
+
+  /// True when this song is already in at least one playlist. The Playlist
+  /// button then shows a check mark, but stays tappable so the song can still
+  /// be added to other playlists.
+  final bool inPlaylist;
   final ValueListenable<bool> sleepActive;
 
   @override
@@ -71,11 +77,19 @@ class MusicPlayerPage extends StatefulWidget {
 class _MusicPlayerPageState extends State<MusicPlayerPage> {
   double? _dragPositionMs;
 
+  // After the user releases the slider, the native position event can lag by
+  // up to ~1 s (and a listening-room guest waits for the host). Hold the
+  // released value briefly so the thumb does not snap back to the old position.
+  double? _seekHoldMs;
+  DateTime? _seekHoldAt;
+
   @override
   void didUpdateWidget(covariant MusicPlayerPage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.video.videoId != widget.video.videoId) {
       _dragPositionMs = null;
+      _seekHoldMs = null;
+      _seekHoldAt = null;
     }
   }
 
@@ -231,7 +245,19 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
         ? state.duration
         : Duration(milliseconds: ((widget.video.durationSeconds ?? 0) * 1000).round());
     final maxMs = duration.inMilliseconds > 0 ? duration.inMilliseconds.toDouble() : 1.0;
-    final sliderValue = (_dragPositionMs ?? position.inMilliseconds.toDouble()).clamp(0.0, maxMs).toDouble();
+
+    // Show the finger position while dragging; for ~1.5 s after release keep
+    // showing the released value until the player's real position catches up.
+    final positionMs = position.inMilliseconds.toDouble();
+    final holdMs = _seekHoldMs;
+    final holdAt = _seekHoldAt;
+    final holdActive = holdMs != null &&
+        holdAt != null &&
+        DateTime.now().difference(holdAt) < const Duration(milliseconds: 1500) &&
+        (holdMs - positionMs).abs() > 1200;
+    final double shownMs = _dragPositionMs ?? (holdActive ? holdMs : positionMs);
+    final sliderValue = shownMs.clamp(0.0, maxMs).toDouble();
+
     // Buffer position is reported as a fraction of the whole track.
     // Keep the buffered endpoint at/after the playhead so the
     // light-gray secondary track is the audio already downloaded ahead.
@@ -480,6 +506,8 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                 : (value) async {
                     setState(() {
                       _dragPositionMs = null;
+                      _seekHoldMs = value;
+                      _seekHoldAt = DateTime.now();
                     });
                     await widget.onSeek(Duration(milliseconds: value.round()));
                   },
@@ -575,12 +603,19 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
       child: Row(
         children: [
           Expanded(
+            // Check mark when the song is already in a playlist; still tappable
+            // so it can be added to other playlists too.
             child: _actionIcon(
               context: context,
-              icon: Icons.playlist_add_rounded,
+              icon: widget.inPlaylist
+                  ? Icons.playlist_add_check_rounded
+                  : Icons.playlist_add_rounded,
               label: 'Playlist',
-              tooltip: 'Tambah ke playlist',
+              tooltip: widget.inPlaylist
+                  ? 'Sudah ada di playlist • tambah ke playlist lain'
+                  : 'Tambah ke playlist',
               onPressed: widget.onAddToPlaylist,
+              selected: widget.inPlaylist,
             ),
           ),
           Expanded(

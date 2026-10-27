@@ -45,5 +45,13 @@ jobs:
       - name: Analyze Dart source
         run: flutter analyze --no-pub
 
+      # `flutter test` fails with "Test directory "test" not found" when the
+      # repository has no tests yet. Run it only when test/ exists.
       - name: Run tests
-        run: flutter test --reporter expanded
+        shell: bash
+        run: |
+          if [ -d test ]; then
+            flutter test --reporter expanded
+          else
+            echo "No test/ directory found; skipping tests."
+          fi

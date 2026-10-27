@@ -90,6 +90,9 @@ class _PlaylistNameDialogState extends State<_PlaylistNameDialog> {
 // SHEET "TAMBAH KE PLAYLIST"
 // ============================================================
 
+/// Sheet tetap terbuka setelah satu playlist diketuk, jadi lagu bisa
+/// ditambahkan ke beberapa playlist sekaligus. Playlist yang sudah berisi
+/// lagu ini diberi centang; mengetuknya lagi menghapus lagu dari playlist itu.
 void showAddToPlaylistSheet(
   BuildContext context, {
   required YoutubeSearchResult video,
@@ -103,69 +106,101 @@ void showAddToPlaylistSheet(
     showDragHandle: true,
     isScrollControlled: true,
     builder: (sheetContext) {
-      return SafeArea(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(sheetContext).size.height * 0.6,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 42,
-                      height: 42,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(colors: [Theme.of(sheetContext).colorScheme.primary.withValues(alpha: 0.18), Theme.of(sheetContext).colorScheme.secondary.withValues(alpha: 0.12)]),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: Icon(Icons.playlist_add_rounded, color: Theme.of(sheetContext).colorScheme.primary),
-                    ),
-                    const SizedBox(width: 12),
-                    const Expanded(
-                      child: Text('Tambah ke playlist', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: -0.3)),
-                    ),
-                  ],
-                ),
+      return StatefulBuilder(
+        builder: (innerContext, setSheetState) {
+          final scheme = Theme.of(sheetContext).colorScheme;
+          final addedCount =
+              playlists.where((p) => p.contains(video.videoId)).length;
+
+          return SafeArea(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(sheetContext).size.height * 0.6,
               ),
-              ListTile(
-                leading: const Icon(Icons.add, color: appGold),
-                title: const Text('Playlist baru'),
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  onCreateNew();
-                },
-              ),
-              Flexible(
-                child: ListView(
-                  shrinkWrap: true,
-                  children: [
-                    for (final playlist in playlists)
-                      ListTile(
-                        leading: const Icon(Icons.queue_music),
-                        title: Text(
-                          playlist.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 12, 12),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 42,
+                          height: 42,
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(colors: [scheme.primary.withValues(alpha: 0.18), scheme.secondary.withValues(alpha: 0.12)]),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: Icon(
+                            addedCount > 0 ? Icons.playlist_add_check_rounded : Icons.playlist_add_rounded,
+                            color: scheme.primary,
+                          ),
                         ),
-                        subtitle: Text('${playlist.songs.length} lagu'),
-                        trailing: playlist.contains(video.videoId)
-                            ? const Icon(Icons.check_circle, color: appGold)
-                            : null,
-                        onTap: () {
-                          Navigator.pop(sheetContext);
-                          onToggle(playlist);
-                        },
-                      ),
-                  ],
-                ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Tambah ke playlist', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: -0.3)),
+                              if (addedCount > 0)
+                                Text(
+                                  'Sudah ada di $addedCount playlist',
+                                  style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+                                ),
+                            ],
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.pop(sheetContext),
+                          child: const Text('Selesai'),
+                        ),
+                      ],
+                    ),
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.add, color: appGold),
+                    title: const Text('Playlist baru'),
+                    onTap: () {
+                      Navigator.pop(sheetContext);
+                      onCreateNew();
+                    },
+                  ),
+                  Flexible(
+                    child: ListView(
+                      shrinkWrap: true,
+                      children: [
+                        for (final playlist in playlists)
+                          ListTile(
+                            leading: const Icon(Icons.queue_music),
+                            title: Text(
+                              playlist.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            subtitle: Text(
+                              playlist.contains(video.videoId)
+                                  ? '${playlist.songs.length} lagu • sudah ada, ketuk untuk menghapus'
+                                  : '${playlist.songs.length} lagu',
+                            ),
+                            trailing: playlist.contains(video.videoId)
+                                ? const Icon(Icons.check_circle, color: appGold)
+                                : Icon(Icons.add_circle_outline, color: scheme.onSurfaceVariant),
+                            onTap: () {
+                              // Jangan tutup sheet: ubah playlist ini lalu
+                              // segarkan centang supaya bisa lanjut memilih
+                              // playlist lain.
+                              onToggle(playlist);
+                              setSheetState(() {});
+                            },
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       );
     },
   );

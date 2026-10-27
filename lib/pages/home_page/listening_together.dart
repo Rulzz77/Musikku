@@ -17,6 +17,27 @@ extension _HomeListeningTogether on _HomePageState {
     _refreshListeningTogetherUi();
   }
 
+  /// Dipanggil setiap kali state native berubah (lihat initState di home_page.dart).
+  void _stampNativeStateTime() {
+    _nativeStateStampedAt = DateTime.now();
+  }
+
+  /// Posisi native hanya diperbarui sekitar tiap detik, jadi nilai mentahnya bisa
+  /// tertinggal hingga ~1 detik. Tambahkan waktu sejak event terakhir saat
+  /// sedang bermain supaya perbandingan dengan target host akurat.
+  int _estimatedNativePositionMs() {
+    final state = _nativeState;
+    var ms = state.position.inMilliseconds;
+    if (state.isEffectivelyPlaying) {
+      ms += DateTime.now()
+          .difference(_nativeStateStampedAt)
+          .inMilliseconds
+          .clamp(0, 1500)
+          .toInt();
+    }
+    return ms;
+  }
+
   void _showListenTogetherSheet() {
     // The room can be opened from Beranda before a song is selected. If the
     // host starts playing later, the existing broadcaster synchronizes it.
@@ -528,7 +549,7 @@ extension _HomeListeningTogether on _HomePageState {
       'artist': video.channelTitle,
       'thumbnailUrl': video.coverUrl,
       'durationSeconds': video.durationSeconds,
-      'positionMs': matchesTrack ? state.position.inMilliseconds : 0,
+      'positionMs': matchesTrack ? _estimatedNativePositionMs() : 0,
       'playing': matchesTrack && state.isEffectivelyPlaying,
       'isShuffle': _playerUiState.value.isShuffle,
       'isSmartShuffle': _playerUiState.value.isSmartShuffle,
@@ -545,6 +566,11 @@ extension _HomeListeningTogether on _HomePageState {
       return;
     }
     if (!_listenTogether.isGuest) return;
+    if (type == 'state') {
+      // Catat kapan snapshot tiba. Snapshot yang sempat mengantre selama lagu
+      // dimuat harus digeser maju sebesar waktu tunggunya.
+      message['guestReceivedAtMs'] ??= DateTime.now().millisecondsSinceEpoch;
+    }
     if (type == 'room_closed') {
       _lastRoomUnsupportedTrackId = 'room_closed';
       unawaited(_pauseListenTogetherGuest());
@@ -657,6 +683,14 @@ extension _HomeListeningTogether on _HomePageState {
     var positionMs = (message['hostTargetPositionMs'] as num?)?.toInt() ??
         (message['positionMs'] as num?)?.toInt() ??
         0;
+    // Snapshot bisa menunggu beberapa detik di antrean saat lagu sebelumnya
+    // masih dimuat. Majukan posisinya sebesar waktu tunggu itu.
+    final receivedAtMs = (message['guestReceivedAtMs'] as num?)?.toInt();
+    if (playing && receivedAtMs != null) {
+      positionMs += (DateTime.now().millisecondsSinceEpoch - receivedAtMs)
+          .clamp(0, 15000)
+          .toInt();
+    }
     if (durationSeconds != null && durationSeconds > 0) {
       positionMs = positionMs.clamp(0, (durationSeconds * 1000).round()).toInt();
     } else {
@@ -705,6 +739,7 @@ extension _HomeListeningTogether on _HomePageState {
           return;
         }
 
+        final loadStartedAt = DateTime.now();
         await _playVideo(
           track,
           recordHistory: false,
@@ -718,6 +753,22 @@ extension _HomeListeningTogether on _HomePageState {
             _nativeState.videoId == videoId) {
           _lastListenTogetherLoadFailureVideoId = '';
           _lastListenTogetherLoadFailureAt = null;
+          // Resolusi stream bisa makan beberapa detik, selama itu host terus
+          // berjalan. Setelah siap, lompat ke posisi host yang sekarang.
+          if (playing) {
+            final lateMs =
+                DateTime.now().difference(loadStartedAt).inMilliseconds;
+            if (lateMs > 800) {
+              var catchUpMs = positionMs + lateMs + _listenTogetherSeekLeadMs;
+              if (durationSeconds != null && durationSeconds > 0) {
+                catchUpMs = catchUpMs
+                    .clamp(0, (durationSeconds * 1000).round())
+                    .toInt();
+              }
+              _lastListenTogetherSeekAt = DateTime.now();
+              await _youtubeController.seekTo(seconds: catchUpMs / 1000.0);
+            }
+          }
           _listenTogether.syncStatus.value = 'Tersinkron: $title';
         } else {
           _lastListenTogetherLoadFailureVideoId = videoId;
@@ -735,29 +786,37 @@ extension _HomeListeningTogether on _HomePageState {
         await _youtubeController.pauseVideo();
       }
 
+      // Bandingkan dengan posisi guest yang diperkirakan "sekarang", bukan nilai
+      // native mentah yang bisa tertinggal ~1 detik (itu memicu seek palsu).
+      final guestPositionMs = _estimatedNativePositionMs();
+      final driftMs = guestPositionMs - positionMs;
       if (state.duration > Duration.zero &&
           shouldCorrectListeningTogetherPosition(
-            guestPositionMs: state.position.inMilliseconds,
+            guestPositionMs: guestPositionMs,
             hostTargetPositionMs: positionMs,
           )) {
         // Correct moderate drift after the urgent pause command (or before a
         // resume). Seeking a stream causes buffering, so repeated corrective
         // seeks are rate-limited; a very large drift (e.g. the host just
         // seeked) bypasses the cooldown.
-        final drift = (state.position.inMilliseconds - positionMs).abs();
-        if (drift > 5000 ||
+        if (driftMs.abs() > 5000 ||
             isListeningTogetherSeekCooldownOver(
               lastSeekAt: _lastListenTogetherSeekAt,
             )) {
           _lastListenTogetherSeekAt = DateTime.now();
-          await _youtubeController.seekTo(seconds: positionMs / 1000.0);
+          // Saat host bermain, lompat sedikit ke depan untuk mengimbangi
+          // waktu buffering setelah seek.
+          final seekMs =
+              playing ? positionMs + _listenTogetherSeekLeadMs : positionMs;
+          await _youtubeController.seekTo(seconds: seekMs / 1000.0);
         }
       }
 
       if (playing && !state.isEffectivelyPlaying) {
         await _youtubeController.playVideo();
       }
-      _listenTogether.syncStatus.value = 'Tersinkron: $title';
+      _listenTogether.syncStatus.value =
+          'Tersinkron: $title (selisih ${driftMs}ms, RTT ${_listenTogether.bestRttMs ?? '-'}ms)';
     } catch (error) {
       debugPrint('LISTEN TOGETHER SYNC ERROR: $error');
       _listenTogether.syncStatus.value =

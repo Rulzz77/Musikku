@@ -115,6 +115,11 @@ class _HomePageState extends State<HomePage>
   DateTime? _lastListenTogetherLoadFailureAt;
   // Cooldown untuk seek koreksi drift di sisi guest.
   DateTime? _lastListenTogetherSeekAt;
+  // Waktu terakhir event native diterima. Posisi native hanya diperbarui sekitar
+  // tiap detik, jadi dipakai untuk memperkirakan posisi sebenarnya saat ini.
+  DateTime _nativeStateStampedAt = DateTime.fromMillisecondsSinceEpoch(0);
+  // Seek koreksi sengaja melompat sedikit ke depan untuk mengimbangi buffering.
+  final int _listenTogetherSeekLeadMs = 300;
 
   final Random _random = Random();
 
@@ -535,6 +540,7 @@ class _HomePageState extends State<HomePage>
       onError: (Object error) => debugPrint('LISTEN TOGETHER ERROR: $error'),
     );
     _listenTogether.status.addListener(_onListenTogetherStatusChanged);
+    _nativeStateNotifier.addListener(_stampNativeStateTime);
 
     _videoStateSubscription = _youtubeController.stateStream.listen(
       _onYoutubeState,
@@ -692,6 +698,7 @@ class _HomePageState extends State<HomePage>
     _searchFocusNode.dispose();
 
     _playerUiState.dispose();
+    _nativeStateNotifier.removeListener(_stampNativeStateTime);
     _nativeStateNotifier.dispose();
     _sleepActive.dispose();
 

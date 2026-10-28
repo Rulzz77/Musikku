@@ -25,6 +25,7 @@ class AppSettingsPage extends StatelessWidget {
         AppThemeChoice.dark => 'Gelap',
         AppThemeChoice.amoled => 'AMOLED hitam',
         AppThemeChoice.light => 'Terang',
+        AppThemeChoice.pink => 'Pink pastel aesthetic',
       };
 
   IconData _themeIcon(AppThemeChoice choice) => switch (choice) {
@@ -32,6 +33,7 @@ class AppSettingsPage extends StatelessWidget {
         AppThemeChoice.dark => Icons.dark_mode_rounded,
         AppThemeChoice.amoled => Icons.contrast_rounded,
         AppThemeChoice.light => Icons.light_mode_rounded,
+        AppThemeChoice.pink => Icons.favorite_rounded,
       };
 
   @override
@@ -79,6 +81,7 @@ class AppSettingsPage extends StatelessWidget {
                             AppThemeChoice.dark => 'Tema gelap dengan aksen MusikKu.',
                             AppThemeChoice.amoled => 'Latar hitam untuk layar OLED.',
                             AppThemeChoice.light => 'Latar terang untuk ruangan cerah.',
+                            AppThemeChoice.pink => 'Pink lembut, rose, dan glass. Pilih Mode Gelap atau Terang untuk kembali ke tampilan normal.',
                           }),
                         ),
                       ],

@@ -301,7 +301,6 @@ extension _HomeControls on _HomePageState {
 
       if (nextItem != null) {
         unawaited(_storage.saveQueue(_queueManager.items));
-        _syncListeningTogetherQueueFromLocal();
         await _playVideo(nextItem.video);
 
         if (mounted) {

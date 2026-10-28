@@ -91,44 +91,70 @@ class MusikKuApp extends StatelessWidget {
 
   final AppSettingsController settings;
 
-  ThemeData _buildTheme(Brightness brightness, {required bool amoled}) {
+  ThemeData _buildTheme(Brightness brightness, {required bool amoled, bool pink = false}) {
     final isDark = brightness == Brightness.dark;
-    final background = isDark ? (amoled ? Colors.black : appInk) : appLightBackground;
-    final surface = isDark ? (amoled ? Colors.black : appPanel) : appLightPanel;
+    final background = pink ? const Color(0xFFFFF5F8) : (isDark ? (amoled ? Colors.black : appInk) : appLightBackground);
+    final surface = pink ? const Color(0xFFFFFBFC) : (isDark ? (amoled ? Colors.black : appPanel) : appLightPanel);
 
     final base = ColorScheme.fromSeed(
-      seedColor: appGoldStrong,
+      seedColor: pink ? const Color(0xFFE879A6) : appGoldStrong,
       brightness: brightness,
       surface: surface,
     );
 
-    final scheme = base.copyWith(
-      // MusikKu identity: charcoal surfaces, accessible teal navigation/actions,
-      // and a warm amber accent. Avoids the former disconnected violet dock.
-      primary: isDark ? const Color(0xFF55DCCB) : const Color(0xFF087F79),
-      onPrimary: isDark ? const Color(0xFF052D29) : Colors.white,
-      primaryContainer: isDark ? const Color(0xFF153E39) : const Color(0xFFDDF8F2),
-      onPrimaryContainer: isDark ? const Color(0xFFC7FFF4) : const Color(0xFF104E4A),
-      secondary: isDark ? const Color(0xFFFFC47D) : const Color(0xFF975500),
-      onSecondary: isDark ? const Color(0xFF3B260D) : Colors.white,
-      secondaryContainer: isDark ? const Color(0xFF46321E) : const Color(0xFFFFF0D8),
-      onSecondaryContainer: isDark ? const Color(0xFFFFE5C2) : const Color(0xFF653900),
-      tertiary: isDark ? const Color(0xFFFF9AAB) : const Color(0xFFB93756),
-      tertiaryContainer: isDark ? const Color(0xFF552B36) : const Color(0xFFFFE1E7),
-      onTertiary: isDark ? const Color(0xFF3E101C) : Colors.white,
-      onTertiaryContainer: isDark ? const Color(0xFFFFD9E0) : const Color(0xFF721E34),
-      surface: surface,
-      surfaceContainerLowest: isDark ? const Color(0xFF080D0E) : Colors.white,
-      surfaceContainerLow: isDark ? const Color(0xFF141C1D) : const Color(0xFFFAFCFB),
-      surfaceContainer: isDark ? const Color(0xFF192223) : const Color(0xFFF0F5F3),
-      surfaceContainerHigh: isDark ? const Color(0xFF202A2B) : const Color(0xFFE7EFEC),
-      surfaceContainerHighest: isDark ? const Color(0xFF2A3637) : const Color(0xFFDDE7E3),
-      onSurface: isDark ? const Color(0xFFF0F7F5) : const Color(0xFF192321),
-      onSurfaceVariant: isDark ? const Color(0xFFB0C2BE) : const Color(0xFF586A66),
-      outline: isDark ? const Color(0xFF465756) : const Color(0xFFCAD6D3),
-      outlineVariant: isDark ? const Color(0xFF2C3A39) : const Color(0xFFDCE6E3),
-      error: const Color(0xFFD94A5C),
-    );
+    final scheme = pink
+        ? base.copyWith(
+            primary: const Color(0xFFCE5C8B),
+            onPrimary: Colors.white,
+            primaryContainer: const Color(0xFFFFDCE9),
+            onPrimaryContainer: const Color(0xFF6D2443),
+            secondary: const Color(0xFFB86B8D),
+            onSecondary: Colors.white,
+            secondaryContainer: const Color(0xFFFFE8F0),
+            onSecondaryContainer: const Color(0xFF71334E),
+            tertiary: const Color(0xFFB77B9D),
+            tertiaryContainer: const Color(0xFFF8DFEA),
+            onTertiary: Colors.white,
+            onTertiaryContainer: const Color(0xFF593348),
+            surface: surface,
+            surfaceContainerLowest: Colors.white,
+            surfaceContainerLow: const Color(0xFFFFF8FA),
+            surfaceContainer: const Color(0xFFFFEEF4),
+            surfaceContainerHigh: const Color(0xFFFBE4ED),
+            surfaceContainerHighest: const Color(0xFFF4D7E2),
+            onSurface: const Color(0xFF35242C),
+            onSurfaceVariant: const Color(0xFF806773),
+            outline: const Color(0xFFD9B8C7),
+            outlineVariant: const Color(0xFFEEDCE4),
+            error: const Color(0xFFD94A5C),
+          )
+        : base.copyWith(
+            // MusikKu identity: charcoal surfaces, accessible teal navigation/actions,
+            // and a warm amber accent. Avoids the former disconnected violet dock.
+            primary: isDark ? const Color(0xFF55DCCB) : const Color(0xFF087F79),
+            onPrimary: isDark ? const Color(0xFF052D29) : Colors.white,
+            primaryContainer: isDark ? const Color(0xFF153E39) : const Color(0xFFDDF8F2),
+            onPrimaryContainer: isDark ? const Color(0xFFC7FFF4) : const Color(0xFF104E4A),
+            secondary: isDark ? const Color(0xFFFFC47D) : const Color(0xFF975500),
+            onSecondary: isDark ? const Color(0xFF3B260D) : Colors.white,
+            secondaryContainer: isDark ? const Color(0xFF46321E) : const Color(0xFFFFF0D8),
+            onSecondaryContainer: isDark ? const Color(0xFFFFE5C2) : const Color(0xFF653900),
+            tertiary: isDark ? const Color(0xFFFF9AAB) : const Color(0xFFB93756),
+            tertiaryContainer: isDark ? const Color(0xFF552B36) : const Color(0xFFFFE1E7),
+            onTertiary: isDark ? const Color(0xFF3E101C) : Colors.white,
+            onTertiaryContainer: isDark ? const Color(0xFFFFD9E0) : const Color(0xFF721E34),
+            surface: surface,
+            surfaceContainerLowest: isDark ? const Color(0xFF080D0E) : Colors.white,
+            surfaceContainerLow: isDark ? const Color(0xFF141C1D) : const Color(0xFFFAFCFB),
+            surfaceContainer: isDark ? const Color(0xFF192223) : const Color(0xFFF0F5F3),
+            surfaceContainerHigh: isDark ? const Color(0xFF202A2B) : const Color(0xFFE7EFEC),
+            surfaceContainerHighest: isDark ? const Color(0xFF2A3637) : const Color(0xFFDDE7E3),
+            onSurface: isDark ? const Color(0xFFF0F7F5) : const Color(0xFF192321),
+            onSurfaceVariant: isDark ? const Color(0xFFB0C2BE) : const Color(0xFF586A66),
+            outline: isDark ? const Color(0xFF465756) : const Color(0xFFCAD6D3),
+            outlineVariant: isDark ? const Color(0xFF2C3A39) : const Color(0xFFDCE6E3),
+            error: const Color(0xFFD94A5C),
+          );
 
     final baseTextTheme = ThemeData(
       brightness: brightness,
@@ -379,7 +405,7 @@ class MusikKuApp extends StatelessWidget {
         return MaterialApp(
           debugShowCheckedModeBanner: false,
           title: appName,
-          theme: _buildTheme(Brightness.light, amoled: false),
+          theme: _buildTheme(Brightness.light, amoled: false, pink: choice == AppThemeChoice.pink),
           darkTheme: _buildTheme(
             Brightness.dark,
             amoled: choice == AppThemeChoice.amoled,

@@ -9,8 +9,8 @@ import '../services/youtube_search_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/unified_artwork.dart';
 
-/// Katalog artis dengan daftar lagu dan rilisan. Data YouTube di belakang layar
-/// bisa berasal dari beberapa channel, tetapi UI selalu dikelompokkan per artis.
+/// Halaman artis/channel dengan daftar lagu dan playlist publik dari channel.
+/// Kalau channelId tidak tersedia, halaman memakai pencarian musik sebagai fallback.
 class ArtistPage extends StatefulWidget {
   const ArtistPage({
     super.key,
@@ -57,9 +57,9 @@ class _ArtistPageState extends State<ArtistPage> {
   int _tab = 0;
   bool _usedSearchFallback = false;
 
-  String get _artistTitle => widget.artist.trim().isNotEmpty
-      ? widget.artist.trim()
-      : (_details?.title.isNotEmpty == true ? _details!.title : 'Artis');
+  String get _artistTitle => _details?.title.isNotEmpty == true
+      ? _details!.title
+      : widget.artist;
 
   // A channel can publish vlogs, interviews, podcasts, and music on the same
   // account. Artist pages should expose music releases only, not every public
@@ -265,20 +265,6 @@ class _ArtistPageState extends State<ArtistPage> {
             ? _mergeTracks(artistReleases, _songs)
             : _mergeTracks(cleanResults.take(30).toList(growable: false), _songs);
       }
-      // Tampilan katalog diurutkan sebagai rilisan artis: yang memiliki tanggal
-      // rilis terbaru di depan; item tanpa tanggal tetap mempertahankan urutannya.
-      final indexedSongs = _songs.asMap().entries.toList(growable: false);
-      final sortedSongs = List<MapEntry<int, YoutubeSearchResult>>.from(indexedSongs)
-        ..sort((a, b) {
-          final dateA = a.value.publishedAt;
-          final dateB = b.value.publishedAt;
-          if (dateA == null && dateB == null) return a.key.compareTo(b.key);
-          if (dateA == null) return 1;
-          if (dateB == null) return -1;
-          final dateOrder = dateB.compareTo(dateA);
-          return dateOrder != 0 ? dateOrder : a.key.compareTo(b.key);
-        });
-      _songs = sortedSongs.map((entry) => entry.value).toList(growable: false);
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -418,7 +404,7 @@ class _ArtistPageState extends State<ArtistPage> {
                         children: [
                           Expanded(child: _tabButton(0, 'Lagu', Icons.music_note_rounded)),
                           const SizedBox(width: 8),
-                          Expanded(child: _tabButton(1, 'Album & rilisan', Icons.album_rounded)),
+                          Expanded(child: _tabButton(1, 'Album & playlist', Icons.album_rounded)),
                         ],
                       ),
                     ),
@@ -431,194 +417,88 @@ class _ArtistPageState extends State<ArtistPage> {
   }
 
   Widget _header(ColorScheme scheme) {
-    final banner = _details?.bannerUrl.trim() ?? '';
-    final bio = _details?.description.trim() ?? '';
     return Container(
-      margin: const EdgeInsets.fromLTRB(14, 10, 14, 14),
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(26),
-        boxShadow: [
-          BoxShadow(
-            color: scheme.shadow.withValues(alpha: 0.10),
-            blurRadius: 24,
-            offset: const Offset(0, 10),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            scheme.primaryContainer.withValues(alpha: 0.96),
+            scheme.secondaryContainer.withValues(alpha: 0.74),
+            scheme.surfaceContainerLow,
+          ],
+        ),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.55)),
+      ),
+      child: Row(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(18),
+            child: SizedBox(
+              width: 78,
+              height: 78,
+              child: _details?.avatarUrl.isNotEmpty == true
+                  ? Image.network(
+                      _details!.avatarUrl,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, _, _) => _artistPlaceholder(scheme),
+                    )
+                  : _artistPlaceholder(scheme),
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _details == null ? 'RADIO ARTIS' : 'ARTIS / CHANNEL',
+                  style: TextStyle(
+                    color: scheme.primary,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  _artistTitle,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w900, height: 1.05),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  '${_songs.length} lagu · ${_playlists.length} album/playlist',
+                  style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11.5),
+                ),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    FilledButton.tonalIcon(
+                      onPressed: _songs.isEmpty
+                          ? null
+                          : () => unawaited(_playTracks(_songs.first, _songs)),
+                      icon: const Icon(Icons.play_arrow_rounded, size: 18),
+                      label: const Text('Putar semua'),
+                    ),
+                    if (_playlists.isNotEmpty)
+                      OutlinedButton.icon(
+                        onPressed: () => setState(() => _tab = 1),
+                        icon: const Icon(Icons.album_rounded, size: 17),
+                        label: const Text('Rilisan'),
+                      ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ],
       ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(26),
-        child: Stack(
-          children: [
-            if (banner.startsWith('https://'))
-              Positioned.fill(
-                child: Image.network(
-                  banner,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, _, _) => const SizedBox.shrink(),
-                ),
-              ),
-            Positioned.fill(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      scheme.primaryContainer.withValues(alpha: 0.96),
-                      scheme.secondaryContainer.withValues(alpha: 0.90),
-                      scheme.surfaceContainerLow.withValues(alpha: 0.97),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(17),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(3),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: scheme.primary.withValues(alpha: 0.46),
-                            width: 1.5,
-                          ),
-                        ),
-                        child: ClipOval(
-                          child: SizedBox(
-                            width: 88,
-                            height: 88,
-                            child: _details?.avatarUrl.isNotEmpty == true
-                                ? Image.network(
-                                    _details!.avatarUrl,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (_, _, _) => _artistPlaceholder(scheme),
-                                  )
-                                : _artistPlaceholder(scheme),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 15),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-                              decoration: BoxDecoration(
-                                color: scheme.primary.withValues(alpha: 0.12),
-                                borderRadius: BorderRadius.circular(999),
-                                border: Border.all(color: scheme.primary.withValues(alpha: 0.20)),
-                              ),
-                              child: Text(
-                                'KATALOG ARTIS',
-                                style: TextStyle(
-                                  color: scheme.primary,
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.w900,
-                                  letterSpacing: 1.2,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 9),
-                            Text(
-                              _artistTitle,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 23,
-                                fontWeight: FontWeight.w900,
-                                height: 1.02,
-                                letterSpacing: -0.6,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Wrap(
-                              spacing: 12,
-                              runSpacing: 5,
-                              children: [
-                                _artistStat(Icons.music_note_rounded, '${_songs.length} lagu', scheme),
-                                _artistStat(Icons.album_rounded, '${_playlists.length} rilisan', scheme),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (bio.isNotEmpty) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      bio,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: scheme.onSurfaceVariant,
-                        fontSize: 11.5,
-                        height: 1.3,
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: FilledButton.icon(
-                          onPressed: _songs.isEmpty
-                              ? null
-                              : () => unawaited(_playTracks(_songs.first, _songs)),
-                          icon: const Icon(Icons.play_arrow_rounded, size: 21),
-                          label: const Text('Putar semua'),
-                          style: FilledButton.styleFrom(
-                            minimumSize: const Size.fromHeight(44),
-                            shape: const StadiumBorder(),
-                          ),
-                        ),
-                      ),
-                      if (_playlists.isNotEmpty) ...[
-                        const SizedBox(width: 9),
-                        OutlinedButton.icon(
-                          onPressed: () => setState(() => _tab = 1),
-                          icon: const Icon(Icons.album_rounded, size: 18),
-                          label: const Text('Rilisan'),
-                          style: OutlinedButton.styleFrom(
-                            minimumSize: const Size(0, 44),
-                            shape: const StadiumBorder(),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _artistStat(IconData icon, String label, ColorScheme scheme) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 14, color: scheme.onSurfaceVariant),
-        const SizedBox(width: 4),
-        Text(
-          label,
-          style: TextStyle(
-            color: scheme.onSurfaceVariant,
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      ],
     );
   }
 
@@ -704,9 +584,8 @@ class _ArtistPageState extends State<ArtistPage> {
           video: _songs[index],
           onTap: () => unawaited(_playTracks(_songs[index], _songs)),
           onLongPress: widget.onLongPress == null ? null : () => widget.onLongPress!(_songs[index]),
-          subtitle: _songs[index].publishedAt == null
-              ? _artistTitle
-              : '$_artistTitle · ${_songs[index].publishedAt!.year}',
+          subtitle: _songs[index].publishedAt == null ? _songs[index].channelTitle :
+              '${_songs[index].channelTitle} · ${_songs[index].publishedAt!.year}',
         );
       },
     );
@@ -719,7 +598,7 @@ class _ArtistPageState extends State<ArtistPage> {
         title: 'Album musik belum ditemukan',
         subtitle: _nextPlaylistsToken != null
             ? 'Playlist pada halaman ini terfilter sebagai konten nonmusik. Muat daftar berikutnya untuk mencari album atau playlist lagu.'
-            : 'Belum ada album atau rilisan publik yang dikenali untuk artis ini.',
+            : 'Channel ini tidak memiliki album atau playlist musik publik yang dikenali.',
         actionLabel: _nextPlaylistsToken != null ? 'Muat playlist berikutnya' : null,
         onAction: _nextPlaylistsToken != null ? _loadMorePlaylists : null,
         actionLoading: _loadingMorePlaylists,
@@ -1013,7 +892,7 @@ class _AlbumPlaylistTileState extends State<_AlbumPlaylistTile> {
                   leading: const Icon(Icons.music_note_rounded),
                   title: Text(track.title, maxLines: 2, overflow: TextOverflow.ellipsis,
                       style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
-                  subtitle: Text(widget.channelTitle, maxLines: 1, overflow: TextOverflow.ellipsis,
+                  subtitle: Text(track.channelTitle, maxLines: 1, overflow: TextOverflow.ellipsis,
                       style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
                   trailing: const Icon(Icons.play_circle_outline_rounded, color: appGold),
                   onTap: () => unawaited(_play(track)),

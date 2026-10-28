@@ -30,62 +30,6 @@ class MusicTitleFormatter {
     caseSensitive: false,
   );
 
-  /// Best-effort artist label for UI surfaces. Prefer an artist inferred from
-  /// a title like "Artist - Song"; use the video owner only after removing
-  /// common platform suffixes and rejecting obvious label/network names.
-  /// YouTube metadata does not always identify the performing artist, so this
-  /// deliberately returns a neutral fallback rather than inventing a name.
-  static String artistLabel({
-    required String title,
-    String channelTitle = '',
-  }) {
-    String normalized(String value) => value
-        .toLowerCase()
-        .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .trim();
-
-    String cleanOwner(String value) {
-      var owner = value.trim().replaceAll(
-        RegExp(
-          r'\b(?:official(?:\s+music)?(?:\s+channel)?|vevo|topic|music\s+channel|channel)\b',
-          caseSensitive: false,
-        ),
-        ' ',
-      );
-      owner = owner.replaceAll(RegExp(r'\s+'), ' ').trim();
-      if (owner.isEmpty || RegExp(
-        r'\b(?:records?|music|musik|entertainment|production|productions|media\s+group|network|label|digital|vibe|audio\s+network)\b',
-        caseSensitive: false,
-      ).hasMatch(owner)) {
-        return '';
-      }
-      return owner;
-    }
-
-    bool matches(String candidate, String owner) {
-      final a = normalized(candidate);
-      final b = normalized(owner);
-      if (a.isEmpty || b.isEmpty) return false;
-      return a == b || a.startsWith('$b ') || b.startsWith('$a ');
-    }
-
-    final readableTitle = clean(title);
-    final pieces = readableTitle
-        .split(RegExp(r'\s+(?:-|–|—|\|)\s+'))
-        .map((part) => part.trim())
-        .where((part) => part.isNotEmpty)
-        .toList(growable: false);
-    final owner = cleanOwner(channelTitle);
-    if (pieces.length > 1) {
-      if (owner.isNotEmpty && matches(pieces.first, owner)) return pieces.first;
-      if (owner.isNotEmpty && matches(pieces[1], owner)) return pieces[1];
-      if (pieces.first.length <= 52) return pieces.first;
-    }
-    if (owner.isNotEmpty) return owner;
-    return 'Artis tidak diketahui';
-  }
-
   /// Returns a readable title, removing common metadata tags such as
   /// `[Official Video]`, `(Lyrics)`, `| Official Audio`, and HTML markup.
   /// Meaningful text such as `feat. Artist`, apostrophes, medley separators,

@@ -577,12 +577,7 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
     final title = hasTrack
         ? MusicTitleFormatter.clean(track.title)
         : 'Temukan musik yang kamu suka';
-    final artist = track == null
-        ? ''
-        : MusicTitleFormatter.artistLabel(
-            title: track.title,
-            channelTitle: track.channelTitle,
-          );
+    final artist = track?.channelTitle.trim() ?? '';
     final subtitle = hasTrack
         ? artist
         : 'Cari rilisan baru dan lanjutkan lagu favorit.';

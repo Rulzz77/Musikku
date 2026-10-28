@@ -6,7 +6,6 @@ import 'package:flutter/foundation.dart' show ValueListenable;
 import '../models/playlist.dart';
 import '../models/player_ui_state.dart';
 import '../models/youtube_search_result.dart';
-import '../services/music_title_formatter.dart';
 import '../widgets/playlist_widgets.dart' show showPlaylistNameDialog;
 import '../widgets/unified_artwork.dart';
 import '../widgets/flow_components.dart';
@@ -185,11 +184,7 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
                           child: UnifiedArtwork(track: song, width: 48, height: 48, fit: BoxFit.cover),
                         ),
                         title: Text(song.title, maxLines: 2, overflow: TextOverflow.ellipsis),
-                        subtitle: Text(
-                          MusicTitleFormatter.artistLabel(title: song.title, channelTitle: song.channelTitle),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                        subtitle: Text(song.channelTitle, maxLines: 1, overflow: TextOverflow.ellipsis),
                       );
                     },
                   ),
@@ -644,9 +639,7 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
                         style: isCurrent ? TextStyle(color: scheme.primary, fontWeight: FontWeight.w900) : null,
                       ),
                       subtitle: Text(
-                        isCurrent
-                            ? 'SEDANG DIPUTAR · ${MusicTitleFormatter.artistLabel(title: song.title, channelTitle: song.channelTitle)}'
-                            : MusicTitleFormatter.artistLabel(title: song.title, channelTitle: song.channelTitle),
+                        isCurrent ? 'SEDANG DIPUTAR · ${song.channelTitle}' : song.channelTitle,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: isCurrent ? TextStyle(color: scheme.primary, fontWeight: FontWeight.w700) : null,

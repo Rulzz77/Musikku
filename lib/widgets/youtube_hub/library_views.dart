@@ -240,14 +240,7 @@ extension _YoutubeHubLibraryViews on _YoutubeHubState {
               if (isCurrent) Container(width: 96, height: 54, color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.38), child: const Icon(Icons.graphic_eq_rounded, color: Colors.white)),
             ])),
             title: Text(video.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: isCurrent ? TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w900) : null),
-            subtitle: Text(
-              isCurrent
-                  ? 'SEDANG DIPUTAR • ${MusicTitleFormatter.artistLabel(title: video.title, channelTitle: video.channelTitle)}'
-                  : MusicTitleFormatter.artistLabel(title: video.title, channelTitle: video.channelTitle),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: isCurrent ? TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w700) : null,
-            ),
+            subtitle: Text(isCurrent ? 'SEDANG DIPUTAR • ${video.channelTitle}' : video.channelTitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: isCurrent ? TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w700) : null),
             trailing: isCurrent ? Icon(Icons.graphic_eq_rounded, color: Theme.of(context).colorScheme.primary) : null,
             onTap: () { Navigator.pop(context); unawaited(widget.onPlayFromList(video, musicSongs)); },
           );

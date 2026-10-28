@@ -254,11 +254,6 @@ extension _HomeListeningTogether on _HomePageState {
                       onPressed: () async {
                         try {
                           await _listenTogether.hostRoom();
-                          await _listenTogether.replaceSharedQueue(
-                            _queueManager.items
-                                .map((item) => item.video.toJson())
-                                .toList(growable: false),
-                          );
                           _startListenTogetherBroadcast();
                           _refreshListeningTogetherUi();
                         } catch (error) {
@@ -311,7 +306,7 @@ extension _HomeListeningTogether on _HomePageState {
                       Padding(
                         padding: const EdgeInsets.only(top: 8),
                         child: Text(
-                          'Semua anggota bisa mengontrol pemutaran dan mengelola antrean bersama. Lagu yang ditambahkan, dihapus, atau diurutkan ulang akan muncul di semua HP; label menunjukkan apakah lagu ditambahkan host atau anggota.',
+                          'Semua anggota bisa play/pause, Next/Previous, geser posisi, Shuffle, dan Repeat. Perintah dikirim ke host lalu tersinkron ke kamar.',
                           textAlign: TextAlign.center,
                           style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
                         ),
@@ -325,84 +320,6 @@ extension _HomeListeningTogether on _HomePageState {
       ),
     ).whenComplete(codeController.dispose);
   }
-
-  /// Every room participant reflects the host's canonical queue locally.
-  /// The room role check prevents closing a room from clearing the saved queue.
-  void _onSharedQueueChanged() {
-    if (!_listenTogether.isConnected) {
-      _lastSharedQueueVideoIds = <String>{};
-      _sharedQueueSnapshotInitialized = false;
-      return;
-    }
-
-    final seen = <String>{};
-    final items = <QueueItem>[];
-    final incoming = _listenTogether.sharedQueue.value;
-    for (final raw in incoming) {
-      final video = YoutubeSearchResult.fromJson(Map<String, dynamic>.from(raw));
-      if (video.isLocal || video.videoId.isEmpty || !seen.add(video.videoId)) continue;
-      items.add(QueueItem(video: video));
-    }
-
-    // Suppress the first snapshot after joining/hosting. Later additions notify
-    // all phones so a person knows another member changed the shared queue even
-    // when they are not currently looking at the queue sheet.
-    if (_sharedQueueSnapshotInitialized) {
-      final added = items.where((item) => !_lastSharedQueueVideoIds.contains(item.id)).toList(growable: false);
-      if (added.isNotEmpty && mounted) {
-        final latest = added.last.video;
-        var contributor = 'anggota';
-        for (final raw in incoming) {
-          if (raw['videoId']?.toString() == latest.videoId) {
-            contributor = raw['_addedByLabel']?.toString() ??
-                (raw['_addedByRole']?.toString() == 'host' ? 'Host' : 'Anggota');
-            break;
-          }
-        }
-        final messenger = ScaffoldMessenger.maybeOf(context);
-        messenger
-          ?..hideCurrentSnackBar()
-          ..showSnackBar(
-            SnackBar(
-              content: Text('Antrean bersama: ${latest.title} ditambahkan oleh $contributor'),
-              duration: const Duration(seconds: 3),
-            ),
-          );
-      }
-    }
-    _lastSharedQueueVideoIds = items.map((item) => item.id).toSet();
-    _sharedQueueSnapshotInitialized = true;
-    _queueManager.restore(items);
-    unawaited(_storage.saveQueue(_queueManager.items));
-    _refreshListeningTogetherUi();
-  }
-
-  /// Called when playback consumes an item from the host's local queue.
-  /// User-driven room mutations use the explicit shared queue operations below.
-  void _syncListeningTogetherQueueFromLocal() {
-    if (!_listenTogether.isHost) return;
-    unawaited(_listenTogether.replaceSharedQueue(
-      _queueManager.items.map((item) => item.video.toJson()).toList(growable: false),
-    ));
-  }
-
-  String _sharedQueueAddedByLabel(String videoId) {
-    for (final item in _listenTogether.sharedQueue.value) {
-      if (item['videoId']?.toString() != videoId) continue;
-      final contributor = item['_addedByLabel']?.toString().trim() ?? '';
-      if (contributor.isNotEmpty) return 'DITAMBAHKAN ${contributor.toUpperCase()}';
-      final role = item['_addedByRole']?.toString() ?? '';
-      if (role == 'host') return 'DITAMBAHKAN HOST';
-      if (role == 'member') return 'DITAMBAHKAN ANGGOTA';
-    }
-    return 'ANTREAN BERSAMA';
-  }
-
-  String _sharedQueueArtistLabel(YoutubeSearchResult video) =>
-      MusicTitleFormatter.artistLabel(
-        title: video.title,
-        channelTitle: video.channelTitle,
-      );
 
   Future<void> _joinListenTogetherRoom(String code) async {
     final normalizedCode = code.trim();

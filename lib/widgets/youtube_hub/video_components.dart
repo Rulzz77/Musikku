@@ -4,12 +4,6 @@ part of '../youtube_hub.dart';
 // ignore_for_file: invalid_use_of_protected_member
 
 extension _YoutubeHubVideoComponents on _YoutubeHubState {
-  String _artistLabelFromTrackTitle(YoutubeSearchResult video) =>
-      MusicTitleFormatter.artistLabel(
-        title: video.title,
-        channelTitle: video.channelTitle,
-      );
-
   Widget _sampleCard(YoutubeSearchResult video) {
     final scheme = Theme.of(context).colorScheme;
     final isCurrent = widget.currentVideoId == video.videoId;
@@ -40,8 +34,8 @@ extension _YoutubeHubVideoComponents on _YoutubeHubState {
                 padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
                 child: Row(
                   children: [
-                    Expanded(child: Text(_artistLabelFromTrackTitle(video), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11, fontWeight: FontWeight.w700))),
-                    IconButton(tooltip: 'Tambahkan ke antrean', visualDensity: VisualDensity.compact, onPressed: () => widget.onAddToQueue(video), icon: const Icon(Icons.queue_music_rounded, size: 20)),
+                    Expanded(child: Text(video.channelTitle.isEmpty ? 'Musik' : video.channelTitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11, fontWeight: FontWeight.w700))),
+                    IconButton(tooltip: 'Tambahkan ke antrean', visualDensity: VisualDensity.compact, onPressed: () { widget.onAddToQueue(video); ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ditambahkan ke antrean: ${video.title}'), duration: const Duration(seconds: 2))); }, icon: const Icon(Icons.queue_music_rounded, size: 20)),
                   ],
                 ),
               ),
@@ -120,7 +114,7 @@ extension _YoutubeHubVideoComponents on _YoutubeHubState {
     final scheme = Theme.of(context).colorScheme;
     final progress = (widget.watchProgress[video.videoId] ?? 0).clamp(0.0, 1.0).toDouble();
     final timeLabel = _watchTimeLabel(video);
-    final artistLabel = _artistLabelFromTrackTitle(video);
+    final channel = video.channelTitle.trim();
     final isCurrent = widget.currentVideoId == video.videoId;
 
     return TweenAnimationBuilder<double>(
@@ -198,12 +192,16 @@ extension _YoutubeHubVideoComponents on _YoutubeHubState {
                       ],
                       Text(MusicTitleFormatter.clean(video.title), maxLines: 2, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontSize: 13.5, fontWeight: FontWeight.w800, height: 1.2, letterSpacing: -0.2)),
                       const SizedBox(height: 5),
-                      Text(artistLabel, maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant, fontSize: 10.5, fontWeight: FontWeight.w700)),
+                      Text(channel.isEmpty ? 'Musik' : channel, maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant, fontSize: 10.5, fontWeight: FontWeight.w700)),
                       const SizedBox(height: 3),
                       Text(_metaLine(video), maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant.withValues(alpha: 0.84), fontSize: 9.5)),
                     ],
                   ),
                 ),
+                if (video.channelId.isNotEmpty) ...[
+                  const SizedBox(width: 5),
+                  ChannelAvatar(channelId: video.channelId, videoId: video.videoId, name: channel, radius: 13, onTap: () => _handleControllerOpenChannel(video.channelId, channel, '')),
+                ],
                 IconButton(
                   tooltip: 'Opsi lagu',
                   visualDensity: VisualDensity.compact,
@@ -270,7 +268,7 @@ extension _YoutubeHubVideoComponents on _YoutubeHubState {
                 const SizedBox(height: 7),
                 Text(MusicTitleFormatter.clean(video.title), maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurface, fontSize: 11, fontWeight: FontWeight.w800, height: 1.15, letterSpacing: -0.1)),
                 const SizedBox(height: 3),
-                Text(_artistLabelFromTrackTitle(video), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 9.5, fontWeight: FontWeight.w600)),
+                Text(video.channelTitle.isEmpty ? 'Musik' : video.channelTitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 9.5, fontWeight: FontWeight.w600)),
               ],
             ),
           ),

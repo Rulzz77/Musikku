@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-enum AppThemeChoice { system, dark, amoled, light }
+enum AppThemeChoice { system, dark, amoled, light, pink }
 
 enum DataSaverMode { off, saver, superSaver }
 
@@ -194,6 +194,7 @@ class AppSettingsController {
       case AppThemeChoice.system:
         return ThemeMode.system;
       case AppThemeChoice.light:
+      case AppThemeChoice.pink:
         return ThemeMode.light;
       case AppThemeChoice.dark:
       case AppThemeChoice.amoled:
@@ -202,4 +203,6 @@ class AppSettingsController {
   }
 
   bool get isAmoled => theme.value == AppThemeChoice.amoled;
+
+  bool get isPink => theme.value == AppThemeChoice.pink;
 }

@@ -31,38 +31,32 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
     final requestId = _searchRequestId;
     setState(() {
       _channelSearchLoading = true;
+      _artistChannelMode = artistMode;
     });
     try {
       var channels = await _searchService.searchChannels(query);
       if (!mounted || requestId != _searchRequestId || query != _query.trim()) return;
       if (artistMode) {
-        // Channel IDs are only the data source for a single artist catalogue;
-        // the search UI must not show duplicate cards for Official/Topic/VEVO
-        // variants of the same name.
+        // Automatic artist discovery only keeps channels whose names actually
+        // match the query (e.g. "Raisa Official" for "Raisa"). This avoids
+        // showing unrelated channels and avoids a second search for ordinary
+        // song/genre queries.
         channels = channels
             .where((channel) => _channelNameMatchesArtistQuery(channel.title, query))
             .toList(growable: false);
-        int rank(YoutubeChannelSearchResult channel) {
-          final title = channel.title.toLowerCase();
-          if (RegExp(r'\b(?:topic|vevo)\b').hasMatch(title)) return 2;
-          if (RegExp(r'\bofficial\b').hasMatch(title)) return 1;
-          return 0;
-        }
-        channels.sort((a, b) => rank(a).compareTo(rank(b)));
-        final seenArtists = <String>{};
-        channels = channels.where((channel) {
-          final key = _normalizeArtistChannelName(channel.title);
-          return key.isNotEmpty && seenArtists.add(key);
-        }).toList(growable: false);
       }
       setState(() {
         _searchChannels = channels.take(8).toList(growable: false);
+        _artistChannelMode = artistMode && _searchChannels.isNotEmpty;
       });
-    } catch (_) {
+    } catch (error) {
       if (!mounted || requestId != _searchRequestId || query != _query.trim()) return;
-      // Artist discovery is supplementary; a channel-search failure must not
-      // hide otherwise successful song results.
-      setState(() => _searchChannels = const []);
+      setState(() {
+        _artistChannelMode = false;
+        _error = error is YoutubeSearchException
+            ? error.message
+            : 'Pencarian channel gagal. Coba lagi nanti.';
+      });
     } finally {
       if (mounted && requestId == _searchRequestId && query == _query.trim()) {
         setState(() => _channelSearchLoading = false);
@@ -161,6 +155,7 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
       _searchResults = const [];
       _searchChannels = const [];
       _channelSearchLoading = false;
+      _artistChannelMode = false;
     });
     unawaited(_loadHome());
   }
@@ -181,6 +176,7 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
         _searchResults = const [];
         _searchChannels = const [];
         _channelSearchLoading = false;
+        _artistChannelMode = false;
         _section = _YoutubeSection.home;
         _loading = false;
       });
@@ -197,6 +193,7 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
       // query looks like an artist name, to avoid extra requests for songs/genres.
       _searchChannels = const [];
       _channelSearchLoading = false;
+      _artistChannelMode = false;
       _section = _YoutubeSection.home;
       _loading = true;
       _error = '';

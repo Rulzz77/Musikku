@@ -115,12 +115,6 @@ const Set<String> listeningRoomControlActions = <String>{
   'smart_shuffle',
   'loop',
   'sync_request',
-  'queue_request',
-  'queue_add',
-  'queue_remove',
-  'queue_move',
-  'queue_clear',
-  'queue_replace',
 };
 
 /// Controls that must broadcast a fresh snapshot immediately after the host
@@ -230,10 +224,6 @@ class ListeningTogetherService {
   final ValueNotifier<int> peerCount = ValueNotifier<int>(0);
   final ValueNotifier<String> inviteAddress = ValueNotifier<String>('');
   final ValueNotifier<String> roomCode = ValueNotifier<String>('');
-
-  /// Antrean kamar yang sama untuk seluruh perangkat, berisi metadata YouTube saja.
-  final ValueNotifier<List<Map<String, dynamic>>> sharedQueue =
-      ValueNotifier<List<Map<String, dynamic>>>(const <Map<String, dynamic>>[]);
   final StreamController<Map<String, dynamic>> _messages =
       StreamController<Map<String, dynamic>>.broadcast();
 
@@ -254,8 +244,6 @@ class ListeningTogetherService {
   final Map<String, DateTime> _onlinePeerLastSeen = <String, DateTime>{};
   final Map<String, DateTime> _lastControlAt = <String, DateTime>{};
   Map<String, dynamic>? _latestHostPlaybackState;
-  List<Map<String, dynamic>> _sharedQueue = <Map<String, dynamic>>[];
-  int _sharedQueueRevision = 0;
 
   // ---- Clock sync (guest side) ----
   /// hostTime - guestTime, in ms. Measured with NTP-style ping/pong and the
@@ -367,12 +355,6 @@ class ListeningTogetherService {
 
   Future<String> _hostOnlineRoom() async {
     final pin = (Random.secure().nextInt(90000000) + 10000000).toString();
-    // Clear the old room's snapshot while still disconnected. Otherwise the
-    // HomePage sharedQueue listener could interpret this setup reset as a real
-    // empty queue and erase the host's local queue before it is seeded below.
-    _sharedQueue = <Map<String, dynamic>>[];
-    _sharedQueueRevision = 0;
-    sharedQueue.value = const <Map<String, dynamic>>[];
     _onlineMode = true;
     _onlineClientId = _randomHexToken();
     _hosting = true;
@@ -418,9 +400,6 @@ class ListeningTogetherService {
     _bestRttMs = 1 << 30;
     _clockSamples.clear();
     _lastAcceptedSequence = 0;
-    _sharedQueue = <Map<String, dynamic>>[];
-    _sharedQueueRevision = 0;
-    sharedQueue.value = const <Map<String, dynamic>>[];
     _onlinePeers.clear();
     roomCode.value = pin;
     inviteAddress.value = pin;
@@ -492,11 +471,6 @@ class ListeningTogetherService {
       } catch (error) {
         syncStatus.value =
             'Terhubung; menunggu pembaruan lagu (${error.runtimeType})';
-      }
-      try {
-        await requestSharedQueueSnapshot();
-      } catch (error) {
-        status.value = 'Terhubung; antrean bersama sedang dimuat';
       }
     } catch (_) {
       _onlineJoinCompleter = null;
@@ -575,295 +549,6 @@ class ListeningTogetherService {
     _messages.add(_decorateGuestSnapshot(message));
   }
 
-  Map<String, dynamic>? _sanitizeSharedTrack(
-    dynamic raw, {
-    String addedByRole = 'member',
-    String addedByClientId = '',
-  }) {
-    if (raw is! Map) return null;
-    final source = Map<String, dynamic>.from(raw);
-    final id = source['videoId']?.toString().trim() ?? '';
-    final title = source['title']?.toString().trim() ?? '';
-    if (!isValidSharedYouTubeVideoId(id) || title.isEmpty) return null;
-    final rawThumbnail = source['thumbnailUrl']?.toString().trim() ?? '';
-    final safeThumbnail = rawThumbnail.startsWith('https://i.ytimg.com/') ||
-            rawThumbnail.startsWith('https://img.youtube.com/')
-        ? rawThumbnail
-        : '';
-    final rawDuration = source['durationSeconds'];
-    final duration = rawDuration is num && rawDuration.isFinite && rawDuration > 0
-        ? rawDuration.toDouble().clamp(0.0, 86400.0).toDouble()
-        : null;
-    final artistSource = (source['channelTitle'] ?? source['artist'] ??
-            'Artis tidak diketahui')
-        .toString()
-        .trim();
-    final addedRole = source['_addedByRole']?.toString() ?? addedByRole;
-    final addedClientId =
-        source['_addedByClientId']?.toString() ?? addedByClientId;
-    final suppliedLabel = source['_addedByLabel']?.toString().trim() ?? '';
-    final generatedLabel = addedRole == 'host'
-        ? 'Host'
-        : addedClientId.isNotEmpty
-            ? 'Anggota ${addedClientId.substring(0, addedClientId.length.clamp(0, 6).toInt()).toUpperCase()}'
-            : 'Anggota';
-    final addedLabel = suppliedLabel.isNotEmpty
-        ? suppliedLabel.substring(0, suppliedLabel.length.clamp(0, 40).toInt())
-        : generatedLabel;
-    final track = <String, dynamic>{
-      'videoId': id,
-      'title': title.substring(0, title.length.clamp(0, 180).toInt()),
-      'description': '',
-      'channelTitle': artistSource.substring(0, artistSource.length.clamp(0, 160).toInt()),
-      'thumbnailUrl': safeThumbnail,
-      'durationSeconds': ?duration,
-      'sourceType': 'youtube',
-      'publishedAt': source['publishedAt']?.toString(),
-      'viewCount': source['viewCount'] is num ? (source['viewCount'] as num).toInt() : null,
-      'album': '',
-      'liveStatus': '',
-      'channelId': '',
-      'categoryId': source['categoryId']?.toString() ?? '',
-      '_addedByRole': addedRole,
-      '_addedByLabel': addedLabel,
-      '_addedAtMs': (source['_addedAtMs'] as num?)?.toInt() ?? DateTime.now().millisecondsSinceEpoch,
-      '_addedByClientId': addedClientId,
-    };
-    return track;
-  }
-
-  void _publishSharedQueue() {
-    if (!_hosting || !_onlineMode) return;
-    _sharedQueueRevision++;
-    sharedQueue.value = List<Map<String, dynamic>>.unmodifiable(
-      _sharedQueue.map((item) => Map<String, dynamic>.unmodifiable(item)),
-    );
-    _sendOnlineUnawaited('room_queue_state', <String, dynamic>{
-      'code': roomCode.value,
-      'revision': _sharedQueueRevision,
-      'items': _sharedQueue.map((item) => Map<String, dynamic>.from(item)).toList(growable: false),
-      'sentAtMs': DateTime.now().millisecondsSinceEpoch,
-    });
-  }
-
-  void _handleSharedQueueControl(
-    Map<String, dynamic> message, {
-    required String clientId,
-  }) {
-    if (!_hosting || !_onlineMode) return;
-    final action = message['action']?.toString() ?? '';
-    if (action == 'queue_request') {
-      _publishSharedQueue();
-      return;
-    }
-    switch (action) {
-      case 'queue_add':
-        final rawTrack = message['track'];
-        final track = _sanitizeSharedTrack(
-          rawTrack,
-          addedByRole: clientId == _onlineClientId ? 'host' : 'member',
-          addedByClientId: clientId,
-        );
-        if (track == null) return;
-        final oldIndex = _sharedQueue.indexWhere((item) => item['videoId'] == track['videoId']);
-        final rawIndex = message['index'];
-        if (oldIndex >= 0) {
-          // Adding an existing track with index 0 means "play next"; keep its
-          // original contributor metadata while moving it to the front.
-          if (rawIndex is num && rawIndex.toInt() == 0 && oldIndex > 0) {
-            final existing = _sharedQueue.removeAt(oldIndex);
-            _sharedQueue.insert(0, existing);
-          } else {
-            return;
-          }
-        } else {
-          final index = rawIndex is num
-              ? rawIndex.toInt().clamp(0, _sharedQueue.length).toInt()
-              : _sharedQueue.length;
-          _sharedQueue.insert(index, track);
-        }
-        break;
-      case 'queue_remove':
-        final id = message['videoId']?.toString() ?? '';
-        _sharedQueue.removeWhere((item) => item['videoId'] == id);
-        break;
-      case 'queue_move':
-        final oldRaw = message['oldIndex'];
-        final newRaw = message['newIndex'];
-        if (oldRaw is! num || newRaw is! num) return;
-        if (_sharedQueue.isEmpty) return;
-        final oldIndex = oldRaw.toInt();
-        if (oldIndex < 0 || oldIndex >= _sharedQueue.length) return;
-        final item = _sharedQueue.removeAt(oldIndex);
-        final newIndex = newRaw.toInt().clamp(0, _sharedQueue.length).toInt();
-        _sharedQueue.insert(newIndex, item);
-        break;
-      case 'queue_clear':
-        _sharedQueue.clear();
-        break;
-      case 'queue_replace':
-        final rawItems = message['items'];
-        if (rawItems is! List) return;
-        final next = <Map<String, dynamic>>[];
-        final seen = <String>{};
-        for (final raw in rawItems) {
-          final track = _sanitizeSharedTrack(
-            raw,
-            addedByRole: clientId == _onlineClientId ? 'host' : 'member',
-            addedByClientId: clientId,
-          );
-          if (track == null || !seen.add(track['videoId']!.toString())) continue;
-          next.add(track);
-          if (next.length >= 100) break;
-        }
-        _sharedQueue = next;
-        break;
-      default:
-        return;
-    }
-    if (_sharedQueue.length > 100) _sharedQueue = _sharedQueue.take(100).toList();
-    _publishSharedQueue();
-  }
-
-  /// Seeds the collaborative queue from the host's existing local queue when
-  /// a room is created. Calls from guests are sent to the host instead.
-  Future<void> replaceSharedQueue(List<Map<String, dynamic>> items) async {
-    if (!_onlineMode || !isConnected) return;
-    final clean = <Map<String, dynamic>>[];
-    final seen = <String>{};
-    for (final raw in items) {
-      final rawMap = raw;
-      final id = rawMap['videoId']?.toString() ?? '';
-      Map<String, dynamic>? previous;
-      for (final oldItem in _sharedQueue) {
-        if (oldItem['videoId']?.toString() == id) {
-          previous = oldItem;
-          break;
-        }
-      }
-      final source = <String, dynamic>{
-        ...rawMap,
-        if (rawMap['_addedByRole'] == null && previous != null)
-          '_addedByRole': previous['_addedByRole'],
-        if (rawMap['_addedAtMs'] == null && previous != null)
-          '_addedAtMs': previous['_addedAtMs'],
-        if (rawMap['_addedByClientId'] == null && previous != null)
-          '_addedByClientId': previous['_addedByClientId'],
-        if (rawMap['_addedByLabel'] == null && previous != null)
-          '_addedByLabel': previous['_addedByLabel'],
-      };
-      final track = _sanitizeSharedTrack(
-        source,
-        addedByRole: _hosting ? 'host' : 'member',
-        addedByClientId: _onlineClientId,
-      );
-      if (track == null || !seen.add(track['videoId']!.toString())) continue;
-      clean.add(track);
-      if (clean.length >= 100) break;
-    }
-    if (_hosting) {
-      _sharedQueue = clean;
-      _publishSharedQueue();
-      return;
-    }
-    await _sendQueueControl('queue_replace', extra: <String, dynamic>{'items': clean});
-  }
-
-  Future<void> addSharedQueueTrack(
-    Map<String, dynamic> track, {
-    bool next = false,
-    int? index,
-  }) async {
-    if (!_onlineMode || !isConnected) {
-      throw StateError('Antrean bersama hanya tersedia saat terhubung ke kamar.');
-    }
-    final clean = _sanitizeSharedTrack(
-      track,
-      addedByRole: _hosting ? 'host' : 'member',
-      addedByClientId: _onlineClientId,
-    );
-    if (clean == null) {
-      throw const FormatException('Hanya lagu YouTube dengan judul valid yang bisa dimasukkan ke antrean bersama.');
-    }
-    final targetIndex = index ?? (next ? 0 : _sharedQueue.length);
-    if (_hosting) {
-      final existingIndex = _sharedQueue.indexWhere(
-        (item) => item['videoId'] == clean['videoId'],
-      );
-      if (existingIndex >= 0) {
-        if (next && existingIndex > 0) {
-          final existing = _sharedQueue.removeAt(existingIndex);
-          _sharedQueue.insert(0, existing);
-          _publishSharedQueue();
-        }
-        return;
-      }
-      clean['_addedByRole'] = 'host';
-      _sharedQueue.insert(targetIndex.clamp(0, _sharedQueue.length).toInt(), clean);
-      _publishSharedQueue();
-      return;
-    }
-    await _sendQueueControl('queue_add', extra: <String, dynamic>{
-      'track': clean,
-      'index': index ?? (next ? 0 : null),
-    });
-  }
-
-  Future<void> removeSharedQueueTrack(String videoId) async {
-    if (!_onlineMode || !isConnected) return;
-    if (_hosting) {
-      _sharedQueue.removeWhere((item) => item['videoId'] == videoId);
-      _publishSharedQueue();
-    } else {
-      await _sendQueueControl('queue_remove', extra: <String, dynamic>{'videoId': videoId});
-    }
-  }
-
-  Future<void> moveSharedQueueTrack(int oldIndex, int newIndex) async {
-    if (!_onlineMode || !isConnected) return;
-    if (_hosting) {
-      if (oldIndex < 0 || oldIndex >= _sharedQueue.length) return;
-      final item = _sharedQueue.removeAt(oldIndex);
-      _sharedQueue.insert(newIndex.clamp(0, _sharedQueue.length).toInt(), item);
-      _publishSharedQueue();
-    } else {
-      await _sendQueueControl('queue_move', extra: <String, dynamic>{
-        'oldIndex': oldIndex,
-        'newIndex': newIndex,
-      });
-    }
-  }
-
-  Future<void> clearSharedQueue() async {
-    if (!_onlineMode || !isConnected) return;
-    if (_hosting) {
-      _sharedQueue.clear();
-      _publishSharedQueue();
-    } else {
-      await _sendQueueControl('queue_clear');
-    }
-  }
-
-  Future<void> requestSharedQueueSnapshot() async {
-    if (!_onlineMode || !_joined || _hosting) return;
-    await _sendQueueControl('queue_request');
-  }
-
-  Future<void> _sendQueueControl(
-    String action, {
-    Map<String, dynamic> extra = const <String, dynamic>{},
-  }) async {
-    if (!_onlineMode || !_joined || _hosting) {
-      throw StateError('Gabung kamar sebagai anggota untuk mengirim perubahan antrean.');
-    }
-    await _sendOnline('room_control', <String, dynamic>{
-      'clientId': _onlineClientId,
-      'code': roomCode.value,
-      'action': action,
-      ...extra,
-    });
-  }
-
   RealtimeChannel _createOnlineChannel(String pin, {required bool hosting}) {
     final channel = _remoteClient.channel(
       'musikku_room_$pin',
@@ -874,36 +559,6 @@ class ListeningTogetherService {
       if (hosting || !_onlineMode || !_joined || _disposed) return;
       final message = unwrapRealtimeBroadcastPayload(frame);
       _deliverHostSnapshot(message);
-    });
-
-    channel.onBroadcast(event: 'room_queue_state', callback: (frame) {
-      if (hosting || !_onlineMode || !_joined || _disposed) return;
-      final message = unwrapRealtimeBroadcastPayload(frame);
-      if (message['code']?.toString() != roomCode.value) return;
-      final rawItems = message['items'];
-      if (rawItems is! List) return;
-      final incomingRevision = (message['revision'] as num?)?.toInt() ?? 0;
-      if (incomingRevision > 0 && incomingRevision < _sharedQueueRevision) return;
-      final next = <Map<String, dynamic>>[];
-      final seen = <String>{};
-      for (final raw in rawItems) {
-        final item = _sanitizeSharedTrack(raw);
-        if (item == null || !seen.add(item['videoId']!.toString())) continue;
-        if (raw is Map) {
-          final source = Map<String, dynamic>.from(raw);
-          item['_addedByRole'] = source['_addedByRole']?.toString() ?? 'member';
-          item['_addedByLabel'] = source['_addedByLabel']?.toString() ?? 'Anggota';
-          item['_addedAtMs'] = (source['_addedAtMs'] as num?)?.toInt() ?? 0;
-          item['_addedByClientId'] = source['_addedByClientId']?.toString() ?? '';
-        }
-        next.add(item);
-        if (next.length >= 100) break;
-      }
-      _sharedQueue = next;
-      if (incomingRevision > 0) _sharedQueueRevision = incomingRevision;
-      sharedQueue.value = List<Map<String, dynamic>>.unmodifiable(
-        next.map((item) => Map<String, dynamic>.unmodifiable(item)),
-      );
     });
 
     channel.onBroadcast(event: 'room_join', callback: (frame) {
@@ -1014,17 +669,13 @@ class ListeningTogetherService {
         return;
       }
       final now = DateTime.now();
-      _onlinePeerLastSeen[clientId] = now;
-      if (action.startsWith('queue_')) {
-        _handleSharedQueueControl(message, clientId: clientId);
-        return;
-      }
       final last = _lastControlAt[clientId];
       if (last != null &&
           now.difference(last) < const Duration(milliseconds: 180)) {
         return;
       }
       _lastControlAt[clientId] = now;
+      _onlinePeerLastSeen[clientId] = now;
       if (!_messages.isClosed) {
         final forwarded = <String, dynamic>{
           'type': 'control',
@@ -1308,9 +959,6 @@ class ListeningTogetherService {
 
     _hosting = false;
     _joined = false;
-    _sharedQueue = <Map<String, dynamic>>[];
-    _sharedQueueRevision = 0;
-    sharedQueue.value = const <Map<String, dynamic>>[];
     peerCount.value = 0;
     inviteAddress.value = '';
     roomCode.value = '';
@@ -1329,6 +977,5 @@ class ListeningTogetherService {
     peerCount.dispose();
     inviteAddress.dispose();
     roomCode.dispose();
-    sharedQueue.dispose();
   }
 }

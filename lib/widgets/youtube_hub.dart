@@ -20,6 +20,7 @@ import '../services/smart_playlist_service.dart';
 import '../services/storage_service.dart';
 import '../services/youtube_search_service.dart';
 import 'app_update_sheet.dart';
+import 'channel_avatar.dart';
 import 'live_badge.dart';
 import 'unified_artwork.dart';
 
@@ -139,6 +140,7 @@ class _YoutubeHubState extends State<YoutubeHub> {
   List<YoutubeSearchResult> _searchResults = const [];
   List<YoutubeChannelSearchResult> _searchChannels = const [];
   bool _channelSearchLoading = false;
+  bool _artistChannelMode = false;
 
   /// true selama tarik-untuk-refresh: RefreshIndicator sudah punya spinner
   /// sendiri, jadi spinner inline disembunyikan supaya tidak muncul dobel.
@@ -246,6 +248,7 @@ class _YoutubeHubState extends State<YoutubeHub> {
         _query = '';
         _searchResults = const [];
         _searchChannels = const [];
+        _artistChannelMode = false;
         _channelSearchLoading = false;
         _error = '';
         _loading = false;
@@ -273,6 +276,7 @@ class _YoutubeHubState extends State<YoutubeHub> {
       _query = '';
       _searchResults = const [];
       _searchChannels = const [];
+      _artistChannelMode = false;
       _channelSearchLoading = false;
       _loading = false;
       _error = '';
@@ -322,10 +326,18 @@ class _YoutubeHubState extends State<YoutubeHub> {
   @override
   Widget build(BuildContext context) {
     final channel = _openedChannel;
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final dockInset = screenWidth >= 700
+        ? ((screenWidth - 820) / 2).clamp(14.0, 180.0).toDouble()
+        : 14.0;
 
     return Stack(
       children: [
-        AnimatedSwitcher(
+        Center(
+          child: ConstrainedBox(
+            // Keep reading widths comfortable on tablets and desktop-sized windows.
+            constraints: const BoxConstraints(maxWidth: 1200),
+            child: AnimatedSwitcher(
           duration: const Duration(milliseconds: 300),
           reverseDuration: const Duration(milliseconds: 210),
           switchInCurve: Curves.easeOutCubic,
@@ -350,10 +362,12 @@ class _YoutubeHubState extends State<YoutubeHub> {
               slivers: _hubSlivers(),
             ),
           ),
+            ),
+          ),
         ),
         Positioned(
-          left: 14,
-          right: 14,
+          left: dockInset,
+          right: dockInset,
           bottom: MediaQuery.paddingOf(context).bottom + 8,
           child: _GlassMagnifyingDock(
             selectedIndex: _section.index,
@@ -451,16 +465,16 @@ class _YoutubeHubState extends State<YoutubeHub> {
     }
   }
 
-  /// Hasil pencarian: daftar artis terlebih dahulu, kemudian lagu terkait.
+  /// Hasil pencarian di Beranda: channel terkait, lalu daftar lagu.
   List<Widget> _hubSearchSlivers() {
     return [
       if (_searchChannels.isNotEmpty) ...[
-        _sectionHeader('Artis'),
+        _sectionHeader(_artistChannelMode ? 'Artis' : 'Channel musik'),
         SliverToBoxAdapter(
           child: SizedBox(
-            // Kartu artis ringkas; identitas channel hanya dipakai sebagai
-            // sumber data internal dan tidak lagi ditampilkan sebagai kategori.
-            height: 130,
+            // Tinggi cukup untuk avatar + nama + label channel bahkan saat
+            // ukuran font sistem dibesarkan (sebelumnya overflow 10 px).
+            height: 136,
             child: ListView.separated(
               padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
               scrollDirection: Axis.horizontal,
@@ -471,7 +485,27 @@ class _YoutubeHubState extends State<YoutubeHub> {
           ),
         ),
       ],
-      _sectionHeader('Lagu terkait “$_query”'),
+      if (_searchChannels.isEmpty && !_inlineLoading)
+        SliverToBoxAdapter(
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+              child: TextButton.icon(
+                onPressed: _channelSearchLoading ? null : () => _searchChannelsForCurrentQuery(),
+                icon: _channelSearchLoading
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.person_search_rounded),
+                label: Text(_channelSearchLoading ? 'Mencari channel…' : 'Cari channel terkait'),
+              ),
+            ),
+          ),
+        ),
+      _sectionHeader('Lagu untuk “$_query”'),
       if (_inlineLoading && _searchResults.isEmpty)
         const SliverToBoxAdapter(
           child: Padding(
@@ -497,9 +531,17 @@ class _YoutubeHubState extends State<YoutubeHub> {
       width: 160,
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
-        // Channel ID is an implementation detail used to load the public
-        // discography; navigation always opens the artist catalogue.
-        onTap: () => _openArtistCatalogue(channel),
+        onTap: () {
+          if (_artistChannelMode) {
+            _openArtistCatalogue(channel);
+          } else {
+            _handleControllerOpenChannel(
+              channel.channelId,
+              channel.title,
+              channel.thumbnailUrl,
+            );
+          }
+        },
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
           child: Column(
@@ -512,7 +554,7 @@ class _YoutubeHubState extends State<YoutubeHub> {
               ),
               const SizedBox(height: 6),
               Text(
-                _query.trim().isNotEmpty ? _query.trim() : channel.title.replaceAll(RegExp(r'\b(?:Official(?: Music)?(?: Channel)?|VEVO|Topic|Music Channel|Channel)\b', caseSensitive: false), '').trim(),
+                channel.title,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
@@ -520,7 +562,7 @@ class _YoutubeHubState extends State<YoutubeHub> {
               ),
               const SizedBox(height: 2),
               Text(
-                'Lihat lagu & rilisan',
+                _artistChannelMode ? 'Lihat daftar lagu' : 'Buka channel',
                 style: const TextStyle(fontSize: 10.5),
               ),
             ],

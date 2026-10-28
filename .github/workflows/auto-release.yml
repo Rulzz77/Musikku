@@ -104,6 +104,61 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      # Ensure Android SDK tools and licenses are available before Gradle configures :app.
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+
+      # Gradle's Android project requests NDK 28.2.13676358. Installing it here first
+      # avoids sdkmanager trying to unpack a partial/corrupt archive during configuration.
+      - name: Install Android NDK 28.2.13676358 (retry on corrupt download)
+        shell: bash
+        run: |
+          set -eu
+
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [[ -z "$SDK_ROOT" ]]; then
+            echo "::error::ANDROID_HOME / ANDROID_SDK_ROOT is not set."
+            exit 1
+          fi
+
+          SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          if [[ ! -x "$SDKMANAGER" ]]; then
+            SDKMANAGER="$(command -v sdkmanager || true)"
+          fi
+          if [[ -z "$SDKMANAGER" || ! -x "$SDKMANAGER" ]]; then
+            echo "::error::sdkmanager was not found in the Android SDK."
+            exit 1
+          fi
+
+          # Accept any Android SDK licenses not accepted by the runner image yet.
+          yes | "$SDKMANAGER" --licenses >/dev/null
+
+          NDK_DIR="$SDK_ROOT/ndk/28.2.13676358"
+          if [[ -s "$NDK_DIR/source.properties" ]]; then
+            echo "NDK 28.2.13676358 is already installed."
+            exit 0
+          fi
+
+          for attempt in 1 2 3; do
+            echo "Installing NDK 28.2.13676358 (attempt $attempt/3)..."
+            rm -rf "$NDK_DIR" "$SDK_ROOT/temp"
+
+            if "$SDKMANAGER" --install "ndk;28.2.13676358"; then
+              if [[ -s "$NDK_DIR/source.properties" ]]; then
+                echo "NDK installation verified."
+                exit 0
+              fi
+              echo "::warning::sdkmanager returned success, but source.properties is missing."
+            else
+              echo "::warning::NDK installation attempt $attempt failed."
+            fi
+
+            sleep 5
+          done
+
+          echo "::error::Could not install a valid NDK after 3 attempts."
+          exit 1
+
       - name: Set up Flutter
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:

@@ -16,6 +16,7 @@ import '../models/youtube_search_result.dart';
 import '../services/lyrics_service.dart';
 import '../services/listening_playback_tracker.dart';
 import '../services/listening_together_service.dart';
+import '../services/music_title_formatter.dart';
 import '../services/music_style_matcher.dart';
 import '../services/original_track_resolver.dart';
 import '../services/app_settings.dart';
@@ -120,6 +121,8 @@ class _HomePageState extends State<HomePage>
   bool? _listenTogetherOptimisticPlaying;
   int _listenTogetherOptimisticSinceMs = 0;
   bool _wasFollowingListenTogether = false;
+  Set<String> _lastSharedQueueVideoIds = <String>{};
+  bool _sharedQueueSnapshotInitialized = false;
   String _lastRoomUnsupportedTrackId = '';
   String _lastListenTogetherLoadFailureVideoId = '';
   DateTime? _lastListenTogetherLoadFailureAt;
@@ -552,6 +555,7 @@ class _HomePageState extends State<HomePage>
       onError: (Object error) => debugPrint('LISTEN TOGETHER ERROR: $error'),
     );
     _listenTogether.status.addListener(_onListenTogetherStatusChanged);
+    _listenTogether.sharedQueue.addListener(_onSharedQueueChanged);
     _nativeStateNotifier.addListener(_stampNativeStateTime);
 
     _videoStateSubscription = _youtubeController.stateStream.listen(
@@ -695,6 +699,7 @@ class _HomePageState extends State<HomePage>
     _listenTogetherSyncTimer?.cancel();
     _listenTogetherMessagesSubscription?.cancel();
     _listenTogether.status.removeListener(_onListenTogetherStatusChanged);
+    _listenTogether.sharedQueue.removeListener(_onSharedQueueChanged);
     unawaited(_listenTogether.dispose());
 
     _youtubeController.dispose();

@@ -212,18 +212,28 @@ extension _HomeQueue on _HomePageState {
   }
 
   void _addToQueue(YoutubeSearchResult video) {
-    final added = _queueManager.add(video);
-
-    if (added) {
-      unawaited(_storage.saveQueue(_queueManager.items));
-    }
-
-    if (!mounted) {
+    if (_listenTogether.isConnected) {
+      final exists = _listenTogether.sharedQueue.value.any(
+        (item) => item['videoId']?.toString() == video.videoId,
+      );
+      if (exists) {
+        _toast('"${video.title}" sudah ada di antrean bersama');
+        return;
+      }
+      unawaited(() async {
+        try {
+          await _listenTogether.addSharedQueueTrack(video.toJson());
+        } catch (error) {
+          if (mounted) _toast('Gagal menambahkan ke antrean bersama: $error');
+        }
+      }());
       return;
     }
 
+    final added = _queueManager.add(video);
+    if (added) unawaited(_storage.saveQueue(_queueManager.items));
+    if (!mounted) return;
     setState(() {});
-
     _toast(
       added
           ? '"${video.title}" ditambahkan ke antrean'
@@ -232,15 +242,20 @@ extension _HomeQueue on _HomePageState {
   }
 
   void _playNext(YoutubeSearchResult video) {
-    _queueManager.addNext(video);
-    unawaited(_storage.saveQueue(_queueManager.items));
-
-    if (!mounted) {
+    if (_listenTogether.isConnected) {
+      unawaited(() async {
+        try {
+          await _listenTogether.addSharedQueueTrack(video.toJson(), next: true);
+        } catch (error) {
+          if (mounted) _toast('Gagal memperbarui antrean bersama: $error');
+        }
+      }());
       return;
     }
-
+    _queueManager.addNext(video);
+    unawaited(_storage.saveQueue(_queueManager.items));
+    if (!mounted) return;
     setState(() {});
-
     _toast('"${video.title}" akan diputar berikutnya');
   }
 
@@ -284,10 +299,14 @@ extension _HomeQueue on _HomePageState {
       onLike: () => _toggleLike(video),
       onDislike: () => _toggleDislike(video),
       onToggleChannelBlock: () => _toggleChannelBlock(video),
-      onOpenArtist: () => _openArtist(
-        video.channelTitle,
-        channelId: video.channelId,
-      ),
+      onOpenArtist: () {
+        final artist = MusicTitleFormatter.artistLabel(
+          title: video.title,
+          channelTitle: video.channelTitle,
+        );
+        if (artist == 'Artis tidak diketahui') return;
+        _openArtist(artist, channelId: video.channelId);
+      },
       onPlayNext: () => _playNext(video),
       onAddToQueue: () => _addToQueue(video),
       onToggleFavorite: () => _toggleFavorite(video),
@@ -310,8 +329,10 @@ extension _HomeQueueSheet on _HomePageState {
       useSafeArea: true,
       isScrollControlled: true,
       constraints: const BoxConstraints(maxWidth: 640),
-      builder: (sheetContext) => StatefulBuilder(
-        builder: (context, setSheetState) {
+      builder: (sheetContext) => ValueListenableBuilder<List<Map<String, dynamic>>>(
+        valueListenable: _listenTogether.sharedQueue,
+        builder: (context, _, _) => StatefulBuilder(
+          builder: (context, setSheetState) {
           final scheme = Theme.of(context).colorScheme;
           final items = _queueManager.items;
           final current = _currentVideo;
@@ -334,8 +355,12 @@ extension _HomeQueueSheet on _HomePageState {
             if (confirm != true) return;
             final previousItems = List<QueueItem>.from(_queueManager.items);
             if (previousItems.isEmpty) return;
-            _queueManager.clear();
-            await _storage.saveQueue(_queueManager.items);
+            if (_listenTogether.isConnected) {
+              await _listenTogether.clearSharedQueue();
+            } else {
+              _queueManager.clear();
+              await _storage.saveQueue(_queueManager.items);
+            }
             if (mounted) setState(() {});
             if (sheetContext.mounted) setSheetState(() {});
             messenger.hideCurrentSnackBar();
@@ -348,10 +373,16 @@ extension _HomeQueueSheet on _HomePageState {
                   onPressed: () {
                     // Restore missing entries at their former indexes without
                     // deleting songs that may have been added after clearing.
-                    for (var i = 0; i < previousItems.length; i++) {
-                      _queueManager.restoreAtIndex(previousItems[i], i);
+                    if (_listenTogether.isConnected) {
+                      unawaited(_listenTogether.replaceSharedQueue(
+                        previousItems.map((item) => item.video.toJson()).toList(growable: false),
+                      ));
+                    } else {
+                      for (var i = 0; i < previousItems.length; i++) {
+                        _queueManager.restoreAtIndex(previousItems[i], i);
+                      }
+                      unawaited(_storage.saveQueue(_queueManager.items));
                     }
-                    unawaited(_storage.saveQueue(_queueManager.items));
                     if (mounted) setState(() {});
                     if (sheetContext.mounted) setSheetState(() {});
                   },
@@ -361,25 +392,35 @@ extension _HomeQueueSheet on _HomePageState {
           }
 
           void removeFromQueueWithUndo(YoutubeSearchResult video) {
-            final removal = _queueManager.removeWithIndex(video.videoId);
-            if (removal == null) return;
-            unawaited(_storage.saveQueue(_queueManager.items));
+            final oldIndex = _queueManager.items.indexWhere((item) => item.id == video.videoId);
+            if (oldIndex < 0) return;
+            final removal = QueueRemoval(item: QueueItem(video: video), index: oldIndex);
+            if (_listenTogether.isConnected) {
+              unawaited(_listenTogether.removeSharedQueueTrack(video.videoId));
+            } else {
+              _queueManager.remove(video.videoId);
+              unawaited(_storage.saveQueue(_queueManager.items));
+            }
             if (mounted) setState(() {});
             setSheetState(() {});
             messenger.hideCurrentSnackBar();
             messenger.showSnackBar(
               SnackBar(
-                content: Text('"${video.title}" dihapus dari antrean'),
+                content: Text('"${video.title}" dihapus dari antrean${_listenTogether.isConnected ? ' bersama' : ''}'),
                 duration: const Duration(seconds: 6),
                 action: SnackBarAction(
                   label: 'URUNGKAN',
                   onPressed: () {
-                    final restored = _queueManager.restoreAtIndex(
-                      removal.item,
-                      removal.index,
-                    );
-                    if (!restored) return;
-                    unawaited(_storage.saveQueue(_queueManager.items));
+                    if (_listenTogether.isConnected) {
+                      unawaited(_listenTogether.addSharedQueueTrack(
+                        removal.item.video.toJson(),
+                        index: removal.index,
+                      ));
+                    } else {
+                      final restored = _queueManager.restoreAtIndex(removal.item, removal.index);
+                      if (!restored) return;
+                      unawaited(_storage.saveQueue(_queueManager.items));
+                    }
                     if (mounted) setState(() {});
                     if (sheetContext.mounted) setSheetState(() {});
                   },
@@ -401,9 +442,14 @@ extension _HomeQueueSheet on _HomePageState {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text('Antrean putar', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: -0.45)),
+                            Text(_listenTogether.isConnected ? 'Antrean bersama' : 'Antrean putar', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: -0.45)),
                             const SizedBox(height: 3),
-                            Text('${items.length} lagu menunggu', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12)),
+                            Text(
+                              _listenTogether.isConnected
+                                  ? '${items.length} lagu · disinkronkan ke semua perangkat'
+                                  : '${items.length} lagu menunggu',
+                              style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
+                            ),
                           ],
                         ),
                       ),
@@ -417,9 +463,14 @@ extension _HomeQueueSheet on _HomePageState {
                         IconButton.filledTonal(
                           tooltip: 'Putar lagu pertama di antrean',
                           onPressed: () {
-                            final first = _queueManager.takeFirst();
-                            if (first == null) return;
-                            unawaited(_storage.saveQueue(_queueManager.items));
+                            if (items.isEmpty) return;
+                            final first = items.first;
+                            if (_listenTogether.isConnected) {
+                              unawaited(_listenTogether.removeSharedQueueTrack(first.id));
+                            } else {
+                              _queueManager.takeFirst();
+                              unawaited(_storage.saveQueue(_queueManager.items));
+                            }
                             Navigator.of(sheetContext).pop();
                             unawaited(_playVideo(first.video));
                           },
@@ -447,7 +498,7 @@ extension _HomeQueueSheet on _HomePageState {
                               Text('SEDANG DIPUTAR', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1, color: scheme.primary)),
                               const SizedBox(height: 3),
                               Text(current.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800)),
-                              Text(current.channelTitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11)),
+                              Text(_sharedQueueArtistLabel(current), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11)),
                             ],
                           ),
                         ),
@@ -478,8 +529,12 @@ extension _HomeQueueSheet on _HomePageState {
                             // onReorderItem sudah menyesuaikan newIndex untuk item
                             // yang dipindahkan; jangan kurangi indeks lagi.
                             final target = newIndex.clamp(0, items.length - 1).toInt();
-                            _queueManager.move(oldIndex: oldIndex, newIndex: target);
-                            unawaited(_storage.saveQueue(_queueManager.items));
+                            if (_listenTogether.isConnected) {
+                              unawaited(_listenTogether.moveSharedQueueTrack(oldIndex, target));
+                            } else {
+                              _queueManager.move(oldIndex: oldIndex, newIndex: target);
+                              unawaited(_storage.saveQueue(_queueManager.items));
+                            }
                             if (mounted) setState(() {});
                             setSheetState(() {});
                           },
@@ -495,8 +550,12 @@ extension _HomeQueueSheet on _HomePageState {
                                 child: InkWell(
                                   borderRadius: BorderRadius.circular(18),
                                   onTap: () {
-                                    _queueManager.remove(video.videoId);
-                                    unawaited(_storage.saveQueue(_queueManager.items));
+                                    if (_listenTogether.isConnected) {
+                                      unawaited(_listenTogether.removeSharedQueueTrack(video.videoId));
+                                    } else {
+                                      _queueManager.remove(video.videoId);
+                                      unawaited(_storage.saveQueue(_queueManager.items));
+                                    }
                                     Navigator.of(sheetContext).pop();
                                     unawaited(_playVideo(video));
                                   },
@@ -522,9 +581,14 @@ extension _HomeQueueSheet on _HomePageState {
                                             children: [
                                               Text(video.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13)),
                                               const SizedBox(height: 4),
-                                              Text(video.channelTitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
+                                              Text(_sharedQueueArtistLabel(video), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
                                               const SizedBox(height: 5),
-                                              Text('MENUNGGU DIPUTAR', style: TextStyle(fontSize: 8.5, letterSpacing: 0.8, fontWeight: FontWeight.w900, color: scheme.primary)),
+                                              Text(
+                                                _listenTogether.isConnected
+                                                    ? _sharedQueueAddedByLabel(video.videoId)
+                                                    : 'MENUNGGU DIPUTAR',
+                                                style: TextStyle(fontSize: 8.5, letterSpacing: 0.8, fontWeight: FontWeight.w900, color: scheme.primary),
+                                              ),
                                             ],
                                           ),
                                         ),
@@ -553,7 +617,8 @@ extension _HomeQueueSheet on _HomePageState {
               ],
             ),
           );
-        },
+          },
+        ),
       ),
     );
   }

@@ -51,6 +51,7 @@ extension _HomeAutoNext on _HomePageState {
         if (nextItem != null) {
           unawaited(_storage.flushPendingWrites());
           unawaited(_storage.saveQueue(_queueManager.items));
+          _syncListeningTogetherQueueFromLocal();
           await _playVideo(nextItem.video);
 
           if (mounted) {

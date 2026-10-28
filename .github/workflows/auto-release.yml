@@ -130,8 +130,12 @@ jobs:
             exit 1
           fi
 
-          # Accept any Android SDK licenses not accepted by the runner image yet.
-          yes | "$SDKMANAGER" --licenses >/dev/null
+          # Accept Android SDK licenses. Temporarily disable pipefail because
+          # `yes` can receive SIGPIPE when sdkmanager exits after reading all answers.
+          # With pipefail disabled, the pipeline still returns sdkmanager's exit code.
+          set +o pipefail
+          yes 2>/dev/null | "$SDKMANAGER" --licenses >/dev/null
+          set -o pipefail
 
           NDK_DIR="$SDK_ROOT/ndk/28.2.13676358"
           if [[ -s "$NDK_DIR/source.properties" ]]; then

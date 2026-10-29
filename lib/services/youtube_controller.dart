@@ -533,6 +533,13 @@ class NativeYoutubeController {
   }
 
   Future<bool> setEqualizerPreset(String preset) async {
+    // Native presets vary across platform implementations. Define Dangdut
+    // through the existing five-band bridge so saved/global/per-track presets
+    // behave consistently even when native code has no named Dangdut preset.
+    if (preset.trim().toLowerCase() == 'dangdut') {
+      return setEqualizerBands(const <double>[3.0, 2.0, 0.5, 2.0, 1.0]);
+    }
+
     final result = await _methods.invokeMethod<dynamic>(
       'setEqualizerPreset',
       {'preset': preset},

@@ -231,7 +231,7 @@ class YoutubeMusicPolicy {
     // Topic channels are YouTube-generated artist-track channels. Also accept
     // common artist/label official-channel naming conventions.
     final officialChannel = RegExp(
-      r'(?:-\s*topic$|\bvevo\b|\bofficial\b|\b(?:universal music|warner music|sony music|republic records|atlantic records|interscope records|capitol records|emi records|musica studios?|trinity optima|aquarius musikindo|nagaswara|gp records|sony music indonesia|warner music indonesia|universal music indonesia|sm entertainment|jyp entertainment|yg entertainment|hybe labels|big hit music|t-series|zee music company|saregama|lahari music|aditya music|times music|speed records|white hill music|my music records|stone music entertainment|1thek|smtown|mnet k[ -]?pop|indosemar records|proaktif|pelangi records|3d entertainment|musik proaktif)\b)',
+      r'(?:-\s*topic$|\bvevo\b|\bofficial\b|\b(?:universal music|warner music|sony music|republic records|atlantic records|interscope records|capitol records|emi records|musica studios?|trinity optima|aquarius musikindo|nagaswara|gp records|sony music indonesia|warner music indonesia|universal music indonesia|sm entertainment|jyp entertainment|yg entertainment|hybe labels|big hit music|t-series|zee music company|saregama|lahari music|aditya music|times music|speed records|white hill music|my music records|stone music entertainment|1thek|smtown|mnet k[ -]?pop|indosemar records|proaktif|pelangi records|3d entertainment|musik proaktif|milady record|berkah talenta|wahana records?|sandi records?|you musik|cmp label|global musik era digital|warna warni musik|santara indonesia|yi production|music interactive|himawan musik entertainment)\b)',
       caseSensitive: false,
     ).hasMatch(channel);
 

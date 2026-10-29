@@ -22,6 +22,8 @@ extension _HomePlayback on _HomePageState {
     final result = await LyricsService.getLyrics(
       title: video.title,
       artist: video.channelTitle,
+      albumName: video.album,
+      durationSeconds: video.durationSeconds,
     );
 
     // Lagu sudah ganti selama menunggu → buang hasilnya.

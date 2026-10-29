@@ -358,11 +358,53 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
     if (query == null) return;
     setState(() {
       _exploreCategory = category;
+      _exploreResults = const [];
       _exploreLoading = true;
       _exploreError = '';
     });
     try {
-      final results = await _searchService.search(query, filter: 'music');
+      var results = await _searchService.search(query, filter: 'music');
+
+      // Dangdut sering diunggah melalui label/artist channels yang tidak selalu
+      // memakai kata "official" di judul. Cari variasi tambahan hanya saat hasil
+      // pertama sedikit, lalu gabungkan unik; hasil tetap melewati filter rilis
+      // resmi, AI, karaoke, album penuh, dan Shorts di YoutubeSearchService.
+      if ((category == 'Dangdut' || category == 'Dangdut/Koplo') &&
+          results.length < 6) {
+        final fallbackQueries = category == 'Dangdut'
+            ? const <String>[
+                'dangdut Indonesia official audio',
+                'NAGASWARA dangdut official music video',
+              ]
+            : const <String>[
+                'dangdut koplo official music video Indonesia',
+                'Milady Record dangdut koplo official',
+              ];
+        final combined = <String, YoutubeSearchResult>{
+          for (final video in results)
+            if (video.videoId.isNotEmpty) video.videoId: video,
+        };
+        for (final fallbackQuery in fallbackQueries) {
+          try {
+            final extra = await _searchService.search(
+              fallbackQuery,
+              filter: 'music',
+            );
+            for (final video in extra) {
+              if (video.videoId.isNotEmpty &&
+                  !video.isLive &&
+                  !video.isUpcoming) {
+                combined.putIfAbsent(video.videoId, () => video);
+              }
+            }
+          } catch (_) {
+            // Pakai hasil utama yang ada jika pencarian cadangan gagal.
+          }
+          if (combined.length >= 10) break;
+        }
+        results = combined.values.toList(growable: false);
+      }
+
       if (!mounted ||
           requestSequence != _exploreRequestSequence ||
           _exploreCategory != category) {
@@ -608,6 +650,7 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
       'Lagu terbaru',
       'Jawa',
       'Pop Indonesia',
+      'Dangdut',
       'Dangdut/Koplo',
       'DJ/Remix',
       'K-Pop',
@@ -615,9 +658,10 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
     const genreQueries = <int, String>{
       3: 'lagu Jawa Indonesia',
       4: 'lagu Pop Indonesia',
-      5: 'lagu Dangdut Koplo Indonesia',
-      6: 'DJ Remix Indonesia',
-      7: 'K-Pop songs',
+      5: 'lagu dangdut Indonesia official music video',
+      6: 'lagu dangdut koplo Indonesia official music video',
+      7: 'DJ Remix Indonesia',
+      8: 'K-Pop songs',
     };
     final scheme = Theme.of(context).colorScheme;
     return SliverToBoxAdapter(

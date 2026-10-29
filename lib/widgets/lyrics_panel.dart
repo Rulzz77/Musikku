@@ -52,54 +52,28 @@ class _LyricsPanelState extends State<LyricsPanel> {
     return answer;
   }
 
-  double _lineProgress(int index, Duration position) {
-    if (index < 0 || index >= widget.lyrics.length) return 0;
-    final startMs = widget.lyrics[index].time.inMilliseconds;
-    int endMs;
-    if (index + 1 < widget.lyrics.length) {
-      final nextMs = widget.lyrics[index + 1].time.inMilliseconds;
-      endMs = nextMs > startMs ? nextMs : startMs + 2500;
-    } else {
-      final durationMs = widget.nativeState?.value.duration.inMilliseconds ?? 0;
-      final wordCount = widget.lyrics[index].text.trim().split(RegExp(r'\s+')).where((word) => word.isNotEmpty).length;
-      endMs = durationMs > startMs ? durationMs : startMs + (wordCount * 360).clamp(2500, 7000).toInt();
-    }
-    final span = (endMs - startMs).clamp(1, 1 << 30);
-    return ((position.inMilliseconds - startMs) / span).clamp(0.0, 1.0).toDouble();
-  }
-
-  List<double> _wordProgresses(List<String> words, double lineProgress) {
-    if (words.isEmpty) return const <double>[];
-    // LRC sources generally expose line timestamps rather than word timestamps.
-    // Allocate time by word length and add a small pause weight for punctuation;
-    // this feels closer to vocal cadence than splitting every line evenly.
-    final weights = words.map((word) {
-      final lexicalLength = word.replaceAll(RegExp(r'[,.;:!?…]+$'), '').runes.length;
-      var weight = lexicalLength.clamp(1, 12).toDouble();
-      if (RegExp(r'[,;:]$').hasMatch(word)) weight += 0.45;
-      if (RegExp(r'[.!?…]$').hasMatch(word)) weight += 0.8;
-      return weight;
-    }).toList(growable: false);
-    final total = weights.fold<double>(0, (sum, value) => sum + value);
-    var cursor = 0.0;
-    final elapsed = lineProgress.clamp(0.0, 1.0) * total;
-    return weights.map((weight) {
-      final result = ((elapsed - cursor) / weight).clamp(0.0, 1.0).toDouble();
-      cursor += weight;
-      return result;
-    }).toList(growable: false);
-  }
-
   Widget _karaokeLine(
     BuildContext context,
-    String text,
-    double progress, {
+    LyricLine line,
+    Duration position, {
     double fontSize = 21,
   }) {
     final scheme = Theme.of(context).colorScheme;
-    final words = text.trim().split(RegExp(r'\s+')).where((word) => word.isNotEmpty).toList(growable: false);
-    if (words.isEmpty) return const SizedBox.shrink();
-    final wordProgress = _wordProgresses(words, progress);
+    if (line.words.isEmpty) {
+      // Regular LRC timestamps apply to the whole line, not individual words.
+      // Don't invent word timing; switch the line highlight at its true time.
+      return Text(
+        line.text,
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          fontSize: fontSize,
+          height: 1.30,
+          fontWeight: FontWeight.w900,
+          color: scheme.primary,
+        ),
+      );
+    }
+
     final baseStyle = TextStyle(
       fontSize: fontSize,
       height: 1.30,
@@ -112,16 +86,41 @@ class _LyricsPanelState extends State<LyricsPanel> {
       spacing: 4,
       runSpacing: 5,
       children: [
-        for (var i = 0; i < words.length; i++)
+        for (var i = 0; i < line.words.length; i++)
           _KaraokeWord(
-            key: ValueKey<String>('$i:${words[i]}'),
-            text: words[i],
-            progress: wordProgress[i],
+            key: ValueKey<String>('$i:${line.words[i].text}:${line.words[i].start.inMilliseconds}'),
+            text: line.words[i].text,
+            progress: _wordProgress(i, line, position),
             baseStyle: baseStyle,
             fillStyle: fillStyle,
           ),
       ],
     );
+  }
+
+  double _wordProgress(int index, LyricLine line, Duration position) {
+    final word = line.words[index];
+    final startMs = word.start.inMilliseconds;
+    int? endMs = word.end?.inMilliseconds;
+    if (endMs == null || endMs <= startMs) {
+      if (index + 1 < line.words.length) {
+        final nextWordStart = line.words[index + 1].start.inMilliseconds;
+        if (nextWordStart > startMs) endMs = nextWordStart;
+      }
+    }
+    if (endMs == null || endMs <= startMs) endMs = line.endTime?.inMilliseconds;
+    if (endMs == null || endMs <= startMs) {
+      final lineIndex = widget.lyrics.indexOf(line);
+      if (lineIndex >= 0 && lineIndex + 1 < widget.lyrics.length) {
+        endMs = widget.lyrics[lineIndex + 1].time.inMilliseconds;
+      }
+    }
+    if (endMs == null || endMs <= startMs) {
+      return position.inMilliseconds >= startMs ? 1.0 : 0.0;
+    }
+    return ((position.inMilliseconds - startMs) / (endMs - startMs))
+        .clamp(0.0, 1.0)
+        .toDouble();
   }
 
   void _ensureVisible(int index) {
@@ -142,7 +141,7 @@ class _LyricsPanelState extends State<LyricsPanel> {
   Widget _currentLyricBanner(BuildContext context, Duration position) {
     final scheme = Theme.of(context).colorScheme;
     final index = widget.synced ? _currentIndex(position) : -1;
-    final line = index >= 0 ? widget.lyrics[index].text : 'Lirik akan mengikuti pemutaran';
+    final line = index >= 0 ? widget.lyrics[index] : null;
     // Blok lembut tanpa gradien, garis tepi, atau bayangan.
     return AnimatedContainer(
       duration: const Duration(milliseconds: 240),
@@ -194,13 +193,13 @@ class _LyricsPanelState extends State<LyricsPanel> {
                       child: child,
                     ),
                   ),
-                  child: widget.synced && index >= 0
+                  child: widget.synced && line != null
                       ? KeyedSubtree(
                           key: ValueKey<int>(index),
-                          child: _karaokeLine(context, line, _lineProgress(index, position), fontSize: 15),
+                          child: _karaokeLine(context, line, position, fontSize: 15),
                         )
                       : Text(
-                          line,
+                          line?.text ?? 'Lirik akan mengikuti pemutaran',
                           key: ValueKey<int>(index),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
@@ -256,7 +255,6 @@ class _LyricsPanelState extends State<LyricsPanel> {
         final line = widget.lyrics[index];
         final active = index == current;
         final passed = current > index;
-        final lyricProgress = active && widget.synced ? _lineProgress(index, position) : 0.0;
         return AnimatedContainer(
           duration: const Duration(milliseconds: 220),
           curve: Curves.easeOutCubic,
@@ -280,7 +278,7 @@ class _LyricsPanelState extends State<LyricsPanel> {
                   color: active ? scheme.primary : scheme.onSurfaceVariant.withValues(alpha: passed ? 0.46 : 0.82),
                 ),
                 child: active && widget.synced
-                    ? _karaokeLine(context, line.text, lyricProgress)
+                    ? _karaokeLine(context, line, position)
                     : Text(line.text, textAlign: TextAlign.center),
               ),
             ),
@@ -402,8 +400,8 @@ class _LyricsPanelState extends State<LyricsPanel> {
 }
 
 
-/// Fills a word from left to right. Exact word timestamps are not supplied by
-/// the current lyric model, so progress is interpolated across each synced line.
+/// Fills a word from left to right only when the lyrics provider supplied the
+/// actual word start/end timestamps. Regular LRC lyrics use line highlighting.
 class _KaraokeWord extends StatefulWidget {
   const _KaraokeWord({
     super.key,

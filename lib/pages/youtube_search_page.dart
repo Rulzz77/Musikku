@@ -109,6 +109,9 @@ class _YoutubeSearchPageState extends State<YoutubeSearchPage> {
     final items = typing ? _suggestions : _history;
     const quickSearches = <String>[
       'Pop Indonesia',
+      'Dangdut',
+      'Dangdut Koplo',
+      'Campursari/Jawa',
       'Lagu Inggris',
       'DJ Remix',
       'K-pop',

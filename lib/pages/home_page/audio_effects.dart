@@ -125,6 +125,7 @@ extension _HomeAudioSettingsUi on _HomePageState {
       (name: 'Flat', detail: 'Suara netral'),
       (name: 'Bass Boost', detail: 'Bass lebih terasa'),
       (name: 'Pop', detail: 'Vokal dan detail cerah'),
+      (name: 'Dangdut', detail: 'Kendang, bass, dan vokal lebih terasa'),
       (name: 'Rock', detail: 'Gitar dan drum lebih tegas'),
       (name: 'Vocal', detail: 'Fokus pada suara vokal'),
       (name: 'Electronic', detail: 'Bass dan treble untuk EDM'),

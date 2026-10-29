@@ -185,6 +185,7 @@ class _YoutubeHubState extends State<YoutubeHub> {
   static const List<String> _exploreCategories = [
     'Sedang tren',
     'Pop Indonesia',
+    'Dangdut',
     'Dangdut/Koplo',
     'K-Pop',
     'Hip-hop',
@@ -196,8 +197,9 @@ class _YoutubeHubState extends State<YoutubeHub> {
   ];
 
   static const Map<String, String> _exploreQueries = {
-    'Pop Indonesia': 'lagu pop Indonesia terbaru official music',
-    'Dangdut/Koplo': 'dangdut koplo Indonesia terbaru official',
+    'Pop Indonesia': 'lagu pop Indonesia official music video',
+    'Dangdut': 'lagu dangdut Indonesia official music video',
+    'Dangdut/Koplo': 'lagu dangdut koplo Indonesia official music video',
     'K-Pop': 'K-pop official music video latest',
     'Hip-hop': 'hip hop music official video',
     'Rock': 'rock music official video',

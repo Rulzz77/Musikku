@@ -22,7 +22,7 @@ class LyricsService {
 
   /// Cache di HP supaya lirik tidak diunduh ulang tiap app dibuka.
   static const DiskCache _disk = DiskCache(
-    namespace: 'lyrics_v2',
+    namespace: 'lyrics_v3',
     maxEntries: 40,
     ttl: Duration(days: 14),
   );
@@ -34,7 +34,16 @@ class LyricsService {
     return {
       'synced': result.synced,
       'lines': [
-        for (final line in result.lines) [line.time.inMilliseconds, line.text],
+        for (final line in result.lines)
+          [
+            line.time.inMilliseconds,
+            line.text,
+            line.endTime?.inMilliseconds,
+            [
+              for (final word in line.words)
+                [word.text, word.start.inMilliseconds, word.end?.inMilliseconds],
+            ],
+          ],
       ],
     };
   }
@@ -49,11 +58,37 @@ class LyricsService {
     final lines = <LyricLine>[];
 
     for (final item in rawLines) {
-      if (item is List && item.length == 2 && item[0] is int && item[1] is String) {
+      if (item is List && item.length >= 2 && item[0] is int && item[1] is String) {
+        final words = <LyricWord>[];
+        final rawWords = item.length > 3 ? item[3] : null;
+        if (rawWords is List) {
+          for (final rawWord in rawWords) {
+            if (rawWord is! List ||
+                rawWord.length < 2 ||
+                rawWord[0] is! String ||
+                rawWord[1] is! int) {
+              continue;
+            }
+            words.add(
+              LyricWord(
+                text: rawWord[0] as String,
+                start: Duration(milliseconds: rawWord[1] as int),
+                end: rawWord.length > 2 && rawWord[2] is int
+                    ? Duration(milliseconds: rawWord[2] as int)
+                    : null,
+              ),
+            );
+          }
+        }
+
         lines.add(
           LyricLine(
             time: Duration(milliseconds: item[0] as int),
             text: item[1] as String,
+            endTime: item.length > 2 && item[2] is int
+                ? Duration(milliseconds: item[2] as int)
+                : null,
+            words: words,
           ),
         );
       }
@@ -101,8 +136,12 @@ class LyricsService {
   static Future<LyricsResult?> getLyrics({
     required String title,
     required String artist,
+    String albumName = '',
+    double? durationSeconds,
   }) async {
-    final cacheKey = '${title.toLowerCase().trim()}|${artist.toLowerCase().trim()}';
+    final validDuration = _validDuration(durationSeconds) ? durationSeconds!.round() : null;
+    final cacheKey = '${title.toLowerCase().trim()}|${artist.toLowerCase().trim()}|'
+        '${albumName.toLowerCase().trim()}|${validDuration ?? 'unknown'}';
 
     if (_cache.containsKey(cacheKey)) {
       return _cache[cacheKey];
@@ -141,7 +180,11 @@ class LyricsService {
     // Batasi request agar lookup lirik tidak membuat UI menunggu terlalu lama.
     for (final query in queries.take(2)) {
       try {
-        final result = await _fetchExact(query);
+        final result = await _fetchExact(
+          query,
+          albumName: albumName,
+          durationSeconds: durationSeconds,
+        );
 
         if (result != null) {
           _remember(cacheKey, result);
@@ -157,7 +200,7 @@ class LyricsService {
     // artist. Some lyric endpoints return a synced song for a similar title;
     // never accept it just because it appears first in the response.
     try {
-      final result = await _search(queries.first);
+      final result = await _search(queries.first, durationSeconds: durationSeconds);
       if (result != null) {
         _remember(cacheKey, result);
         return result;
@@ -179,12 +222,21 @@ class LyricsService {
   // REQUEST
   // ==========================================================
 
-  static Future<LyricsResult?> _fetchExact(_LyricsQuery query) async {
+  static Future<LyricsResult?> _fetchExact(
+    _LyricsQuery query, {
+    required String albumName,
+    required double? durationSeconds,
+  }) async {
     if (query.title.trim().isEmpty || query.artist.trim().isEmpty) return null;
-    final uri = Uri.https('lrclib.net', '/api/get', {
+    final params = <String, String>{
       'track_name': query.title,
       'artist_name': query.artist,
-    });
+    };
+    if (albumName.trim().isNotEmpty) params['album_name'] = albumName.trim();
+    if (_validDuration(durationSeconds)) {
+      params['duration'] = durationSeconds!.round().toString();
+    }
+    final uri = Uri.https('lrclib.net', '/api/get', params);
 
     final response =
         await http.get(uri, headers: _headers).timeout(_timeout);
@@ -207,6 +259,7 @@ class LyricsService {
     // Validate the metadata even for the exact endpoint before caching it.
     final returnedTitle = decoded['trackName']?.toString() ?? '';
     final returnedArtist = decoded['artistName']?.toString() ?? '';
+    if (!_durationMatches(durationSeconds, decoded['duration'])) return null;
     if (_metadataMatchScore(query.title, returnedTitle) < 80) return null;
     if (query.artist.trim().isNotEmpty &&
         (returnedArtist.trim().isEmpty ||
@@ -217,7 +270,10 @@ class LyricsService {
     return _fromJson(decoded);
   }
 
-  static Future<LyricsResult?> _search(_LyricsQuery query) async {
+  static Future<LyricsResult?> _search(
+    _LyricsQuery query, {
+    required double? durationSeconds,
+  }) async {
     final params = <String, String>{'q': query.artist.trim().isEmpty ? query.title : '${query.title} ${query.artist}'};
     final uri = Uri.https('lrclib.net', '/api/search', params);
     final response = await http.get(uri, headers: _headers).timeout(_timeout);
@@ -247,6 +303,10 @@ class LyricsService {
 
       final result = _fromJson(item);
       if (result == null) continue;
+      // A search fallback must not use timestamped lyrics from a different
+      // edit/live/video version. Plain text has no timeline to desync, so it
+      // can still be shown when the provider has no duration for that result.
+      if (result.synced && !_durationMatches(durationSeconds, item['duration'])) continue;
       final score = titleScore + artistScore + (result.synced ? 10 : 0);
       if (score > bestScore) {
         bestScore = score;
@@ -285,6 +345,14 @@ class LyricsService {
   }
 
   static LyricsResult? _fromJson(Map decoded) {
+    final lyricsFile = decoded['lyricsfile'];
+    if (decoded['hasWordSync'] == true && lyricsFile is String && lyricsFile.trim().isNotEmpty) {
+      final wordSynced = parseWordSyncedLyricsFile(lyricsFile);
+      if (wordSynced.isNotEmpty) {
+        return LyricsResult(lines: wordSynced, synced: true);
+      }
+    }
+
     final syncedLyrics = decoded['syncedLyrics'];
 
     if (syncedLyrics is String && syncedLyrics.trim().isNotEmpty) {
@@ -310,6 +378,134 @@ class LyricsService {
     }
 
     return null;
+  }
+
+  static bool _validDuration(double? value) =>
+      value != null && value.isFinite && value >= 1 && value <= 3600;
+
+  static bool _durationMatches(double? requested, Object? returned) {
+    if (!_validDuration(requested)) return true;
+    if (returned is! num || !returned.isFinite) return false;
+    // LRCLIB recommends duration matching within roughly +/-2 seconds.
+    return (returned.toDouble() - requested!).abs() <= 2.5;
+  }
+
+  /// Reads the simple word-timed subset of LRCLIB's Lyricsfile YAML format.
+  /// This keeps the app dependency-free and safely falls back to LRC lines
+  /// when the provider returns a format we do not recognize.
+  static List<LyricLine> parseWordSyncedLyricsFile(String raw) {
+    final lines = <LyricLine>[];
+    String? lineText;
+    int? lineStart;
+    int? lineEnd;
+    List<LyricWord> words = <LyricWord>[];
+    String? wordText;
+    int? wordStart;
+    int? wordEnd;
+    var inLines = false;
+
+    String unquote(String value) {
+      final text = value.trim();
+      if (text.length >= 2 && text.startsWith('"') && text.endsWith('"')) {
+        return text.substring(1, text.length - 1)
+            .replaceAll(r'\"', '"')
+            .replaceAll(r'\\', '\\');
+      }
+      if (text.length >= 2 && text.startsWith("'") && text.endsWith("'")) {
+        return text.substring(1, text.length - 1).replaceAll("''", "'");
+      }
+      return text;
+    }
+
+    void flushWord() {
+      final text = wordText;
+      final start = wordStart;
+      if (text != null && text.isNotEmpty && start != null && start >= 0) {
+        words.add(LyricWord(
+          text: text,
+          start: Duration(milliseconds: start),
+          end: wordEnd != null && wordEnd! >= start
+              ? Duration(milliseconds: wordEnd!)
+              : null,
+        ));
+      }
+      wordText = null;
+      wordStart = null;
+      wordEnd = null;
+    }
+
+    void flushLine() {
+      flushWord();
+      final text = lineText?.trim() ?? '';
+      if (text.isNotEmpty && lineStart != null && lineStart! >= 0) {
+        words.sort((a, b) => a.start.compareTo(b.start));
+        lines.add(LyricLine(
+          time: Duration(milliseconds: lineStart!),
+          text: text,
+          endTime: lineEnd != null && lineEnd! >= lineStart!
+              ? Duration(milliseconds: lineEnd!)
+              : null,
+          words: List<LyricWord>.unmodifiable(words),
+        ));
+      }
+      lineText = null;
+      lineStart = null;
+      lineEnd = null;
+      words = <LyricWord>[];
+    }
+
+    for (final rawLine in raw.replaceAll('\r', '').split('\n')) {
+      if (rawLine.trim() == 'lines:') {
+        inLines = true;
+        continue;
+      }
+      if (!inLines) continue;
+      if (rawLine.trim().startsWith('plain:') ||
+          (rawLine.trim().isNotEmpty && !rawLine.startsWith(' '))) {
+        flushLine();
+        break;
+      }
+
+      final lineMatch = RegExp(r'^  - text:\s*(.*)$').firstMatch(rawLine);
+      if (lineMatch != null) {
+        flushLine();
+        lineText = unquote(lineMatch.group(1) ?? '');
+        continue;
+      }
+
+      final wordMatch = RegExp(r'^      - text:\s*(.*)$').firstMatch(rawLine);
+      if (wordMatch != null) {
+        flushWord();
+        wordText = unquote(wordMatch.group(1) ?? '');
+        continue;
+      }
+
+      final lineStartMatch = RegExp(r'^    start_ms:\s*(-?\d+)\s*$').firstMatch(rawLine);
+      if (lineStartMatch != null) {
+        lineStart = int.tryParse(lineStartMatch.group(1)!);
+        continue;
+      }
+      final lineEndMatch = RegExp(r'^    end_ms:\s*(-?\d+)\s*$').firstMatch(rawLine);
+      if (lineEndMatch != null) {
+        lineEnd = int.tryParse(lineEndMatch.group(1)!);
+        continue;
+      }
+      final wordStartMatch = RegExp(r'^        start_ms:\s*(-?\d+)\s*$').firstMatch(rawLine);
+      if (wordStartMatch != null) {
+        wordStart = int.tryParse(wordStartMatch.group(1)!);
+        continue;
+      }
+      final wordEndMatch = RegExp(r'^        end_ms:\s*(-?\d+)\s*$').firstMatch(rawLine);
+      if (wordEndMatch != null) {
+        wordEnd = int.tryParse(wordEndMatch.group(1)!);
+      }
+    }
+    if (inLines && lineText != null) flushLine();
+    lines.sort((a, b) => a.time.compareTo(b.time));
+    if (!lines.any((line) => line.words.isNotEmpty)) {
+      return const <LyricLine>[];
+    }
+    return lines;
   }
 
   // ==========================================================

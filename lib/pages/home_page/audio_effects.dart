@@ -166,13 +166,10 @@ extension _HomeAudioSettingsUi on _HomePageState {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Container(
+                MusicGlassPanel(
                   padding: const EdgeInsets.all(15),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(colors: [scheme.primary.withValues(alpha: 0.18), scheme.secondary.withValues(alpha: 0.08), scheme.surfaceContainerLow]),
-                    borderRadius: BorderRadius.circular(22),
-                    border: Border.all(color: scheme.primary.withValues(alpha: 0.18)),
-                  ),
+                  radius: 22,
+                  accent: scheme.primary,
                   child: Row(
                     children: [
                       Container(

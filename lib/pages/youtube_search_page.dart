@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../services/search_suggest_service.dart';
+import '../widgets/music_design.dart';
 
 /// Mode pencarian MusikKu: katalog lagu saja.
 enum YoutubeSearchMode { music }
@@ -116,7 +117,7 @@ class _YoutubeSearchPageState extends State<YoutubeSearchPage> {
     ];
 
     return Scaffold(
-      body: SafeArea(
+      body: MusicBackdrop(child: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -350,7 +351,7 @@ class _YoutubeSearchPageState extends State<YoutubeSearchPage> {
             ),
           ],
         ),
-      ),
+      )),
     );
   }
 }

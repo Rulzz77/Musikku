@@ -6,6 +6,7 @@ import '../models/local_song.dart';
 import '../models/youtube_search_result.dart';
 import '../services/local_media_service.dart';
 import '../widgets/unified_artwork.dart';
+import '../widgets/music_design.dart';
 
 class LocalMusicPage extends StatefulWidget {
   const LocalMusicPage({
@@ -128,7 +129,7 @@ class _LocalMusicPageState extends State<LocalMusicPage> {
           ),
         ],
       ),
-      body: _loading
+      body: MusicBackdrop(child: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
               ? _LocalMessage(
@@ -335,7 +336,7 @@ class _LocalMusicPageState extends State<LocalMusicPage> {
                             ),
                         ],
                       ),
-                    ),
+                    )),
     );
   }
 }

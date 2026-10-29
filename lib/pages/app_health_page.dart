@@ -7,6 +7,7 @@ import '../app_info.dart' as app_info;
 import '../services/app_health_monitor.dart';
 import '../services/native_playback_diagnostics.dart';
 import '../widgets/flow_components.dart';
+import '../widgets/music_design.dart';
 
 /// Log diagnostik lokal untuk membantu mencari penyebab playback gagal.
 /// Data tidak dikirim ke server; pengguna bisa menyalin atau menghapusnya.
@@ -146,7 +147,7 @@ class _AppHealthPageState extends State<AppHealthPage> {
           ),
         ],
       ),
-      body: FutureBuilder<List<Map<String, dynamic>>>(
+      body: MusicBackdrop(child: FutureBuilder<List<Map<String, dynamic>>>(
         future: _eventsFuture,
         builder: (context, snapshot) {
           final events = snapshot.data ?? const <Map<String, dynamic>>[];
@@ -385,7 +386,7 @@ class _AppHealthPageState extends State<AppHealthPage> {
             ],
           );
         },
-      ),
+      )),
     );
   }
 }

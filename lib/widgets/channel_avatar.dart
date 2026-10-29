@@ -80,6 +80,14 @@ class _ChannelAvatarState extends State<ChannelAvatar> {
                     fit: BoxFit.cover,
                     cacheWidth: (size * 3).round(),
                     filterQuality: FilterQuality.medium,
+                    frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+                      if (wasSynchronouslyLoaded) return child;
+                      return AnimatedOpacity(
+                        opacity: frame == null ? 0 : 1,
+                        duration: const Duration(milliseconds: 200),
+                        child: child,
+                      );
+                    },
                     // Gagal dimuat: huruf di bawahnya tetap terlihat.
                     errorBuilder: (_, _, _) => const SizedBox.shrink(),
                   ),

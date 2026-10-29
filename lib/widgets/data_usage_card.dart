@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
@@ -62,7 +63,11 @@ class _DataUsageCardState extends State<DataUsageCard> {
     final scheme = Theme.of(context).colorScheme;
     final snapshot = _snapshot;
 
-    return Container(
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+        child: Container(
       width: double.infinity,
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(16),
@@ -174,6 +179,8 @@ class _DataUsageCardState extends State<DataUsageCard> {
             ),
           ),
         ],
+      ),
+        ),
       ),
     );
   }

@@ -5,6 +5,7 @@ import 'unified_artwork.dart';
 import '../models/youtube_search_result.dart';
 import '../theme/app_colors.dart';
 import 'song_lists.dart';
+import 'music_design.dart';
 
 // ============================================================
 // DIALOG NAMA PLAYLIST
@@ -228,44 +229,28 @@ class PlaylistsView extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 90),
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 12, 0),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Playlist (${playlists.length})',
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-              TextButton.icon(
-                onPressed: onCreate,
-                icon: const Icon(Icons.add),
-                label: const Text('Baru'),
-              ),
-            ],
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
+          child: MusicPageHeader(
+            icon: Icons.queue_music_rounded,
+            eyebrow: 'KOLEKSI PRIBADI',
+            title: 'Playlist kamu',
+            subtitle: '${playlists.length} playlist · susun lagu sesuai suasana',
+            trailing: IconButton.filledTonal(
+              tooltip: 'Playlist baru',
+              onPressed: onCreate,
+              icon: const Icon(Icons.add_rounded),
+            ),
           ),
         ),
         if (playlists.isEmpty)
           Padding(
-            padding: const EdgeInsets.only(top: 80),
-            child: Column(
-              children: [
-                Icon(Icons.queue_music, size: 60, color: Theme.of(context).colorScheme.onSurfaceVariant),
-                const SizedBox(height: 12),
-                Text(
-                  'Belum ada playlist',
-                  style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 16),
-                ),
-                const SizedBox(height: 5),
-                Text(
-                  'Buat playlist, lalu tahan lagu untuk menambahkannya.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13),
-                ),
-              ],
+            padding: const EdgeInsets.fromLTRB(16, 32, 16, 16),
+            child: MusicEmptyState(
+              icon: Icons.queue_music_rounded,
+              title: 'Belum ada playlist',
+              message: 'Buat playlist pertama, lalu tahan lagu untuk menambahkannya.',
+              actionLabel: 'Buat playlist',
+              onAction: onCreate,
             ),
           ),
         for (final playlist in playlists)
@@ -338,8 +323,11 @@ class PlaylistDetailView extends StatelessWidget {
       itemBuilder: (context, index) {
         if (index == 0) {
           return Padding(
-            padding: const EdgeInsets.fromLTRB(4, 0, 4, 0),
-            child: Row(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+            child: MusicGlassPanel(
+              padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
+              radius: 20,
+              child: Row(
               children: [
                 IconButton(
                   tooltip: 'Kembali',
@@ -386,28 +374,17 @@ class PlaylistDetailView extends StatelessWidget {
                 ),
               ],
             ),
+            ),
           );
         }
 
         if (songs.isEmpty) {
-          final scheme = Theme.of(context).colorScheme;
           return Padding(
-            padding: const EdgeInsets.only(top: 80),
-            child: Column(
-              children: [
-                Icon(Icons.library_music_outlined, size: 60, color: scheme.onSurfaceVariant),
-                const SizedBox(height: 12),
-                Text(
-                  'Playlist masih kosong',
-                  style: TextStyle(color: scheme.onSurface, fontSize: 16),
-                ),
-                const SizedBox(height: 5),
-                Text(
-                  'Tahan sebuah lagu, lalu pilih "Tambah ke playlist".',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13),
-                ),
-              ],
+            padding: const EdgeInsets.fromLTRB(16, 28, 16, 20),
+            child: MusicEmptyState(
+              icon: Icons.library_music_outlined,
+              title: 'Playlist masih kosong',
+              message: 'Tahan sebuah lagu, lalu pilih "Tambah ke playlist".',
             ),
           );
         }

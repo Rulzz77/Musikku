@@ -110,13 +110,10 @@ extension _HomeListeningTogether on _HomePageState {
                     ],
                   ),
                   const SizedBox(height: 16),
-                  Container(
+                  MusicGlassPanel(
                     padding: const EdgeInsets.all(13),
-                    decoration: BoxDecoration(
-                      color: scheme.surfaceContainerHighest.withValues(alpha: 0.70),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.55)),
-                    ),
+                    radius: 16,
+                    accent: onlineReady ? scheme.primary : scheme.error,
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -134,19 +131,10 @@ extension _HomeListeningTogether on _HomePageState {
                     ),
                   ),
                   const SizedBox(height: 14),
-                  Container(
+                  MusicGlassPanel(
                     padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: connected
-                          ? scheme.primaryContainer.withValues(alpha: 0.62)
-                          : scheme.surfaceContainerLow,
-                      borderRadius: BorderRadius.circular(17),
-                      border: Border.all(
-                        color: connected
-                            ? scheme.primary.withValues(alpha: 0.40)
-                            : scheme.outlineVariant.withValues(alpha: 0.55),
-                      ),
-                    ),
+                    radius: 17,
+                    accent: connected ? scheme.primary : scheme.secondary,
                     child: Row(
                       children: [
                         Icon(
@@ -202,12 +190,10 @@ extension _HomeListeningTogether on _HomePageState {
                     const SizedBox(height: 12),
                     ValueListenableBuilder<String>(
                       valueListenable: _listenTogether.roomCode,
-                      builder: (context, code, _) => Container(
+                      builder: (context, code, _) => MusicGlassPanel(
                         padding: const EdgeInsets.all(18),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(18),
-                          border: Border.all(color: scheme.outlineVariant),
-                        ),
+                        radius: 18,
+                        accent: scheme.primary,
                         child: Column(
                           children: [
                             Text('KODE KAMAR', style: TextStyle(fontSize: 11, letterSpacing: 1.8, color: scheme.onSurfaceVariant, fontWeight: FontWeight.w800)),

@@ -7,6 +7,7 @@ import '../services/youtube_public_channel_service.dart';
 import '../models/youtube_channel_models.dart';
 import '../services/youtube_search_service.dart';
 import '../widgets/live_badge.dart';
+import '../widgets/music_design.dart';
 
 String _channelErrorMessage(Object error) {
   final message = error.toString().replaceFirst('Bad state: ', '').trim();
@@ -744,7 +745,7 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Scaffold(
-      body: CustomScrollView(
+      body: MusicBackdrop(child: CustomScrollView(
         slivers: [
           SliverAppBar(
             pinned: true,
@@ -764,7 +765,7 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
           ..._body(scheme),
           const SliverToBoxAdapter(child: SizedBox(height: 40)),
         ],
-      ),
+      )),
     );
   }
 }

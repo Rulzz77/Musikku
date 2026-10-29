@@ -125,6 +125,12 @@ class _UnifiedArtworkState extends State<UnifiedArtwork> {
                 widget.track.coverUrl,
                 fit: widget.fit,
                 cacheWidth: widget.cacheWidth?.round(),
+                gaplessPlayback: true,
+                filterQuality: FilterQuality.medium,
+                loadingBuilder: (context, child, loadingProgress) {
+                  if (loadingProgress == null) return child;
+                  return _fallback(context);
+                },
                 errorBuilder: (context, error, stackTrace) => _fallback(context),
               ));
 
@@ -144,6 +150,22 @@ class _UnifiedArtworkState extends State<UnifiedArtwork> {
       );
     }
 
-    return result;
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 220),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      transitionBuilder: (child, animation) => FadeTransition(
+        opacity: animation,
+        child: child,
+      ),
+      child: KeyedSubtree(
+        key: ValueKey<String>(
+          widget.track.isLocal
+              ? 'local-${widget.track.localMediaId}'
+              : 'online-${widget.track.videoId}',
+        ),
+        child: result,
+      ),
+    );
   }
 }

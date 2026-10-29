@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../app_info.dart';
 import '../services/app_update_service.dart';
+import 'music_design.dart';
 
 class AppUpdateSheet {
   const AppUpdateSheet._();
@@ -392,21 +393,10 @@ class _AppUpdatePanelState extends State<AppUpdatePanel> with WidgetsBindingObse
   }
 
   Widget _buildHeader(ColorScheme colors) {
-    return Container(
+    return MusicGlassPanel(
       padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            colors.primary.withValues(alpha: 0.17),
-            colors.surfaceContainerLow,
-            colors.secondary.withValues(alpha: 0.08),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(23),
-        border: Border.all(color: colors.primary.withValues(alpha: 0.18)),
-      ),
+      radius: 23,
+      accent: colors.primary,
       child: Row(
         children: [
           Container(

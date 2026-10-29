@@ -78,6 +78,10 @@ class _AlbumArtworkImageState extends State<AlbumArtworkImage> {
       fit: widget.fit,
       filterQuality: FilterQuality.medium,
       gaplessPlayback: true,
+      loadingBuilder: (context, child, loadingProgress) {
+        if (loadingProgress == null) return child;
+        return _placeholder(context);
+      },
       errorBuilder: (context, error, stackTrace) => canFallBack
           ? _networkImage(context, thumbnail)
           : _placeholder(context),
@@ -89,6 +93,7 @@ class _AlbumArtworkImageState extends State<AlbumArtworkImage> {
     final track = widget.track;
     if (track.isLocal) {
       return UnifiedArtwork(
+        key: ValueKey<String>('local-${track.localMediaId}-${track.videoId}'),
         track: track,
         fit: widget.fit,
         width: widget.width,
@@ -98,18 +103,30 @@ class _AlbumArtworkImageState extends State<AlbumArtworkImage> {
     }
 
     final thumbnail = track.coverUrl;
-    return FutureBuilder<String>(
-      future: _coverFuture,
-      builder: (context, snapshot) {
-        // Tampilkan thumbnail YouTube dulu; ganti ke sampul album persegi
-        // begitu MusicBrainz/Cover Art Archive selesai, supaya player tidak
-        // sempat kosong. Jika future gagal, snapshot.data null dan thumbnail
-        // tetap dipakai.
-        final resolved = snapshot.data;
-        final url = (resolved != null && resolved.isNotEmpty) ? resolved : thumbnail;
-        if (url.isEmpty) return _placeholder(context);
-        return _networkImage(context, url);
-      },
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 240),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      transitionBuilder: (child, animation) => FadeTransition(
+        opacity: animation,
+        child: child,
+      ),
+      child: FutureBuilder<String>(
+        key: ValueKey<String>('album-cover-${track.videoId}'),
+        future: _coverFuture,
+        builder: (context, snapshot) {
+          // Tampilkan thumbnail YouTube dulu; ganti ke sampul album persegi
+          // begitu MusicBrainz/Cover Art Archive selesai, supaya player tidak
+          // sempat kosong. Jika future gagal, snapshot.data null dan thumbnail
+          // tetap dipakai.
+          final resolved = snapshot.data;
+          final url = (resolved != null && resolved.isNotEmpty)
+              ? resolved
+              : thumbnail;
+          if (url.isEmpty) return _placeholder(context);
+          return _networkImage(context, url);
+        },
+      ),
     );
   }
 }

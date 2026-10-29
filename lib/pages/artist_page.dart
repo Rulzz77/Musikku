@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
@@ -8,6 +9,7 @@ import '../services/youtube_public_channel_service.dart';
 import '../services/youtube_search_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/unified_artwork.dart';
+import '../widgets/music_design.dart';
 
 /// Halaman artis/channel dengan daftar lagu dan playlist publik dari channel.
 /// Kalau channelId tidak tersedia, halaman memakai pencarian musik sebagai fallback.
@@ -406,7 +408,7 @@ class _ArtistPageState extends State<ArtistPage> {
     final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(title: Text(_artistTitle, maxLines: 1, overflow: TextOverflow.ellipsis)),
-      body: _loading
+      body: MusicBackdrop(child: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null && _songs.isEmpty && _playlists.isEmpty
               ? _ErrorState(message: _error.toString(), onRetry: _load)
@@ -427,92 +429,105 @@ class _ArtistPageState extends State<ArtistPage> {
                       child: _tab == 0 ? _buildSongList() : _buildPlaylistList(),
                     ),
                   ],
-                ),
+                )),
     );
   }
 
   Widget _header(ColorScheme scheme) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 12, 16, 14),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            scheme.primaryContainer.withValues(alpha: 0.96),
-            scheme.secondaryContainer.withValues(alpha: 0.74),
-            scheme.surfaceContainerLow,
-          ],
-        ),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.55)),
-      ),
-      child: Row(
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(18),
-            child: SizedBox(
-              width: 78,
-              height: 78,
-              child: _details?.avatarUrl.isNotEmpty == true
-                  ? Image.network(
-                      _details!.avatarUrl,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, _, _) => _artistPlaceholder(scheme),
-                    )
-                  : _artistPlaceholder(scheme),
+    final radius = BorderRadius.circular(21);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+      child: ClipRRect(
+        borderRadius: radius,
+        child: BackdropFilter(
+          filter: ui.ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  scheme.primaryContainer.withValues(alpha: 0.86),
+                  scheme.secondaryContainer.withValues(alpha: 0.64),
+                  scheme.surfaceContainerLow.withValues(alpha: 0.80),
+                ],
+              ),
+              borderRadius: radius,
+              border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.55)),
             ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
               children: [
-                Text(
-                  _details == null ? 'RADIO ARTIS' : 'ARTIS / CHANNEL',
-                  style: TextStyle(
-                    color: scheme.primary,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 1.2,
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(15),
+                  child: SizedBox(
+                    width: 78,
+                    height: 78,
+                    child: _details?.avatarUrl.isNotEmpty == true
+                        ? Image.network(
+                            _details!.avatarUrl,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, _, _) => _artistPlaceholder(scheme),
+                          )
+                        : _artistPlaceholder(scheme),
                   ),
                 ),
-                const SizedBox(height: 5),
-                Text(
-                  _artistTitle,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w900, height: 1.05),
-                ),
-                const SizedBox(height: 5),
-                Text(
-                  '${_songs.length} lagu · ${_playlists.length} album/playlist',
-                  style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11.5),
-                ),
-                const SizedBox(height: 10),
-                Wrap(
-                  spacing: 8,
-                  children: [
-                    FilledButton.tonalIcon(
-                      onPressed: _songs.isEmpty
-                          ? null
-                          : () => unawaited(_playTracks(_songs.first, _songs)),
-                      icon: const Icon(Icons.play_arrow_rounded, size: 18),
-                      label: const Text('Putar semua'),
-                    ),
-                    if (_playlists.isNotEmpty)
-                      OutlinedButton.icon(
-                        onPressed: () => setState(() => _tab = 1),
-                        icon: const Icon(Icons.album_rounded, size: 17),
-                        label: const Text('Rilisan'),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _details == null ? 'RADIO ARTIS' : 'ARTIS / CHANNEL',
+                        style: TextStyle(
+                          color: scheme.primary,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 1.2,
+                        ),
                       ),
-                  ],
+                      const SizedBox(height: 5),
+                      Text(
+                        _artistTitle,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 21,
+                          fontWeight: FontWeight.w900,
+                          height: 1.05,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        '${_songs.length} lagu · ${_playlists.length} album/playlist',
+                        style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11.5),
+                      ),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 8,
+                        children: [
+                          FilledButton.tonalIcon(
+                            onPressed: _songs.isEmpty
+                                ? null
+                                : () => unawaited(_playTracks(_songs.first, _songs)),
+                            icon: const Icon(Icons.play_arrow_rounded, size: 18),
+                            label: const Text('Putar semua'),
+                          ),
+                          if (_playlists.isNotEmpty)
+                            OutlinedButton.icon(
+                              onPressed: () => setState(() => _tab = 1),
+                              icon: const Icon(Icons.album_rounded, size: 17),
+                              label: const Text('Rilisan'),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }

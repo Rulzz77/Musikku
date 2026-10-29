@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../models/youtube_search_result.dart';
 import '../theme/app_colors.dart';
 import 'unified_artwork.dart';
+import 'music_design.dart';
 
 /// Menu yang muncul saat kartu lagu ditekan lama.
 ///
@@ -56,23 +57,10 @@ void showVideoMenuSheet(
               children: [
                 Padding(
                   padding: const EdgeInsets.fromLTRB(18, 0, 18, 14),
-                  child: Container(
+                  child: MusicGlassPanel(
                     padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          colors.primary.withValues(alpha: 0.16),
-                          colors.surfaceContainerLow,
-                          colors.secondary.withValues(alpha: 0.08),
-                        ],
-                      ),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: colors.outlineVariant.withValues(alpha: 0.55),
-                      ),
-                    ),
+                    radius: 20,
+                    accent: colors.primary,
                     child: Row(
                       children: [
                         ClipRRect(

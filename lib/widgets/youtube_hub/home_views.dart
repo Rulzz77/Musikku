@@ -518,35 +518,89 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
                 ? 'Selamat sore'
                 : 'Selamat malam';
 
-    // Hanya sapaan dan satu tombol cari: tanpa logo, label, atau garis.
+    // Beranda terasa seperti aplikasi musik: sapaan ringkas, deskripsi singkat,
+    // dan pencarian yang jelas tanpa elemen akun/profil yang tidak dipakai.
     return Padding(
-      padding: EdgeInsets.fromLTRB(20, topInset + 12, 16, 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
+      padding: EdgeInsets.fromLTRB(20, topInset + 14, 20, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Text(
-              greeting,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: scheme.onSurface,
-                fontSize: 28,
-                fontWeight: FontWeight.w800,
-                letterSpacing: -0.9,
-                height: 1.1,
-              ),
+          Text(
+            'MUSIKKU  •  MUSIC FOR YOUR MOOD',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: scheme.primary,
+              fontSize: 9.5,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 1.5,
             ),
           ),
-          IconButton(
-            tooltip: 'Cari musik',
-            constraints: const BoxConstraints.tightFor(width: 44, height: 44),
-            style: IconButton.styleFrom(
-              backgroundColor: scheme.surfaceContainerHigh,
-              padding: EdgeInsets.zero,
+          const SizedBox(height: 7),
+          Text(
+            greeting,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: scheme.onSurface,
+              fontSize: 29,
+              fontWeight: FontWeight.w900,
+              letterSpacing: -1.05,
+              height: 1.05,
             ),
-            onPressed: _openSearch,
-            icon: Icon(Icons.search_rounded, size: 24, color: scheme.onSurface),
+          ),
+          const SizedBox(height: 5),
+          Text(
+            'Temukan lagu yang pas buat suasana kamu.',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: scheme.onSurfaceVariant,
+              fontSize: 12.5,
+              height: 1.35,
+            ),
+          ),
+          const SizedBox(height: 15),
+          Material(
+            color: scheme.surfaceContainerLow.withValues(alpha: 0.96),
+            borderRadius: BorderRadius.circular(18),
+            child: InkWell(
+              onTap: _openSearch,
+              borderRadius: BorderRadius.circular(18),
+              child: Container(
+                height: 52,
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(
+                    color: scheme.outlineVariant.withValues(alpha: 0.55),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.search_rounded, color: scheme.primary, size: 23),
+                    const SizedBox(width: 11),
+                    Expanded(
+                      child: Text(
+                        'Cari lagu, artis, atau album',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: scheme.onSurfaceVariant,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    Icon(
+                      Icons.graphic_eq_rounded,
+                      color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
+                      size: 21,
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
         ],
       ),
@@ -643,10 +697,33 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
                           begin: Alignment.topCenter,
                           end: Alignment.bottomCenter,
                           colors: [
+                            Colors.black.withValues(alpha: 0.13),
                             Colors.transparent,
-                            Colors.black.withValues(alpha: 0.75),
+                            Colors.black.withValues(alpha: 0.78),
                           ],
-                          stops: const [0.35, 1.0],
+                          stops: const [0.0, 0.34, 1.0],
+                        ),
+                      ),
+                    ),
+                  if (hasTrack)
+                    Positioned(
+                      top: 13,
+                      left: 14,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.34),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.white.withValues(alpha: 0.24)),
+                        ),
+                        child: const Text(
+                          'MUSIK PILIHAN',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 8.5,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 1.15,
+                          ),
                         ),
                       ),
                     ),

@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 
@@ -121,9 +122,25 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          // Keep the backdrop stable when the queue changes. The album cover
-          // is rendered only in its fixed square slot below, never blown up
-          // as a full-screen image that changes crop between songs.
+          // Softly blurred cover art fills the background. A translucent theme
+          // wash keeps text readable while the fixed square cover below stays
+          // crisp and does not resize when playback changes.
+          Positioned.fill(
+            child: ImageFiltered(
+              imageFilter: ui.ImageFilter.blur(sigmaX: 42, sigmaY: 42),
+              child: Transform.scale(
+                scale: 1.18,
+                child: Opacity(
+                  opacity: isDarkTheme ? 0.34 : 0.16,
+                  child: AlbumArtworkImage(
+                    track: widget.video,
+                    fit: BoxFit.cover,
+                    iconSize: 64,
+                  ),
+                ),
+              ),
+            ),
+          ),
           Positioned.fill(
             child: DecoratedBox(
               decoration: BoxDecoration(
@@ -131,9 +148,9 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    playerTopColor,
-                    playerMidColor,
-                    scheme.surface,
+                    playerTopColor.withValues(alpha: isDarkTheme ? 0.72 : 0.84),
+                    playerMidColor.withValues(alpha: isDarkTheme ? 0.80 : 0.89),
+                    scheme.surface.withValues(alpha: isDarkTheme ? 0.89 : 0.94),
                   ],
                   stops: const [0.0, 0.55, 1.0],
                 ),

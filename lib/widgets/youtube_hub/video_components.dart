@@ -146,21 +146,21 @@ extension _YoutubeHubVideoComponents on _YoutubeHubState {
             child: Row(
               children: [
                 SizedBox(
-                  width: 112,
-                  height: 80,
+                  width: 88,
+                  height: 88,
                   child: ClipRRect(
-                    borderRadius: BorderRadius.circular(15),
+                    borderRadius: BorderRadius.circular(14),
                     child: Stack(
                       fit: StackFit.expand,
                       children: [
-                        UnifiedArtwork(track: video, fit: BoxFit.cover, iconSize: 32),
+                        UnifiedArtwork(track: video, fit: BoxFit.cover, iconSize: 30),
                         DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.black.withValues(alpha: 0.03), Colors.black.withValues(alpha: 0.40)]))),
                         Center(
                           child: Container(
-                            width: 34,
-                            height: 34,
+                            width: 31,
+                            height: 31,
                             decoration: BoxDecoration(shape: BoxShape.circle, color: isCurrent ? scheme.primary : Colors.black.withValues(alpha: 0.53), border: Border.all(color: Colors.white.withValues(alpha: 0.72), width: 1.1)),
-                            child: Icon(isCurrent ? Icons.graphic_eq_rounded : Icons.play_arrow_rounded, color: Colors.white, size: 22),
+                            child: Icon(isCurrent ? Icons.graphic_eq_rounded : Icons.play_arrow_rounded, color: Colors.white, size: 20),
                           ),
                         ),
                         if (video.liveStatus.isNotEmpty) Positioned(left: 4, top: 4, child: LiveBadge(video: video)),
@@ -237,7 +237,7 @@ extension _YoutubeHubVideoComponents on _YoutubeHubState {
                   borderRadius: BorderRadius.circular(14),
                   child: SizedBox(
                     width: double.infinity,
-                    height: 123,
+                    height: 138,
                     child: Stack(
                       fit: StackFit.expand,
                       children: [

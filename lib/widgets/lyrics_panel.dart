@@ -150,8 +150,19 @@ class _LyricsPanelState extends State<LyricsPanel> {
       margin: const EdgeInsets.fromLTRB(16, 2, 16, 10),
       padding: const EdgeInsets.fromLTRB(16, 12, 14, 13),
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerHigh.withValues(alpha: 0.85),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            scheme.primary.withValues(alpha: widget.synced ? 0.15 : 0.07),
+            scheme.surfaceContainerHigh.withValues(alpha: 0.66),
+          ],
+        ),
         borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: scheme.primary.withValues(alpha: widget.synced ? 0.20 : 0.10)),
+        boxShadow: [
+          BoxShadow(color: scheme.primary.withValues(alpha: 0.045), blurRadius: 18, offset: const Offset(0, 6)),
+        ],
       ),
       child: Row(
         children: [
@@ -310,8 +321,18 @@ class _LyricsPanelState extends State<LyricsPanel> {
         child: Container(
           margin: widget.expandToAvailableHeight ? EdgeInsets.zero : const EdgeInsets.fromLTRB(14, 8, 14, 8),
           decoration: BoxDecoration(
-            color: scheme.surfaceContainerLow.withValues(alpha: 0.94),
+            color: scheme.surfaceContainerLow.withValues(alpha: 0.74),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                scheme.primary.withValues(alpha: 0.075),
+                scheme.surfaceContainerLow.withValues(alpha: 0.80),
+                scheme.secondary.withValues(alpha: 0.035),
+              ],
+            ),
             borderRadius: BorderRadius.circular(28),
+            border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.55)),
           ),
           clipBehavior: Clip.antiAlias,
           child: Column(
@@ -325,7 +346,7 @@ class _LyricsPanelState extends State<LyricsPanel> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Lirik', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, letterSpacing: -0.8)),
+                        const Text('Lirik', style: TextStyle(fontSize: 25, fontWeight: FontWeight.w900, letterSpacing: -0.9)),
                         const SizedBox(height: 2),
                         Text(
                           widget.synced ? 'Lirik mengikuti posisi lagu' : 'Lirik untuk lagu ini',

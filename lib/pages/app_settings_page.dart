@@ -7,6 +7,7 @@ import 'app_health_page.dart';
 import '../services/app_settings.dart';
 import '../widgets/app_update_sheet.dart';
 import '../widgets/data_usage_card.dart';
+import '../widgets/music_design.dart';
 
 /// Pengaturan global aplikasi. Semua opsi terhubung langsung ke controller
 /// dan disimpan lewat SharedPreferences.
@@ -44,9 +45,78 @@ class AppSettingsPage extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Pengaturan'),
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 40),
+      body: MusicBackdrop(child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 40),
         children: [
+          Container(
+            margin: const EdgeInsets.only(bottom: 22),
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  scheme.primaryContainer.withValues(alpha: 0.88),
+                  scheme.surfaceContainerLow,
+                ],
+              ),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                color: scheme.primary.withValues(alpha: 0.14),
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 50,
+                  height: 50,
+                  decoration: BoxDecoration(
+                    color: scheme.primary.withValues(alpha: 0.13),
+                    borderRadius: BorderRadius.circular(17),
+                  ),
+                  child: Icon(
+                    Icons.tune_rounded,
+                    color: scheme.primary,
+                    size: 26,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'RACIK PENGALAMAN MUSIKMU',
+                        style: TextStyle(
+                          color: scheme.primary,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 1.1,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        'Atur MusikKu sesuai caramu mendengarkan.',
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w900,
+                          height: 1.2,
+                          letterSpacing: -0.25,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Tema, penggunaan data, dan opsi pemutaran ada di sini.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                          height: 1.35,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
           // ---------------------------------------------------------------
           // TAMPILAN
           // ---------------------------------------------------------------
@@ -334,7 +404,7 @@ class AppSettingsPage extends StatelessWidget {
             ),
           ),
         ],
-      ),
+      )),
     );
   }
 }

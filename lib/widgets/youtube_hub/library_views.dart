@@ -47,8 +47,11 @@ extension _YoutubeHubLibraryViews on _YoutubeHubState {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Material(
-        color: scheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(22),
+        color: scheme.surfaceContainerLow.withValues(alpha: 0.82),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(22),
+          side: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.52)),
+        ),
         clipBehavior: Clip.antiAlias,
         child: Column(
           children: [
@@ -81,49 +84,23 @@ extension _YoutubeHubLibraryViews on _YoutubeHubState {
   }
 
   List<Widget> _libraryView() {
-    final scheme = Theme.of(context).colorScheme;
     final topInset = MediaQuery.paddingOf(context).top;
 
     return <Widget>[
-      // Header: teks besar saja + satu tombol bulat, tanpa kartu gradien.
+      // Header koleksi mengikuti visual katalog streaming dan tetap ringkas.
       SliverToBoxAdapter(
         child: Padding(
-          padding: EdgeInsets.fromLTRB(20, topInset + 16, 14, 4),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'RUANG MUSIKMU',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 2.2),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Koleksi kamu',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: scheme.onSurface, fontSize: 30, fontWeight: FontWeight.w800, letterSpacing: -1.1, height: 1.05),
-                    ),
-                  ],
-                ),
-              ),
-              IconButton(
-                tooltip: 'Pembaruan aplikasi',
-                constraints: const BoxConstraints.tightFor(width: 46, height: 46),
-                style: IconButton.styleFrom(
-                  backgroundColor: scheme.surfaceContainerHigh.withValues(alpha: 0.9),
-                  padding: EdgeInsets.zero,
-                ),
-                onPressed: () => unawaited(AppUpdateSheet.show(context)),
-                icon: Icon(Icons.system_update_alt_rounded, size: 22, color: scheme.onSurface),
-              ),
-            ],
+          padding: EdgeInsets.fromLTRB(16, topInset + 10, 16, 8),
+          child: FlowPageHero(
+            icon: Icons.library_music_rounded,
+            eyebrow: 'RUANG MUSIKMU',
+            title: 'Koleksi kamu',
+            subtitle: 'Playlist, favorit, riwayat, dan musik dari perangkatmu.',
+            trailing: IconButton.filledTonal(
+              tooltip: 'Pembaruan aplikasi',
+              onPressed: () => unawaited(AppUpdateSheet.show(context)),
+              icon: const Icon(Icons.system_update_alt_rounded),
+            ),
           ),
         ),
       ),
@@ -173,8 +150,11 @@ extension _YoutubeHubLibraryViews on _YoutubeHubState {
   Widget _libraryQuickTile({required String title, required String subtitle, required IconData icon, required VoidCallback onTap}) {
     final scheme = Theme.of(context).colorScheme;
     return Material(
-      color: scheme.surfaceContainerLow,
-      borderRadius: BorderRadius.circular(20),
+      color: scheme.surfaceContainerLow.withValues(alpha: 0.82),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.48)),
+      ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,

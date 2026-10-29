@@ -1,8 +1,11 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 
 import '../models/listening_stat.dart';
 import '../services/storage_service.dart';
 import '../widgets/flow_components.dart';
+import '../widgets/music_design.dart';
 import '../theme/app_colors.dart';
 
 class StatsPage extends StatefulWidget {
@@ -54,7 +57,7 @@ class _StatsPageState extends State<StatsPage> {
       appBar: AppBar(
         title: const Text('Statistik'),
       ),
-      body: FutureBuilder<List<ListeningStat>>(
+      body: MusicBackdrop(child: FutureBuilder<List<ListeningStat>>(
         future: _future,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
@@ -223,7 +226,7 @@ class _StatsPageState extends State<StatsPage> {
             ),
           );
         },
-      ),
+      )),
     );
   }
 }
@@ -246,67 +249,85 @@ class _StatsHero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            scheme.primary.withValues(alpha: 0.22),
-            scheme.secondary.withValues(alpha: 0.10),
-            scheme.surfaceContainerLow,
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: scheme.primary.withValues(alpha: 0.20)),
-        boxShadow: [BoxShadow(color: scheme.primary.withValues(alpha: 0.07), blurRadius: 26, offset: const Offset(0, 10))],
-      ),
-      child: Wrap(
-        crossAxisAlignment: WrapCrossAlignment.center,
-        spacing: 14,
-        runSpacing: 12,
-        children: [
-          Container(
-            width: 58,
-            height: 58,
-            decoration: BoxDecoration(
-              color: appGoldStrong.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(19),
-            ),
-            child: Icon(Icons.insights_rounded, color: scheme.primary, size: 27),
-          ),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 480),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'RINGKASAN PERSONAL',
-                  style: TextStyle(fontSize: 10, letterSpacing: 1.05, fontWeight: FontWeight.w900, color: scheme.secondary),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  '${formatMinutes(totalSeconds)} • $totalPlays play',
-                  style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
-                ),
-                if (topArtist != null) ...[
-                  const SizedBox(height: 6),
-                  Text(
-                    'Teratas: $topArtist • ${formatMinutes(topArtistMinutes)}',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: appGoldStrong,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
+    final radius = BorderRadius.circular(22);
+    return ClipRRect(
+      borderRadius: radius,
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+        child: Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                scheme.primary.withValues(alpha: 0.22),
+                scheme.secondary.withValues(alpha: 0.10),
+                scheme.surfaceContainerLow.withValues(alpha: 0.80),
               ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
             ),
+            borderRadius: radius,
+            border: Border.all(color: scheme.primary.withValues(alpha: 0.20)),
+            boxShadow: [
+              BoxShadow(
+                color: scheme.primary.withValues(alpha: 0.07),
+                blurRadius: 24,
+                offset: const Offset(0, 9),
+              ),
+            ],
           ),
-        ],
+          child: Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 14,
+            runSpacing: 12,
+            children: [
+              Container(
+                width: 58,
+                height: 58,
+                decoration: BoxDecoration(
+                  color: appGoldStrong.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                child: Icon(Icons.insights_rounded, color: scheme.primary, size: 27),
+              ),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 480),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'RINGKASAN PERSONAL',
+                      style: TextStyle(
+                        fontSize: 10,
+                        letterSpacing: 1.05,
+                        fontWeight: FontWeight.w900,
+                        color: scheme.secondary,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      '${formatMinutes(totalSeconds)} • $totalPlays play',
+                      style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
+                    ),
+                    if (topArtist != null) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        'Teratas: $topArtist • ${formatMinutes(topArtistMinutes)}',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: scheme.primary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

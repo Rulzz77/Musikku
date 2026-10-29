@@ -405,28 +405,19 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
     final radioSeed = seedVideo ?? (videos.isEmpty ? null : videos.first);
     final scheme = Theme.of(context).colorScheme;
     return [
-      // Header teks saja (tanpa kartu gradien / kotak ikon).
       SliverToBoxAdapter(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 16, 16, 14),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
-                'MUSIC DISCOVERY',
-                style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 2.2),
+              FlowPageHero(
+                icon: Icons.radio_rounded,
+                eyebrow: 'MUSIC DISCOVERY',
+                title: 'Radio untuk selera kamu',
+                subtitle: 'Mulai dari satu lagu, lalu temukan lagu lain yang nyambung. Rekomendasi mempertimbangkan gaya musik, artis, dan bahasa.',
               ),
-              const SizedBox(height: 4),
-              Text(
-                'Radio untuk selera kamu',
-                style: TextStyle(color: scheme.onSurface, fontSize: 28, fontWeight: FontWeight.w800, letterSpacing: -1.0, height: 1.05),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                'Mulai dari satu lagu, lalu temukan lagu lain yang nyambung. Rekomendasi diacak berdasarkan gaya musik dan konteks lagu. Bahasa bisa berganti jika lagunya cocok.',
-                style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12.5, height: 1.4),
-              ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
@@ -512,13 +503,16 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
     return [
       SliverToBoxAdapter(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 16, 16, 10),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text('Jelajahi musik', style: TextStyle(color: scheme.onSurface, fontSize: 28, fontWeight: FontWeight.w800, letterSpacing: -1.0, height: 1.05)),
-              const SizedBox(height: 8),
-              Text('Pilih genre untuk mencari katalog musik yang relevan.', style: TextStyle(color: scheme.onSurfaceVariant, height: 1.35)),
+              const FlowPageHero(
+                icon: Icons.explore_rounded,
+                eyebrow: 'DISCOVER YOUR SOUND',
+                title: 'Jelajahi musik',
+                subtitle: 'Pilih genre untuk menemukan katalog musik yang lebih relevan dengan suasana kamu.',
+              ),
               if (shownResults.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 Wrap(

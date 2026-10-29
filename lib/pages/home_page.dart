@@ -36,6 +36,7 @@ import '../widgets/mini_music_player.dart';
 import '../widgets/app_update_sheet.dart';
 import '../widgets/playlist_widgets.dart';
 import '../widgets/video_menu_sheet.dart';
+import '../widgets/music_design.dart';
 import 'artist_page.dart';
 import 'custom_playlists_page.dart';
 

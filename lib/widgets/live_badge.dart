@@ -29,11 +29,16 @@ class LiveBadge extends StatelessWidget {
       icon = Icons.history_rounded;
     }
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: background,
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
+        boxShadow: video.isLive
+            ? [BoxShadow(color: background.withValues(alpha: 0.22), blurRadius: 8, spreadRadius: 0.3)]
+            : const [],
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -100,8 +105,9 @@ class DurationBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.80),
-        borderRadius: BorderRadius.circular(5),
+        color: Colors.black.withValues(alpha: 0.82),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
       ),
       child: Text(
         formatVideoDuration(seconds),

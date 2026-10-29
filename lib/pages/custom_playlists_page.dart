@@ -9,6 +9,7 @@ import '../models/youtube_search_result.dart';
 import '../widgets/playlist_widgets.dart' show showPlaylistNameDialog;
 import '../widgets/unified_artwork.dart';
 import '../widgets/flow_components.dart';
+import '../widgets/music_design.dart';
 
 /// Management screen for MusikKu's locally saved playlists.
 /// The supplied playlist list is shared with HomePage; every mutation is
@@ -320,9 +321,11 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
             ),
         ],
       ),
-      body: playlist == null
-          ? _buildPlaylistList(scheme)
-          : _buildPlaylistSongs(playlist, scheme),
+      body: MusicBackdrop(
+        child: playlist == null
+            ? _buildPlaylistList(scheme)
+            : _buildPlaylistSongs(playlist, scheme),
+      ),
     );
   }
 

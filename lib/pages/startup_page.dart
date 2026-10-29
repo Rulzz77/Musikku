@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../app_info.dart';
 import '../services/app_settings.dart';
+import '../widgets/music_design.dart';
 import 'home_page.dart';
 
 class StartupPage extends StatefulWidget {
@@ -106,81 +107,93 @@ class _StartupPageState extends State<StartupPage> {
                 scale: scale,
                 child: child,
               ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 112,
-                    height: 112,
-                    padding: const EdgeInsets.all(5),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(34),
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [scheme.primary, scheme.secondary],
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: scheme.primary.withValues(alpha: 0.28),
-                          blurRadius: 38,
-                          offset: const Offset(0, 16),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 360),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: MusicGlassPanel(
+                    padding: const EdgeInsets.fromLTRB(24, 30, 24, 22),
+                    radius: 32,
+                    accent: scheme.primary,
+                    blur: 18,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 112,
+                          height: 112,
+                          padding: const EdgeInsets.all(5),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(34),
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [scheme.primary, scheme.secondary],
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: scheme.primary.withValues(alpha: 0.28),
+                                blurRadius: 38,
+                                offset: const Offset(0, 16),
+                              ),
+                            ],
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(29),
+                            child: Image.asset(
+                              'assets/icon/app_icon.png',
+                              fit: BoxFit.cover,
+                              filterQuality: FilterQuality.high,
+                              errorBuilder: (_, _, _) => Container(
+                                color: scheme.surfaceContainerHighest,
+                                alignment: Alignment.center,
+                                child: Icon(Icons.graphic_eq_rounded, size: 50, color: scheme.primary),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        Text(
+                          appName,
+                          style: TextStyle(
+                            fontSize: 31,
+                            height: 1,
+                            letterSpacing: -1.1,
+                            fontWeight: FontWeight.w900,
+                            color: scheme.onSurface,
+                          ),
+                        ),
+                        const SizedBox(height: 9),
+                        Text(
+                          'MUSIK YANG SELALU MENEMANIMU',
+                          style: TextStyle(
+                            color: scheme.onSurfaceVariant,
+                            fontSize: 9.5,
+                            letterSpacing: 1.7,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 30),
+                        SizedBox(
+                          width: 92,
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(99),
+                            child: LinearProgressIndicator(
+                              minHeight: 3,
+                              backgroundColor: scheme.primary.withValues(alpha: 0.12),
+                              valueColor: AlwaysStoppedAnimation<Color>(scheme.secondary),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'v$appVersion  •  build $appBuildNumber',
+                          style: TextStyle(color: scheme.onSurfaceVariant.withValues(alpha: 0.72), fontSize: 10, fontWeight: FontWeight.w600),
                         ),
                       ],
                     ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(29),
-                      child: Image.asset(
-                        'assets/icon/app_icon.png',
-                        fit: BoxFit.cover,
-                        filterQuality: FilterQuality.high,
-                        errorBuilder: (_, _, _) => Container(
-                          color: scheme.surfaceContainerHighest,
-                          alignment: Alignment.center,
-                          child: Icon(Icons.graphic_eq_rounded, size: 50, color: scheme.primary),
-                        ),
-                      ),
-                    ),
                   ),
-                  const SizedBox(height: 24),
-                  Text(
-                    appName,
-                    style: TextStyle(
-                      fontSize: 31,
-                      height: 1,
-                      letterSpacing: -1.1,
-                      fontWeight: FontWeight.w900,
-                      color: scheme.onSurface,
-                    ),
-                  ),
-                  const SizedBox(height: 9),
-                  Text(
-                    'MUSIK YANG SELALU MENEMANIMU',
-                    style: TextStyle(
-                      color: scheme.onSurfaceVariant,
-                      fontSize: 9.5,
-                      letterSpacing: 1.7,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 30),
-                  SizedBox(
-                    width: 92,
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(99),
-                      child: LinearProgressIndicator(
-                        minHeight: 3,
-                        backgroundColor: scheme.primary.withValues(alpha: 0.12),
-                        valueColor: AlwaysStoppedAnimation<Color>(scheme.secondary),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'v$appVersion  •  build $appBuildNumber',
-                    style: TextStyle(color: scheme.onSurfaceVariant.withValues(alpha: 0.72), fontSize: 10, fontWeight: FontWeight.w600),
-                  ),
-                ],
+                ),
               ),
             ),
           ),

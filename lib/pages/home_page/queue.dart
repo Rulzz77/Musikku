@@ -429,13 +429,11 @@ extension _HomeQueueSheet on _HomePageState {
                   ),
                 ),
                 if (current != null)
-                  Container(
+                  MusicGlassPanel(
                     margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                     padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: scheme.primaryContainer.withValues(alpha: 0.55),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
+                    radius: 16,
+                    accent: scheme.primary,
                     child: Row(
                       children: [
                         Icon(Icons.graphic_eq_rounded, color: scheme.primary),
@@ -458,16 +456,11 @@ extension _HomeQueueSheet on _HomePageState {
                   child: items.isEmpty
                       ? Center(
                           child: Padding(
-                            padding: const EdgeInsets.all(28),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.queue_music_rounded, size: 54, color: scheme.onSurfaceVariant.withValues(alpha: 0.65)),
-                                const SizedBox(height: 12),
-                                const Text('Antrean masih kosong', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
-                                const SizedBox(height: 5),
-                                Text('Tambahkan lagu lewat menu ⋮ pada kartu lagu.', textAlign: TextAlign.center, style: TextStyle(color: scheme.onSurfaceVariant)),
-                              ],
+                            padding: const EdgeInsets.all(22),
+                            child: MusicEmptyState(
+                              icon: Icons.queue_music_rounded,
+                              title: 'Antrean masih kosong',
+                              message: 'Tambahkan lagu lewat menu ⋮ pada kartu lagu.',
                             ),
                           ),
                         )

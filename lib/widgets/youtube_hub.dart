@@ -23,6 +23,7 @@ import 'app_update_sheet.dart';
 import 'channel_avatar.dart';
 import 'live_badge.dart';
 import 'unified_artwork.dart';
+import 'flow_components.dart';
 
 part 'youtube_hub/startup_actions.dart';
 part 'youtube_hub/home_views.dart';
@@ -672,7 +673,7 @@ class _GlassMagnifyingDockState extends State<_GlassMagnifyingDock> {
             },
             onHorizontalDragCancel: () => setState(() => _dragX = null),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(28),
+              borderRadius: BorderRadius.circular(18),
               child: BackdropFilter(
                 filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
                 child: DecoratedBox(
@@ -680,9 +681,27 @@ class _GlassMagnifyingDockState extends State<_GlassMagnifyingDock> {
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      // At rest, selection is communicated by the icon/label.
-                      // While dragging, a compact glass lens follows the finger
-                      // and magnifies nearby icons without filling an entire tab.
+                      // Pantulan kaca tipis selalu terlihat, bukan hanya saat dock digeser.
+                      Positioned(
+                        left: 24,
+                        right: 24,
+                        top: 1,
+                        height: 1.5,
+                        child: IgnorePointer(
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  Colors.white.withValues(alpha: 0.02),
+                                  Colors.white.withValues(alpha: 0.48),
+                                  Colors.white.withValues(alpha: 0.05),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      // Saat digeser, lensa kaca mengikuti jari dan memperbesar ikon terdekat.
                       if (dragging) ..._lensLayers(colors, visualIndex, cellWidth, maxWidth),
                       Row(
                         children: [
@@ -722,8 +741,8 @@ class _GlassMagnifyingDockState extends State<_GlassMagnifyingDock> {
           colors.surface.withValues(alpha: 0.76),
         ],
       ),
-      borderRadius: BorderRadius.circular(28),
-      border: Border.all(color: Colors.white.withValues(alpha: 0.19), width: 1),
+      borderRadius: BorderRadius.circular(18),
+      border: Border.all(color: Colors.white.withValues(alpha: 0.22), width: 1),
       boxShadow: [
         BoxShadow(
           color: Colors.black.withValues(alpha: 0.22),
@@ -759,12 +778,12 @@ class _GlassMagnifyingDockState extends State<_GlassMagnifyingDock> {
         width: glassWidth,
         child: IgnorePointer(
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(23),
+            borderRadius: BorderRadius.circular(15),
             child: BackdropFilter(
               filter: ui.ImageFilter.blur(sigmaX: 11, sigmaY: 11),
               child: DecoratedBox(
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(23),
+                  borderRadius: BorderRadius.circular(15),
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
@@ -797,7 +816,7 @@ class _GlassMagnifyingDockState extends State<_GlassMagnifyingDock> {
         child: IgnorePointer(
           child: DecoratedBox(
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(22),
+              borderRadius: BorderRadius.circular(16),
               gradient: LinearGradient(
                 begin: Alignment.centerLeft,
                 end: Alignment.centerRight,

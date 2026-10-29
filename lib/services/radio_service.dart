@@ -87,7 +87,17 @@ class RadioService {
   /// Batas lagu dari satu artis di dalam pool. Satu halaman hasil pencarian
   /// "artis X" berisi lagu artis X semua; tanpa batas, pool terisi satu
   /// penyanyi saja dan Next terus memutar dia.
-  static const int _maxPerArtistInPool = 4;
+  static const int _maxPerArtistInPool = 2;
+
+  /// Batas variasi artis: dalam [_artistWindow] lagu terakhir yang diputar
+  /// (termasuk pilihan manual dan lagu awal Radio), satu artis maksimal
+  /// [_maxPerArtistInWindow] kali, dan tidak boleh muncul dalam
+  /// [_artistNoRepeatGap] lagu terakhir.
+  static const int _artistWindow = 10;
+  static const int _maxPerArtistInWindow = 2;
+  static const int _artistNoRepeatGap = 3;
+  final List<({String id, String artist})> _recentPlayedArtists =
+      <({String id, String artist})>[];
 
   bool get hasSeed => _seed.isNotEmpty;
 
@@ -205,6 +215,48 @@ class RadioService {
     return future;
   }
 
+  int _artistPlaysInWindow(String artist) =>
+      _recentPlayedArtists.where((entry) => entry.artist == artist).length;
+
+  bool _artistInRecentGap(String artist) => _recentPlayedArtists.reversed
+      .take(_artistNoRepeatGap)
+      .any((entry) => entry.artist == artist);
+
+  /// Utamakan kandidat sesuai batas variasi artis. Bertahap supaya Next tidak
+  /// mati kalau pilihan terbatas: (1) di bawah batas jendela dan di luar jeda,
+  /// (2) di bawah batas jendela, (3) bukan artis lagu terakhir, (4) semua.
+  /// Mengembalikan [candidates] apa adanya bila tidak ada yang lolos.
+  List<YoutubeSearchResult> preferArtistVariety(
+    List<YoutubeSearchResult> candidates,
+  ) {
+    if (candidates.isEmpty || _recentPlayedArtists.isEmpty) return candidates;
+    bool underCap(YoutubeSearchResult v) {
+      final artist = _artistKey(v);
+      return artist.isEmpty || _artistPlaysInWindow(artist) < _maxPerArtistInWindow;
+    }
+
+    bool outsideGap(YoutubeSearchResult v) {
+      final artist = _artistKey(v);
+      return artist.isEmpty || !_artistInRecentGap(artist);
+    }
+
+    bool notLast(YoutubeSearchResult v) {
+      final artist = _artistKey(v);
+      return artist.isEmpty || _recentPlayedArtists.last.artist != artist;
+    }
+
+    final tiers = <bool Function(YoutubeSearchResult)>[
+      (v) => underCap(v) && outsideGap(v),
+      underCap,
+      notLast,
+    ];
+    for (final tier in tiers) {
+      final picked = candidates.where(tier).toList(growable: false);
+      if (picked.isNotEmpty) return picked;
+    }
+    return candidates;
+  }
+
   /// Ambil satu lagu secara berbobot. Dipakai Shuffle Pintar supaya radio
   /// tetap acak tetapi juga menghindari judul/artist yang baru diputar.
   YoutubeSearchResult? takeSmart({required double Function(YoutubeSearchResult) score}) {
@@ -240,14 +292,7 @@ class RadioService {
         .where((video) => !_recentlySelected(video))
         .toList(growable: false);
     if (candidatesPool.isEmpty) return null;
-    final currentArtist = _recentSelectionArtists.isEmpty
-        ? ''
-        : _recentSelectionArtists.last;
-    final differentArtists = candidatesPool.where((video) {
-      final artist = _artistKey(video);
-      return currentArtist.isEmpty || artist.isEmpty || artist != currentArtist;
-    }).toList(growable: false);
-    final sourcePool = differentArtists.isNotEmpty ? differentArtists : candidatesPool;
+    final sourcePool = preferArtistVariety(candidatesPool);
     final scored = sourcePool
         .map((video) {
           final key = trackKeyFor(video);
@@ -290,7 +335,10 @@ class RadioService {
   /// Radio memilih secara berbobot dari kandidat yang relevan dengan seed dan
   /// gaya musik aktif. Popularitas/view count tidak menjadi faktor pemilihan.
   /// Shuffle aktif tetap memilih secara acak merata dari pool terkait.
-  YoutubeSearchResult? take({required bool random}) {
+  YoutubeSearchResult? take({
+    required bool random,
+    double Function(YoutubeSearchResult)? tasteBonus,
+  }) {
     final targetStyle = MusicStyleMatcher.styleFromText(_seed);
     final targetLanguage = _preferredLanguage ?? MusicStyleMatcher.languageFromText(_seed);
     _pool.removeWhere((video) =>
@@ -319,25 +367,8 @@ class RadioService {
     // Utamakan lagu yang belum baru dipilih dan artis berbeda dari pilihan
     // sebelumnya. Kalau kandidat terlalu sedikit, longgarkan aturan artis.
     final fresh = candidates.where((video) => !_recentlySelected(video)).toList();
-    final currentArtist = _recentSelectionArtists.isEmpty
-        ? ''
-        : _recentSelectionArtists.last;
-    final diverse = fresh.where((video) {
-      final artist = _artistKey(video);
-      return currentArtist.isEmpty || artist.isEmpty || artist != currentArtist;
-    }).toList();
-    // Beri jeda antar-artis: utamakan artis yang tidak muncul dalam 3 lagu
-    // terakhir, seperti Radio Spotify yang tidak memutar artis sama berurutan.
-    final recentArtists = _recentSelectionArtists.reversed.take(3).toSet();
-    final spaced = fresh.where((video) {
-      final artist = _artistKey(video);
-      return artist.isEmpty || !recentArtists.contains(artist);
-    }).toList();
-    // Never fall back to [candidates] when [fresh] is empty. That fallback
-    // reintroduced recently selected tracks and made Radio feel repetitive.
-    final source = spaced.isNotEmpty
-        ? spaced
-        : (diverse.isNotEmpty ? diverse : fresh);
+    // Batas variasi artis berbasis jendela (lihat preferArtistVariety).
+    final source = preferArtistVariety(fresh);
     if (source.isEmpty) return null;
 
     final selected = random
@@ -346,6 +377,7 @@ class RadioService {
             source,
             targetStyle: targetStyle,
             targetLanguage: targetLanguage,
+            tasteBonus: tasteBonus,
           );
 
     _removeTrackFamilyFromPool(selected);
@@ -360,6 +392,7 @@ class RadioService {
     List<YoutubeSearchResult> candidates, {
     required String? targetStyle,
     required String? targetLanguage,
+    double Function(YoutubeSearchResult)? tasteBonus,
   }) {
     if (candidates.length == 1) return candidates.single;
 
@@ -378,6 +411,9 @@ class RadioService {
           artist == _recentSelectionArtists.last) {
         score -= 18.0;
       }
+      // Selera pendengar (artis yang sering didengar/dicari, minus skip). Genre
+      // tetap menjadi gerbang; ini hanya menggeser bobot di antara kandidat.
+      score += tasteBonus?.call(video) ?? 0.0;
       // Jitter kecil membuat urutan kandidat dengan nilai serupa ikut berubah.
       score += _random.nextDouble() * 6.0;
       return (video: video, score: score);
@@ -497,6 +533,15 @@ class RadioService {
     final videoId = video.videoId.trim();
     if (videoId.isEmpty) {
       return;
+    }
+
+    final playedArtist = _artistKey(video);
+    if (playedArtist.isNotEmpty &&
+        (_recentPlayedArtists.isEmpty || _recentPlayedArtists.last.id != videoId)) {
+      _recentPlayedArtists.add((id: videoId, artist: playedArtist));
+      if (_recentPlayedArtists.length > _artistWindow) {
+        _recentPlayedArtists.removeAt(0);
+      }
     }
 
     _playedIds.remove(videoId);

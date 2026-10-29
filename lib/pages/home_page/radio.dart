@@ -194,7 +194,10 @@ extension _HomeRadio on _HomePageState {
               targetLanguage: targetLanguage,
               allowCrossLanguage: true,
             );
-      final next = _pickNonShort(ranked, random: true);
+      final next = _pickNonShort(
+        _radio.preferArtistVariety(ranked.toList(growable: false)),
+        random: true,
+      );
       if (next != null) {
         await _playVideo(next);
         return;
@@ -211,7 +214,49 @@ extension _HomeRadio on _HomePageState {
   }
 
   /// Ambil kandidat dari pool radio yang bukan Shorts, memakai metadata lokal.
-  YoutubeSearchResult? _takeNonShortFromRadio() {
+  /// Bonus selera untuk Radio: artis yang sering didengar, disukai, atau
+  /// sering dicari mendapat bobot lebih; artis yang sering di-skip dikurangi.
+  /// Level artis, bukan lagu, karena lagu yang sudah diputar memang disaring
+  /// anti-ulang. Rentang dibatasi (-10..+10) supaya genre tetap dominan dan
+  /// batas variasi artis tetap berlaku.
+  Future<double Function(YoutubeSearchResult)> _buildRadioTasteBonus() async {
+    final plays = <String, int>{};
+    final skips = <String, int>{};
+    final liked = <String>{};
+    for (final entry in _listeningStatsById.entries) {
+      final key = SmartQueueScorer.normalizeArtist(entry.value.artist);
+      if (key.isEmpty) continue;
+      plays[key] = (plays[key] ?? 0) + entry.value.playCount;
+      skips[key] = (skips[key] ?? 0) + entry.value.skipCount;
+      if (_likedIds.contains(entry.key)) liked.add(key);
+    }
+
+    var queries = <String>[];
+    try {
+      queries = (await _storage.loadHistory())
+          .take(30)
+          .map((q) => ' ${SmartQueueScorer.normalizeArtist(q)} ')
+          .where((q) => q.trim().isNotEmpty)
+          .toList(growable: false);
+    } catch (_) {}
+
+    return (YoutubeSearchResult video) {
+      final key = SmartQueueScorer.normalizeArtist(video.channelTitle);
+      if (key.isEmpty) return 0.0;
+      var bonus = 0.0;
+      bonus += ((plays[key] ?? 0).clamp(0, 20)) / 20.0 * 6.0;
+      if (liked.contains(key)) bonus += 3.0;
+      bonus -= ((skips[key] ?? 0).clamp(0, 6)) * 1.5;
+      if (key.length >= 3 && queries.any((q) => q.contains(' $key '))) {
+        bonus += 3.0;
+      }
+      return bonus.clamp(-10.0, 10.0).toDouble();
+    };
+  }
+
+  YoutubeSearchResult? _takeNonShortFromRadio({
+    double Function(YoutubeSearchResult)? tasteBonus,
+  }) {
     for (var i = 0; i < 50; i++) {
       final candidate = _playerUiState.value.isSmartShuffle
           ? _radio.takeSmart(
@@ -220,7 +265,10 @@ extension _HomeRadio on _HomePageState {
                 currentArtist: _currentVideo?.channelTitle,
               ),
             )
-          : _radio.take(random: _playerUiState.value.isShuffle);
+          : _radio.take(
+              random: _playerUiState.value.isShuffle,
+              tasteBonus: tasteBonus,
+            );
 
       if (candidate == null) {
         return null;
@@ -321,7 +369,9 @@ extension _HomeRadio on _HomePageState {
         continue;
       }
 
-      next = _takeNonShortFromRadio();
+      next = _takeNonShortFromRadio(
+        tasteBonus: await _buildRadioTasteBonus(),
+      );
     }
 
     // Fallback 1: pakai hasil pencarian aktif yang sudah ada di memory.
@@ -398,7 +448,10 @@ extension _HomeRadio on _HomePageState {
           }
         }
 
-        next = _pickNonShort(selectionPool, random: true);
+        next = _pickNonShort(
+          _radio.preferArtistVariety(selectionPool),
+          random: true,
+        );
       }
     }
 
@@ -455,7 +508,12 @@ extension _HomeRadio on _HomePageState {
           targetLanguage: targetLanguage,
           allowCrossLanguage: !_radio.locksLanguage,
         );
-        next = _pickNonShort(preferred.isNotEmpty ? preferred : verifiedLocal, random: true);
+        next = _pickNonShort(
+          _radio.preferArtistVariety(
+            preferred.isNotEmpty ? preferred : verifiedLocal,
+          ),
+          random: true,
+        );
       }
     }
 

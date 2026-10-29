@@ -169,13 +169,68 @@ class YoutubeMusicPolicy {
     return videos.where((video) => !isLikelyAiGeneratedMusic(video)).toList();
   }
 
-  static bool isMusicCandidate(YoutubeSearchResult video) {
+  /// Filter ketat untuk hasil katalog publik MusikKu: prioritaskan rilis
+  /// single resmi saja. youtube_explode_dart tidak mengekspos badge
+  /// verifikasi channel secara konsisten, jadi keputusan ini berbasis marker
+  /// resmi pada judul/channel dan tidak bisa menjamin status resmi 100%.
+  static bool isOfficialMusicReleaseCandidate(YoutubeSearchResult video) {
     if (video.isLocal) return true;
-    return !isLikelyShortForm(video) &&
-        !isLikelyNonMusicVideo(video) &&
-        !isLikelyNonMusicShort(video) &&
-        !isLikelyAiGeneratedMusic(video);
+
+    final title = video.title.toLowerCase().trim();
+    final channel = video.channelTitle.toLowerCase().trim();
+    final combined = '$title $channel';
+
+    if (title.isEmpty || video.videoId.isEmpty) return false;
+    if (isLikelyShortForm(video) ||
+        isLikelyNonMusicVideo(video) ||
+        isLikelyNonMusicShort(video) ||
+        isLikelyAiGeneratedMusic(video)) {
+      return false;
+    }
+
+    // Pengguna meminta single, bukan album penuh, kompilasi atau playlist.
+    final albumOrCompilation = RegExp(
+      r'\b(?:full\s+album|complete\s+album|entire\s+album|whole\s+album|album|full\s+discography|complete\s+discography|discography|greatest\s+hits|best\s+of|compilation|playlist|non[ -]?stop|continuous\s+mix|song\s+collection|all\s+(?:songs|tracks)|medley|karaoke\s+version)\b',
+      caseSensitive: false,
+    );
+    if (albumOrCompilation.hasMatch(title)) return false;
+
+    // Tolak versi non-original yang biasa mencemari hasil pencarian.
+    final nonOfficialVersion = RegExp(
+      r'\b(?:karaoke|cover|fan[ -]?made|unofficial|tribute|nightcore|sped[ -]?up|slowed(?:\s*(?:and|&|\+)\s*reverb)?|reverb\s+version|8d\s+audio|8d\s+music|mash[ -]?up|bootleg|fan[ -]?edit|ai[ -]?(?:cover|version|voice|vocals?|generated)|suno|udio)\b',
+      caseSensitive: false,
+    );
+    if (nonOfficialVersion.hasMatch(combined)) return false;
+
+    // Explicit title markers for official singles/audio/video/visualizer.
+    final officialTitle = RegExp(
+      r'\b(?:official(?:\s+(?:music|audio|lyrics?|lyric|visualizer|performance|mv))*\s+(?:video|audio|lyrics?|visualizer|performance|mv)|audio\s+resmi|video\s+(?:musik|klip)\s+resmi|lirik\s+resmi|mv\s+official)\b',
+      caseSensitive: false,
+    ).hasMatch(title);
+
+    // Topic channels are YouTube-generated artist-track channels. Also accept
+    // common artist/label official-channel naming conventions.
+    final officialChannel = RegExp(
+      r'(?:-\s*topic$|\bvevo\b|\bofficial\b|\b(?:universal music|warner music|sony music|republic records|atlantic records|interscope records|capitol records|emi records|musica studios?|trinity optima|aquarius musikindo|nagaswara|gp records|sony music indonesia|warner music indonesia|universal music indonesia|sm entertainment|jyp entertainment|yg entertainment|hybe labels|big hit music|t-series|zee music company|saregama|lahari music|aditya music|times music|speed records|white hill music|my music records|stone music entertainment|1thek|smtown|mnet k[ -]?pop|indosemar records|proaktif|pelangi records|3d entertainment|musik proaktif)\b)',
+      caseSensitive: false,
+    ).hasMatch(channel);
+
+    // Banyak official artist channels memakai nama artis saja. Saat judul
+    // diawali nama channel lalu pemisah judul, perlakukan sebagai kandidat
+    // official (tetap sudah lolos filter cover/AI/karaoke/album di atas).
+    final normalizedChannel = channel.replaceAll(RegExp(r'\s+'), ' ').trim();
+    final normalizedTitle = title.replaceAll(RegExp(r'\s+'), ' ').trim();
+    final artistNamedChannelRelease = normalizedChannel.length >= 3 &&
+        normalizedTitle.startsWith(normalizedChannel) &&
+        normalizedTitle.length > normalizedChannel.length &&
+        RegExp(r'^\s*(?:[-–—|:])\s*')
+            .hasMatch(normalizedTitle.substring(normalizedChannel.length));
+
+    return officialTitle || officialChannel || artistNamedChannelRelease;
   }
+
+  static bool isMusicCandidate(YoutubeSearchResult video) =>
+      video.isLocal || isOfficialMusicReleaseCandidate(video);
 
   /// Shorts tidak selalu diberi hashtag #Shorts di metadata YouTube.
   /// Untuk video berdurasi sampai 3 menit, kategori YouTube "Music" saja
@@ -337,8 +392,6 @@ class YoutubeMusicPolicy {
     final category = video.categoryId.trim();
     if (category.isNotEmpty && category != '10') return false;
     if (requireCategoryId && category != '10') return false;
-    return !isLikelyShortForm(video) &&
-        !isLikelyNonMusicVideo(video) &&
-        !isLikelyNonMusicShort(video);
+    return isOfficialMusicReleaseCandidate(video);
   }
 }

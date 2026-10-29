@@ -177,6 +177,15 @@ class YoutubeSearchService {
 
   /// Konversi metadata Video dari youtube_explode_dart menjadi model app.
   /// Properti dibaca defensif karena metadata video YouTube bisa tidak lengkap.
+  static String _officialSearchQuery(String query) {
+    final trimmed = query.trim();
+    if (trimmed.isEmpty) return trimmed;
+    if (RegExp(r'\b(?:official|vevo)\b', caseSensitive: false).hasMatch(trimmed)) {
+      return trimmed;
+    }
+    return '$trimmed official';
+  }
+
   static YoutubeSearchResult _fromExplodeVideo(dynamic video) {
     String readString(dynamic Function() read, [String fallback = '']) {
       try {
@@ -287,15 +296,18 @@ class YoutubeSearchService {
     if (keyword.isEmpty) return const [];
 
     final intent = interpretSearch(keyword);
-    final safeFilter = 'music';
+    final safeFilter = 'official-music';
+    final effectiveQuery = _officialSearchQuery(intent.apiQuery);
     final cacheKey =
-        'explodeSearchV1|${intent.apiQuery.toLowerCase()}|${intent.latest ? 'date' : 'relevance'}|$safeFilter';
+        'explodeSearchV2Official|${effectiveQuery.toLowerCase()}|${intent.latest ? 'date' : 'relevance'}|$safeFilter';
     final cached = _cache[cacheKey];
 
     if (cached != null &&
         DateTime.now().difference(cached.time) < _cacheTtl) {
       debugPrint('EXPLODE SEARCH CACHE HIT (memory): ${intent.apiQuery}');
-      return cached.results;
+      return cached.results
+          .where(YoutubeMusicPolicy.isOfficialMusicReleaseCandidate)
+          .toList(growable: false);
     }
 
     final diskRaw = await _disk.get(
@@ -305,9 +317,12 @@ class YoutubeSearchService {
     final diskResults = _resultsFromJson(diskRaw);
     if (diskRaw is List && (diskRaw.isEmpty || diskResults.isNotEmpty)) {
       debugPrint('EXPLODE SEARCH CACHE HIT (disk): ${intent.apiQuery}');
-      _putCache(cacheKey, _CacheEntry(DateTime.now(), diskResults));
-      _rememberVideoDetails(diskResults);
-      return diskResults;
+      final officialResults = diskResults
+          .where(YoutubeMusicPolicy.isOfficialMusicReleaseCandidate)
+          .toList(growable: false);
+      _putCache(cacheKey, _CacheEntry(DateTime.now(), officialResults));
+      _rememberVideoDetails(officialResults);
+      return officialResults;
     }
 
     debugPrint('EXPLODE SEARCH NETWORK REQUEST: ${intent.apiQuery}');
@@ -316,22 +331,22 @@ class YoutubeSearchService {
           ? ytex.SortFilters.uploadDate
           : ytex.SortFilters.relevance;
       final dynamic page = await _youtubeExplode.search.search(
-        intent.apiQuery,
+        effectiveQuery,
         filter: sort,
       );
       final rawItems = (page as Iterable).cast<dynamic>().toList();
-      var results = rawItems
+      final results = rawItems
           .map(_fromExplodeVideo)
           .where((video) => video.videoId.isNotEmpty)
+          .where((video) {
+            if (video.isLive || video.isUpcoming) return false;
+            final seconds = video.durationSeconds;
+            if (seconds != null && seconds <= 60) return false;
+            return isMusicCatalogItem(video) &&
+                YoutubeMusicPolicy.isOfficialMusicReleaseCandidate(video);
+          })
           .take(dataSaverLevel >= 2 ? 6 : (dataSaverLevel == 1 ? 10 : 16))
           .toList(growable: false);
-
-      results = results.where((video) {
-        if (video.isLive || video.isUpcoming) return false;
-        final seconds = video.durationSeconds;
-        if (seconds != null && seconds <= 60) return false;
-        return isMusicCatalogItem(video);
-      }).toList(growable: false);
 
       _putCache(cacheKey, _CacheEntry(DateTime.now(), results));
       _rememberVideoDetails(results);
@@ -465,7 +480,7 @@ class YoutubeSearchService {
   // Shorts bisa sampai 3 menit, sementara Data API tidak memberi flag isShort.
   // Filter lokal memakai label metadata dan durasi untuk membatasi kandidat.
   static const int _radioMinSeconds = 61;
-  static const int _radioMaxSeconds = 30 * 60;
+  static const int _radioMaxSeconds = 12 * 60;
 
   Future<RadioPage> searchLatest(
     String query, {
@@ -476,7 +491,7 @@ class YoutubeSearchService {
 
     final normalized = keyword.toLowerCase();
     final cacheKey =
-        'radioExplodeV1|$normalized|${pageToken ?? ''}';
+        'radioExplodeV2Official|$normalized|${pageToken ?? ''}';
     final cached = _cache[cacheKey];
     if (cached != null) {
       final age = DateTime.now().difference(cached.time);
@@ -484,7 +499,7 @@ class YoutubeSearchService {
       if (age < ttl) {
         final filtered = _rankRadio(_filterAiMusicCandidates(
           _filterNonMusicCandidates(_filterShortFormCandidates(cached.results)),
-        ));
+        ).where(YoutubeMusicPolicy.isOfficialMusicReleaseCandidate).toList());
         return RadioPage(results: filtered, nextPageToken: cached.nextPageToken);
       }
     }
@@ -496,7 +511,7 @@ class YoutubeSearchService {
       if (restored.isNotEmpty) {
         final filtered = _rankRadio(_filterAiMusicCandidates(
           _filterNonMusicCandidates(_filterShortFormCandidates(restored)),
-        ));
+        ).where(YoutubeMusicPolicy.isOfficialMusicReleaseCandidate).toList());
         _putCache(cacheKey, _CacheEntry(DateTime.now(), filtered, token));
         return RadioPage(results: filtered, nextPageToken: token);
       }
@@ -518,7 +533,8 @@ class YoutubeSearchService {
       if (!alreadyMusicWord && !isSongSimilarityQuery) 'lagu',
       if (!hasIndonesia && !isSongSimilarityQuery) 'Indonesia',
     ].join(' ');
-    final pageSourceKey = radioKeyword.toLowerCase();
+    final officialRadioKeyword = _officialSearchQuery(radioKeyword);
+    final pageSourceKey = officialRadioKeyword.toLowerCase();
 
     int requestedPage = 1;
     if (pageToken != null && pageToken.startsWith('explode:page:')) {
@@ -535,7 +551,7 @@ class YoutubeSearchService {
       // Radio sebelumnya sudah mencapai halaman berikutnya.
       if (requestedPage == 1 || source == null) {
         source = await _youtubeExplode.search.search(
-          radioKeyword,
+          officialRadioKeyword,
           filter: ytex.SortFilters.relevance,
         );
         sourcePageNumber = 1;
@@ -567,25 +583,23 @@ class YoutubeSearchService {
           .where((video) => video.videoId.isNotEmpty)
           .toList(growable: false);
 
-      final wantsLong = lowerKeyword.contains('mix') ||
-          lowerKeyword.contains('nonstop') ||
-          lowerKeyword.contains('non stop') ||
-          lowerKeyword.contains('album');
-      if (!wantsLong) {
-        results = results.where((video) {
-          if (video.isLive || video.isUpcoming) return false;
-          final seconds = video.durationSeconds;
-          // Durasi yang tidak disediakan hasil pencarian dipertahankan agar
-          // Radio tidak melakukan request videos.list untuk melengkapinya.
-          if (seconds == null) return true;
-          return seconds >= _radioMinSeconds && seconds <= _radioMaxSeconds;
-        }).toList(growable: false);
-      }
+      // Single-track mode: compilations and long album mixes are not allowed.
+      results = results.where((video) {
+        if (video.isLive || video.isUpcoming) return false;
+        final seconds = video.durationSeconds;
+        // Durasi yang tidak disediakan hasil pencarian dipertahankan agar
+        // Radio tidak melakukan request videos.list untuk melengkapinya.
+        if (seconds == null) return true;
+        return seconds >= _radioMinSeconds && seconds <= _radioMaxSeconds;
+      }).toList(growable: false);
 
       results = _filterShortFormCandidates(results);
       results = await removeShorts(results);
       results = _filterNonMusicCandidates(results);
       results = _filterAiMusicCandidates(results);
+      results = results
+          .where(YoutubeMusicPolicy.isOfficialMusicReleaseCandidate)
+          .toList(growable: false);
       results = _rankRadio(results);
 
       final nextToken = rawItems.length >= 20 && page != null
@@ -627,21 +641,27 @@ class YoutubeSearchService {
     final musicCategoryId = categoryId == null || categoryId.trim().isEmpty
         ? '10'
         : categoryId.trim();
-    final cacheKey = 'mostPopularMusicV3|$musicCategoryId';
+    final cacheKey = 'mostPopularOfficialMusicV4|$musicCategoryId';
     final cached = _cache[cacheKey];
     if (cached != null) {
       final age = DateTime.now().difference(cached.time);
       if (age < _feedTtl || (force && age < _forcedFeedRefreshFloor)) {
-        return cached.results.take(maxResults).toList(growable: false);
+        return cached.results
+            .where(YoutubeMusicPolicy.isOfficialMusicReleaseCandidate)
+            .take(maxResults)
+            .toList(growable: false);
       }
     }
     if (!force) {
       final diskHit = await _disk.get(cacheKey, maxAge: _feedTtl);
       final fromDisk = _resultsFromJson(diskHit);
       if (diskHit is List && (diskHit.isEmpty || fromDisk.isNotEmpty)) {
-        _putCache(cacheKey, _CacheEntry(DateTime.now(), fromDisk));
-        _rememberVideoDetails(fromDisk);
-        return fromDisk.take(maxResults).toList(growable: false);
+        final officialFromDisk = fromDisk
+            .where(YoutubeMusicPolicy.isOfficialMusicReleaseCandidate)
+            .toList(growable: false);
+        _putCache(cacheKey, _CacheEntry(DateTime.now(), officialFromDisk));
+        _rememberVideoDetails(officialFromDisk);
+        return officialFromDisk.take(maxResults).toList(growable: false);
       }
     }
 
@@ -662,7 +682,10 @@ class YoutubeSearchService {
     final items = data['items'];
     final parsed = _parseVideoResources(items is List ? items : const []);
     _rememberVideoDetails(parsed);
-    final results = parsed.where(isMusicCatalogItem).toList(growable: false);
+    final results = parsed
+        .where(isMusicCatalogItem)
+        .where(YoutubeMusicPolicy.isOfficialMusicReleaseCandidate)
+        .toList(growable: false);
 
     _putCache(cacheKey, _CacheEntry(DateTime.now(), results));
     unawaited(_disk.put(cacheKey, results.map((v) => v.toJson()).toList()));
@@ -682,20 +705,26 @@ class YoutubeSearchService {
       );
     }
 
-    const cacheKey = 'recentMusicV5FromPopular';
+    const cacheKey = 'recentOfficialMusicV6FromPopular';
     final cached = _cache[cacheKey];
     if (cached != null) {
       final age = DateTime.now().difference(cached.time);
       if (age < _feedTtl || (force && age < _forcedFeedRefreshFloor)) {
-        return cached.results.take(maxResults).toList(growable: false);
+        return cached.results
+            .where(YoutubeMusicPolicy.isOfficialMusicReleaseCandidate)
+            .take(maxResults)
+            .toList(growable: false);
       }
     }
     if (!force) {
       final diskHit = await _disk.get(cacheKey, maxAge: _feedTtl);
       final fromDisk = _resultsFromJson(diskHit);
       if (diskHit is List && (diskHit.isEmpty || fromDisk.isNotEmpty)) {
-        _putCache(cacheKey, _CacheEntry(DateTime.now(), fromDisk));
-        return fromDisk.take(maxResults).toList(growable: false);
+        final officialFromDisk = fromDisk
+            .where(YoutubeMusicPolicy.isOfficialMusicReleaseCandidate)
+            .toList(growable: false);
+        _putCache(cacheKey, _CacheEntry(DateTime.now(), officialFromDisk));
+        return officialFromDisk.take(maxResults).toList(growable: false);
       }
     }
 

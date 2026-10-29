@@ -179,10 +179,38 @@ extension _HomeRadio on _HomePageState {
         continue;
       }
 
+      // Guard lapis kedua: jika pool berisi upload lain untuk lagu yang baru
+      // diputar, jangan sampai Next memantul ke lagu sebelumnya.
+      if (_wasPlayedInRecentPlaybackHistory(candidate)) {
+        debugPrint('RADIO NEXT: skip recent track ${candidate.videoId} | ${candidate.title}');
+        continue;
+      }
+
       return candidate;
     }
 
     return null;
+  }
+
+  /// Kandidat radio/cached fallback tidak boleh berupa lagu sekarang atau
+  /// keluarga lagu yang ada di jendela Previous terbaru.
+  bool _wasPlayedInRecentPlaybackHistory(YoutubeSearchResult candidate) {
+    final current = _currentVideo;
+    if (current != null &&
+        (candidate.videoId == current.videoId ||
+            RadioService.isSameTrackFamily(candidate, current))) {
+      return true;
+    }
+
+    // Batasi ke 15 track terakhir supaya katalog panjang tidak ikut terkunci.
+    final start = _playHistory.length > 15 ? _playHistory.length - 15 : 0;
+    for (final previous in _playHistory.skip(start)) {
+      if (candidate.videoId == previous.videoId ||
+          RadioService.isSameTrackFamily(candidate, previous)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /// Dari daftar [videos] ambil satu yang bukan Shorts (urutan/acak sesuai mode).
@@ -198,7 +226,8 @@ extension _HomeRadio on _HomePageState {
 
     for (final video in list) {
       if (YoutubeSearchService.isLikelyShortForm(video) ||
-          YoutubeSearchService.isLikelyNonMusicVideo(video)) {
+          YoutubeSearchService.isLikelyNonMusicVideo(video) ||
+          _wasPlayedInRecentPlaybackHistory(video)) {
         continue;
       }
       return video;

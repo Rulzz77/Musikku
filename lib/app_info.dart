@@ -1,4 +1,4 @@
 /// Identitas versi aplikasi MusikKu Flow. Samakan dengan pubspec.yaml.
 const String appName = 'MusikKu';
-const String appVersion = '5.0.64';
-const String appBuildNumber = '42';
+const String appVersion = '5.0.59';
+const String appBuildNumber = '37';

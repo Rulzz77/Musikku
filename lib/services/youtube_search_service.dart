@@ -1,9 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:math' as math;
 
 import 'package:crypto/crypto.dart' show sha256;
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:http/http.dart' as http;
+import 'package:youtube_explode_dart/youtube_explode_dart.dart' as ytex;
 
 import '../models/youtube_search_result.dart';
 import 'disk_cache.dart';
@@ -79,21 +80,29 @@ class YoutubeSearchService {
   /// package name + SHA-1 sertifikat aplikasi dan ke YouTube Data API v3 saja.
   static const String _apiKey = String.fromEnvironment('YOUTUBE_API_KEY');
 
-  static const String _baseUrl =
-      'https://www.googleapis.com/youtube/v3/search';
-
   static const YoutubeSearchApiErrors _apiErrors = YoutubeSearchApiErrors();
+
+  // Search video dan channel memakai youtube_explode_dart, bukan endpoint
+  // YouTube Data API search.list. Client dibuat sekali untuk seluruh sesi app.
+  static final ytex.YoutubeExplode _youtubeExplode = ytex.YoutubeExplode();
+  static final Map<String, dynamic> _radioExplodePageSources =
+      <String, dynamic>{};
+  static final Map<String, int> _radioExplodePageNumbers = <String, int>{};
 
   // Biaya kuota per endpoint (search.list jauh lebih mahal daripada
   // videos.list) dan batas hariannya ditentukan Google dan bisa berubah.
   // Cek dokumentasi resmi YouTube Data API dan halaman Quotas di Cloud Console.
   // Cache dan deduplikasi di bawah mengurangi request berulang.
 
-  static const int _cacheLimit = 40;
+  static const int _cacheLimit = 60;
   static const Duration _cacheTtl = Duration(hours: 6);
-  // Radio kandidat tidak perlu diperbarui setiap beberapa menit. TTL yang lebih
-  // panjang mengurangi permintaan halaman yang sama saat lagu berpindah.
-  static const Duration _radioCacheTtl = Duration(hours: 6);
+  // Cache katalog pencarian disimpan lama di perangkat agar query berulang,
+  // termasuk setelah aplikasi dibuka ulang, tidak meminta search.list lagi.
+  static const Duration _catalogSearchDiskTtl = Duration(days: 90);
+  static const Duration _latestSearchDiskTtl = Duration(hours: 6);
+  // Radio pages stabil cukup lama untuk dipakai ulang lintas sesi. Next tetap
+  // dilarang mengambil halaman jaringan baru; TTL ini berlaku saat Radio dimulai.
+  static const Duration _radioCacheTtl = Duration(days: 30);
   // Hasil Radio yang kosong biasanya karena filter terlalu ketat atau metadata
   // sementara tidak lengkap, jadi jangan ditahan selama 6 jam.
   static const Duration _emptyResultTtl = Duration(minutes: 30);
@@ -114,16 +123,24 @@ class YoutubeSearchService {
   /// walaupun aplikasi sudah ditutup dan dibuka ulang.
   static const DiskCache _disk = DiskCache(
     namespace: 'search',
-    maxEntries: 80,
-    ttl: Duration(hours: 24),
+    maxEntries: 180,
+    ttl: Duration(days: 180),
+  );
+
+  // Terpisah dari katalog biasa agar penulisan feed/search tidak mengusir
+  // kandidat Radio yang bisa dipakai untuk autoplay pada sesi berikutnya.
+  static const DiskCache _radioDisk = DiskCache(
+    namespace: 'radio_search_pages',
+    maxEntries: 50,
+    ttl: Duration(days: 30),
   );
 
   // Pencarian channel bersifat opsional dan disimpan lintas sesi supaya query
   // yang sama tidak kembali menghabiskan kuota search.list setelah app dibuka ulang.
   static const DiskCache _channelDisk = DiskCache(
     namespace: 'channel_search',
-    maxEntries: 30,
-    ttl: Duration(hours: 12),
+    maxEntries: 50,
+    ttl: Duration(days: 30),
   );
 
   // Detail metadata for video IDs reused across queries, radio, and the home
@@ -158,153 +175,188 @@ class YoutubeSearchService {
 
   String describeSearch(String query) => interpretSearch(query).label;
 
+  /// Konversi metadata Video dari youtube_explode_dart menjadi model app.
+  /// Properti dibaca defensif karena metadata video YouTube bisa tidak lengkap.
+  static YoutubeSearchResult _fromExplodeVideo(dynamic video) {
+    String readString(dynamic Function() read, [String fallback = '']) {
+      try {
+        final value = read();
+        if (value == null) return fallback;
+        final text = value.toString().trim();
+        return text.isEmpty ? fallback : text;
+      } catch (_) {
+        return fallback;
+      }
+    }
+
+    String videoId = readString(() => video.id.value);
+    if (videoId.isEmpty) videoId = readString(() => video.id);
+
+    String channelId = readString(() => video.channelId.value);
+    if (channelId.isEmpty) channelId = readString(() => video.channelId);
+
+    final title = _decodeHtml(readString(() => video.title, 'Tanpa judul'));
+    final description = _decodeHtml(readString(() => video.description));
+    final channelTitle = _decodeHtml(readString(() => video.author, 'Unknown'));
+
+    String thumbnailUrl = readString(() => video.thumbnails.maxResUrl);
+    if (thumbnailUrl.isEmpty) {
+      thumbnailUrl = readString(() => video.thumbnails.highResUrl);
+    }
+    if (thumbnailUrl.isEmpty) {
+      thumbnailUrl = readString(() => video.thumbnails.mediumResUrl);
+    }
+    if (thumbnailUrl.isEmpty && videoId.isNotEmpty) {
+      thumbnailUrl = 'https://i.ytimg.com/vi/$videoId/hqdefault.jpg';
+    }
+
+    DateTime? publishedAt;
+    try {
+      final dynamic date = video.publishDate ?? video.uploadDate;
+      if (date is DateTime) publishedAt = date;
+    } catch (_) {}
+
+    double? durationSeconds;
+    try {
+      final dynamic duration = video.duration;
+      if (duration is Duration) durationSeconds = duration.inMilliseconds / 1000.0;
+    } catch (_) {}
+
+    int? viewCount;
+    try {
+      final dynamic value = video.engagement.viewCount;
+      if (value is num) viewCount = value.toInt();
+    } catch (_) {}
+
+    bool live = false;
+    try {
+      live = video.isLive == true;
+    } catch (_) {}
+
+    return YoutubeSearchResult(
+      videoId: videoId,
+      title: title,
+      description: description,
+      channelTitle: channelTitle,
+      thumbnailUrl: thumbnailUrl,
+      viewCount: viewCount,
+      publishedAt: publishedAt,
+      durationSeconds: live ? null : durationSeconds,
+      liveStatus: live ? 'live' : '',
+      channelId: channelId,
+      // youtube_explode_dart tidak mengembalikan categoryId resmi untuk hasil
+      // pencarian. Filter katalog MusikKu tetap memakai metadata/judul/channel.
+      categoryId: '',
+    );
+  }
+
+  static String _explodeChannelId(dynamic video) {
+    try {
+      return video.channelId.value.toString();
+    } catch (_) {
+      try {
+        return video.channelId.toString();
+      } catch (_) {
+        return '';
+      }
+    }
+  }
+
+
+  static String _explodeVideoAuthor(dynamic video) {
+    try {
+      return video.author.toString();
+    } catch (_) {
+      return 'Channel';
+    }
+  }
+
+  static String _explodeVideoDescription(dynamic video) {
+    try {
+      return video.description.toString();
+    } catch (_) {
+      return '';
+    }
+  }
+
   Future<List<YoutubeSearchResult>> search(
     String query, {
     String filter = 'music',
   }) async {
     final keyword = query.trim();
-
-    if (keyword.isEmpty) {
-      return [];
-    }
-
-    if (_apiKey.isEmpty) {
-      throw const YoutubeSearchException(
-        'API key YouTube belum diatur. Jalankan aplikasi dengan '
-        '--dart-define=YOUTUBE_API_KEY=KUNCI_KAMU',
-      );
-    }
+    if (keyword.isEmpty) return const [];
 
     final intent = interpretSearch(keyword);
-    // MusikKu mode audio-only: pencarian selalu dibatasi ke kategori Musik,
-    // apa pun nilai [filter] yang dikirim pemanggil. Kunci cache tetap memakai
-    // 'music' supaya cache yang sudah ada tetap berlaku.
-    const safeFilter = 'music';
+    final safeFilter = 'music';
     final cacheKey =
-        'smartV7|${intent.apiQuery.toLowerCase()}|${intent.latest ? 'date' : 'relevance'}|$safeFilter';
+        'explodeSearchV1|${intent.apiQuery.toLowerCase()}|${intent.latest ? 'date' : 'relevance'}|$safeFilter';
     final cached = _cache[cacheKey];
 
     if (cached != null &&
         DateTime.now().difference(cached.time) < _cacheTtl) {
+      debugPrint('EXPLODE SEARCH CACHE HIT (memory): ${intent.apiQuery}');
       return cached.results;
     }
 
-    final diskRaw = await _disk.get('q|$cacheKey');
+    final diskRaw = await _disk.get(
+      'q|$cacheKey',
+      maxAge: intent.latest ? _latestSearchDiskTtl : _catalogSearchDiskTtl,
+    );
     final diskResults = _resultsFromJson(diskRaw);
     if (diskRaw is List && (diskRaw.isEmpty || diskResults.isNotEmpty)) {
+      debugPrint('EXPLODE SEARCH CACHE HIT (disk): ${intent.apiQuery}');
       _putCache(cacheKey, _CacheEntry(DateTime.now(), diskResults));
       _rememberVideoDetails(diskResults);
       return diskResults;
     }
 
-    final params = <String, String>{
-      'part': 'snippet',
-      'q': intent.apiQuery,
-      'type': 'video',
-      'maxResults':
-          dataSaverLevel >= 2 ? '6' : (dataSaverLevel == 1 ? '10' : '16'),
-      'relevanceLanguage': 'id',
-      'regionCode': 'ID',
-      // Tidak memakai filter embeddable karena kita tidak menampilkan player
-      // video tertanam.
-      'videoCategoryId': '10',
-      'key': _apiKey,
-    };
+    debugPrint('EXPLODE SEARCH NETWORK REQUEST: ${intent.apiQuery}');
+    try {
+      final sort = intent.latest
+          ? ytex.SortFilters.uploadDate
+          : ytex.SortFilters.relevance;
+      final dynamic page = await _youtubeExplode.search.search(
+        intent.apiQuery,
+        filter: sort,
+      );
+      final rawItems = (page as Iterable).cast<dynamic>().toList();
+      var results = rawItems
+          .map(_fromExplodeVideo)
+          .where((video) => video.videoId.isNotEmpty)
+          .take(dataSaverLevel >= 2 ? 6 : (dataSaverLevel == 1 ? 10 : 16))
+          .toList(growable: false);
 
-    if (intent.latest) {
-      params['order'] = 'date';
-    }
+      results = results.where((video) {
+        if (video.isLive || video.isUpcoming) return false;
+        final seconds = video.durationSeconds;
+        if (seconds != null && seconds <= 60) return false;
+        return isMusicCatalogItem(video);
+      }).toList(growable: false);
 
-    final uri = Uri.parse(_baseUrl).replace(queryParameters: params);
-
-    final response = await _getWithRetry(uri);
-
-    if (response.statusCode != 200) {
-      throw YoutubeSearchException(_errorMessage(response));
-    }
-
-    final data = jsonDecode(response.body);
-    final items = data is Map ? data['items'] : null;
-
-    if (items is! List) {
-      return [];
-    }
-
-    var results = <YoutubeSearchResult>[];
-
-    for (final item in items) {
-      if (item is! Map) {
-        continue;
-      }
-
-      final id = item['id'];
-      final snippet = item['snippet'];
-
-      if (id is! Map || snippet is! Map) {
-        continue;
-      }
-
-      final videoId = id['videoId']?.toString() ?? '';
-
-      if (videoId.isEmpty) {
-        continue;
-      }
-
-      results.add(
-        YoutubeSearchResult(
-          videoId: videoId,
-          title: _decodeHtml(snippet['title']?.toString() ?? 'Tanpa judul'),
-          description: _decodeHtml(snippet['description']?.toString() ?? ''),
-          channelTitle: _decodeHtml(
-            snippet['channelTitle']?.toString() ?? 'Unknown',
-          ),
-          thumbnailUrl: _pickThumbnail(snippet['thumbnails']),
-          publishedAt:
-              DateTime.tryParse(snippet['publishedAt']?.toString() ?? ''),
-          channelId: snippet['channelId']?.toString() ?? '',
-          categoryId: snippet['categoryId']?.toString() ?? '',
-        ),
+      _putCache(cacheKey, _CacheEntry(DateTime.now(), results));
+      _rememberVideoDetails(results);
+      await _disk.put(
+        'q|$cacheKey',
+        results.map((video) => video.toJson()).toList(),
+      );
+      return results;
+    } catch (error) {
+      debugPrint('EXPLODE SEARCH ERROR: $error');
+      throw YoutubeSearchException(
+        'Pencarian YouTube sedang tidak tersedia. Coba lagi nanti. ($error)',
       );
     }
-
-    // Lengkapi durasi, jumlah tonton, dan status live (1 unit kuota).
-    results = await _withDetails(results);
-    // Katalog audio saja: buang siaran aktif, video sangat pendek, Shorts yang
-    // terdeteksi dari metadata, dan video pendek yang tidak punya sinyal musik.
-    results = results.where((video) {
-      if (video.isLive || video.isUpcoming) return false;
-      final seconds = video.durationSeconds;
-      if (seconds != null && seconds <= 60) return false;
-      return isMusicCatalogItem(video);
-    }).toList(growable: false);
-
-    _putCache(cacheKey, _CacheEntry(DateTime.now(), results));
-
-    // Cache juga hasil kosong: typo atau query yang memang tidak punya hasil
-    // tidak boleh menghabiskan search.list lagi setelah aplikasi dibuka ulang.
-    unawaited(_disk.put(
-      'q|$cacheKey',
-      results.map((video) => video.toJson()).toList(),
-    ));
-
-    return results;
   }
 
   Future<List<YoutubeChannelSearchResult>> searchChannels(String query) async {
     final keyword = query.trim();
     if (keyword.isEmpty) return const [];
 
-    if (_apiKey.isEmpty) {
-      throw const YoutubeSearchException(
-        'API key YouTube belum diatur. Jalankan aplikasi dengan '
-        '--dart-define=YOUTUBE_API_KEY=KUNCI_KAMU',
-      );
-    }
-
-    final cacheKey = 'channel|${keyword.toLowerCase()}';
+    final cacheKey = 'channelExplodeV1|${keyword.toLowerCase()}';
     final cached = _channelCache[cacheKey];
     if (cached != null &&
         DateTime.now().difference(cached.time) < _cacheTtl) {
+      debugPrint('EXPLODE CHANNEL CACHE HIT (memory): $keyword');
       return cached.results;
     }
 
@@ -322,63 +374,66 @@ class YoutubeSearchService {
               ))
           .toList(growable: false);
       _putChannelCache(cacheKey, restored);
+      debugPrint('EXPLODE CHANNEL CACHE HIT (disk): $keyword');
       return restored;
     }
 
-    final params = <String, String>{
-      'part': 'snippet',
-      'q': keyword,
-      'type': 'channel',
-      'maxResults': '8',
-      'relevanceLanguage': 'id',
-      'regionCode': 'ID',
-      'key': _apiKey,
-    };
+    try {
+      // Ambil kandidat video melalui youtube_explode_dart, lalu deduplikasi
+      // channelId. Ini tidak memanggil endpoint Data API search.list.
+      final dynamic searchPage = await _youtubeExplode.search.search(
+        keyword,
+        filter: ytex.SortFilters.relevance,
+      );
+      final rawItems = (searchPage as Iterable).cast<dynamic>().take(20);
+      final candidates = <String, dynamic>{};
+      for (final item in rawItems) {
+        final channelId = _explodeChannelId(item).trim();
+        if (channelId.isNotEmpty) candidates.putIfAbsent(channelId, () => item);
+      }
 
-    final uri = Uri.parse(_baseUrl).replace(queryParameters: params);
-    final response =
-        await _getWithRetry(uri, timeout: const Duration(seconds: 12));
-    if (response.statusCode != 200) {
-      throw YoutubeSearchException(_errorMessage(response));
-    }
+      final tasks = candidates.entries.take(8).map((entry) async {
+        final fallback = entry.value;
+        var title = _decodeHtml(_explodeVideoAuthor(fallback));
+        var description = _decodeHtml(_explodeVideoDescription(fallback));
+        var thumbnail = '';
+        try {
+          final channel = await _youtubeExplode.channels.get(entry.key);
+          if (channel.title.trim().isNotEmpty) title = channel.title.trim();
+          if (channel.logoUrl.trim().isNotEmpty) thumbnail = channel.logoUrl.trim();
+        } catch (_) {
+          // Tetap tampilkan kandidat channel dari metadata hasil pencarian.
+        }
+        return YoutubeChannelSearchResult(
+          channelId: entry.key,
+          title: title.isEmpty ? 'Channel' : title,
+          description: description,
+          thumbnailUrl: thumbnail,
+        );
+      });
+      final channels = (await Future.wait(tasks))
+          .where((channel) => channel.channelId.isNotEmpty)
+          .toList(growable: false);
 
-    final data = jsonDecode(response.body);
-    final items = data is Map ? data['items'] : null;
-    if (items is! List) return const [];
-
-    final channels = <YoutubeChannelSearchResult>[];
-    for (final item in items) {
-      if (item is! Map) continue;
-      final id = item['id'];
-      final snippet = item['snippet'];
-      if (id is! Map || snippet is! Map) continue;
-
-      final channelId = id['channelId']?.toString() ?? '';
-      if (channelId.isEmpty) continue;
-
-      channels.add(
-        YoutubeChannelSearchResult(
-          channelId: channelId,
-          title: _decodeHtml(snippet['title']?.toString() ?? 'Channel'),
-          description: _decodeHtml(snippet['description']?.toString() ?? ''),
-          thumbnailUrl: _pickThumbnail(snippet['thumbnails']),
-        ),
+      _putChannelCache(cacheKey, channels);
+      await _channelDisk.put(
+        'q|$cacheKey',
+        channels
+            .map((channel) => {
+                  'channelId': channel.channelId,
+                  'title': channel.title,
+                  'description': channel.description,
+                  'thumbnailUrl': channel.thumbnailUrl,
+                })
+            .toList(growable: false),
+      );
+      return channels;
+    } catch (error) {
+      debugPrint('EXPLODE CHANNEL SEARCH ERROR: $error');
+      throw YoutubeSearchException(
+        'Pencarian artis/channel sedang tidak tersedia. Coba lagi nanti. ($error)',
       );
     }
-
-    _putChannelCache(cacheKey, channels);
-    unawaited(_channelDisk.put(
-      'q|$cacheKey',
-      channels
-          .map((channel) => {
-                'channelId': channel.channelId,
-                'title': channel.title,
-                'description': channel.description,
-                'thumbnailUrl': channel.thumbnailUrl,
-              })
-          .toList(growable: false),
-    ));
-    return channels;
   }
 
   void _putChannelCache(
@@ -417,80 +472,39 @@ class YoutubeSearchService {
     String? pageToken,
   }) async {
     final keyword = query.trim();
+    if (keyword.isEmpty) return const RadioPage(results: []);
 
-    if (keyword.isEmpty) {
-      return const RadioPage(results: []);
-    }
-
-    if (_apiKey.isEmpty) {
-      throw const YoutubeSearchException(
-        'API key YouTube belum diatur. Jalankan aplikasi dengan '
-        '--dart-define=YOUTUBE_API_KEY=KUNCI_KAMU',
-      );
-    }
-
-    // V41: invalidasi cache disk lama yang mungkin berisi hasil kosong 6 jam.
+    final normalized = keyword.toLowerCase();
     final cacheKey =
-        'radioRelatedV41|${keyword.toLowerCase()}|${pageToken ?? ''}';
+        'radioExplodeV1|$normalized|${pageToken ?? ''}';
     final cached = _cache[cacheKey];
-
     if (cached != null) {
       final age = DateTime.now().difference(cached.time);
       final ttl = cached.results.isEmpty ? _emptyResultTtl : _radioCacheTtl;
       if (age < ttl) {
-        if (cached.results.isEmpty) {
-          return RadioPage(
-            results: const <YoutubeSearchResult>[],
-            nextPageToken: cached.nextPageToken,
-          );
-        }
-        final filteredCached = await removeShorts(
-          _filterShortFormCandidates(
-            _filterNonMusicCandidates(_filterAiMusicCandidates(cached.results)),
-          ),
-        );
-        if (filteredCached.isNotEmpty) {
-          return RadioPage(
-            results: _rankRadio(filteredCached),
-            nextPageToken: cached.nextPageToken,
-          );
-        }
+        final filtered = _rankRadio(_filterAiMusicCandidates(
+          _filterNonMusicCandidates(_filterShortFormCandidates(cached.results)),
+        ));
+        return RadioPage(results: filtered, nextPageToken: cached.nextPageToken);
       }
     }
 
-    final diskHit = await _disk.get(
-      cacheKey,
-      maxAge: _radioCacheTtl,
-    );
-
+    final diskHit = await _radioDisk.get(cacheKey, maxAge: _radioCacheTtl);
     if (diskHit is Map) {
-      final rawDiskResults = diskHit['results'];
-      final diskResults = _resultsFromJson(rawDiskResults);
-      final diskToken = diskHit['next']?.toString();
-
-      if (diskResults.isNotEmpty) {
-        final enriched = await _ensureViewCounts(diskResults);
-        final filtered = await removeShorts(
-          _filterShortFormCandidates(
-            _filterNonMusicCandidates(_filterAiMusicCandidates(enriched)),
-          ),
-        );
-        final ranked = _rankRadio(filtered);
-        if (ranked.isNotEmpty) {
-          _putCache(cacheKey, _CacheEntry(DateTime.now(), ranked, diskToken));
-          return RadioPage(results: ranked, nextPageToken: diskToken);
-        }
+      final restored = _resultsFromJson(diskHit['results']);
+      final token = diskHit['next']?.toString();
+      if (restored.isNotEmpty) {
+        final filtered = _rankRadio(_filterAiMusicCandidates(
+          _filterNonMusicCandidates(_filterShortFormCandidates(restored)),
+        ));
+        _putCache(cacheKey, _CacheEntry(DateTime.now(), filtered, token));
+        return RadioPage(results: filtered, nextPageToken: token);
       }
     }
 
-    final normalized = keyword.toLowerCase();
-    final hasIndonesia = normalized.contains('indonesia') ||
-        RegExp(r'(^|\s)indo($|\s)').hasMatch(normalized);
-
-    // Pertahankan konteks asli pencarian. Jangan tambahkan "populer" atau
-    // kata yang bisa menggeser genre. Track-specific queries stay intact and
-    // use YouTube's relevance ordering instead of chart/view ordering.
     final lowerKeyword = keyword.toLowerCase();
+    final hasIndonesia = lowerKeyword.contains('indonesia') ||
+        RegExp(r'(^|\s)indo($|\s)').hasMatch(lowerKeyword);
     final isSongSimilarityQuery = RegExp(
       r'\b(?:similar songs?|songs? like|similar music)\b',
       caseSensitive: false,
@@ -499,106 +513,99 @@ class YoutubeSearchService {
       r'\b(?:lagu|musik|music|songs?|audio|remix|dj|dangdut|pop|rock|jazz|hip\s*hop|kpop|metal|indie|akustik|nostalgia|karaoke|cover|mix|album)\b',
       caseSensitive: false,
     ).hasMatch(lowerKeyword);
-
-    // Song Radio harus tetap mencari lagu/artis yang menjadi seed. Jangan
-    // menambahkan "lagu Indonesia" ke query track-specific, karena itu bisa
-    // menggeser hasil dari lagu asing atau gaya yang sedang diputar.
     final radioKeyword = [
       keyword,
       if (!alreadyMusicWord && !isSongSimilarityQuery) 'lagu',
       if (!hasIndonesia && !isSongSimilarityQuery) 'Indonesia',
     ].join(' ');
+    final pageSourceKey = radioKeyword.toLowerCase();
 
-    final params = <String, String>{
-      'part': 'snippet',
-      'q': radioKeyword,
-      'type': 'video',
-      'maxResults':
-          dataSaverLevel >= 2 ? '12' : (dataSaverLevel == 1 ? '20' : '50'),
-      'order': 'relevance',
-      'videoCategoryId': '10', // Musik
-      'key': _apiKey,
-    };
-    if (!isSongSimilarityQuery) {
-      params['regionCode'] = 'ID';
-      params['relevanceLanguage'] = 'id';
+    int requestedPage = 1;
+    if (pageToken != null && pageToken.startsWith('explode:page:')) {
+      requestedPage = int.tryParse(pageToken.substring('explode:page:'.length)) ?? 1;
+      if (requestedPage < 1) requestedPage = 1;
     }
 
-    if (pageToken != null && pageToken.isNotEmpty) {
-      params['pageToken'] = pageToken;
-    }
+    try {
+      dynamic page;
+      var sourcePageNumber = _radioExplodePageNumbers[pageSourceKey] ?? 0;
+      var source = _radioExplodePageSources[pageSourceKey];
 
-    final data = await _getJson(
-      Uri.parse(_baseUrl).replace(queryParameters: params),
-    );
-
-    final items = data['items'];
-    var results =
-        items is List ? _parseItems(items) : <YoutubeSearchResult>[];
-
-    // Detail durasi tetap diperlukan untuk filter video pendek. View count
-    // tidak digunakan untuk menggeser relevansi hasil pencarian Radio.
-    results = await _ensureViewCounts(results);
-
-    // Kalau user memang mencari mix / nonstop, jangan buang video panjang.
-    final lower = keyword.toLowerCase();
-    final wantsLong = lower.contains('mix') ||
-        lower.contains('nonstop') ||
-        lower.contains('non stop') ||
-        lower.contains('album');
-
-    if (!wantsLong) {
-      // Filter durasi utama tanpa mengganti query track-specific dengan chart.
-      // Kalau metadata durasi kurang lengkap, pertahankan hasil query relevan.
-      final originalResults = results;
-      results = await _filterByDuration(
-        results,
-        minSeconds: _radioMinSeconds,
-        maxSeconds: _radioMaxSeconds,
-      );
-
-      if (results.isEmpty && originalResults.isNotEmpty) {
-        results = await _filterByDuration(
-          originalResults,
-          minSeconds: 61,
-          maxSeconds: 60 * 60,
+      // Memulai Radio baru selalu mulai dari halaman pertama meskipun sesi
+      // Radio sebelumnya sudah mencapai halaman berikutnya.
+      if (requestedPage == 1 || source == null) {
+        source = await _youtubeExplode.search.search(
+          radioKeyword,
+          filter: ytex.SortFilters.relevance,
         );
+        sourcePageNumber = 1;
+        _radioExplodePageSources[pageSourceKey] = source;
+        _radioExplodePageNumbers[pageSourceKey] = 1;
       }
 
-      if (results.isEmpty) {
-        // Jangan buang seluruh radio hanya karena endpoint duration sedang
-        // gagal atau upload terbaru tidak punya metadata durasi lengkap.
-        results = originalResults;
+      // YoutubeExplode menyimpan sumber halaman untuk pagination; ketika app
+      // hidup kembali dan sumbernya belum ada, ulangi query dan maju ke halaman
+      // yang diminta. Pagination ini juga tidak memakai Data API search.list.
+      page = source;
+      while (sourcePageNumber < requestedPage) {
+        final dynamic nextPage = await page.nextPage();
+        if (nextPage == null) {
+          page = null;
+          break;
+        }
+        page = nextPage;
+        sourcePageNumber += 1;
+        _radioExplodePageSources[pageSourceKey] = page;
+        _radioExplodePageNumbers[pageSourceKey] = sourcePageNumber;
       }
+
+      final rawItems = page == null
+          ? <dynamic>[]
+          : (page as Iterable).cast<dynamic>().toList();
+      var results = rawItems
+          .map(_fromExplodeVideo)
+          .where((video) => video.videoId.isNotEmpty)
+          .toList(growable: false);
+
+      final wantsLong = lowerKeyword.contains('mix') ||
+          lowerKeyword.contains('nonstop') ||
+          lowerKeyword.contains('non stop') ||
+          lowerKeyword.contains('album');
+      if (!wantsLong) {
+        results = results.where((video) {
+          if (video.isLive || video.isUpcoming) return false;
+          final seconds = video.durationSeconds;
+          // Durasi yang tidak disediakan hasil pencarian dipertahankan agar
+          // Radio tidak melakukan request videos.list untuk melengkapinya.
+          if (seconds == null) return true;
+          return seconds >= _radioMinSeconds && seconds <= _radioMaxSeconds;
+        }).toList(growable: false);
+      }
+
+      results = _filterShortFormCandidates(results);
+      results = await removeShorts(results);
+      results = _filterNonMusicCandidates(results);
+      results = _filterAiMusicCandidates(results);
+      results = _rankRadio(results);
+
+      final nextToken = rawItems.length >= 20 && page != null
+          ? 'explode:page:${sourcePageNumber + 1}'
+          : null;
+      _putCache(cacheKey, _CacheEntry(DateTime.now(), results, nextToken));
+      if (results.isNotEmpty) {
+        await _radioDisk.put(cacheKey, {
+          'results': results.map((video) => video.toJson()).toList(),
+          'next': nextToken,
+        });
+      }
+      return RadioPage(results: results, nextPageToken: nextToken);
+    } catch (error) {
+      debugPrint('EXPLODE RADIO SEARCH ERROR: $error');
+      // Jangan fallback ke Data API search.list karena itu justru menghidupkan
+      // kembali batas 100 pencarian/hari. Error terlihat dengan hasil kosong.
+      _putCache(cacheKey, _CacheEntry(DateTime.now(), const []));
+      return const RadioPage(results: []);
     }
-
-    // YouTube Shorts tidak punya flag eksplisit di Search API. Gunakan
-    // penyaring berlapis: query exclusion + heuristik judul/channel.
-    results = _filterShortFormCandidates(results);
-
-    // Filter Shorts memakai metadata lokal tanpa request tambahan ke halaman YouTube.
-    results = await removeShorts(results);
-    results = _filterNonMusicCandidates(results);
-    results = _filterAiMusicCandidates(results);
-
-    // Pertahankan urutan relevansi dari YouTube dan batasi dominasi satu
-    // channel. Jangan mengganti hasil kosong dengan chart populer global.
-    results = _rankRadio(results);
-
-    final token = data['nextPageToken']?.toString();
-
-    _putCache(cacheKey, _CacheEntry(DateTime.now(), results, token));
-
-    // Hasil kosong hanya disimpan di memori (TTL pendek), tidak di disk,
-    // supaya kegagalan sementara tidak menahan Radio berjam-jam.
-    if (results.isNotEmpty) {
-      unawaited(_disk.put(cacheKey, {
-        'results': results.map((video) => video.toJson()).toList(),
-        'next': token,
-      }));
-    }
-
-    return RadioPage(results: results, nextPageToken: token);
   }
 
   /// Musik yang sedang trending. Kategori 10 dipakai sebagai default agar
@@ -728,116 +735,8 @@ class YoutubeSearchService {
     return results.take(maxResults).toList(growable: false);
   }
 
-  /// Melengkapi hasil pencarian dengan durasi, jumlah tonton, dan status live
-  /// lewat satu panggilan videos.list (maks. 50 video per panggilan). Kalau
-  /// gagal, daftar asli dikembalikan apa adanya.
   static String _videoDetailDiskKey(String videoId) =>
       'video|${sha256.convert(utf8.encode(videoId))}';
-
-  Future<List<YoutubeSearchResult>> _withDetails(
-    List<YoutubeSearchResult> videos,
-  ) async {
-    if (videos.isEmpty || _apiKey.isEmpty) return videos;
-
-    final details = <String, YoutubeSearchResult>{};
-    final needDisk = <YoutubeSearchResult>[];
-    final now = DateTime.now();
-
-    for (final video in videos) {
-      if (video.videoId.isEmpty || video.isLocal) continue;
-      final entry = _videoDetailCache[video.videoId];
-      if (entry != null && now.difference(entry.time) < _videoDetailTtl) {
-        details[video.videoId] = entry.result;
-      } else {
-        if (entry != null) _videoDetailCache.remove(video.videoId);
-        needDisk.add(video);
-      }
-    }
-
-    // SharedPreferences lookups are parallelized, but API requests remain
-    // batched (up to 50 IDs per videos.list call).
-    final diskValues = await Future.wait(needDisk.map(
-      (video) => _videoDetailDisk.get(_videoDetailDiskKey(video.videoId)),
-    ));
-    final missingApi = <YoutubeSearchResult>[];
-    for (var i = 0; i < needDisk.length; i++) {
-      final video = needDisk[i];
-      final raw = diskValues[i];
-      if (raw is Map) {
-        try {
-          final cached = YoutubeSearchResult.fromJson(
-            Map<String, dynamic>.from(raw),
-          );
-          if (cached.videoId == video.videoId &&
-              (cached.durationSeconds != null ||
-                  cached.isLive ||
-                  cached.isUpcoming)) {
-            _videoDetailCache[cached.videoId] =
-                _VideoDetailCacheEntry(DateTime.now(), cached);
-            details[cached.videoId] = cached;
-            continue;
-          }
-        } catch (_) {
-          // Invalid cache entries are ignored and refreshed from the API.
-        }
-      }
-      missingApi.add(video);
-    }
-
-    final fetched = <YoutubeSearchResult>[];
-    for (var i = 0; i < missingApi.length; i += 50) {
-      final chunk = missingApi.sublist(i, math.min(i + 50, missingApi.length));
-      try {
-        final data = await _getJson(
-          Uri.parse('https://www.googleapis.com/youtube/v3/videos').replace(
-            queryParameters: {
-              'part': 'snippet,statistics,contentDetails,liveStreamingDetails',
-              'id': chunk.map((v) => v.videoId).join(','),
-              'key': _apiKey,
-            },
-          ),
-        );
-        final items = data['items'];
-        if (items is! List) continue;
-        for (final item in items) {
-          if (item is! Map) continue;
-          final detail = YoutubeSearchResult.fromVideoResource(
-            Map<String, dynamic>.from(item),
-            pickThumbnail: _pickThumbnail,
-            decode: _decodeHtml,
-          );
-          if (detail == null) continue;
-          details[detail.videoId] = detail;
-          fetched.add(detail);
-        }
-      } catch (_) {
-        // Cached and search-snippet metadata are still usable if details fail.
-      }
-    }
-    // Satu kali tulis ke disk untuk seluruh hasil API, bukan satu per video.
-    _rememberVideoDetails(fetched);
-
-    return videos.map((video) {
-      final detail = details[video.videoId];
-      if (detail == null) return video;
-      return video.copyWith(
-        description: detail.description.isNotEmpty
-            ? detail.description
-            : video.description,
-        viewCount: detail.viewCount ?? video.viewCount,
-        durationSeconds: detail.durationSeconds ?? video.durationSeconds,
-        publishedAt: detail.publishedAt ?? video.publishedAt,
-        liveStatus:
-            detail.liveStatus.isNotEmpty ? detail.liveStatus : video.liveStatus,
-        concurrentViewers: detail.concurrentViewers ?? video.concurrentViewers,
-        liveStartTime: detail.liveStartTime ?? video.liveStartTime,
-        channelId:
-            detail.channelId.isNotEmpty ? detail.channelId : video.channelId,
-        categoryId:
-            detail.categoryId.isNotEmpty ? detail.categoryId : video.categoryId,
-      );
-    }).toList(growable: false);
-  }
 
   /// Simpan detail video ke cache memori (LRU) dan ke disk dalam satu batch.
   /// Hanya video yang punya durasi atau status live/upcoming yang disimpan.
@@ -975,15 +874,6 @@ class YoutubeSearchService {
     return decoded is Map ? decoded : <String, dynamic>{};
   }
 
-  List<YoutubeSearchResult> _parseItems(List items) =>
-      YoutubeSearchResponseParser.parseSearchItems(items);
-
-  Future<List<YoutubeSearchResult>> _ensureViewCounts(
-    List<YoutubeSearchResult> videos,
-  ) async {
-    if (videos.isEmpty || dataSaverLevel > 0) return videos;
-    return _withDetails(videos);
-  }
 
   List<YoutubeSearchResult> _rankRadio(List<YoutubeSearchResult> videos) {
     // searchLatest requests order=relevance. Preserve that order rather than
@@ -1086,111 +976,6 @@ class YoutubeSearchService {
   ) {
     return videos.where((video) => !isLikelyShortForm(video)).toList();
   }
-
-  /// Buang live stream, klip terlalu pendek, dan mix berjam-jam supaya
-  /// "lagu berikutnya" benar-benar satu lagu. videos.list = biaya kuota rendah.
-  Future<List<YoutubeSearchResult>> _filterByDuration(
-    List<YoutubeSearchResult> videos, {
-    int minSeconds = _radioMinSeconds,
-    int maxSeconds = _radioMaxSeconds,
-  }) async {
-    if (videos.isEmpty) {
-      return videos;
-    }
-
-    // Hasil search yang sudah diperkaya _ensureViewCounts memiliki durasi.
-    // Filter secara lokal agar tidak membuat panggilan videos.list kedua.
-    final allHaveDuration = videos.every(
-      (video) =>
-          video.durationSeconds != null || video.isLive || video.isUpcoming,
-    );
-    if (allHaveDuration) {
-      return videos.where((video) {
-        final length = video.durationSeconds;
-        return !video.isLive &&
-            !video.isUpcoming &&
-            length != null &&
-            length >= minSeconds &&
-            length <= maxSeconds;
-      }).toList(growable: false);
-    }
-
-    try {
-      // videos.list menerima maksimal 50 ID. Video di luar 50 pertama tidak
-      // ditanyakan, jadi durasinya tidak diketahui dan tidak boleh dibuang
-      // hanya karena itu.
-      final requestedIds = videos
-          .where((video) => video.durationSeconds == null)
-          .take(50)
-          .map((video) => video.videoId)
-          .toSet();
-
-      final data = await _getJson(
-        Uri.parse('https://www.googleapis.com/youtube/v3/videos').replace(
-          queryParameters: {
-            'part': 'contentDetails',
-            'id': requestedIds.join(','),
-            'key': _apiKey,
-          },
-        ),
-      );
-
-      final items = data['items'];
-
-      if (items is! List) {
-        return videos;
-      }
-
-      final seconds = <String, int>{
-        for (final video in videos)
-          if (video.durationSeconds != null)
-            video.videoId: video.durationSeconds!.round(),
-      };
-
-      for (final item in items) {
-        if (item is! Map) {
-          continue;
-        }
-
-        final id = item['id']?.toString() ?? '';
-        final details = item['contentDetails'];
-        final raw = details is Map ? details['duration']?.toString() : null;
-
-        if (id.isEmpty || raw == null) {
-          continue;
-        }
-
-        final match = RegExp(r'^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$')
-            .firstMatch(raw);
-
-        if (match == null) {
-          continue; // live / upcoming
-        }
-
-        seconds[id] = (int.tryParse(match.group(1) ?? '0') ?? 0) * 3600 +
-            (int.tryParse(match.group(2) ?? '0') ?? 0) * 60 +
-            (int.tryParse(match.group(3) ?? '0') ?? 0);
-      }
-
-      return videos.where((video) {
-        final length = seconds[video.videoId];
-
-        if (length == null) {
-          // Tidak diminta ke API -> durasi tidak diketahui, pertahankan.
-          // Diminta tapi tidak dikembalikan (live/upcoming) -> buang.
-          return !requestedIds.contains(video.videoId);
-        }
-
-        return length >= minSeconds && length <= maxSeconds;
-      }).toList();
-    } catch (_) {
-      // Gagal cek durasi tidak boleh menggagalkan autoplay.
-      return videos;
-    }
-  }
-
-  String _pickThumbnail(dynamic thumbnails) =>
-      YoutubeSearchResponseParser.pickThumbnail(thumbnails);
 
   String _errorReason(http.Response response) =>
       _apiErrors.errorReason(response);

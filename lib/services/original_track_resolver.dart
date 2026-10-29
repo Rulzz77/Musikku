@@ -16,13 +16,19 @@ class OriginalTrackResolver {
   final Map<String, Future<YoutubeSearchResult?>> _inFlight =
       <String, Future<YoutubeSearchResult?>>{};
 
-  Future<YoutubeSearchResult> resolveIfCover(YoutubeSearchResult selected) async {
+  Future<YoutubeSearchResult> resolveIfCover(
+    YoutubeSearchResult selected, {
+    bool allowNetwork = true,
+  }) async {
     if (selected.isLocal || !isExplicitCover(selected.title)) return selected;
     final target = targetFor(selected);
     if (target == null) return selected;
 
     final key = selected.videoId;
     if (_resolvedKeys.contains(key)) return _resolvedCache[key] ?? selected;
+    // Next may use an already-cached original mapping, but must not start a
+    // new YouTube search just to replace a cover with an original upload.
+    if (!allowNetwork) return selected;
     final pending = _inFlight[key];
     if (pending != null) return (await pending) ?? selected;
 

@@ -63,9 +63,6 @@ extension _HomeRadio on _HomePageState {
       return;
     }
 
-    // Device-local playback has no YouTube radio continuation. This guard also
-    // covers a restored local track whose playlist context is empty after app
-    // restart, so Next/auto-next cannot jump into remote YouTube audio.
     if (current.isLocal) {
       await _stopPlayback();
       if (!fromAutoNext) {
@@ -74,31 +71,89 @@ extension _HomeRadio on _HomePageState {
       return;
     }
 
-    final seed = _radioSeedFor(current);
+    // IMPORTANT: pressing Next on a one-off song must not silently start a new
+    // Radio search. Use only cached favorites/history/active list. To discover
+    // fresh recommendations from YouTube, the user must explicitly start Radio.
+    await _continueFromCachedLibrary(current, fromAutoNext: fromAutoNext);
+  }
 
-    if (seed.isEmpty) {
-      if (!fromAutoNext) {
-        _toast('Tidak ada lagu berikutnya');
+  Future<void> _continueFromCachedLibrary(
+    YoutubeSearchResult current, {
+    required bool fromAutoNext,
+  }) async {
+    final contextQuery = _activeSource == _ListSource.search ? _lastSearchQuery : '';
+    final targetStyle = MusicStyleMatcher.styleForContext(
+      query: contextQuery,
+      currentVideo: current,
+    );
+    final targetLanguage = MusicStyleMatcher.languageForContext(
+      query: contextQuery,
+      currentVideo: current,
+    );
+    final seenIds = <String>{};
+    final candidates = <YoutubeSearchResult>[];
+
+    for (final video in <YoutubeSearchResult>[
+      ..._activeList,
+      ..._favorites,
+      ..._recentlyPlayed,
+    ]) {
+      if (video.videoId.isEmpty ||
+          !seenIds.add(video.videoId) ||
+          video.videoId == current.videoId ||
+          video.isLocal != current.isLocal ||
+          RadioService.isSameTrackFamily(video, current) ||
+          _dislikedIds.contains(video.videoId) ||
+          ChannelBlockFilter.isBlocked(video, _blockedChannelKeys) ||
+          YoutubeSearchService.isLikelyShortForm(video) ||
+          YoutubeSearchService.isLikelyNonMusicVideo(video) ||
+          video.isLive ||
+          video.isUpcoming) {
+        continue;
       }
 
-      return;
+      if (targetStyle != null) {
+        final candidateStyle = MusicStyleMatcher.styleFromVideo(video);
+        if (candidateStyle == null ||
+            !MusicStyleMatcher.isRelatedStyle(candidateStyle, targetStyle)) {
+          continue;
+        }
+      }
+      if (!MusicStyleMatcher.isCompatible(
+        video: video,
+        targetStyle: targetStyle,
+        targetLanguage: targetLanguage,
+        allowCrossLanguage: true,
+      )) {
+        continue;
+      }
+      candidates.add(video);
     }
 
-    _activeSource = _ListSource.radio;
-    _activePlaylistId = null;
-    // Once Radio takes over, stale search/feed lists must not be used as a
-    // fallback source for Next.
-    _activeList = <YoutubeSearchResult>[];
-    _shufflePool = <YoutubeSearchResult>[];
+    if (candidates.isNotEmpty) {
+      final ranked = targetStyle == null
+          ? candidates
+          : MusicStyleMatcher.rankForRadio(
+              candidates,
+              targetStyle: targetStyle,
+              targetLanguage: targetLanguage,
+              allowCrossLanguage: true,
+            );
+      final next = _pickNonShort(ranked, random: true);
+      if (next != null) {
+        await _playVideo(next);
+        return;
+      }
+    }
 
-    _radio.start(
-      seed,
-      preferredLanguage: _radioPreferredLanguageFor(current),
-      lockLanguage: false,
-      alternateSeeds: MusicStyleMatcher.alternateSeedsFor(current),
-    );
-
-    await _nextFromRadio(fromAutoNext: fromAutoNext);
+    await _stopPlayback();
+    if (!fromAutoNext) {
+      _toast(
+        'Lagu berikutnya belum ada di antrean atau cache. Tambahkan lagu ke antrean, '
+        'atau aktifkan Radio untuk mencari rekomendasi baru.',
+        duration: const Duration(seconds: 3),
+      );
+    }
   }
 
   /// Ambil kandidat dari pool radio yang bukan Shorts, memakai metadata lokal.
@@ -171,12 +226,12 @@ extension _HomeRadio on _HomePageState {
       if (_radio.isPoolEmpty) {
         if (!fromAutoNext && attempt == 0) {
           _toast(
-            'Mencari lagu berikutnya…',
+            'Menyiapkan lagu berikutnya…',
             duration: const Duration(seconds: 1),
           );
         }
 
-        await _radio.refill();
+        await _radio.refill(allowNetwork: false);
       }
 
       if (_radio.isPoolEmpty) {
@@ -339,7 +394,10 @@ extension _HomeRadio on _HomePageState {
     // called for explicit cover titles; ambiguous or unavailable originals keep
     // the chosen result and never block playback.
     final selected = next;
-    final resolved = await _originalTrackResolver.resolveIfCover(selected);
+    final resolved = await _originalTrackResolver.resolveIfCover(
+      selected,
+      allowNetwork: false,
+    );
     final playable = resolved.videoId != selected.videoId ? resolved : selected;
     if (playable.videoId != selected.videoId) {
       debugPrint(
@@ -350,12 +408,10 @@ extension _HomeRadio on _HomePageState {
 
     await _playVideo(playable);
 
-    // Isi ulang lebih awal saat pool tinggal sedikit. Jumlah request tetap sama
-    // (satu per halaman, dibatasi jeda 20 detik di RadioService), tetapi lagu
-    // dari artis/query berikutnya sempat bercampur dengan sisa pool, bukan baru
-    // muncul setelah pool habis.
+    // Promote already-downloaded reserve candidates when the pool is low.
+    // This is local-only; Next must not issue another search.list request.
     if (_radio.poolLength <= 3) {
-      unawaited(_radio.refill());
+      unawaited(_radio.refill(allowNetwork: false));
     }
   }
 }

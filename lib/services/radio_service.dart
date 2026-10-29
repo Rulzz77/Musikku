@@ -169,7 +169,7 @@ class RadioService {
   }
 
   /// Isi ulang pool. Kalau sedang berjalan, pemanggil ikut menunggu yang sama.
-  Future<void> refill() {
+  Future<void> refill({bool allowNetwork = true}) {
     if (_disposed) return Future<void>.value();
 
     final running = _fetch;
@@ -191,7 +191,7 @@ class RadioService {
 
     final generation = _fetchGeneration;
     late final Future<void> future;
-    future = _fetchPage(generation).whenComplete(() {
+    future = _fetchPage(generation, allowNetwork: allowNetwork).whenComplete(() {
       // A fetch invalidated by restart may finish after a newer fetch starts.
       // It must never clear the newer fetch's in-flight handle.
       if (identical(_fetch, future)) {
@@ -886,7 +886,7 @@ class RadioService {
     _reserve.clear();
   }
 
-  Future<void> _fetchPage(int generation) async {
+  Future<void> _fetchPage(int generation, {required bool allowNetwork}) async {
     final seed = _seed;
     if (_disposed || seed.isEmpty) return;
     // Pastikan riwayat dari sesi sebelumnya sudah dimuat sebelum menyaring.
@@ -973,8 +973,12 @@ class RadioService {
       final lastNetwork = _lastNetworkFetchAt;
       final recentNetwork = lastNetwork != null &&
           DateTime.now().difference(lastNetwork) < _minimumRefillInterval;
-      if (_pool.length >= 6 || (_pool.isNotEmpty && recentNetwork)) return;
+      if (!allowNetwork || _pool.length >= 6 || (_pool.isNotEmpty && recentNetwork)) return;
     }
+
+    // Next/auto-next may refill only from the reserve already downloaded during
+    // Radio startup. It must never trigger a new search.list request itself.
+    if (!allowNetwork) return;
 
     final queries = <String>[seed, ..._alternateSeeds];
     final firstFill = _queryCursor == 0 && queries.length > 1;

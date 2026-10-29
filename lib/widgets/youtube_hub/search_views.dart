@@ -29,6 +29,19 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
     final query = _query.trim();
     if (!mounted || query.isEmpty || _channelSearchLoading) return;
     final requestId = _searchRequestId;
+    if (artistMode) {
+      // Hasil pencarian sudah memuat channel artisnya (mis. 3+ lagu dari
+      // channel yang namanya cocok). Pakai itu langsung: instan dan tanpa
+      // request search.list tambahan.
+      final local = _artistChannelsFromResults(query);
+      if (local.isNotEmpty) {
+        setState(() {
+          _searchChannels = local;
+          _artistChannelMode = true;
+        });
+        return;
+      }
+    }
     setState(() {
       _channelSearchLoading = true;
       _artistChannelMode = artistMode;
@@ -78,9 +91,61 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
     final normalizedQuery = _normalizeArtistChannelName(query);
     final normalizedChannel = _normalizeArtistChannelName(channelTitle);
     if (normalizedQuery.isEmpty || normalizedChannel.isEmpty) return false;
-    return normalizedChannel == normalizedQuery ||
+    if (normalizedChannel == normalizedQuery ||
         normalizedChannel.startsWith('$normalizedQuery ') ||
-        normalizedQuery.startsWith('$normalizedChannel ');
+        normalizedQuery.startsWith('$normalizedChannel ')) {
+      return true;
+    }
+    // Toleran terhadap spasi dan kata tambahan: "sheila on 7" ~ "SheilaOn7",
+    // "hindia" ~ "Hindia Band".
+    final compactQuery = normalizedQuery.replaceAll(' ', '');
+    final compactChannel = normalizedChannel.replaceAll(' ', '');
+    if (compactQuery.length >= 3 &&
+        compactChannel.length >= 3 &&
+        (compactChannel == compactQuery ||
+            compactChannel.startsWith(compactQuery) ||
+            compactQuery.startsWith(compactChannel))) {
+      return true;
+    }
+    final channelTokens = normalizedChannel.split(' ').toSet();
+    final queryTokens =
+        normalizedQuery.split(' ').where((t) => t.length >= 2).toList();
+    return queryTokens.isNotEmpty &&
+        queryTokens.every(channelTokens.contains);
+  }
+
+  /// Turunkan kartu artis dari hasil pencarian yang sudah ada: channel yang
+  /// namanya cocok dengan query dan memiliki minimal 3 lagu di hasil teratas.
+  List<YoutubeChannelSearchResult> _artistChannelsFromResults(String query) {
+    final counts = <String, int>{};
+    final samples = <String, YoutubeSearchResult>{};
+    for (final video in _searchResults.take(20)) {
+      if (video.isLocal || video.channelTitle.trim().isEmpty) continue;
+      final key = video.channelId.isNotEmpty
+          ? video.channelId
+          : _normalizeArtistChannelName(video.channelTitle);
+      if (key.isEmpty) continue;
+      counts[key] = (counts[key] ?? 0) + 1;
+      samples.putIfAbsent(key, () => video);
+    }
+    final ranked = counts.entries
+        .where((entry) =>
+            entry.value >= 3 &&
+            _channelNameMatchesArtistQuery(
+              samples[entry.key]!.channelTitle,
+              query,
+            ))
+        .toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    return ranked.take(3).map((entry) {
+      final sample = samples[entry.key]!;
+      return YoutubeChannelSearchResult(
+        channelId: sample.channelId,
+        title: sample.channelTitle,
+        description: '',
+        thumbnailUrl: '',
+      );
+    }).toList(growable: false);
   }
 
   bool _isLikelyArtistNameSearch(String query, List<YoutubeSearchResult> videos) {
@@ -222,6 +287,16 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
       // request path; channel discovery is only triggered for likely names.
       if (_isLikelyArtistNameSearch(query, visibleVideos)) {
         unawaited(_searchChannelsForCurrentQuery(artistMode: true));
+      } else if (query.split(RegExp(r'\s+')).length <= 4) {
+        // Nama artis 3-4 kata ("Sheila On 7", "Hindia Band"): hanya jalur
+        // gratis dari hasil yang sudah ada, tanpa request tambahan.
+        final local = _artistChannelsFromResults(query);
+        if (local.isNotEmpty) {
+          setState(() {
+            _searchChannels = local;
+            _artistChannelMode = true;
+          });
+        }
       }
     } catch (e) {
       if (!mounted || requestId != _searchRequestId) return;

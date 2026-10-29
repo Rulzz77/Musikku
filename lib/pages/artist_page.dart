@@ -77,8 +77,20 @@ class _ArtistPageState extends State<ArtistPage> {
     return true;
   }
 
+  static final RegExp _unofficialContent = RegExp(
+    r'\b(?:cover(?:ed)?|karaoke|fan[ -]?made|unofficial|reaction|reacts?|tribute|slowed|sped\s*up|nightcore|dance\s+practice|teasers?|trailers?|snippets?)\b',
+    caseSensitive: false,
+  );
+
   bool _isClearlyNonMusic(YoutubeSearchResult video) =>
       _nonMusicContentTitle.hasMatch(video.title);
+
+  /// Lagu biasanya 45 detik sampai 15 menit; di luar itu umumnya mix,
+  /// rekaman live panjang, atau klip pendek.
+  bool _hasSongLikeDuration(YoutubeSearchResult video) {
+    final seconds = video.durationSeconds;
+    return seconds == null || (seconds >= 45 && seconds <= 900);
+  }
 
   String _normalizeArtistText(String value) => value
       .toLowerCase()
@@ -261,9 +273,10 @@ class _ArtistPageState extends State<ArtistPage> {
             )).toList(growable: false);
         final cleanResults = await widget.searchService.removeShorts(musicResults);
         final artistReleases = _filterArtistSearchResults(cleanResults);
-        _songs = artistReleases.isNotEmpty
-            ? _mergeTracks(artistReleases, _songs)
-            : _mergeTracks(cleanResults.take(30).toList(growable: false), _songs);
+        // Hanya lagu yang terbukti milik artis ini. Sebelumnya, bila tidak ada
+        // yang cocok, 30 hasil pencarian apa pun ikut ditampilkan sehingga
+        // lagu artis lain bisa muncul di halaman artis.
+        _songs = _mergeTracks(artistReleases, _songs);
       }
       if (!mounted) return;
       setState(() {
@@ -298,6 +311,8 @@ class _ArtistPageState extends State<ArtistPage> {
         !video.isLive &&
         !video.isUpcoming &&
         !_isClearlyNonMusic(video) &&
+        !_unofficialContent.hasMatch(video.title) &&
+        _hasSongLikeDuration(video) &&
         YoutubeSearchService.isMusicChannelUpload(
           video,
           channelTitle: channelTitle,

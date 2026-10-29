@@ -830,6 +830,17 @@ class MusicStyleMatcher {
     return '';
   }
 
+  /// Kunci artis untuk variasi putar (Next, Shuffle, Radio). Dibaca dari judul
+  /// dan channel dengan aturan yang sama seperti seed Radio, jadi unggahan
+  /// resmi, Topic, lirik, dan cover dari penyanyi yang sama dianggap satu
+  /// artis. Kosong bila artis tidak bisa dikenali.
+  static String artistKeyFor(YoutubeSearchResult video) {
+    if (video.isLocal && video.channelTitle.trim() == 'Artis tidak diketahui') {
+      return '';
+    }
+    return normalize(_seedArtistFor(video));
+  }
+
   static String _composeSeed(String artist, String? style) {
     final label = style == null ? '' : (_seedStyleLabels[style] ?? '');
     final artistKey = normalize(artist);

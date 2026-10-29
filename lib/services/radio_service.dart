@@ -452,6 +452,11 @@ class RadioService {
   }
 
   static String _artistKey(YoutubeSearchResult video) {
+    // Utamakan artis hasil baca judul + channel. Nama channel saja menipu:
+    // channel lirik/reupload memuat banyak penyanyi, sedangkan satu penyanyi
+    // bisa tersebar di channel resmi, Topic, dan cover.
+    final recognized = MusicStyleMatcher.artistKeyFor(video);
+    if (recognized.isNotEmpty) return recognized;
     final withoutChannelSuffix = video.channelTitle.replaceAll(
       RegExp(r'\b(?:official|artist|channel|topic|vevo|covers?)\b', caseSensitive: false),
       ' ',

@@ -78,8 +78,20 @@ extension _HomeQueue on _HomePageState {
     final current = _currentVideo;
     if (current == null) return _queueManager.takeRandom();
 
+    // Utamakan lagu dengan artis berbeda dari yang baru diputar (batas jendela
+    // + jeda minimal, sama seperti Radio). Kalau semua kandidat satu artis,
+    // preferArtistVariety mengembalikan semuanya sehingga Next tidak mati.
+    final sameSource = _queueManager.items
+        .map((item) => item.video)
+        .where((video) => video.isLocal == current.isLocal)
+        .toList(growable: false);
+    final varietyIds = _radio
+        .preferArtistVariety(sameSource)
+        .map((video) => video.videoId)
+        .toSet();
+
     bool matchesSource(YoutubeSearchResult video) =>
-        video.isLocal == current.isLocal;
+        video.isLocal == current.isLocal && varietyIds.contains(video.videoId);
 
     if (_playerUiState.value.isSmartShuffle) {
       return _queueManager.takeSmartMatching(
@@ -175,14 +187,18 @@ extension _HomeQueue on _HomePageState {
           : (languageCandidates.isNotEmpty ? languageCandidates : _shufflePool);
     }
 
+    // Hindari artis yang sama muncul terus: batasi per jendela putar terakhir
+    // dan beri jeda beberapa lagu (logika yang sama dengan Radio).
+    final variedPool = _radio.preferArtistVariety(candidatesPool);
+
     if (!_playerUiState.value.isSmartShuffle) {
-      final selected = candidatesPool[_random.nextInt(candidatesPool.length)];
+      final selected = variedPool[_random.nextInt(variedPool.length)];
       _shufflePool.removeWhere((video) => video.videoId == selected.videoId);
       return selected;
     }
 
     final currentArtist = _currentVideo?.channelTitle;
-    final scored = candidatesPool
+    final scored = variedPool
         .map(
           (video) => (
             video: video,
@@ -196,17 +212,7 @@ extension _HomeQueue on _HomePageState {
     // tidak kehilangan preferensi user.
     final topCount = scored.length < 6 ? scored.length : 6;
     final top = scored.take(topCount).map((item) => item.video).toList();
-    final differentArtist = currentArtist == null
-        ? top
-        : top
-            .where(
-              (video) => video.channelTitle.trim().toLowerCase() !=
-                  currentArtist.trim().toLowerCase(),
-            )
-            .toList();
-
-    final candidates = differentArtist.isNotEmpty ? differentArtist : top;
-    final selected = candidates[_random.nextInt(candidates.length)];
+    final selected = top[_random.nextInt(top.length)];
     _shufflePool.removeWhere((video) => video.videoId == selected.videoId);
     return selected;
   }

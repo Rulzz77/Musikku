@@ -489,9 +489,9 @@ class MusicStyleMatcher {
 
     if (targetLanguage != null) {
       if (candidateLanguage == targetLanguage) {
-        score += 2.5;
+        score += 6.0;
       } else if (candidateLanguage == null) {
-        score += 1.25;
+        score += 3.0;
       }
     }
     return score;
@@ -889,7 +889,14 @@ class MusicStyleMatcher {
         if (!padded.contains(' $crossPeer ')) seeds.add(crossPeer);
       }
     }
-    seeds.add(_popularQueryFor(style, language));
+    // If the artist already belongs to a known peer group, keep queries
+    // anchored to the same musical/language scene. A broad genre chart can
+    // inject unrelated local-pop hits into an English artist's radio pool.
+    // Without a style or language the popular query falls back to an
+    // Indonesian chart, which would pollute an unidentified English artist.
+    if (group == null && (style != null || language != null)) {
+      seeds.add(_popularQueryFor(style, language));
+    }
     return seeds;
   }
 

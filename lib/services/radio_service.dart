@@ -120,8 +120,10 @@ class RadioService {
         .toSet()
         .toList(growable: false);
 
+    final effectiveLanguage =
+        preferredLanguage ?? MusicStyleMatcher.languageFromText(normalized);
     final changed = normalized.toLowerCase() != _seed.toLowerCase() ||
-        preferredLanguage != _preferredLanguage ||
+        effectiveLanguage != _preferredLanguage ||
         lockLanguage != _lockLanguage;
     if (changed) {
       _fetchGeneration++;
@@ -139,7 +141,7 @@ class RadioService {
     if (changed || cleanedAlternates.isNotEmpty) {
       _alternateSeeds = cleanedAlternates;
     }
-    _preferredLanguage = preferredLanguage ?? MusicStyleMatcher.languageFromText(normalized);
+    _preferredLanguage = effectiveLanguage;
     _lockLanguage = lockLanguage;
 
     // Siapkan lagu berikutnya di belakang layar supaya Next terasa instan.
@@ -925,6 +927,9 @@ class RadioService {
       }
 
       if (!enforceContext) return true;
+
+      // Cross-language is allowed: the genre must match, language is only a
+      // ranking preference (see MusicStyleMatcher._similarityScore).
       return MusicStyleMatcher.isCompatible(
         video: video,
         targetStyle: targetStyle,

@@ -302,6 +302,7 @@ extension _HomeControls on _HomePageState {
       if (nextItem != null) {
         unawaited(_storage.saveQueue(_queueManager.items));
         await _playVideo(nextItem.video);
+        _prepareRadioForTrack(nextItem.video);
 
         if (mounted) {
           setState(() {});
@@ -318,6 +319,15 @@ extension _HomeControls on _HomePageState {
         (_activeSource == _ListSource.search ||
             _activeSource == _ListSource.radio) &&
         _radio.hasSeed) {
+      // Pengguna bisa pindah lagu lewat jalur yang tidak me-reset Radio.
+      // Kalau lagu aktif bukan asal/pilihan Radio, ikuti lagu aktif.
+      if (_isRadioContextStale(current)) {
+        _activeSource = _ListSource.radio;
+        _activePlaylistId = null;
+        _activeList = <YoutubeSearchResult>[];
+        _shufflePool = <YoutubeSearchResult>[];
+        _prepareRadioForTrack(current);
+      }
       await _nextFromRadio(fromAutoNext: fromAutoNext);
 
       return;

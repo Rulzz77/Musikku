@@ -217,6 +217,10 @@ class _HomePageState extends State<HomePage>
 
   /// Menahan dua aksi Next yang terlalu berdekatan agar tidak memilih track dobel.
   bool _nextActionInProgress = false;
+  // Lagu yang menjadi asal konteks Radio saat ini, dan lagu yang dipilih Radio
+  // sendiri. Lagu di luar keduanya berarti konteks Radio sudah basi.
+  String _radioOriginVideoId = '';
+  final Set<String> _radioPickedIds = <String>{};
 
   /// Lagu yang BELUM diputar dalam siklus shuffle saat ini.
   List<YoutubeSearchResult> _shufflePool = [];

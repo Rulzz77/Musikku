@@ -52,6 +52,9 @@ extension _HomeAutoNext on _HomePageState {
           unawaited(_storage.flushPendingWrites());
           unawaited(_storage.saveQueue(_queueManager.items));
           await _playVideo(nextItem.video);
+          // Lagu dari queue adalah pilihan eksplisit: Radio harus mengikuti
+          // lagu ini, bukan konteks lama.
+          _prepareRadioForTrack(nextItem.video);
 
           if (mounted) {
             setState(() {});

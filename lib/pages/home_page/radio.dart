@@ -14,6 +14,31 @@ extension _HomeRadio on _HomePageState {
   String? _radioPreferredLanguageFor(YoutubeSearchResult video) =>
       MusicStyleMatcher.languageFromVideo(video);
 
+  /// Prime recommendations from the track explicitly selected by the user.
+  /// This prevents a previous Radio seed/pool from leaking into a new song.
+  void _prepareRadioForTrack(YoutubeSearchResult video) {
+    if (video.isLocal) return;
+    final seed = _radioSeedFor(video);
+    if (seed.isEmpty) return;
+    _radioOriginVideoId = video.videoId;
+    _radioPickedIds.clear();
+    _radio.start(
+      seed,
+      preferredLanguage: _radioPreferredLanguageFor(video),
+      lockLanguage: false,
+      alternateSeeds: MusicStyleMatcher.alternateSeedsFor(video),
+    );
+  }
+
+  /// True bila lagu aktif bukan asal konteks Radio dan bukan hasil pilihan
+  /// Radio sendiri, artinya pengguna pindah lagu lewat jalur yang tidak
+  /// me-reset Radio.
+  bool _isRadioContextStale(YoutubeSearchResult current) {
+    if (!_radio.hasSeed || current.isLocal) return false;
+    return current.videoId != _radioOriginVideoId &&
+        !_radioPickedIds.contains(current.videoId);
+  }
+
   Future<void> _startRadioFromVideo(YoutubeSearchResult video) async {
     final seed = _radioSeedFor(video);
     if (seed.isEmpty) {
@@ -28,6 +53,8 @@ extension _HomeRadio on _HomePageState {
     _activeList = <YoutubeSearchResult>[];
     _shufflePool = <YoutubeSearchResult>[];
     _playHistory.clear();
+    _radioOriginVideoId = video.videoId;
+    _radioPickedIds.clear();
     _radio.start(
       seed,
       preferredLanguage: _radioPreferredLanguageFor(video),
@@ -71,9 +98,34 @@ extension _HomeRadio on _HomePageState {
       return;
     }
 
-    // IMPORTANT: pressing Next on a one-off song must not silently start a new
-    // Radio search. Use only cached favorites/history/active list. To discover
-    // fresh recommendations from YouTube, the user must explicitly start Radio.
+    // Next/auto-next must work even when the user never tapped the Radio button.
+    // Start the recommendation engine silently from the current song, then use
+    // the same related-track pool that explicit Radio uses. The UI does not need
+    // to switch screens or show the "Radio aktif" toast.
+    final seed = _radioSeedFor(current);
+    if (seed.isNotEmpty) {
+      final sameRadioSeed = _radio.hasSeed &&
+          RadioService.normalizePhrase(_radio.seed) ==
+              RadioService.normalizePhrase(seed);
+      if (_activeSource != _ListSource.radio || !sameRadioSeed) {
+        _activeSource = _ListSource.radio;
+        _activePlaylistId = null;
+        _activeList = <YoutubeSearchResult>[];
+        _shufflePool = <YoutubeSearchResult>[];
+        _prepareRadioForTrack(current);
+      }
+
+      // start() may already be fetching; refill() joins that request. The
+      // search service uses youtube_explode_dart rather than Data API search.list.
+      await _radio.refill(allowNetwork: true);
+      if (_radio.poolLength > 0) {
+        await _nextFromRadio(fromAutoNext: fromAutoNext);
+        return;
+      }
+    }
+
+    // If discovery fails, fall back to cached related songs instead of forcing
+    // the user to activate Radio manually.
     await _continueFromCachedLibrary(current, fromAutoNext: fromAutoNext);
   }
 
@@ -130,11 +182,14 @@ extension _HomeRadio on _HomePageState {
       candidates.add(video);
     }
 
-    if (candidates.isNotEmpty) {
+    // Never replay anything Radio already played; only the last 15 history
+    // entries are checked by _pickNonShort, which let older songs repeat.
+    final freshCandidates = _radio.filterUnplayedCandidates(candidates);
+    if (freshCandidates.isNotEmpty) {
       final ranked = targetStyle == null
-          ? candidates
+          ? freshCandidates
           : MusicStyleMatcher.rankForRadio(
-              candidates,
+              freshCandidates,
               targetStyle: targetStyle,
               targetLanguage: targetLanguage,
               allowCrossLanguage: true,
@@ -149,8 +204,7 @@ extension _HomeRadio on _HomePageState {
     await _stopPlayback();
     if (!fromAutoNext) {
       _toast(
-        'Lagu berikutnya belum ada di antrean atau cache. Tambahkan lagu ke antrean, '
-        'atau aktifkan Radio untuk mencari rekomendasi baru.',
+        'Lagu berikutnya belum tersedia. Periksa koneksi lalu coba lagi.',
         duration: const Duration(seconds: 3),
       );
     }
@@ -260,7 +314,7 @@ extension _HomeRadio on _HomePageState {
           );
         }
 
-        await _radio.refill(allowNetwork: false);
+        await _radio.refill(allowNetwork: true);
       }
 
       if (_radio.isPoolEmpty) {
@@ -427,7 +481,10 @@ extension _HomeRadio on _HomePageState {
       selected,
       allowNetwork: false,
     );
-    final playable = resolved.videoId != selected.videoId ? resolved : selected;
+    final playable = resolved.videoId != selected.videoId &&
+            !_radio.wasPlayedRecently(resolved)
+        ? resolved
+        : selected;
     if (playable.videoId != selected.videoId) {
       debugPrint(
         'RADIO ORIGINAL RESOLVED: ${selected.title} -> ${playable.title} (${playable.videoId})',
@@ -435,12 +492,17 @@ extension _HomeRadio on _HomePageState {
       if (!fromAutoNext) _toast('Menemukan rekaman asli: ${playable.title}');
     }
 
+    _radioPickedIds
+      ..add(selected.videoId)
+      ..add(playable.videoId);
     await _playVideo(playable);
 
-    // Promote already-downloaded reserve candidates when the pool is low.
-    // This is local-only; Next must not issue another search.list request.
+    // Prefetch related candidates while a song is playing. This avoids needing
+    // the user to activate Radio and helps keep the next transition responsive.
+    // The search service uses youtube_explode_dart rather than YouTube Data API
+    // search.list, although the unofficial endpoint can still be rate-limited.
     if (_radio.poolLength <= 3) {
-      unawaited(_radio.refill(allowNetwork: false));
+      unawaited(_radio.refill(allowNetwork: true));
     }
   }
 }

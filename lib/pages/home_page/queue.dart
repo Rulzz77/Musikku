@@ -498,7 +498,9 @@ extension _HomeQueueSheet on _HomePageState {
                                     _queueManager.remove(video.videoId);
                                     unawaited(_storage.saveQueue(_queueManager.items));
                                     Navigator.of(sheetContext).pop();
-                                    unawaited(_playVideo(video));
+                                    unawaited(_playVideo(video).then((_) {
+                                      _prepareRadioForTrack(video);
+                                    }));
                                   },
                                   child: Padding(
                                     padding: const EdgeInsets.fromLTRB(10, 9, 6, 9),

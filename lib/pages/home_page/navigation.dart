@@ -86,6 +86,11 @@ extension _HomeNavigation on _HomePageState {
       return;
     }
     await _playVideo(video);
+    if (!preserveListContext) {
+      // Start from the newly current track only after playback state has been
+      // switched, so a fast search response cannot capture the old song.
+      _prepareRadioForTrack(video);
+    }
   }
 
   void _handleYoutubeWatchBack() {
@@ -144,8 +149,9 @@ extension _HomeNavigation on _HomePageState {
             _activePlaylistId = null;
             _activeList = <YoutubeSearchResult>[];
             _shufflePool = <YoutubeSearchResult>[];
-            _radio.start(MusicStyleMatcher.recommendationSeedFor(video));
-            unawaited(_playVideo(video));
+            unawaited(_playVideo(video).then((_) {
+              _prepareRadioForTrack(video);
+            }));
           },
           onLongPress: _showVideoMenu,
         ),

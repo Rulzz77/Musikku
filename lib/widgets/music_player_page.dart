@@ -107,6 +107,15 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final isDarkTheme = theme.brightness == Brightness.dark;
+    // Keep the player background aligned with the active theme. The old
+    // fixed charcoal top gradient made dark text disappear in Pink/Light mode.
+    final playerTopColor = isDarkTheme
+        ? const Color(0xFF101718)
+        : Color.lerp(scheme.surface, scheme.primaryContainer, 0.28)!;
+    final playerMidColor = isDarkTheme
+        ? Color.lerp(const Color(0xFF101718), scheme.surface, 0.10)!
+        : Color.lerp(playerTopColor, scheme.surface, 0.58)!;
     return Material(
       color: scheme.surface,
       child: Stack(
@@ -122,8 +131,8 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    const Color(0xFF101718),
-                    Color.lerp(const Color(0xFF101718), scheme.surface, 0.10)!,
+                    playerTopColor,
+                    playerMidColor,
                     scheme.surface,
                   ],
                   stops: const [0.0, 0.55, 1.0],
@@ -153,9 +162,11 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  Colors.black.withValues(alpha: 0.12),
+                  (isDarkTheme ? Colors.black : Colors.white).withValues(
+                    alpha: isDarkTheme ? 0.12 : 0.26,
+                  ),
                   Colors.transparent,
-                  scheme.surface.withValues(alpha: 0.06),
+                  scheme.surface.withValues(alpha: isDarkTheme ? 0.06 : 0.16),
                 ],
               ),
             ),
@@ -181,6 +192,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
   /// Header: back (left), title (centered on the whole screen), listening
   /// room (right). Favorite moved next to the song title, like Spotify.
   Widget _buildHeader(ThemeData theme) {
+    final scheme = theme.colorScheme;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: SizedBox(
@@ -199,7 +211,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                       overflow: TextOverflow.ellipsis,
                       textAlign: TextAlign.center,
                       style: theme.textTheme.labelMedium?.copyWith(
-                        color: Colors.white.withValues(alpha: 0.82),
+                        color: scheme.onSurfaceVariant.withValues(alpha: 0.96),
                         fontWeight: FontWeight.w800,
                         letterSpacing: 1.55,
                       ),
@@ -214,7 +226,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                   tooltip: 'Kembali ke beranda',
                   constraints: const BoxConstraints.tightFor(width: 44, height: 44),
                   onPressed: widget.onBack,
-                  color: Colors.white,
+                  color: scheme.onSurface,
                   icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 30),
                 ),
                 const Spacer(),
@@ -224,7 +236,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                   onPressed: widget.onOpenListeningRoom,
                   icon: Icon(
                     widget.followingRoom ? Icons.headphones_rounded : Icons.groups_2_rounded,
-                    color: Colors.white,
+                    color: scheme.onSurface,
                   ),
                 ),
               ],
@@ -460,7 +472,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
             icon: Icon(
               ui.isFavorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
               size: 26,
-              color: ui.isFavorite ? scheme.primary : Colors.white,
+              color: ui.isFavorite ? scheme.primary : scheme.onSurfaceVariant,
             ),
           ),
         ),

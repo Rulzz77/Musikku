@@ -195,6 +195,26 @@ class YoutubeMusicPolicy {
     );
     if (albumOrCompilation.hasMatch(title)) return false;
 
+    // Lagu DJ/remix (funkot, breakbeat, slow bass, dsb.) hampir selalu diunggah
+    // channel DJ non-resmi, jadi tidak punya penanda "official". Tanpa
+    // pengecualian ini mereka ikut terbuang oleh syarat rilis resmi di bawah.
+    final isDjTrack = RegExp(
+      r'\b(?:dj|remix|funkot|breakbeat|jedag\s*jedug|slow\s*bass|bass\s*boosted|'
+      r'tiktok\s+viral|mashup\s+dj)\b',
+      caseSensitive: false,
+    ).hasMatch(title);
+
+    if (isDjTrack) {
+      // Untuk lagu DJ, hanya tolak yang memang cover/karaoke/AI. Label seperti
+      // slowed, sped up, nightcore, 8D, mashup, bootleg adalah gaya DJ yang wajar.
+      final badDjVersion = RegExp(
+        r'\b(?:karaoke|cover|fan[ -]?made|unofficial|tribute|'
+        r'ai[ -]?(?:cover|version|voice|vocals?|generated)|suno|udio)\b',
+        caseSensitive: false,
+      );
+      return !badDjVersion.hasMatch(combined);
+    }
+
     // Tolak versi non-original yang biasa mencemari hasil pencarian.
     final nonOfficialVersion = RegExp(
       r'\b(?:karaoke|cover|fan[ -]?made|unofficial|tribute|nightcore|sped[ -]?up|slowed(?:\s*(?:and|&|\+)\s*reverb)?|reverb\s+version|8d\s+audio|8d\s+music|mash[ -]?up|bootleg|fan[ -]?edit|ai[ -]?(?:cover|version|voice|vocals?|generated)|suno|udio)\b',

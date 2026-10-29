@@ -617,7 +617,12 @@ class YoutubeSearchService {
       debugPrint('EXPLODE RADIO SEARCH ERROR: $error');
       // Jangan fallback ke Data API search.list karena itu justru menghidupkan
       // kembali batas 100 pencarian/hari. Error terlihat dengan hasil kosong.
-      _putCache(cacheKey, _CacheEntry(DateTime.now(), const []));
+      // JANGAN di-cache: satu error sesaat (jaringan / parsing) sebelumnya
+      // tersimpan sebagai "kosong" selama 30 menit, sehingga setiap Next untuk
+      // seed yang sama ikut gagal menemukan lagu sampai cache itu kedaluwarsa.
+      // Sumber halaman juga dibuang supaya percobaan berikutnya mulai bersih.
+      _radioExplodePageSources.remove(pageSourceKey);
+      _radioExplodePageNumbers.remove(pageSourceKey);
       return const RadioPage(results: []);
     }
   }

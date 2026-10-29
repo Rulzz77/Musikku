@@ -908,6 +908,23 @@ class MusicStyleMatcher {
     if (group == null && (style != null || language != null)) {
       seeds.add(_popularQueryFor(style, language));
     }
+
+    // Cadangan terakhir supaya Radio tidak punya SATU query saja. Lagu dengan
+    // artis tak dikenali / gaya tak terdeteksi tadinya hanya punya seed judul
+    // ("judul channel similar songs") yang sering kosong setelah disaring.
+    final plainArtist = artist.trim();
+    if (plainArtist.isNotEmpty &&
+        normalize(_composeSeed(plainArtist, style)) != artistKey &&
+        !seeds.any((item) => normalize(item) == artistKey)) {
+      seeds.add(plainArtist);
+    }
+    if (seeds.isEmpty) {
+      final channelSeed = _radioSeedArtist(video.channelTitle).trim();
+      final channelKey = normalize(channelSeed);
+      if (channelKey.length >= 3 && !_isGenericChannel(channelKey)) {
+        seeds.add(channelSeed);
+      }
+    }
     return seeds;
   }
 

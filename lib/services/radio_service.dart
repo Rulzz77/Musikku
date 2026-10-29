@@ -49,6 +49,9 @@ class RadioService {
   Future<void>? _fetch;
   DateTime? _lastRefillStartedAt;
   static const Duration _minimumRefillInterval = Duration(seconds: 20);
+  // Saat pool kosong, Next/auto-next butuh lagu SEKARANG. Throttle 20 detik
+  // hanya cocok untuk prefetch; untuk pool kosong cukup jeda singkat.
+  static const Duration _emptyPoolRefillInterval = Duration(seconds: 2);
   bool _disposed = false;
   // Incremented whenever the radio context is reset so an older request cannot
   // populate a new pool or clear the handle for a newer in-flight request.
@@ -194,9 +197,14 @@ class RadioService {
     // pengganti; pencarian berikutnya hanya memakai halaman query yang relevan.
     final now = DateTime.now();
     final lastStarted = _lastRefillStartedAt;
+    // Throttle 20 detik sebelumnya juga menahan refill saat pool KOSONG,
+    // sehingga Next yang ditekan <20 detik setelah prefetch terakhir langsung
+    // berakhir dengan "Belum menemukan lagu berikutnya".
+    final minimumGap =
+        _pool.isEmpty ? _emptyPoolRefillInterval : _minimumRefillInterval;
     if (_reserve.isEmpty &&
         lastStarted != null &&
-        now.difference(lastStarted) < _minimumRefillInterval) {
+        now.difference(lastStarted) < minimumGap) {
       return Future<void>.value();
     }
     _lastRefillStartedAt = now;
@@ -1037,7 +1045,10 @@ class RadioService {
 
     final queries = <String>[seed, ..._alternateSeeds];
     final firstFill = _queryCursor == 0 && queries.length > 1;
-    final maxAttempts = queries.length > 1 ? 2 : 1;
+    // Halaman 1 biasanya sudah habis dipakai (sudah diputar / disaring), jadi
+    // satu halaman per isi ulang sering menghasilkan pool kosong. Coba sampai
+    // 4 halaman/query berturut-turut; berhenti begitu pool terisi.
+    final maxAttempts = 4;
     for (var attempt = 0; attempt < maxAttempts; attempt++) {
       if (attempt > 0 && _pool.isNotEmpty) break;
       final batchSize = (attempt == 0 && firstFill) ? 2 : 1;

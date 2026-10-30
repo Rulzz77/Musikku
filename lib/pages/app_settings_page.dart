@@ -49,67 +49,48 @@ class AppSettingsPage extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(16, 10, 16, 40),
         children: [
           Container(
-            margin: const EdgeInsets.only(bottom: 22),
-            padding: const EdgeInsets.all(18),
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.fromLTRB(17, 17, 15, 17),
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  scheme.primaryContainer.withValues(alpha: 0.88),
-                  scheme.surfaceContainerLow,
-                ],
-              ),
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(
-                color: scheme.primary.withValues(alpha: 0.14),
-              ),
+              color: scheme.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.62)),
             ),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Container(
-                  width: 50,
-                  height: 50,
+                  width: 46,
+                  height: 46,
                   decoration: BoxDecoration(
-                    color: scheme.primary.withValues(alpha: 0.13),
-                    borderRadius: BorderRadius.circular(17),
-                  ),
-                  child: Icon(
-                    Icons.tune_rounded,
                     color: scheme.primary,
-                    size: 26,
+                    borderRadius: BorderRadius.circular(13),
                   ),
+                  child: Icon(Icons.tune_rounded, color: scheme.onPrimary, size: 24),
                 ),
-                const SizedBox(width: 14),
+                const SizedBox(width: 13),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'RACIK PENGALAMAN MUSIKMU',
+                        'PUSAT KONTROL',
                         style: TextStyle(
                           color: scheme.primary,
                           fontSize: 9,
                           fontWeight: FontWeight.w900,
-                          letterSpacing: 1.1,
+                          letterSpacing: 1.45,
                         ),
                       ),
                       const SizedBox(height: 5),
-                      Text(
-                        'Atur MusikKu sesuai caramu mendengarkan.',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w900,
-                          height: 1.2,
-                          letterSpacing: -0.25,
-                        ),
+                      const Text(
+                        'Atur cara kamu mendengarkan.',
+                        style: TextStyle(fontSize: 19, height: 1.08, fontWeight: FontWeight.w900, letterSpacing: -0.55),
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 5),
                       Text(
-                        'Tema, penggunaan data, dan opsi pemutaran ada di sini.',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                          height: 1.35,
-                        ),
+                        'Semua preferensi MusikKu tersusun di satu tempat.',
+                        style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11.5, height: 1.35),
                       ),
                     ],
                   ),
@@ -419,22 +400,23 @@ class _SectionLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(6, 28, 6, 10),
+      padding: const EdgeInsets.fromLTRB(2, 25, 2, 9),
       child: Row(
         children: [
-          Icon(icon, size: 16, color: scheme.primary),
-          const SizedBox(width: 8),
+          Container(
+            width: 4,
+            height: 18,
+            decoration: BoxDecoration(color: scheme.primary, borderRadius: BorderRadius.circular(4)),
+          ),
+          const SizedBox(width: 9),
+          Icon(icon, size: 15, color: scheme.primary),
+          const SizedBox(width: 7),
           Expanded(
             child: Text(
-              title.toUpperCase(),
+              title,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.3,
-                color: scheme.onSurfaceVariant,
-              ),
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900, letterSpacing: -0.15),
             ),
           ),
         ],
@@ -451,9 +433,12 @@ class _Group extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Material(
-      color: scheme.surfaceContainerLow,
-      borderRadius: BorderRadius.circular(22),
+    return Container(
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.58)),
+      ),
       clipBehavior: Clip.antiAlias,
       child: Column(
         children: [

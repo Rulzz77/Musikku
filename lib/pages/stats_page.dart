@@ -1,5 +1,3 @@
-import 'dart:ui' as ui;
-
 import 'package:flutter/material.dart';
 
 import '../models/listening_stat.dart';
@@ -249,86 +247,73 @@ class _StatsHero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final radius = BorderRadius.circular(22);
-    return ClipRRect(
-      borderRadius: radius,
-      child: BackdropFilter(
-        filter: ui.ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-        child: Container(
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                scheme.primary.withValues(alpha: 0.22),
-                scheme.secondary.withValues(alpha: 0.10),
-                scheme.surfaceContainerLow.withValues(alpha: 0.80),
-              ],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: radius,
-            border: Border.all(color: scheme.primary.withValues(alpha: 0.20)),
-            boxShadow: [
-              BoxShadow(
-                color: scheme.primary.withValues(alpha: 0.07),
-                blurRadius: 24,
-                offset: const Offset(0, 9),
-              ),
-            ],
-          ),
-          child: Wrap(
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 14,
-            runSpacing: 12,
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(19, 18, 19, 18),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(19),
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.58)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
               Container(
-                width: 58,
-                height: 58,
-                decoration: BoxDecoration(
-                  color: appGoldStrong.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(15),
-                ),
-                child: Icon(Icons.insights_rounded, color: scheme.primary, size: 27),
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(color: scheme.primary, borderRadius: BorderRadius.circular(11)),
+                child: Icon(Icons.insights_rounded, color: scheme.onPrimary, size: 21),
               ),
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 480),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'RINGKASAN PERSONAL',
-                      style: TextStyle(
-                        fontSize: 10,
-                        letterSpacing: 1.05,
-                        fontWeight: FontWeight.w900,
-                        color: scheme.secondary,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      '${formatMinutes(totalSeconds)} • $totalPlays play',
-                      style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
-                    ),
-                    if (topArtist != null) ...[
-                      const SizedBox(height: 6),
-                      Text(
-                        'Teratas: $topArtist • ${formatMinutes(topArtistMinutes)}',
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: scheme.primary,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
+              const SizedBox(width: 10),
+              Text(
+                'RINGKASAN PERSONAL',
+                style: TextStyle(color: scheme.primary, fontSize: 9, letterSpacing: 1.35, fontWeight: FontWeight.w900),
               ),
             ],
           ),
-        ),
+          const SizedBox(height: 15),
+          Text(
+            formatMinutes(totalSeconds),
+            style: TextStyle(fontSize: 32, height: 1, letterSpacing: -1.25, fontWeight: FontWeight.w900, color: scheme.onSurface),
+          ),
+          const SizedBox(height: 5),
+          Text('total waktu mendengarkan', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12)),
+          const SizedBox(height: 14),
+          Container(height: 1, color: scheme.outlineVariant.withValues(alpha: 0.7)),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 18,
+            runSpacing: 8,
+            children: [
+              _SummaryDatum(label: 'Lagu diputar', value: '$totalPlays'),
+              if (topArtist != null)
+                _SummaryDatum(label: 'Artis teratas', value: '$topArtist · ${formatMinutes(topArtistMinutes)}'),
+            ],
+          ),
+        ],
       ),
+    );
+  }
+}
+
+class _SummaryDatum extends StatelessWidget {
+  const _SummaryDatum({required this.label, required this.value});
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(label, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10)),
+        const SizedBox(height: 3),
+        Text(value, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurface, fontSize: 12, fontWeight: FontWeight.w800)),
+      ],
     );
   }
 }
@@ -351,57 +336,42 @@ class _MetricCard extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return TweenAnimationBuilder<double>(
       key: ValueKey<String>('stats-metric-$label'),
-      tween: Tween<double>(begin: 0.92, end: 1.0),
-      duration: const Duration(milliseconds: 360),
-      curve: Curves.easeOutBack,
+      tween: Tween<double>(begin: 0.94, end: 1.0),
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOutCubic,
       builder: (context, scale, child) => Opacity(
         opacity: scale.clamp(0.0, 1.0).toDouble(),
         child: Transform.scale(scale: scale, child: child),
       ),
       child: SizedBox(
         width: width,
-        child: Card(
-          child: Padding(
-          padding: const EdgeInsets.all(15),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(13, 13, 11, 13),
+          decoration: BoxDecoration(
+            color: scheme.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(15),
+            border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.52)),
+          ),
           child: Row(
             children: [
               Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: appGoldStrong.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(13),
-                ),
-                child: Icon(icon, color: appGoldStrong, size: 21),
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(color: scheme.primary, borderRadius: BorderRadius.circular(10)),
+                child: Icon(icon, color: scheme.onPrimary, size: 18),
               ),
-              const SizedBox(width: 11),
+              const SizedBox(width: 9),
               Expanded(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: scheme.onSurfaceVariant,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+                    Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10, fontWeight: FontWeight.w600)),
                     const SizedBox(height: 3),
                     FittedBox(
                       fit: BoxFit.scaleDown,
                       alignment: Alignment.centerLeft,
-                      child: Text(
-                        value,
-                        style: const TextStyle(
-                          fontSize: 20,
-                          letterSpacing: -0.4,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
+                      child: Text(value, style: const TextStyle(fontSize: 18, letterSpacing: -0.5, fontWeight: FontWeight.w900)),
                     ),
                   ],
                 ),
@@ -409,7 +379,6 @@ class _MetricCard extends StatelessWidget {
             ],
           ),
         ),
-      ),
       ),
     );
   }

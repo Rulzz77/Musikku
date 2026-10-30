@@ -154,17 +154,13 @@ class _LocalMusicPageState extends State<LocalMusicPage> {
                         slivers: [
                           SliverToBoxAdapter(
                             child: Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                              padding: const EdgeInsets.fromLTRB(16, 9, 16, 14),
                               child: Container(
-                                padding: const EdgeInsets.all(18),
+                                padding: const EdgeInsets.fromLTRB(16, 16, 16, 15),
                                 decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                    colors: [scheme.primaryContainer.withValues(alpha: 0.88), scheme.surfaceContainerLow],
-                                  ),
-                                  borderRadius: BorderRadius.circular(26),
-                                  border: Border.all(color: scheme.primary.withValues(alpha: 0.20)),
+                                  color: scheme.surfaceContainerLow,
+                                  borderRadius: BorderRadius.circular(18),
+                                  border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.58)),
                                 ),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -172,46 +168,39 @@ class _LocalMusicPageState extends State<LocalMusicPage> {
                                     Row(
                                       children: [
                                         Container(
-                                          width: 58,
-                                          height: 58,
-                                          decoration: BoxDecoration(
-                                            gradient: LinearGradient(colors: [scheme.primary, scheme.secondary]),
-                                            borderRadius: BorderRadius.circular(18),
-                                          ),
-                                          child: Icon(Icons.library_music_rounded, color: scheme.onPrimary, size: 28),
+                                          width: 42,
+                                          height: 42,
+                                          decoration: BoxDecoration(color: scheme.primary, borderRadius: BorderRadius.circular(12)),
+                                          child: Icon(Icons.phone_android_rounded, color: scheme.onPrimary, size: 22),
                                         ),
-                                        const SizedBox(width: 13),
+                                        const SizedBox(width: 11),
                                         Expanded(
                                           child: Column(
                                             crossAxisAlignment: CrossAxisAlignment.start,
                                             children: [
-                                              Text('KOLEKSI PERANGKAT', style: TextStyle(color: scheme.primary, fontSize: 9.5, letterSpacing: 1.35, fontWeight: FontWeight.w900)),
-                                              const SizedBox(height: 5),
-                                              Text('${_songs.length} lagu tersedia', style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w900, letterSpacing: -0.6)),
+                                              Text('KOLEKSI PERANGKAT', style: TextStyle(color: scheme.primary, fontSize: 9, letterSpacing: 1.3, fontWeight: FontWeight.w900)),
                                               const SizedBox(height: 3),
-                                              Text('Tersimpan lokal • tetap di perangkatmu', style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant)),
+                                              Text('${_songs.length} lagu tersedia', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: -0.6)),
                                             ],
                                           ),
                                         ),
                                       ],
                                     ),
-                                    const SizedBox(height: 16),
-                                    Wrap(
-                                      spacing: 8,
-                                      runSpacing: 8,
+                                    const SizedBox(height: 11),
+                                    Text('File audio tetap tersimpan di perangkatmu. MusikKu tidak mengunggahnya.', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11.5, height: 1.35)),
+                                    const SizedBox(height: 13),
+                                    Row(
                                       children: [
                                         _LibraryPill(icon: Icons.person_rounded, label: '${_songs.map((item) => item.artist.trim()).where((item) => item.isNotEmpty).toSet().length} artis'),
-                                        const _LibraryPill(icon: Icons.phone_android_rounded, label: 'Lokal · privat'),
+                                        const SizedBox(width: 7),
+                                        const _LibraryPill(icon: Icons.lock_outline_rounded, label: 'Privat'),
+                                        const Spacer(),
+                                        IconButton.filled(
+                                          tooltip: 'Putar semua lagu lokal',
+                                          onPressed: playableSongs.isEmpty ? null : () => widget.onPlayFromList(playableSongs.first, playableSongs),
+                                          icon: const Icon(Icons.play_arrow_rounded),
+                                        ),
                                       ],
-                                    ),
-                                    const SizedBox(height: 12),
-                                    SizedBox(
-                                      width: double.infinity,
-                                      child: FilledButton.icon(
-                                        onPressed: playableSongs.isEmpty ? null : () => widget.onPlayFromList(playableSongs.first, playableSongs),
-                                        icon: const Icon(Icons.play_arrow_rounded, size: 19),
-                                        label: const Text('Putar semua'),
-                                      ),
                                     ),
                                   ],
                                 ),
@@ -230,7 +219,9 @@ class _LocalMusicPageState extends State<LocalMusicPage> {
                                   suffixIcon: _search.text.isEmpty ? null : IconButton(onPressed: _search.clear, icon: const Icon(Icons.close_rounded)),
                                   filled: true,
                                   fillColor: scheme.surfaceContainerLow,
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide.none),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.7))),
+                                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.55))),
+                                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: scheme.primary, width: 1.5)),
                                 ),
                               ),
                             ),
@@ -289,9 +280,9 @@ class _LocalMusicPageState extends State<LocalMusicPage> {
                                     padding: const EdgeInsets.only(bottom: 8),
                                     child: Material(
                                       color: scheme.surfaceContainerLow,
-                                      borderRadius: BorderRadius.circular(19),
+                                      borderRadius: BorderRadius.circular(15),
                                       child: InkWell(
-                                        borderRadius: BorderRadius.circular(19),
+                                        borderRadius: BorderRadius.circular(15),
                                         onTap: () => unawaited(widget.onPlayFromList(video, playableSongs)),
                                         child: Padding(
                                           padding: const EdgeInsets.fromLTRB(10, 9, 5, 9),

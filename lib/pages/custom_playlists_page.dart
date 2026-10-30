@@ -406,7 +406,7 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
                 crossAxisCount: columns,
                 crossAxisSpacing: 12,
                 mainAxisSpacing: 12,
-                childAspectRatio: 0.79,
+                childAspectRatio: 0.82,
               ),
               itemBuilder: (context, index) {
                 final playlist = widget.playlists[index];
@@ -438,8 +438,8 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
     return Material(
       color: scheme.surfaceContainerLow,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(22),
-        side: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.56)),
+        borderRadius: BorderRadius.circular(17),
+        side: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.48)),
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -475,7 +475,7 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
                     top: 10,
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-                      decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.54), borderRadius: BorderRadius.circular(999)),
+                      decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.54), borderRadius: BorderRadius.circular(8)),
                       child: Text('${playlist.songs.length} lagu', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800)),
                     ),
                   ),

@@ -7,39 +7,43 @@ extension _YoutubeHubLibraryViews on _YoutubeHubState {
   /// Dipakai di dalam blok `_libraryGroup`, jadi tanpa kartu atau garis tepi.
   Widget _libraryCard(String title, String subtitle, IconData icon, VoidCallback onTap) {
     final scheme = Theme.of(context).colorScheme;
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
-        child: Row(
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: scheme.surfaceContainerHigh.withValues(alpha: 0.9),
-                shape: BoxShape.circle,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(13, 12, 13, 12),
+          child: Row(
+            children: [
+              Container(
+                width: 43,
+                height: 43,
+                decoration: BoxDecoration(
+                  color: scheme.primaryContainer,
+                  borderRadius: BorderRadius.circular(13),
+                ),
+                child: Icon(icon, color: scheme.onPrimaryContainer, size: 21),
               ),
-              child: Icon(icon, color: scheme.primary, size: 22),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14.5)),
-                  const SizedBox(height: 3),
-                  Text(subtitle, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11.5, height: 1.25)),
-                ],
+              const SizedBox(width: 13),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13.5)),
+                    const SizedBox(height: 3),
+                    Text(subtitle, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10.5, height: 1.25)),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(width: 6),
-            Icon(Icons.chevron_right_rounded, color: scheme.onSurfaceVariant, size: 22),
-          ],
+              const SizedBox(width: 6),
+              Icon(Icons.arrow_forward_rounded, color: scheme.onSurfaceVariant, size: 18),
+            ],
+          ),
         ),
       ),
     );
   }
+
 
   /// Blok lembut tanpa garis tepi; baris di dalamnya dipisah garis tipis.
   Widget _libraryGroup(List<Widget> rows) {
@@ -47,16 +51,13 @@ extension _YoutubeHubLibraryViews on _YoutubeHubState {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Material(
-        color: scheme.surfaceContainerLow.withValues(alpha: 0.82),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(22),
-          side: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.52)),
-        ),
+        color: scheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(18),
         clipBehavior: Clip.antiAlias,
         child: Column(
           children: [
             for (var i = 0; i < rows.length; i++) ...[
-              if (i > 0) const Divider(height: 1, indent: 72, endIndent: 16),
+              if (i > 0) Divider(height: 1, indent: 69, endIndent: 12, color: scheme.outlineVariant.withValues(alpha: 0.56)),
               rows[i],
             ],
           ],
@@ -64,6 +65,7 @@ extension _YoutubeHubLibraryViews on _YoutubeHubState {
       ),
     );
   }
+
 
   Widget _librarySectionLabel(String text) {
     final scheme = Theme.of(context).colorScheme;
@@ -85,33 +87,87 @@ extension _YoutubeHubLibraryViews on _YoutubeHubState {
 
   List<Widget> _libraryView() {
     final topInset = MediaQuery.paddingOf(context).top;
+    final scheme = Theme.of(context).colorScheme;
+
+    Widget stat(String value, String label) {
+      return Expanded(
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(12, 12, 8, 12),
+          decoration: BoxDecoration(
+            color: scheme.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(15),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(value, style: TextStyle(color: scheme.primary, fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: -0.7)),
+              const SizedBox(height: 3),
+              Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 9.5, fontWeight: FontWeight.w700)),
+            ],
+          ),
+        ),
+      );
+    }
 
     return <Widget>[
-      // Header koleksi mengikuti visual katalog streaming dan tetap ringkas.
       SliverToBoxAdapter(
         child: Padding(
-          padding: EdgeInsets.fromLTRB(16, topInset + 10, 16, 8),
-          child: FlowPageHero(
-            icon: Icons.library_music_rounded,
-            eyebrow: 'RUANG MUSIKMU',
-            title: 'Koleksi kamu',
-            subtitle: 'Playlist, favorit, riwayat, dan musik dari perangkatmu.',
-            trailing: IconButton.filledTonal(
-              tooltip: 'Pembaruan aplikasi',
-              onPressed: () => unawaited(AppUpdateSheet.show(context)),
-              icon: const Icon(Icons.system_update_alt_rounded),
-            ),
+          padding: EdgeInsets.fromLTRB(18, topInset + 18, 16, 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'RUANG PRIBADI',
+                      style: TextStyle(color: scheme.primary, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.4),
+                    ),
+                  ),
+                  IconButton.filledTonal(
+                    tooltip: 'Pembaruan aplikasi',
+                    onPressed: () => unawaited(AppUpdateSheet.show(context)),
+                    icon: const Icon(Icons.system_update_alt_rounded),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 9),
+              Text.rich(
+                TextSpan(
+                  children: [
+                    const TextSpan(text: 'Semua musikmu.\n'),
+                    TextSpan(text: 'Satu tempat.', style: TextStyle(color: scheme.primary)),
+                  ],
+                ),
+                style: TextStyle(color: scheme.onSurface, fontSize: 31, height: 1.0, fontWeight: FontWeight.w900, letterSpacing: -1.4),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Simpan, susun, dan temukan lagi lagu yang pernah kamu dengarkan.',
+                style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12, height: 1.4),
+              ),
+              const SizedBox(height: 17),
+              Row(
+                children: [
+                  stat('${widget.customPlaylistCount}', 'PLAYLIST'),
+                  const SizedBox(width: 8),
+                  stat('${widget.favorites.length}', 'FAVORIT'),
+                  const SizedBox(width: 8),
+                  stat('${widget.recentlyPlayed.length}', 'RIWAYAT'),
+                ],
+              ),
+            ],
           ),
         ),
       ),
-      SliverToBoxAdapter(child: _librarySectionLabel('Playlist')),
+      SliverToBoxAdapter(child: _librarySectionLabel('Playlist & mix')),
       SliverToBoxAdapter(
         child: _libraryGroup([
           _libraryCard('Playlist MusikKu', '${widget.customPlaylistCount} playlist buatan sendiri · bisa diurutkan dan diedit', Icons.queue_music_rounded, widget.onOpenCustomPlaylists ?? () {}),
-          _libraryCard('Playlist pintar', 'Mix kamu dibuat dari lagu yang sering diputar, ditambah favorit dan riwayat', Icons.auto_awesome_rounded, _showSmartPlaylistPicker),
+          _libraryCard('Playlist pintar', 'Mix dari lagu yang sering diputar, favorit, dan riwayat', Icons.auto_awesome_rounded, _showSmartPlaylistPicker),
         ]),
       ),
-      SliverToBoxAdapter(child: _librarySectionLabel('Pintasan koleksi')),
+      SliverToBoxAdapter(child: _librarySectionLabel('Koleksi cepat')),
       SliverToBoxAdapter(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -134,44 +190,42 @@ extension _YoutubeHubLibraryViews on _YoutubeHubState {
           ),
         ),
       ),
-      SliverToBoxAdapter(child: _librarySectionLabel('Lainnya')),
+      SliverToBoxAdapter(child: _librarySectionLabel('Pengaturan & aktivitas')),
       SliverToBoxAdapter(
         child: _libraryGroup([
           _libraryCard('Statistik mendengarkan', 'Ringkasan waktu dengar, lagu, dan kebiasaan musik', Icons.insights_outlined, () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => StatsPage(storage: _storage)))),
-          _libraryCard('Pengaturan MusikKu', 'Tema, tampilan pemutar, dan preferensi jaringan', Icons.tune_rounded, _showAppSettings),
+          _libraryCard('Pengaturan MusikKu', 'Tema, penggunaan data, dan preferensi pemutaran', Icons.tune_rounded, _showAppSettings),
         ]),
       ),
-      const SliverToBoxAdapter(child: SizedBox(height: 12)),
+      const SliverToBoxAdapter(child: SizedBox(height: 18)),
     ];
   }
+
 
   /// Ubin pintasan: warna lembut tanpa garis tepi, ikon polos di kiri atas,
   /// judul dan keterangan di bawahnya.
   Widget _libraryQuickTile({required String title, required String subtitle, required IconData icon, required VoidCallback onTap}) {
     final scheme = Theme.of(context).colorScheme;
     return Material(
-      color: scheme.surfaceContainerLow.withValues(alpha: 0.82),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-        side: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.48)),
-      ),
+      color: scheme.surfaceContainerLow,
+      borderRadius: BorderRadius.circular(17),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.all(14),
+          padding: const EdgeInsets.all(13),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Icon(icon, color: scheme.primary, size: 26),
+              Icon(icon, color: scheme.primary, size: 23),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800)),
-                  const SizedBox(height: 2),
-                  Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 10.5, color: scheme.onSurfaceVariant)),
+                  Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w900)),
+                  const SizedBox(height: 3),
+                  Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 10, color: scheme.onSurfaceVariant)),
                 ],
               ),
             ],
@@ -180,6 +234,7 @@ extension _YoutubeHubLibraryViews on _YoutubeHubState {
       ),
     );
   }
+
 
   void _openLocalMusic() {
     Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => LocalMusicPage(onPlayFromList: widget.onPlayFromList, onAddToQueue: widget.onAddToQueue)));

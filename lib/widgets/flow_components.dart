@@ -1,9 +1,6 @@
-import 'dart:ui' as ui;
-
 import 'package:flutter/material.dart';
 
 /// Reusable editorial hero for secondary MusikKu pages.
-/// Uses the active theme so the same layout works in dark, light, and AMOLED modes.
 class FlowPageHero extends StatelessWidget {
   const FlowPageHero({
     super.key,
@@ -25,102 +22,75 @@ class FlowPageHero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final radius = BorderRadius.circular(compact ? 17 : 22);
-    return ClipRRect(
-      borderRadius: radius,
-      child: BackdropFilter(
-        filter: ui.ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-        child: Container(
-          width: double.infinity,
-          padding: EdgeInsets.all(compact ? 15 : 19),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                scheme.primary.withValues(alpha: 0.20),
-                scheme.secondary.withValues(alpha: 0.10),
-                scheme.surfaceContainerLow.withValues(alpha: 0.78),
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.fromLTRB(compact ? 14 : 18, compact ? 14 : 18, compact ? 12 : 16, compact ? 14 : 18),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(compact ? 16 : 20),
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: dark ? 0.45 : 0.72)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: compact ? 42 : 50,
+            height: compact ? 42 : 50,
+            decoration: BoxDecoration(
+              color: scheme.primary,
+              borderRadius: BorderRadius.circular(compact ? 12 : 14),
+            ),
+            child: Icon(icon, size: compact ? 22 : 26, color: scheme.onPrimary),
+          ),
+          SizedBox(width: compact ? 11 : 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if ((eyebrow ?? '').isNotEmpty) ...[
+                  Text(
+                    eyebrow!.toUpperCase(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: scheme.primary,
+                      fontSize: 9,
+                      letterSpacing: 1.35,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                ],
+                Text(
+                  title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: compact ? 17 : 22,
+                    height: 1.04,
+                    letterSpacing: -0.8,
+                    fontWeight: FontWeight.w900,
+                    color: scheme.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  subtitle,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: compact ? 11 : 12,
+                    height: 1.38,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
               ],
             ),
-            borderRadius: radius,
-            border: Border.all(color: scheme.primary.withValues(alpha: 0.20)),
-            boxShadow: [
-              BoxShadow(
-                color: scheme.primary.withValues(alpha: 0.06),
-                blurRadius: 24,
-                offset: const Offset(0, 9),
-              ),
-            ],
           ),
-          child: Row(
-            children: [
-              Container(
-                width: compact ? 45 : 54,
-                height: compact ? 45 : 54,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [scheme.primary, scheme.secondary],
-                  ),
-                  borderRadius: BorderRadius.circular(compact ? 12 : 15),
-                ),
-                child: Icon(icon, size: compact ? 23 : 28, color: scheme.onPrimary),
-              ),
-              SizedBox(width: compact ? 11 : 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if ((eyebrow ?? '').isNotEmpty) ...[
-                      Text(
-                        eyebrow!.toUpperCase(),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: scheme.secondary,
-                          fontSize: 9.5,
-                          letterSpacing: 1.15,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                    ],
-                    Text(
-                      title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: compact ? 16 : 20,
-                        height: 1.1,
-                        letterSpacing: -0.45,
-                        fontWeight: FontWeight.w900,
-                        color: scheme.onSurface,
-                      ),
-                    ),
-                    const SizedBox(height: 5),
-                    Text(
-                      subtitle,
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: compact ? 11 : 12,
-                        height: 1.35,
-                        color: scheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              if (trailing != null) ...[
-                const SizedBox(width: 8),
-                trailing!,
-              ],
-            ],
-          ),
-        ),
+          if (trailing != null) ...[const SizedBox(width: 8), trailing!],
+        ],
       ),
     );
   }
@@ -144,13 +114,9 @@ class FlowSectionHeader extends StatelessWidget {
     return Row(
       children: [
         Container(
-          width: 32,
-          height: 32,
-          decoration: BoxDecoration(
-            color: scheme.primary.withValues(alpha: 0.13),
-            borderRadius: BorderRadius.circular(11),
-          ),
-          child: Icon(icon, color: scheme.primary, size: 18),
+          width: 4,
+          height: 23,
+          decoration: BoxDecoration(color: scheme.primary, borderRadius: BorderRadius.circular(4)),
         ),
         const SizedBox(width: 10),
         Expanded(

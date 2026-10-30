@@ -358,12 +358,11 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
     final d = _details;
     final title = d?.title ?? widget.title;
     final avatar = (d?.avatarUrl.isNotEmpty == true) ? d!.avatarUrl : widget.thumbnailUrl;
-
     final meta = <String>[];
     if (d != null) {
       if (d.handle.isNotEmpty) meta.add(d.handle.startsWith('@') ? d.handle : '@${d.handle}');
       if (d.hiddenSubscriberCount) {
-        meta.add('Jumlah subscriber disembunyikan');
+        meta.add('Subscriber disembunyikan');
       } else if (d.subscriberCount != null) {
         meta.add('${formatCount(d.subscriberCount!)} subscriber');
       }
@@ -371,66 +370,54 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
     }
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 0, 14, 6),
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
       child: Container(
-        padding: const EdgeInsets.fromLTRB(15, 15, 15, 14),
+        padding: const EdgeInsets.fromLTRB(14, 14, 14, 13),
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [scheme.primary.withValues(alpha: 0.12), scheme.surfaceContainerLow, scheme.secondary.withValues(alpha: 0.05)],
-          ),
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.55)),
+          color: scheme.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.56)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              CircleAvatar(
-                radius: 36,
-                backgroundColor: scheme.surfaceContainerHighest,
-                backgroundImage: avatar.isNotEmpty ? NetworkImage(avatar) : null,
-                child: avatar.isEmpty ? const Icon(Icons.person_rounded, size: 34) : null,
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Text(
-                  title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, height: 1.15),
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 34,
+                  backgroundColor: scheme.surfaceContainerHighest,
+                  backgroundImage: avatar.isNotEmpty ? NetworkImage(avatar) : null,
+                  child: avatar.isEmpty ? const Icon(Icons.person_rounded, size: 32) : null,
+                ),
+                const SizedBox(width: 13),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('CHANNEL MUSIK', style: TextStyle(color: scheme.primary, fontSize: 9, letterSpacing: 1.3, fontWeight: FontWeight.w900)),
+                      const SizedBox(height: 4),
+                      Text(title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, height: 1.05, letterSpacing: -0.55)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            if (meta.isNotEmpty) ...[
+              const SizedBox(height: 11),
+              Text(meta.join('  /  '), style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11, height: 1.3)),
+            ],
+            if ((d?.description ?? '').trim().isNotEmpty) ...[
+              const SizedBox(height: 7),
+              InkWell(
+                onTap: () => _selectTab(2),
+                child: Row(
+                  children: [
+                    Expanded(child: Text(d!.description.trim(), maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11.5, height: 1.35))),
+                    Icon(Icons.chevron_right_rounded, color: scheme.onSurfaceVariant, size: 19),
+                  ],
                 ),
               ),
             ],
-          ),
-          const SizedBox(height: 10),
-          if (meta.isNotEmpty)
-            Text(
-              meta.join(' • '),
-              style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12.5, height: 1.4),
-            ),
-          if ((d?.description ?? '').trim().isNotEmpty) ...[
-            const SizedBox(height: 6),
-            InkWell(
-              onTap: () => _selectTab(2),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      d!.description.trim(),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12.5),
-                    ),
-                  ),
-                  Icon(Icons.chevron_right_rounded, color: scheme.onSurfaceVariant, size: 20),
-                ],
-              ),
-            ),
-          ],
           ],
         ),
       ),
@@ -441,43 +428,35 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
     final isLiveNow = _liveItems.any((v) => v.isLive);
     final labels = <Widget>[
       const Text('Musik'),
-      Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (isLiveNow) ...[
-            const Icon(Icons.circle, size: 9, color: Color(0xFFE53935)),
-            const SizedBox(width: 6),
-          ],
-          const Text('Live'),
-        ],
-      ),
+      Row(mainAxisSize: MainAxisSize.min, children: [
+        if (isLiveNow) ...[const Icon(Icons.circle, size: 8, color: Color(0xFFE53935)), const SizedBox(width: 6)],
+        const Text('Live'),
+      ]),
       const Text('Tentang'),
     ];
+    final scheme = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 6, 14, 10),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Container(
-          padding: const EdgeInsets.all(4),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surfaceContainerLow,
-            borderRadius: BorderRadius.circular(99),
-            border: Border.all(color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.5)),
-          ),
-          child: Row(
-            children: [
-              for (var i = 0; i < labels.length; i++) ...[
-                ChoiceChip(
-                  label: labels[i],
-                  selected: _tab == i,
-                  onSelected: (_) => _selectTab(i),
-                  showCheckmark: false,
+      padding: const EdgeInsets.fromLTRB(16, 1, 16, 10),
+      child: Row(
+        children: [
+          for (var i = 0; i < labels.length; i++)
+            Expanded(
+              child: InkWell(
+                onTap: () => _selectTab(i),
+                child: Container(
+                  alignment: Alignment.center,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  decoration: BoxDecoration(
+                    border: Border(bottom: BorderSide(color: _tab == i ? scheme.primary : scheme.outlineVariant.withValues(alpha: 0.42), width: _tab == i ? 3 : 1)),
+                  ),
+                  child: DefaultTextStyle(
+                    style: TextStyle(color: _tab == i ? scheme.primary : scheme.onSurfaceVariant, fontWeight: _tab == i ? FontWeight.w900 : FontWeight.w600, fontSize: 12),
+                    child: labels[i],
+                  ),
                 ),
-                if (i != labels.length - 1) const SizedBox(width: 5),
-              ],
-            ],
-          ),
-        ),
+              ),
+            ),
+        ],
       ),
     );
   }

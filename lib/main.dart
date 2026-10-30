@@ -97,7 +97,7 @@ class MusikKuApp extends StatelessWidget {
     final surface = pink ? const Color(0xFFFFFBFC) : (isDark ? (amoled ? Colors.black : appPanel) : appLightPanel);
 
     final base = ColorScheme.fromSeed(
-      seedColor: pink ? const Color(0xFFE879A6) : appGoldStrong,
+      seedColor: pink ? const Color(0xFFE879A6) : const Color(0xFF91B52C),
       brightness: brightness,
       surface: surface,
     );
@@ -129,30 +129,29 @@ class MusikKuApp extends StatelessWidget {
             error: const Color(0xFFD94A5C),
           )
         : base.copyWith(
-            // MusikKu identity: charcoal surfaces, accessible teal navigation/actions,
-            // and a warm amber accent. Avoids the former disconnected violet dock.
-            primary: isDark ? const Color(0xFF55DCCB) : const Color(0xFF087F79),
-            onPrimary: isDark ? const Color(0xFF052D29) : Colors.white,
-            primaryContainer: isDark ? const Color(0xFF153E39) : const Color(0xFFDDF8F2),
-            onPrimaryContainer: isDark ? const Color(0xFFC7FFF4) : const Color(0xFF104E4A),
-            secondary: isDark ? const Color(0xFFFFC47D) : const Color(0xFF975500),
-            onSecondary: isDark ? const Color(0xFF3B260D) : Colors.white,
-            secondaryContainer: isDark ? const Color(0xFF46321E) : const Color(0xFFFFF0D8),
-            onSecondaryContainer: isDark ? const Color(0xFFFFE5C2) : const Color(0xFF653900),
-            tertiary: isDark ? const Color(0xFFFF9AAB) : const Color(0xFFB93756),
-            tertiaryContainer: isDark ? const Color(0xFF552B36) : const Color(0xFFFFE1E7),
-            onTertiary: isDark ? const Color(0xFF3E101C) : Colors.white,
-            onTertiaryContainer: isDark ? const Color(0xFFFFD9E0) : const Color(0xFF721E34),
+            // MusikKu identity: ink-black / warm-paper surfaces and a vivid lime accent.
+            primary: isDark ? const Color(0xFFD8FF55) : const Color(0xFF526B19),
+            onPrimary: isDark ? const Color(0xFF171B0D) : Colors.white,
+            primaryContainer: isDark ? const Color(0xFF303B19) : const Color(0xFFEAF4C9),
+            onPrimaryContainer: isDark ? const Color(0xFFE8FFAC) : const Color(0xFF34450D),
+            secondary: isDark ? const Color(0xFFFF906D) : const Color(0xFFB65335),
+            onSecondary: isDark ? const Color(0xFF2B140D) : Colors.white,
+            secondaryContainer: isDark ? const Color(0xFF47271D) : const Color(0xFFFBE2D8),
+            onSecondaryContainer: isDark ? const Color(0xFFFFD7C9) : const Color(0xFF6C2D1A),
+            tertiary: isDark ? const Color(0xFF9FD8C6) : const Color(0xFF367C68),
+            tertiaryContainer: isDark ? const Color(0xFF203B32) : const Color(0xFFDCEFE6),
+            onTertiary: isDark ? const Color(0xFF10231D) : Colors.white,
+            onTertiaryContainer: isDark ? const Color(0xFFC9F5E3) : const Color(0xFF1D4D40),
             surface: surface,
-            surfaceContainerLowest: isDark ? const Color(0xFF080D0E) : Colors.white,
-            surfaceContainerLow: isDark ? const Color(0xFF141C1D) : const Color(0xFFFAFCFB),
-            surfaceContainer: isDark ? const Color(0xFF192223) : const Color(0xFFF0F5F3),
-            surfaceContainerHigh: isDark ? const Color(0xFF202A2B) : const Color(0xFFE7EFEC),
-            surfaceContainerHighest: isDark ? const Color(0xFF2A3637) : const Color(0xFFDDE7E3),
-            onSurface: isDark ? const Color(0xFFF0F7F5) : const Color(0xFF192321),
-            onSurfaceVariant: isDark ? const Color(0xFFB0C2BE) : const Color(0xFF586A66),
-            outline: isDark ? const Color(0xFF465756) : const Color(0xFFCAD6D3),
-            outlineVariant: isDark ? const Color(0xFF2C3A39) : const Color(0xFFDCE6E3),
+            surfaceContainerLowest: isDark ? const Color(0xFF0A0C08) : Colors.white,
+            surfaceContainerLow: isDark ? const Color(0xFF1A1D16) : const Color(0xFFFBFAF2),
+            surfaceContainer: isDark ? const Color(0xFF20241A) : const Color(0xFFF0EFE3),
+            surfaceContainerHigh: isDark ? const Color(0xFF292E21) : const Color(0xFFE8E7D9),
+            surfaceContainerHighest: isDark ? const Color(0xFF343A2A) : const Color(0xFFDDDDCC),
+            onSurface: isDark ? const Color(0xFFF3F4E9) : const Color(0xFF202219),
+            onSurfaceVariant: isDark ? const Color(0xFFB5B9A8) : const Color(0xFF696C5C),
+            outline: isDark ? const Color(0xFF515844) : const Color(0xFFC9CBB7),
+            outlineVariant: isDark ? const Color(0xFF353B2B) : const Color(0xFFE0E1D2),
             error: const Color(0xFFD94A5C),
           );
 
@@ -227,7 +226,7 @@ class MusikKuApp extends StatelessWidget {
         color: surface,
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(22),
+          borderRadius: BorderRadius.circular(17),
           side: BorderSide(
             color: scheme.outlineVariant.withValues(alpha: isDark ? 0.40 : 0.78),
           ),
@@ -291,7 +290,7 @@ class MusikKuApp extends StatelessWidget {
         prefixIconColor: scheme.onSurfaceVariant,
         suffixIconColor: scheme.onSurfaceVariant,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(

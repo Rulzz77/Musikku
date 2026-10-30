@@ -54,9 +54,9 @@ extension _HomeUiLayout on _HomePageState {
               Positioned(
                 left: 12,
                 right: 12,
-                // Keep a real 14dp gap above the 64dp glass dock. Include the
+                // Keep a real 14dp gap above the 66dp floating dock. Include the
                 // Android gesture/system inset so the mini-player never touches it.
-                bottom: safeBottom + 64 + 8 + 14,
+                bottom: safeBottom + 66 + 8 + 12,
                 child: MiniMusicPlayer(
                   key: ValueKey<String>('mini-music-player-${current.videoId}'),
                   video: current,

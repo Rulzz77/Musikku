@@ -47,35 +47,58 @@ extension _YoutubeHubVideoComponents on _YoutubeHubState {
   }
 
   Widget _topBar({String? title}) {
+    final scheme = Theme.of(context).colorScheme;
     return SliverToBoxAdapter(
       child: Padding(
-        padding: EdgeInsets.fromLTRB(14, MediaQuery.paddingOf(context).top + 4, 10, 4),
+        padding: EdgeInsets.fromLTRB(17, MediaQuery.paddingOf(context).top + 12, 14, 13),
         child: Row(
           children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: Image.asset(
-                'assets/icon/app_icon.png',
-                width: 36,
-                height: 36,
-                fit: BoxFit.cover,
-                semanticLabel: 'Logo MusikKu',
+            Container(
+              width: 5,
+              height: 29,
+              decoration: BoxDecoration(
+                color: scheme.primary,
+                borderRadius: BorderRadius.circular(4),
               ),
             ),
-            const SizedBox(width: 9),
+            const SizedBox(width: 11),
             Expanded(
-              child: Text(
-                title ?? appName,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: -0.7),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'MUSIKKU',
+                    style: TextStyle(
+                      color: scheme.primary,
+                      fontSize: 8,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 1.5,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    title ?? appName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 23,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: -0.8,
+                      height: 1.0,
+                    ),
+                  ),
+                ],
               ),
             ),
-            IconButton(
-              tooltip: 'Cari',
-              visualDensity: VisualDensity.compact,
-              onPressed: _openSearch,
-              icon: const Icon(Icons.search_rounded),
+            Material(
+              color: scheme.surfaceContainerHigh,
+              borderRadius: BorderRadius.circular(13),
+              child: IconButton(
+                tooltip: 'Cari',
+                visualDensity: VisualDensity.compact,
+                onPressed: _openSearch,
+                icon: const Icon(Icons.search_rounded),
+              ),
             ),
           ],
         ),
@@ -83,32 +106,51 @@ extension _YoutubeHubVideoComponents on _YoutubeHubState {
     );
   }
 
+
   Widget _sectionHeader(String title, {String? action, VoidCallback? onAction}) {
     final scheme = Theme.of(context).colorScheme;
     return SliverToBoxAdapter(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(17, 20, 12, 10),
+        padding: const EdgeInsets.fromLTRB(18, 22, 14, 10),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Container(
-              width: 5,
-              height: 23,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [scheme.primary, scheme.secondary]),
-                borderRadius: BorderRadius.circular(999),
+            Expanded(
+              child: Text(
+                title,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: -0.6,
+                  height: 1.08,
+                ),
               ),
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(title, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: -0.55, height: 1.15)),
-            ),
-            if (action != null) TextButton(onPressed: onAction, style: TextButton.styleFrom(visualDensity: VisualDensity.compact), child: Text(action, style: const TextStyle(fontWeight: FontWeight.w800))),
-            if (action == null) Icon(Icons.auto_awesome_rounded, size: 17, color: scheme.primary.withValues(alpha: 0.70)),
+            if (action != null)
+              TextButton(
+                onPressed: onAction,
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  foregroundColor: scheme.primary,
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+                ),
+                child: Text(action, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900)),
+              )
+            else
+              Container(
+                width: 24,
+                height: 3,
+                decoration: BoxDecoration(
+                  color: scheme.primary,
+                  borderRadius: BorderRadius.circular(99),
+                ),
+              ),
           ],
         ),
       ),
     );
   }
+
 
   Widget _videoCard(YoutubeSearchResult video) {
     final scheme = Theme.of(context).colorScheme;
@@ -119,103 +161,144 @@ extension _YoutubeHubVideoComponents on _YoutubeHubState {
 
     return TweenAnimationBuilder<double>(
       key: ValueKey<String>('flow-song-${video.videoId}'),
-      duration: const Duration(milliseconds: 280),
+      duration: const Duration(milliseconds: 240),
       curve: Curves.easeOutCubic,
       tween: Tween<double>(begin: 0, end: 1),
       builder: (context, value, child) => Opacity(
         opacity: value.clamp(0.0, 1.0).toDouble(),
-        child: Transform.translate(
-          offset: Offset(0, 12 * (1 - value)),
-          child: child,
-        ),
+        child: Transform.translate(offset: Offset(0, 8 * (1 - value)), child: child),
       ),
       child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
-      child: Material(
-        color: isCurrent ? scheme.primaryContainer.withValues(alpha: 0.50) : scheme.surfaceContainerLow,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-          side: BorderSide(color: isCurrent ? scheme.primary.withValues(alpha: 0.48) : scheme.outlineVariant.withValues(alpha: 0.28), width: isCurrent ? 1.35 : 0.7),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: () => unawaited(widget.onPlay(video)),
-          onLongPress: widget.onShowVideoMenu == null ? null : () => widget.onShowVideoMenu!(video),
-          child: Padding(
-            padding: const EdgeInsets.all(9),
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 88,
-                  height: 88,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(14),
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        UnifiedArtwork(track: video, fit: BoxFit.cover, iconSize: 30),
-                        DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.black.withValues(alpha: 0.03), Colors.black.withValues(alpha: 0.40)]))),
-                        Center(
-                          child: Container(
-                            width: 31,
-                            height: 31,
-                            decoration: BoxDecoration(shape: BoxShape.circle, color: isCurrent ? scheme.primary : Colors.black.withValues(alpha: 0.53), border: Border.all(color: Colors.white.withValues(alpha: 0.72), width: 1.1)),
-                            child: Icon(isCurrent ? Icons.graphic_eq_rounded : Icons.play_arrow_rounded, color: Colors.white, size: 20),
+        padding: const EdgeInsets.symmetric(horizontal: 17),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () => unawaited(widget.onPlay(video)),
+            onLongPress: widget.onShowVideoMenu == null ? null : () => widget.onShowVideoMenu!(video),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 9),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      SizedBox(
+                        width: 76,
+                        height: 76,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              UnifiedArtwork(track: video, fit: BoxFit.cover, iconSize: 28),
+                              if (timeLabel.isNotEmpty)
+                                Positioned(
+                                  right: 4,
+                                  bottom: 4,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: Colors.black.withValues(alpha: 0.76),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(timeLabel, style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w800)),
+                                  ),
+                                ),
+                              if (progress > 0)
+                                Align(
+                                  alignment: Alignment.bottomCenter,
+                                  child: LinearProgressIndicator(
+                                    value: progress,
+                                    minHeight: 2.5,
+                                    backgroundColor: Colors.white.withValues(alpha: 0.28),
+                                    valueColor: AlwaysStoppedAnimation<Color>(scheme.primary),
+                                  ),
+                                ),
+                            ],
                           ),
                         ),
-                        if (video.liveStatus.isNotEmpty) Positioned(left: 4, top: 4, child: LiveBadge(video: video)),
-                        if (timeLabel.isNotEmpty)
-                          Positioned(
-                            right: 4,
-                            bottom: 4,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                              decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.78), borderRadius: BorderRadius.circular(5)),
-                              child: Text(timeLabel, style: const TextStyle(color: Colors.white, fontSize: 7.5, fontWeight: FontWeight.w800)),
+                      ),
+                      const SizedBox(width: 13),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            if (isCurrent) ...[
+                              Text(
+                                'SEDANG DIPUTAR',
+                                style: TextStyle(
+                                  color: scheme.primary,
+                                  fontSize: 8,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 0.9,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                            ],
+                            Text(
+                              MusicTitleFormatter.clean(video.title),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w900,
+                                height: 1.18,
+                                letterSpacing: -0.25,
+                              ),
                             ),
-                          ),
-                        if (progress > 0)
-                          Align(alignment: Alignment.bottomCenter, child: LinearProgressIndicator(value: progress, minHeight: 2.5, backgroundColor: Colors.white.withValues(alpha: 0.30), valueColor: AlwaysStoppedAnimation<Color>(scheme.primary))),
+                            const SizedBox(height: 5),
+                            Text(
+                              channel.isEmpty ? 'Musik' : channel,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: scheme.onSurfaceVariant,
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              _metaLine(video),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: scheme.onSurfaceVariant.withValues(alpha: 0.82),
+                                fontSize: 9.5,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (video.channelId.isNotEmpty) ...[
+                        const SizedBox(width: 4),
+                        ChannelAvatar(
+                          channelId: video.channelId,
+                          videoId: video.videoId,
+                          name: channel,
+                          radius: 12,
+                          onTap: () => _handleControllerOpenChannel(video.channelId, channel, ''),
+                        ),
                       ],
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 11),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      if (isCurrent) ...[
-                        Row(children: [Icon(Icons.volume_up_rounded, size: 12, color: scheme.primary), const SizedBox(width: 4), Text('SEDANG DIPUTAR', style: TextStyle(color: scheme.primary, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 0.7))]),
-                        const SizedBox(height: 3),
-                      ],
-                      Text(MusicTitleFormatter.clean(video.title), maxLines: 2, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontSize: 13.5, fontWeight: FontWeight.w800, height: 1.2, letterSpacing: -0.2)),
-                      const SizedBox(height: 5),
-                      Text(channel.isEmpty ? 'Musik' : channel, maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant, fontSize: 10.5, fontWeight: FontWeight.w700)),
-                      const SizedBox(height: 3),
-                      Text(_metaLine(video), maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant.withValues(alpha: 0.84), fontSize: 9.5)),
+                      IconButton(
+                        tooltip: 'Opsi lagu',
+                        visualDensity: VisualDensity.compact,
+                        onPressed: widget.onShowVideoMenu == null ? null : () => widget.onShowVideoMenu!(video),
+                        icon: const Icon(Icons.more_horiz_rounded, size: 21),
+                      ),
                     ],
                   ),
-                ),
-                if (video.channelId.isNotEmpty) ...[
-                  const SizedBox(width: 5),
-                  ChannelAvatar(channelId: video.channelId, videoId: video.videoId, name: channel, radius: 13, onTap: () => _handleControllerOpenChannel(video.channelId, channel, '')),
+                  const SizedBox(height: 9),
+                  Divider(height: 1, color: scheme.outlineVariant.withValues(alpha: 0.52)),
                 ],
-                IconButton(
-                  tooltip: 'Opsi lagu',
-                  visualDensity: VisualDensity.compact,
-                  onPressed: widget.onShowVideoMenu == null ? null : () => widget.onShowVideoMenu!(video),
-                  icon: const Icon(Icons.more_vert_rounded, size: 21),
-                ),
-              ],
+              ),
             ),
           ),
         ),
       ),
-      ),
     );
   }
+
 
   Widget _quickPickCard(YoutubeSearchResult video) {
     final scheme = Theme.of(context).colorScheme;

@@ -156,8 +156,8 @@ class _YoutubeSearchPageState extends State<YoutubeSearchPage> {
                     width: 42,
                     height: 42,
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(colors: [scheme.primary, scheme.secondary]),
-                      borderRadius: BorderRadius.circular(14),
+                      color: scheme.primary,
+                      borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(Icons.graphic_eq_rounded, color: scheme.onPrimary),
                   ),
@@ -169,11 +169,8 @@ class _YoutubeSearchPageState extends State<YoutubeSearchPage> {
               child: Container(
                 decoration: BoxDecoration(
                   color: scheme.surfaceContainerLow,
-                  borderRadius: BorderRadius.circular(22),
-                  border: Border.all(color: _focus.hasFocus ? scheme.primary.withValues(alpha: 0.65) : scheme.outlineVariant.withValues(alpha: 0.5)),
-                  boxShadow: [
-                    BoxShadow(color: scheme.primary.withValues(alpha: _focus.hasFocus ? 0.08 : 0.025), blurRadius: 20, offset: const Offset(0, 7)),
-                  ],
+                  borderRadius: BorderRadius.circular(15),
+                  border: Border.all(color: _focus.hasFocus ? scheme.primary : scheme.outlineVariant.withValues(alpha: 0.55), width: _focus.hasFocus ? 1.4 : 1),
                 ),
                 child: Row(
                   children: [
@@ -283,10 +280,10 @@ class _YoutubeSearchPageState extends State<YoutubeSearchPage> {
                               width: 78,
                               height: 78,
                               decoration: BoxDecoration(
-                                gradient: LinearGradient(colors: [scheme.primary.withValues(alpha: 0.17), scheme.secondary.withValues(alpha: 0.10)]),
-                                borderRadius: BorderRadius.circular(26),
+                                color: scheme.primary,
+                                borderRadius: BorderRadius.circular(18),
                               ),
-                              child: Icon(typing ? Icons.search_off_rounded : Icons.headphones_rounded, size: 38, color: scheme.primary),
+                              child: Icon(typing ? Icons.search_off_rounded : Icons.headphones_rounded, size: 38, color: scheme.onPrimary),
                             ),
                             const SizedBox(height: 14),
                             Text(
@@ -313,9 +310,9 @@ class _YoutubeSearchPageState extends State<YoutubeSearchPage> {
                         final text = items[index];
                         return Material(
                           color: scheme.surfaceContainerLow,
-                          borderRadius: BorderRadius.circular(17),
+                          borderRadius: BorderRadius.circular(14),
                           child: InkWell(
-                            borderRadius: BorderRadius.circular(17),
+                            borderRadius: BorderRadius.circular(14),
                             onTap: () => _submit(text),
                             child: Padding(
                               padding: const EdgeInsets.fromLTRB(12, 7, 6, 7),

@@ -1,9 +1,7 @@
-import 'dart:ui' as ui;
-
 import 'package:flutter/material.dart';
 
-/// Decorative, non-interactive ambient backdrop shared by MusikKu screens.
-/// The content itself remains in charge of scrolling, gestures, and playback.
+/// Shared editorial canvas for every MusikKu destination.
+/// Kept intentionally quiet so artwork and page content become the focus.
 class MusicBackdrop extends StatelessWidget {
   const MusicBackdrop({super.key, required this.child, this.intensity = 1});
 
@@ -12,25 +10,33 @@ class MusicBackdrop extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final a = (0.075 * intensity).clamp(0.0, 0.14).toDouble();
-    final b = (0.045 * intensity).clamp(0.0, 0.10).toDouble();
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final wash = (0.035 * intensity).clamp(0.0, 0.07).toDouble();
     return Stack(
       fit: StackFit.expand,
       children: [
-        Positioned(
-          top: -125,
-          right: -115,
-          child: IgnorePointer(
-            child: _GlowOrb(size: 300, color: scheme.primary.withValues(alpha: a)),
+        DecoratedBox(
+          decoration: BoxDecoration(
+            color: theme.scaffoldBackgroundColor,
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Color.lerp(theme.scaffoldBackgroundColor, scheme.primary, wash)!,
+                theme.scaffoldBackgroundColor,
+                theme.scaffoldBackgroundColor,
+              ],
+              stops: const [0, 0.28, 1],
+            ),
           ),
         ),
         Positioned(
-          bottom: -135,
-          left: -120,
-          child: IgnorePointer(
-            child: _GlowOrb(size: 330, color: scheme.secondary.withValues(alpha: b)),
-          ),
+          top: 0,
+          left: 0,
+          right: 0,
+          height: 3,
+          child: ColoredBox(color: scheme.primary.withValues(alpha: 0.76)),
         ),
         child,
       ],
@@ -38,29 +44,8 @@ class MusicBackdrop extends StatelessWidget {
   }
 }
 
-class _GlowOrb extends StatelessWidget {
-  const _GlowOrb({required this.size, required this.color});
-  final double size;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) => SizedBox(
-        width: size,
-        height: size,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: RadialGradient(
-              colors: [color, color.withValues(alpha: 0)],
-              stops: const [0, 1],
-            ),
-          ),
-        ),
-      );
-}
-
-/// Soft blurred surface for dialogs, cards, and compact controls. Uses the
-/// current theme so dark, light, and AMOLED modes stay visually coherent.
+/// Solid editorial surface. The legacy name remains to keep existing screens
+/// source-compatible; no blur is applied anymore.
 class MusicGlassPanel extends StatelessWidget {
   const MusicGlassPanel({
     super.key,
@@ -84,39 +69,25 @@ class MusicGlassPanel extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final tint = accent ?? scheme.primary;
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final borderRadius = BorderRadius.circular(radius);
     return Container(
       margin: margin,
-      child: ClipRRect(
-        borderRadius: borderRadius,
-        child: BackdropFilter(
-          filter: ui.ImageFilter.blur(sigmaX: blur, sigmaY: blur),
-          child: Container(
-            padding: padding,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  tint.withValues(alpha: dark ? 0.11 : 0.075),
-                  scheme.surfaceContainerLow.withValues(alpha: dark ? 0.68 : 0.88),
-                ],
-              ),
-              borderRadius: borderRadius,
-              border: Border.all(
-                color: scheme.outlineVariant.withValues(alpha: dark ? 0.48 : 0.72),
-              ),
-            ),
-            child: child,
-          ),
+      padding: padding,
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(radius),
+        border: Border(
+          left: BorderSide(color: tint, width: 3),
+          top: BorderSide(color: scheme.outlineVariant.withValues(alpha: dark ? 0.42 : 0.75)),
+          right: BorderSide(color: scheme.outlineVariant.withValues(alpha: dark ? 0.42 : 0.75)),
+          bottom: BorderSide(color: scheme.outlineVariant.withValues(alpha: dark ? 0.42 : 0.75)),
         ),
       ),
+      child: child,
     );
   }
 }
 
-/// Page-specific header that feels like a streaming catalogue rather than a
-/// generic settings screen. Intended for secondary pages only.
+/// Compact editorial title block for secondary pages.
 class MusicPageHeader extends StatelessWidget {
   const MusicPageHeader({
     super.key,
@@ -136,24 +107,19 @@ class MusicPageHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return MusicGlassPanel(
-      padding: const EdgeInsets.fromLTRB(16, 16, 14, 16),
-      radius: 23,
-      accent: scheme.primary,
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(2, 8, 2, 16),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            width: 48,
-            height: 48,
+            width: 44,
+            height: 44,
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [scheme.primary, scheme.secondary],
-              ),
-              borderRadius: BorderRadius.circular(16),
+              color: scheme.primary,
+              borderRadius: BorderRadius.circular(13),
             ),
-            child: Icon(icon, color: scheme.onPrimary, size: 25),
+            child: Icon(icon, color: scheme.onPrimary, size: 23),
           ),
           const SizedBox(width: 13),
           Expanded(
@@ -166,7 +132,7 @@ class MusicPageHeader extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 9,
-                    letterSpacing: 1.4,
+                    letterSpacing: 1.45,
                     fontWeight: FontWeight.w900,
                     color: scheme.primary,
                   ),
@@ -176,14 +142,14 @@ class MusicPageHeader extends StatelessWidget {
                   title,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 20, height: 1.05, fontWeight: FontWeight.w900, letterSpacing: -0.65),
+                  style: const TextStyle(fontSize: 23, height: 1.02, fontWeight: FontWeight.w900, letterSpacing: -0.85),
                 ),
                 const SizedBox(height: 5),
                 Text(
                   subtitle,
-                  maxLines: 2,
+                  maxLines: 3,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 11.5, height: 1.3, color: scheme.onSurfaceVariant),
+                  style: TextStyle(fontSize: 11.5, height: 1.35, color: scheme.onSurfaceVariant),
                 ),
               ],
             ),
@@ -221,15 +187,13 @@ class MusicEmptyState extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 66,
-            height: 66,
+            width: 62,
+            height: 62,
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [scheme.primary.withValues(alpha: 0.18), scheme.secondary.withValues(alpha: 0.12)],
-              ),
-              borderRadius: BorderRadius.circular(22),
+              color: scheme.primary,
+              borderRadius: BorderRadius.circular(18),
             ),
-            child: Icon(icon, size: 31, color: scheme.primary),
+            child: Icon(icon, size: 29, color: scheme.onPrimary),
           ),
           const SizedBox(height: 13),
           Text(title, textAlign: TextAlign.center, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900, letterSpacing: -0.25)),

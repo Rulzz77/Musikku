@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 
 import '../app_info.dart';
 import '../services/app_settings.dart';
-import '../widgets/music_design.dart';
 import 'home_page.dart';
 
 class StartupPage extends StatefulWidget {
@@ -67,131 +66,67 @@ class _StartupPageState extends State<StartupPage> {
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  scheme.primary.withValues(alpha: theme.brightness == Brightness.dark ? 0.20 : 0.10),
                   theme.scaffoldBackgroundColor,
-                  scheme.secondary.withValues(alpha: theme.brightness == Brightness.dark ? 0.10 : 0.06),
+                  Color.lerp(theme.scaffoldBackgroundColor, scheme.primary, 0.08)!,
+                  theme.scaffoldBackgroundColor,
                 ],
               ),
             ),
           ),
-          Positioned(
-            top: -100,
-            right: -70,
-            child: Container(
-              width: 280,
-              height: 280,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: scheme.primary.withValues(alpha: 0.08),
-              ),
-            ),
-          ),
-          Positioned(
-            bottom: -135,
-            left: -70,
-            child: Container(
-              width: 320,
-              height: 320,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: scheme.secondary.withValues(alpha: 0.07),
-              ),
-            ),
-          ),
+          Positioned(top: 0, left: 0, right: 0, height: 4, child: ColoredBox(color: scheme.primary)),
           Center(
             child: TweenAnimationBuilder<double>(
-              tween: Tween(begin: 0.90, end: 1.0),
+              tween: Tween(begin: 0.94, end: 1.0),
               duration: const Duration(milliseconds: 650),
               curve: Curves.easeOutCubic,
-              builder: (context, scale, child) => Transform.scale(
-                scale: scale,
-                child: child,
+              builder: (context, scale, child) => Opacity(
+                opacity: scale.clamp(0.0, 1.0).toDouble(),
+                child: Transform.scale(scale: scale, child: child),
               ),
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 360),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: MusicGlassPanel(
-                    padding: const EdgeInsets.fromLTRB(24, 30, 24, 22),
-                    radius: 32,
-                    accent: scheme.primary,
-                    blur: 18,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 112,
-                          height: 112,
-                          padding: const EdgeInsets.all(5),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(34),
-                            gradient: LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [scheme.primary, scheme.secondary],
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: scheme.primary.withValues(alpha: 0.28),
-                                blurRadius: 38,
-                                offset: const Offset(0, 16),
-                              ),
-                            ],
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(29),
-                            child: Image.asset(
-                              'assets/icon/app_icon.png',
-                              fit: BoxFit.cover,
-                              filterQuality: FilterQuality.high,
-                              errorBuilder: (_, _, _) => Container(
-                                color: scheme.surfaceContainerHighest,
-                                alignment: Alignment.center,
-                                child: Icon(Icons.graphic_eq_rounded, size: 50, color: scheme.primary),
+                  padding: const EdgeInsets.symmetric(horizontal: 30),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 96,
+                        height: 96,
+                        decoration: BoxDecoration(color: scheme.primary, borderRadius: BorderRadius.circular(25)),
+                        clipBehavior: Clip.antiAlias,
+                        child: Image.asset(
+                          'assets/icon/app_icon.png',
+                          fit: BoxFit.cover,
+                          filterQuality: FilterQuality.high,
+                          errorBuilder: (_, _, _) => Icon(Icons.graphic_eq_rounded, size: 48, color: scheme.onPrimary),
+                        ),
+                      ),
+                      const SizedBox(height: 27),
+                      Text(appName, style: TextStyle(fontSize: 42, height: 0.98, letterSpacing: -1.8, fontWeight: FontWeight.w900, color: scheme.onSurface)),
+                      const SizedBox(height: 9),
+                      Text('MUSIK. SUASANA. MOMENMU.', style: TextStyle(color: scheme.primary, fontSize: 10, letterSpacing: 1.65, fontWeight: FontWeight.w900)),
+                      const SizedBox(height: 34),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(3),
+                              child: LinearProgressIndicator(
+                                minHeight: 3,
+                                backgroundColor: scheme.outlineVariant.withValues(alpha: 0.55),
+                                valueColor: AlwaysStoppedAnimation<Color>(scheme.primary),
                               ),
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 24),
-                        Text(
-                          appName,
-                          style: TextStyle(
-                            fontSize: 31,
-                            height: 1,
-                            letterSpacing: -1.1,
-                            fontWeight: FontWeight.w900,
-                            color: scheme.onSurface,
-                          ),
-                        ),
-                        const SizedBox(height: 9),
-                        Text(
-                          'MUSIK YANG SELALU MENEMANIMU',
-                          style: TextStyle(
-                            color: scheme.onSurfaceVariant,
-                            fontSize: 9.5,
-                            letterSpacing: 1.7,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        const SizedBox(height: 30),
-                        SizedBox(
-                          width: 92,
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(99),
-                            child: LinearProgressIndicator(
-                              minHeight: 3,
-                              backgroundColor: scheme.primary.withValues(alpha: 0.12),
-                              valueColor: AlwaysStoppedAnimation<Color>(scheme.secondary),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'v$appVersion  •  build $appBuildNumber',
-                          style: TextStyle(color: scheme.onSurfaceVariant.withValues(alpha: 0.72), fontSize: 10, fontWeight: FontWeight.w600),
-                        ),
-                      ],
-                    ),
+                          const SizedBox(width: 12),
+                          Icon(Icons.graphic_eq_rounded, size: 18, color: scheme.primary),
+                        ],
+                      ),
+                      const SizedBox(height: 15),
+                      Text('v$appVersion  ·  build $appBuildNumber', style: TextStyle(color: scheme.onSurfaceVariant.withValues(alpha: 0.78), fontSize: 10, fontWeight: FontWeight.w700)),
+                    ],
                   ),
                 ),
               ),

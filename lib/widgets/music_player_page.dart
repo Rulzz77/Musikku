@@ -109,14 +109,12 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final isDarkTheme = theme.brightness == Brightness.dark;
-    // Keep the player background aligned with the active theme. The old
-    // fixed charcoal top gradient made dark text disappear in Pink/Light mode.
+    // A quieter album-stage canvas: the artwork supplies atmosphere, while
+    // the solid themed wash keeps controls readable in dark, light and AMOLED.
     final playerTopColor = isDarkTheme
-        ? const Color(0xFF101718)
-        : Color.lerp(scheme.surface, scheme.primaryContainer, 0.28)!;
-    final playerMidColor = isDarkTheme
-        ? Color.lerp(const Color(0xFF101718), scheme.surface, 0.10)!
-        : Color.lerp(playerTopColor, scheme.surface, 0.58)!;
+        ? const Color(0xFF10120D)
+        : Color.lerp(scheme.surface, scheme.primaryContainer, 0.12)!;
+    final playerMidColor = Color.lerp(playerTopColor, scheme.surface, isDarkTheme ? 0.34 : 0.72)!;
     return Material(
       color: scheme.surface,
       child: Stack(
@@ -127,11 +125,11 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
           // crisp and does not resize when playback changes.
           Positioned.fill(
             child: ImageFiltered(
-              imageFilter: ui.ImageFilter.blur(sigmaX: 42, sigmaY: 42),
+              imageFilter: ui.ImageFilter.blur(sigmaX: 48, sigmaY: 48),
               child: Transform.scale(
                 scale: 1.18,
                 child: Opacity(
-                  opacity: isDarkTheme ? 0.34 : 0.16,
+                  opacity: isDarkTheme ? 0.22 : 0.10,
                   child: AlbumArtworkImage(
                     track: widget.video,
                     fit: BoxFit.cover,
@@ -148,26 +146,34 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    playerTopColor.withValues(alpha: isDarkTheme ? 0.72 : 0.84),
-                    playerMidColor.withValues(alpha: isDarkTheme ? 0.80 : 0.89),
-                    scheme.surface.withValues(alpha: isDarkTheme ? 0.89 : 0.94),
+                    playerTopColor.withValues(alpha: isDarkTheme ? 0.86 : 0.91),
+                    playerMidColor.withValues(alpha: isDarkTheme ? 0.91 : 0.95),
+                    scheme.surface.withValues(alpha: isDarkTheme ? 0.96 : 0.98),
                   ],
-                  stops: const [0.0, 0.55, 1.0],
+                  stops: const [0.0, 0.56, 1.0],
                 ),
               ),
             ),
           ),
           Positioned(
-            top: -90,
-            right: -90,
+            top: -118,
+            right: -105,
             child: IgnorePointer(
               child: Container(
-                width: 300,
-                height: 300,
+                width: 310,
+                height: 310,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: [scheme.primary.withValues(alpha: 0.15), scheme.primary.withValues(alpha: 0.0)],
+                  border: Border.all(color: scheme.primary.withValues(alpha: 0.085), width: 1.2),
+                ),
+                child: Center(
+                  child: Container(
+                    width: 220,
+                    height: 220,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: scheme.secondary.withValues(alpha: 0.06)),
+                    ),
                   ),
                 ),
               ),
@@ -210,59 +216,65 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
   /// room (right). Favorite moved next to the song title, like Spotify.
   Widget _buildHeader(ThemeData theme) {
     final scheme = theme.colorScheme;
+    Widget headerButton({required String tooltip, required IconData icon, required VoidCallback onPressed}) {
+      return Material(
+        color: scheme.surfaceContainerHigh.withValues(alpha: 0.92),
+        borderRadius: BorderRadius.circular(13),
+        child: IconButton(
+          tooltip: tooltip,
+          constraints: const BoxConstraints.tightFor(width: 42, height: 42),
+          padding: EdgeInsets.zero,
+          onPressed: onPressed,
+          icon: Icon(icon, size: 22, color: scheme.onSurface),
+        ),
+      );
+    }
+
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: SizedBox(
-        height: 44,
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            Positioned.fill(
-              child: IgnorePointer(
-                child: Center(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 82),
-                    child: Text(
-                      widget.followingRoom ? 'DENGERIN BARENG' : 'SEDANG DIPUTAR',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.labelMedium?.copyWith(
-                        color: scheme.onSurfaceVariant.withValues(alpha: 0.96),
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.55,
-                      ),
-                    ),
-                  ),
+      padding: const EdgeInsets.fromLTRB(14, 5, 14, 8),
+      child: Row(
+        children: [
+          headerButton(
+            tooltip: 'Tutup pemutar',
+            icon: Icons.keyboard_arrow_down_rounded,
+            onPressed: widget.onBack,
+          ),
+          const Spacer(),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                widget.followingRoom ? 'LISTENING TOGETHER' : 'NOW PLAYING',
+                style: TextStyle(
+                  color: scheme.primary,
+                  fontSize: 8.5,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1.55,
                 ),
               ),
-            ),
-            Row(
-              children: [
-                IconButton(
-                  tooltip: 'Kembali ke beranda',
-                  constraints: const BoxConstraints.tightFor(width: 44, height: 44),
-                  onPressed: widget.onBack,
-                  color: scheme.onSurface,
-                  icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 30),
+              const SizedBox(height: 3),
+              Text(
+                'MUSIKKU PLAYER',
+                style: TextStyle(
+                  color: scheme.onSurfaceVariant,
+                  fontSize: 8,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.0,
                 ),
-                const Spacer(),
-                IconButton(
-                  tooltip: widget.followingRoom ? 'Mengikuti sesi host' : 'Dengerin bareng tanpa login',
-                  constraints: const BoxConstraints.tightFor(width: 44, height: 44),
-                  onPressed: widget.onOpenListeningRoom,
-                  icon: Icon(
-                    widget.followingRoom ? Icons.headphones_rounded : Icons.groups_2_rounded,
-                    color: scheme.onSurface,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
+              ),
+            ],
+          ),
+          const Spacer(),
+          headerButton(
+            tooltip: widget.followingRoom ? 'Mengikuti sesi host' : 'Dengerin bareng tanpa login',
+            icon: widget.followingRoom ? Icons.headphones_rounded : Icons.groups_2_rounded,
+            onPressed: widget.onOpenListeningRoom,
+          ),
+        ],
       ),
     );
   }
+
 
   Widget _buildBody(BuildContext context, NativeYoutubeState state) {
     final theme = Theme.of(context);
@@ -430,42 +442,42 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
   /// Title + artist on the left, buffering spinner and favorite on the right.
   Widget _buildTrackInfo(ThemeData theme, ColorScheme scheme, bool busy) {
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SizedBox(
-                height: 52,
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    MusicTitleFormatter.clean(widget.video.title),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w900,
-                      height: 1.18,
-                      letterSpacing: -0.35,
-                    ),
-                  ),
+              Text(
+                'SEDANG DIPUTAR',
+                style: TextStyle(
+                  color: scheme.primary,
+                  fontSize: 8,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1.3,
                 ),
               ),
-              const SizedBox(height: 3),
-              SizedBox(
-                height: 21,
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    widget.video.channelTitle.isEmpty ? 'Artis tidak diketahui' : widget.video.channelTitle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                      fontSize: 14.5,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+              const SizedBox(height: 5),
+              Text(
+                MusicTitleFormatter.clean(widget.video.title),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontSize: 21,
+                  fontWeight: FontWeight.w900,
+                  height: 1.08,
+                  letterSpacing: -0.75,
+                ),
+              ),
+              const SizedBox(height: 5),
+              Text(
+                widget.video.channelTitle.isEmpty ? 'Artis tidak diketahui' : widget.video.channelTitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ],
@@ -473,11 +485,11 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
         ),
         if (busy)
           Padding(
-            padding: const EdgeInsets.only(left: 10),
+            padding: const EdgeInsets.only(left: 6),
             child: SizedBox(
-              width: 22,
-              height: 22,
-              child: CircularProgressIndicator(strokeWidth: 2.5, color: scheme.primary),
+              width: 19,
+              height: 19,
+              child: CircularProgressIndicator(strokeWidth: 2.2, color: scheme.primary),
             ),
           ),
         ValueListenableBuilder<PlayerUiState>(
@@ -488,14 +500,15 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
             onPressed: widget.onToggleFavorite,
             icon: Icon(
               ui.isFavorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-              size: 26,
-              color: ui.isFavorite ? scheme.primary : scheme.onSurfaceVariant,
+              size: 25,
+              color: ui.isFavorite ? scheme.secondary : scheme.onSurfaceVariant,
             ),
           ),
         ),
       ],
     );
   }
+
 
   Widget _buildSeekBar({
     required BuildContext context,
@@ -511,7 +524,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
       children: [
         SliderTheme(
           data: SliderTheme.of(context).copyWith(
-            trackHeight: 3,
+            trackHeight: 4.5,
             activeTrackColor: scheme.primary,
             secondaryActiveTrackColor: scheme.onSurface.withValues(alpha: 0.46),
             inactiveTrackColor: scheme.onSurface.withValues(alpha: 0.18),
@@ -591,14 +604,14 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
               icon: const Icon(Icons.skip_previous_rounded, size: 36),
             ),
             SizedBox(
-              width: 68,
-              height: 68,
+              width: 72,
+              height: 72,
               child: FilledButton(
                 style: FilledButton.styleFrom(shape: const CircleBorder(), padding: EdgeInsets.zero),
                 onPressed: (busy && !widget.followingRoom) ? null : () => widget.onPlayPause(),
                 child: Icon(
                   busy ? Icons.hourglass_top_rounded : (playing ? Icons.pause_rounded : Icons.play_arrow_rounded),
-                  size: 40,
+                  size: 42,
                 ),
               ),
             ),
@@ -692,10 +705,10 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
     return Container(
       key: key,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.22), width: 1),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.30), width: 1),
         boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.18), blurRadius: 22, offset: const Offset(0, 10)),
+          BoxShadow(color: Colors.black.withValues(alpha: 0.18), blurRadius: 28, offset: const Offset(0, 13)),
         ],
       ),
       clipBehavior: Clip.antiAlias,
@@ -799,29 +812,38 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
     bool selected = false,
   }) {
     final scheme = Theme.of(context).colorScheme;
-    final color = onPressed == null
+    final enabled = onPressed != null;
+    final color = !enabled
         ? scheme.onSurfaceVariant.withValues(alpha: 0.38)
         : (selected ? scheme.primary : scheme.onSurfaceVariant);
     return Tooltip(
       message: tooltip,
       child: InkWell(
         onTap: onPressed,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
+          padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 2),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 24, color: color),
-              const SizedBox(height: 3),
+              Container(
+                width: 42,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: selected ? scheme.primaryContainer : scheme.surfaceContainerHigh.withValues(alpha: 0.82),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, size: 21, color: selected ? scheme.onPrimaryContainer : color),
+              ),
+              const SizedBox(height: 5),
               Text(
                 label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   color: color,
-                  fontSize: 10.5,
-                  fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                  fontSize: 9.5,
+                  fontWeight: selected ? FontWeight.w900 : FontWeight.w700,
                 ),
               ),
             ],
@@ -830,6 +852,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
       ),
     );
   }
+
 
   void _openLyrics() {
     showModalBottomSheet<void>(

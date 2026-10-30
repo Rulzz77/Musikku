@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:math';
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
@@ -372,7 +371,7 @@ class _YoutubeHubState extends State<YoutubeHub> {
           left: dockInset,
           right: dockInset,
           bottom: MediaQuery.paddingOf(context).bottom + 8,
-          child: _GlassMagnifyingDock(
+          child: _EditorialFloatingDock(
             selectedIndex: _section.index,
             onSelect: _selectDockDestination,
           ),
@@ -613,10 +612,10 @@ String _formatHubError(Object error) {
   return message.isEmpty ? 'Permintaan gagal. Periksa koneksi lalu coba lagi.' : message;
 }
 
-/// Floating glass dock. Drag state lives inside this widget so moving the
-/// magnifying lens does not rebuild the whole music feed on every pointer tick.
-class _GlassMagnifyingDock extends StatefulWidget {
-  const _GlassMagnifyingDock({
+/// Floating editorial dock. Drag state stays inside this widget so moving the
+/// selected capsule does not rebuild the whole music feed on every pointer tick.
+class _EditorialFloatingDock extends StatefulWidget {
+  const _EditorialFloatingDock({
     required this.selectedIndex,
     required this.onSelect,
   });
@@ -625,10 +624,10 @@ class _GlassMagnifyingDock extends StatefulWidget {
   final ValueChanged<int> onSelect;
 
   @override
-  State<_GlassMagnifyingDock> createState() => _GlassMagnifyingDockState();
+  State<_EditorialFloatingDock> createState() => _EditorialFloatingDockState();
 }
 
-class _GlassMagnifyingDockState extends State<_GlassMagnifyingDock> {
+class _EditorialFloatingDockState extends State<_EditorialFloatingDock> {
   double? _dragX;
 
   int get _lastIndex => _dockItems.length - 1;
@@ -638,11 +637,11 @@ class _GlassMagnifyingDockState extends State<_GlassMagnifyingDock> {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return SizedBox(
-      height: 64,
+      height: 66,
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final colors = Theme.of(context).colorScheme;
           final maxWidth = constraints.maxWidth;
           final cellWidth = maxWidth / _dockItems.length;
           final activeIndex = widget.selectedIndex;
@@ -651,13 +650,12 @@ class _GlassMagnifyingDockState extends State<_GlassMagnifyingDock> {
           final visualIndex = dragging
               ? (dragX / cellWidth - 0.5).clamp(0.0, _lastIndex.toDouble()).toDouble()
               : activeIndex.toDouble();
+          final activeLeft = (visualIndex * cellWidth + 5).clamp(0.0, maxWidth - cellWidth + 5).toDouble();
 
           return GestureDetector(
             behavior: HitTestBehavior.opaque,
             onHorizontalDragStart: (details) {
-              setState(() {
-                _dragX = _clampDragX(details.localPosition.dx, cellWidth, maxWidth);
-              });
+              setState(() => _dragX = _clampDragX(details.localPosition.dx, cellWidth, maxWidth));
             },
             onHorizontalDragUpdate: (details) {
               setState(() {
@@ -674,54 +672,58 @@ class _GlassMagnifyingDockState extends State<_GlassMagnifyingDock> {
               if (target != widget.selectedIndex) widget.onSelect(target);
             },
             onHorizontalDragCancel: () => setState(() => _dragX = null),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(18),
-              child: BackdropFilter(
-                filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                child: DecoratedBox(
-                  decoration: _dockDecoration(colors),
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      // Pantulan kaca tipis selalu terlihat, bukan hanya saat dock digeser.
-                      Positioned(
-                        left: 24,
-                        right: 24,
-                        top: 1,
-                        height: 1.5,
-                        child: IgnorePointer(
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [
-                                  Colors.white.withValues(alpha: 0.02),
-                                  Colors.white.withValues(alpha: 0.48),
-                                  Colors.white.withValues(alpha: 0.05),
-                                ],
-                              ),
-                            ),
+            child: Container(
+              decoration: BoxDecoration(
+                color: scheme.surface,
+                borderRadius: BorderRadius.circular(19),
+                border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.92)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: Theme.of(context).brightness == Brightness.dark ? 0.34 : 0.10),
+                    blurRadius: 22,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(18),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    AnimatedPositioned(
+                      duration: dragging ? Duration.zero : const Duration(milliseconds: 230),
+                      curve: Curves.easeOutCubic,
+                      left: activeLeft,
+                      top: 6,
+                      bottom: 6,
+                      width: cellWidth - 10,
+                      child: IgnorePointer(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: scheme.primary,
+                            borderRadius: BorderRadius.circular(13),
                           ),
                         ),
                       ),
-                      // Saat digeser, lensa kaca mengikuti jari dan memperbesar ikon terdekat.
-                      if (dragging) ..._lensLayers(colors, visualIndex, cellWidth, maxWidth),
-                      Row(
-                        children: [
-                          for (var i = 0; i < _dockItems.length; i++)
-                            Expanded(
-                              child: _FlowDockDestination(
-                                label: _dockItems[i].label,
-                                icon: _dockItems[i].icon,
-                                selectedIcon: _dockItems[i].selectedIcon,
-                                selected: activeIndex == i,
-                                magnification: _dockMagnification(i, visualIndex, dragging, activeIndex),
-                                onTap: () => widget.onSelect(i),
-                              ),
+                    ),
+                    Row(
+                      children: [
+                        for (var i = 0; i < _dockItems.length; i++)
+                          Expanded(
+                            child: _FlowDockDestination(
+                              label: _dockItems[i].label,
+                              icon: _dockItems[i].icon,
+                              selectedIcon: _dockItems[i].selectedIcon,
+                              selected: dragging
+                                  ? (i - visualIndex).abs() < 0.48
+                                  : activeIndex == i,
+                              magnification: _dockMagnification(i, visualIndex, dragging, activeIndex),
+                              onTap: () => widget.onSelect(i),
                             ),
-                        ],
-                      ),
-                    ],
-                  ),
+                          ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -729,110 +731,6 @@ class _GlassMagnifyingDockState extends State<_GlassMagnifyingDock> {
         },
       ),
     );
-  }
-
-  BoxDecoration _dockDecoration(ColorScheme colors) {
-    return BoxDecoration(
-      gradient: LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [
-          Colors.white.withValues(alpha: 0.11),
-          colors.surface.withValues(alpha: 0.84),
-          colors.surfaceContainerHighest.withValues(alpha: 0.27),
-          colors.surface.withValues(alpha: 0.76),
-        ],
-      ),
-      borderRadius: BorderRadius.circular(18),
-      border: Border.all(color: Colors.white.withValues(alpha: 0.22), width: 1),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withValues(alpha: 0.22),
-          blurRadius: 22,
-          offset: const Offset(0, 7),
-        ),
-        BoxShadow(
-          color: Colors.white.withValues(alpha: 0.035),
-          blurRadius: 1,
-          spreadRadius: 0.5,
-        ),
-      ],
-    );
-  }
-
-  /// Lensa kaca dan kilau tipis yang mengikuti jari saat menggeser dock.
-  List<Widget> _lensLayers(
-    ColorScheme colors,
-    double visualIndex,
-    double cellWidth,
-    double maxWidth,
-  ) {
-    final glassWidth = cellWidth * 0.72;
-    final glowWidth = cellWidth * 0.54;
-    double leftFor(double inset, double width) =>
-        (visualIndex * cellWidth + inset).clamp(0.0, maxWidth - width).toDouble();
-
-    return [
-      Positioned(
-        left: leftFor(cellWidth * 0.14, glassWidth),
-        top: 4,
-        bottom: 4,
-        width: glassWidth,
-        child: IgnorePointer(
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(15),
-            child: BackdropFilter(
-              filter: ui.ImageFilter.blur(sigmaX: 11, sigmaY: 11),
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(15),
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      colors.primary.withValues(alpha: 0.24),
-                      Colors.white.withValues(alpha: 0.12),
-                      colors.primary.withValues(alpha: 0.075),
-                    ],
-                  ),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.30), width: 1),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.10),
-                      blurRadius: 12,
-                      offset: const Offset(0, 3),
-                    ),
-                    BoxShadow(color: Colors.white.withValues(alpha: 0.10), blurRadius: 2),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-      Positioned(
-        left: leftFor(cellWidth * 0.23, glowWidth),
-        top: 5,
-        bottom: 5,
-        width: glowWidth,
-        child: IgnorePointer(
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
-              gradient: LinearGradient(
-                begin: Alignment.centerLeft,
-                end: Alignment.centerRight,
-                colors: [
-                  Colors.white.withValues(alpha: 0),
-                  Colors.white.withValues(alpha: 0.15),
-                  Colors.white.withValues(alpha: 0),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    ];
   }
 }
 
@@ -859,8 +757,6 @@ class _FlowDockDestination extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final highlighted = selected || magnification > 0.42;
-
     return Semantics(
       button: true,
       selected: selected,
@@ -871,39 +767,33 @@ class _FlowDockDestination extends StatelessWidget {
           color: Colors.transparent,
           child: InkWell(
             onTap: onTap,
-            borderRadius: BorderRadius.circular(19),
+            borderRadius: BorderRadius.circular(14),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 5),
+              padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 6),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Transform.translate(
-                    offset: Offset(0, -magnification * 3.5),
-                    child: AnimatedScale(
-                      scale: 1.0 + magnification * 0.30,
-                      duration: const Duration(milliseconds: 120),
-                      curve: Curves.easeOutCubic,
-                      child: Icon(
-                        highlighted ? selectedIcon : icon,
-                        size: 22,
-                        color: highlighted ? scheme.primary : scheme.onSurfaceVariant,
-                        shadows: magnification > 0.25
-                            ? [Shadow(color: Colors.white.withValues(alpha: 0.30), blurRadius: 7)]
-                            : const [],
-                      ),
+                  AnimatedScale(
+                    scale: 1.0 + magnification * 0.18,
+                    duration: const Duration(milliseconds: 130),
+                    curve: Curves.easeOutCubic,
+                    child: Icon(
+                      selected ? selectedIcon : icon,
+                      size: 21,
+                      color: selected ? scheme.onPrimary : scheme.onSurfaceVariant,
                     ),
                   ),
-                  const SizedBox(height: 2),
+                  const SizedBox(height: 3),
                   AnimatedDefaultTextStyle(
-                    duration: const Duration(milliseconds: 140),
+                    duration: const Duration(milliseconds: 130),
                     curve: Curves.easeOut,
                     style: TextStyle(
-                      fontSize: selected ? 10.2 : 9.5,
+                      fontSize: selected ? 9.7 : 9.2,
                       height: 1.1,
                       fontWeight: selected ? FontWeight.w900 : FontWeight.w600,
-                      color: selected ? scheme.primary : scheme.onSurfaceVariant,
-                      letterSpacing: selected ? -0.05 : 0,
+                      color: selected ? scheme.onPrimary : scheme.onSurfaceVariant,
+                      letterSpacing: 0,
                     ),
                     child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
                   ),

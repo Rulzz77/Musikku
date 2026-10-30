@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
@@ -434,41 +433,28 @@ class _ArtistPageState extends State<ArtistPage> {
   }
 
   Widget _header(ColorScheme scheme) {
-    final radius = BorderRadius.circular(21);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
-      child: ClipRRect(
-        borderRadius: radius,
-        child: BackdropFilter(
-          filter: ui.ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  scheme.primaryContainer.withValues(alpha: 0.86),
-                  scheme.secondaryContainer.withValues(alpha: 0.64),
-                  scheme.surfaceContainerLow.withValues(alpha: 0.80),
-                ],
-              ),
-              borderRadius: radius,
-              border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.55)),
-            ),
-            child: Row(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(15, 16, 15, 15),
+        decoration: BoxDecoration(
+          color: scheme.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(19),
+          border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.56)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 ClipRRect(
-                  borderRadius: BorderRadius.circular(15),
+                  borderRadius: BorderRadius.circular(16),
                   child: SizedBox(
-                    width: 78,
-                    height: 78,
+                    width: 76,
+                    height: 76,
                     child: _details?.avatarUrl.isNotEmpty == true
-                        ? Image.network(
-                            _details!.avatarUrl,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, _, _) => _artistPlaceholder(scheme),
-                          )
+                        ? Image.network(_details!.avatarUrl, fit: BoxFit.cover, errorBuilder: (_, _, _) => _artistPlaceholder(scheme))
                         : _artistPlaceholder(scheme),
                   ),
                 ),
@@ -479,54 +465,38 @@ class _ArtistPageState extends State<ArtistPage> {
                     children: [
                       Text(
                         _details == null ? 'RADIO ARTIS' : 'ARTIS / CHANNEL',
-                        style: TextStyle(
-                          color: scheme.primary,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 1.2,
-                        ),
+                        style: TextStyle(color: scheme.primary, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.35),
                       ),
                       const SizedBox(height: 5),
-                      Text(
-                        _artistTitle,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 21,
-                          fontWeight: FontWeight.w900,
-                          height: 1.05,
-                        ),
-                      ),
+                      Text(_artistTitle, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w900, height: 1.04, letterSpacing: -0.6)),
                       const SizedBox(height: 5),
-                      Text(
-                        '${_songs.length} lagu · ${_playlists.length} album/playlist',
-                        style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11.5),
-                      ),
-                      const SizedBox(height: 10),
-                      Wrap(
-                        spacing: 8,
-                        children: [
-                          FilledButton.tonalIcon(
-                            onPressed: _songs.isEmpty
-                                ? null
-                                : () => unawaited(_playTracks(_songs.first, _songs)),
-                            icon: const Icon(Icons.play_arrow_rounded, size: 18),
-                            label: const Text('Putar semua'),
-                          ),
-                          if (_playlists.isNotEmpty)
-                            OutlinedButton.icon(
-                              onPressed: () => setState(() => _tab = 1),
-                              icon: const Icon(Icons.album_rounded, size: 17),
-                              label: const Text('Rilisan'),
-                            ),
-                        ],
-                      ),
+                      Text('${_songs.length} lagu  /  ${_playlists.length} rilisan', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11)),
                     ],
                   ),
                 ),
               ],
             ),
-          ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: _songs.isEmpty ? null : () => unawaited(_playTracks(_songs.first, _songs)),
+                    icon: const Icon(Icons.play_arrow_rounded, size: 18),
+                    label: const Text('Putar semua'),
+                  ),
+                ),
+                if (_playlists.isNotEmpty) ...[
+                  const SizedBox(width: 9),
+                  OutlinedButton.icon(
+                    onPressed: () => setState(() => _tab = 1),
+                    icon: const Icon(Icons.album_rounded, size: 17),
+                    label: const Text('Rilisan'),
+                  ),
+                ],
+              ],
+            ),
+          ],
         ),
       ),
     );
@@ -542,7 +512,7 @@ class _ArtistPageState extends State<ArtistPage> {
     final scheme = Theme.of(context).colorScheme;
     final selected = _tab == index;
     return Material(
-      color: selected ? scheme.secondaryContainer : scheme.surfaceContainerLow,
+      color: selected ? scheme.primary : scheme.surfaceContainerLow,
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
@@ -552,7 +522,7 @@ class _ArtistPageState extends State<ArtistPage> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 18, color: selected ? scheme.onSecondaryContainer : scheme.onSurfaceVariant),
+              Icon(icon, size: 18, color: selected ? scheme.onPrimary : scheme.onSurfaceVariant),
               const SizedBox(width: 7),
               Flexible(
                 child: Text(
@@ -560,7 +530,7 @@ class _ArtistPageState extends State<ArtistPage> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: selected ? scheme.onSecondaryContainer : scheme.onSurfaceVariant,
+                    color: selected ? scheme.onPrimary : scheme.onSurfaceVariant,
                     fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
                     fontSize: 12,
                   ),

@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
@@ -63,24 +62,16 @@ class _DataUsageCardState extends State<DataUsageCard> {
     final scheme = Theme.of(context).colorScheme;
     final snapshot = _snapshot;
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(24),
-      child: BackdropFilter(
-        filter: ui.ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-        child: Container(
+    return Container(
       width: double.infinity,
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [scheme.primary.withValues(alpha: 0.08), scheme.surfaceContainerLow, scheme.secondary.withValues(alpha: 0.04)],
-        ),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.62)),
+        color: scheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(17),
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.58)),
       ),
-      child: Column(
+            child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -179,8 +170,6 @@ class _DataUsageCardState extends State<DataUsageCard> {
             ),
           ),
         ],
-      ),
-        ),
       ),
     );
   }

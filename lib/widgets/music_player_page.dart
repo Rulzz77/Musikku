@@ -237,23 +237,27 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
       builder: (context, constraints) {
         final width = constraints.maxWidth;
         final height = constraints.maxHeight;
-        final discSize = math.min(width * 0.76, height * 0.37).clamp(176.0, 292.0).toDouble();
+        final discSize = math.min(width * 0.72, height * 0.34).clamp(164.0, 260.0).toDouble();
 
         return Padding(
           padding: const EdgeInsets.fromLTRB(22, 6, 22, 8),
           child: Column(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const SizedBox(height: 4),
+              const SizedBox(height: 3),
               SizedBox(
                 width: discSize,
                 height: discSize,
                 child: _buildVinylDisc(discSize, playing),
               ),
-              const SizedBox(height: 17),
+              const SizedBox(height: 11),
               _buildTrackInfo(busy),
-              const SizedBox(height: 8),
-              SizedBox(height: 32, child: _buildCurrentLyricText()),
-              const Spacer(flex: 1),
+              AnimatedSize(
+                duration: const Duration(milliseconds: 220),
+                curve: Curves.easeOutCubic,
+                alignment: Alignment.centerLeft,
+                child: _buildCurrentLyricText(),
+              ),
               _buildSeekBar(
                 context: context,
                 duration: duration,

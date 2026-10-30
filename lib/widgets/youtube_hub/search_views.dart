@@ -546,12 +546,12 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
     final shownError = _exploreCategory == 'Sedang tren' ? _feedError : _exploreError;
 
     const genreColors = <Color>[
-      Color(0xFFD8FF55),
-      Color(0xFFFF916E),
-      Color(0xFF9B8AFB),
-      Color(0xFF65B9E8),
-      Color(0xFFE9B95D),
-      Color(0xFF65C7A4),
+      Color(0xFF67DDEB),
+      Color(0xFFFF8C78),
+      Color(0xFF75A9F5),
+      Color(0xFFFFC76E),
+      Color(0xFF62C8B1),
+      Color(0xFFD6A6EF),
     ];
     IconData genreIcon(String category) => switch (category) {
       'Sedang tren' => Icons.trending_up_rounded,

@@ -86,7 +86,6 @@ extension _YoutubeHubLibraryViews on _YoutubeHubState {
   }
 
   List<Widget> _libraryView() {
-    final topInset = MediaQuery.paddingOf(context).top;
     final scheme = Theme.of(context).colorScheme;
 
     Widget stat(String value, String label) {
@@ -94,15 +93,16 @@ extension _YoutubeHubLibraryViews on _YoutubeHubState {
         child: Container(
           padding: const EdgeInsets.fromLTRB(12, 12, 8, 12),
           decoration: BoxDecoration(
-            color: scheme.surfaceContainerLow,
+            color: Colors.white.withValues(alpha: 0.085),
             borderRadius: BorderRadius.circular(15),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(value, style: TextStyle(color: scheme.primary, fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: -0.7)),
+              Text(value, style: const TextStyle(color: Color(0xFF83EAF2), fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: -0.7)),
               const SizedBox(height: 3),
-              Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 9.5, fontWeight: FontWeight.w700)),
+              Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.white.withValues(alpha: 0.66), fontSize: 9.5, fontWeight: FontWeight.w700)),
             ],
           ),
         ),
@@ -112,51 +112,54 @@ extension _YoutubeHubLibraryViews on _YoutubeHubState {
     return <Widget>[
       SliverToBoxAdapter(
         child: Padding(
-          padding: EdgeInsets.fromLTRB(18, topInset + 18, 16, 8),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'RUANG PRIBADI',
-                      style: TextStyle(color: scheme.primary, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.4),
-                    ),
-                  ),
-                  IconButton.filledTonal(
-                    tooltip: 'Pembaruan aplikasi',
-                    onPressed: () => unawaited(AppUpdateSheet.show(context)),
-                    icon: const Icon(Icons.system_update_alt_rounded),
-                  ),
-                ],
+          padding: const EdgeInsets.fromLTRB(15, 8, 15, 7),
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(18, 17, 18, 17),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(27),
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFF243D58), Color(0xFF142A42), Color(0xFF18253A)],
               ),
-              const SizedBox(height: 9),
-              Text.rich(
-                TextSpan(
+              boxShadow: [BoxShadow(color: scheme.primary.withValues(alpha: 0.10), blurRadius: 24, offset: const Offset(0, 10))],
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: Stack(
+              children: [
+                Positioned(right: -38, top: -54, child: Icon(Icons.album_rounded, size: 190, color: Colors.white.withValues(alpha: 0.045))),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const TextSpan(text: 'Semua musikmu.\n'),
-                    TextSpan(text: 'Satu tempat.', style: TextStyle(color: scheme.primary)),
+                    Row(
+                      children: [
+                        const Expanded(child: Text('RUANG MUSIKMU', style: TextStyle(color: Color(0xFF81EAF2), fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.5))),
+                        IconButton.filledTonal(
+                          tooltip: 'Pembaruan aplikasi',
+                          onPressed: () => unawaited(AppUpdateSheet.show(context)),
+                          style: IconButton.styleFrom(backgroundColor: Colors.white.withValues(alpha: 0.12), foregroundColor: Colors.white),
+                          icon: const Icon(Icons.system_update_alt_rounded, size: 19),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    const Text('Musik yang\nselalu dekat.', style: TextStyle(color: Colors.white, fontSize: 29, height: 1.0, fontWeight: FontWeight.w900, letterSpacing: -1.0)),
+                    const SizedBox(height: 7),
+                    Text('Tempat untuk menyimpan, merapikan, dan kembali ke lagu favoritmu.', style: TextStyle(color: Colors.white.withValues(alpha: 0.72), fontSize: 11.5, height: 1.4)),
+                    const SizedBox(height: 17),
+                    Row(
+                      children: [
+                        stat('${widget.customPlaylistCount}', 'PLAYLIST'),
+                        const SizedBox(width: 8),
+                        stat('${widget.favorites.length}', 'FAVORIT'),
+                        const SizedBox(width: 8),
+                        stat('${widget.recentlyPlayed.length}', 'RIWAYAT'),
+                      ],
+                    ),
                   ],
                 ),
-                style: TextStyle(color: scheme.onSurface, fontSize: 31, height: 1.0, fontWeight: FontWeight.w900, letterSpacing: -1.4),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Simpan, susun, dan temukan lagi lagu yang pernah kamu dengarkan.',
-                style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12, height: 1.4),
-              ),
-              const SizedBox(height: 17),
-              Row(
-                children: [
-                  stat('${widget.customPlaylistCount}', 'PLAYLIST'),
-                  const SizedBox(width: 8),
-                  stat('${widget.favorites.length}', 'FAVORIT'),
-                  const SizedBox(width: 8),
-                  stat('${widget.recentlyPlayed.length}', 'RIWAYAT'),
-                ],
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -182,10 +185,28 @@ extension _YoutubeHubLibraryViews on _YoutubeHubState {
               mainAxisExtent: 112,
             ),
             children: [
-              _libraryQuickTile(title: 'Riwayat dengar', subtitle: '${widget.recentlyPlayed.length} lagu terakhir', icon: Icons.history_rounded, onTap: _openRecentHistory),
-              _libraryQuickTile(title: 'Favorit MusikKu', subtitle: '${widget.favorites.length} lagu tersimpan', icon: Icons.favorite_rounded, onTap: _openFavoritesList),
-              _libraryQuickTile(title: 'Musik lokal', subtitle: 'File di perangkat', icon: Icons.library_music_rounded, onTap: _openLocalMusic),
-              _libraryQuickTile(title: 'Radio otomatis', subtitle: 'Putar lagu serupa', icon: Icons.radio_rounded, onTap: _startRadioFromCollection),
+              for (final tile in <({String title, String subtitle, IconData icon, VoidCallback action})>[
+                (title: 'Riwayat dengar', subtitle: '${widget.recentlyPlayed.length} lagu terakhir', icon: Icons.history_rounded, action: _openRecentHistory),
+                (title: 'Favorit MusikKu', subtitle: '${widget.favorites.length} lagu tersimpan', icon: Icons.favorite_rounded, action: _openFavoritesList),
+                (title: 'Musik lokal', subtitle: 'File di perangkat', icon: Icons.library_music_rounded, action: _openLocalMusic),
+                (title: 'Radio otomatis', subtitle: 'Putar lagu serupa', icon: Icons.radio_rounded, action: _startRadioFromCollection),
+              ].indexed)
+                TweenAnimationBuilder<double>(
+                  key: ValueKey<String>('library-shortcut-${tile.$1}'),
+                  tween: Tween<double>(begin: 0, end: 1),
+                  duration: Duration(milliseconds: 280 + tile.$1 * 65),
+                  curve: Curves.easeOutCubic,
+                  builder: (context, value, child) => Opacity(
+                    opacity: value,
+                    child: Transform.translate(offset: Offset(0, 13 * (1 - value)), child: child),
+                  ),
+                  child: _libraryQuickTile(
+                    title: tile.$2.title,
+                    subtitle: tile.$2.subtitle,
+                    icon: tile.$2.icon,
+                    onTap: tile.$2.action,
+                  ),
+                ),
             ],
           ),
         ),
@@ -264,10 +285,31 @@ extension _YoutubeHubLibraryViews on _YoutubeHubState {
       builder: (context) => DraggableScrollableSheet(expand: false, initialChildSize: 0.85, maxChildSize: 0.95, builder: (_, controller) => SafeArea(child: ListView.builder(
         controller: controller, itemCount: musicSongs.length + 1,
         itemBuilder: (context, index) {
-          if (index == 0) return Padding(padding: const EdgeInsets.fromLTRB(16, 6, 16, 10), child: Text(title, style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w900)));
+          if (index == 0) {
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(18, 6, 18, 12),
+              child: MusicGlassPanel(
+                radius: 21,
+                padding: const EdgeInsets.all(15),
+                child: MusicSheetHeading(
+                  icon: Icons.queue_music_rounded,
+                  title: title,
+                  subtitle: '${musicSongs.length} lagu musik siap dipilih.',
+                ),
+              ),
+            );
+          }
           final video = musicSongs[index - 1];
           final isCurrent = widget.currentVideoId == video.videoId;
-          return ListTile(
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
+            child: Material(
+              color: isCurrent
+                  ? Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.54)
+                  : Theme.of(context).colorScheme.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(17),
+              clipBehavior: Clip.antiAlias,
+              child: ListTile(
             selected: isCurrent,
             selectedTileColor: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.45),
             leading: ClipRRect(borderRadius: BorderRadius.circular(6), child: Stack(alignment: Alignment.center, children: [
@@ -278,6 +320,8 @@ extension _YoutubeHubLibraryViews on _YoutubeHubState {
             subtitle: Text(isCurrent ? 'SEDANG DIPUTAR • ${video.channelTitle}' : video.channelTitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: isCurrent ? TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w700) : null),
             trailing: isCurrent ? Icon(Icons.graphic_eq_rounded, color: Theme.of(context).colorScheme.primary) : null,
             onTap: () { Navigator.pop(context); unawaited(widget.onPlayFromList(video, musicSongs)); },
+              ),
+            ),
           );
         },
       ))),

@@ -15,6 +15,7 @@ import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
@@ -137,6 +138,42 @@ class PlaybackService : MediaBrowserServiceCompat() {
     }
 
     private lateinit var mediaSession: MediaSessionCompat
+
+    // Beberapa headset kabel hanya mengirim KEYCODE_HEADSETHOOK untuk semua
+    // klik. Tunda satu klik sebentar agar klik ganda bisa dibaca sebagai NEXT
+    // dan klik tiga kali sebagai PREVIOUS, bukan dua/tiga kali toggle play.
+    private val mediaButtonHandler = Handler(Looper.getMainLooper())
+    private var headsetClickCount = 0
+    private var pendingHeadsetClick: Runnable? = null
+    private val headsetClickWindowMs = 380L
+
+    private fun queueHeadsetButtonClick(
+        onSingleClick: () -> Unit,
+        onDoubleClick: () -> Unit,
+        onTripleClick: () -> Unit,
+    ) {
+        headsetClickCount = (headsetClickCount + 1).coerceAtMost(3)
+        pendingHeadsetClick?.let { mediaButtonHandler.removeCallbacks(it) }
+
+        val action = Runnable {
+            val clicks = headsetClickCount
+            headsetClickCount = 0
+            pendingHeadsetClick = null
+            when (clicks) {
+                1 -> onSingleClick()
+                2 -> onDoubleClick()
+                else -> onTripleClick()
+            }
+        }
+        pendingHeadsetClick = action
+        mediaButtonHandler.postDelayed(action, headsetClickWindowMs)
+    }
+
+    private fun cancelPendingHeadsetClick() {
+        pendingHeadsetClick?.let { mediaButtonHandler.removeCallbacks(it) }
+        pendingHeadsetClick = null
+        headsetClickCount = 0
+    }
 
     // ========================================================
     // HEADSET DICABUT / BLUETOOTH PUTUS
@@ -351,14 +388,33 @@ class PlaybackService : MediaBrowserServiceCompat() {
                     if (keyEvent.action != KeyEvent.ACTION_DOWN || keyEvent.repeatCount > 0) return true
 
                     when (keyEvent.keyCode) {
-                        KeyEvent.KEYCODE_MEDIA_PLAY -> onPlay()
-                        KeyEvent.KEYCODE_MEDIA_PAUSE -> onPause()
-                        KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
-                        KeyEvent.KEYCODE_HEADSETHOOK -> {
+                        KeyEvent.KEYCODE_MEDIA_PLAY -> {
+                            cancelPendingHeadsetClick()
+                            onPlay()
+                        }
+                        KeyEvent.KEYCODE_MEDIA_PAUSE -> {
+                            cancelPendingHeadsetClick()
+                            onPause()
+                        }
+                        KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
+                            cancelPendingHeadsetClick()
                             if (currentPlaying) onPause() else onPlay()
                         }
-                        KeyEvent.KEYCODE_MEDIA_NEXT -> onSkipToNext()
-                        KeyEvent.KEYCODE_MEDIA_PREVIOUS -> onSkipToPrevious()
+                        KeyEvent.KEYCODE_HEADSETHOOK -> {
+                            queueHeadsetButtonClick(
+                                onSingleClick = { if (currentPlaying) onPause() else onPlay() },
+                                onDoubleClick = { onSkipToNext() },
+                                onTripleClick = { onSkipToPrevious() },
+                            )
+                        }
+                        KeyEvent.KEYCODE_MEDIA_NEXT -> {
+                            cancelPendingHeadsetClick()
+                            onSkipToNext()
+                        }
+                        KeyEvent.KEYCODE_MEDIA_PREVIOUS -> {
+                            cancelPendingHeadsetClick()
+                            onSkipToPrevious()
+                        }
                         else -> return super.onMediaButtonEvent(mediaButtonIntent)
                     }
                     return true
@@ -1247,6 +1303,8 @@ class PlaybackService : MediaBrowserServiceCompat() {
 
 
     override fun onDestroy() {
+        cancelPendingHeadsetClick()
+        mediaButtonHandler.removeCallbacksAndMessages(null)
         snapshotHandler.removeCallbacks(snapshotRunnable)
         localStateHandler.removeCallbacksAndMessages(null)
         if (activeInstance === this) {

@@ -149,7 +149,8 @@ class _LocalMusicPageState extends State<LocalMusicPage> {
                     )
                   : RefreshIndicator(
                       onRefresh: _load,
-                      child: CustomScrollView(
+                      child: MusicPageEntrance(
+                        child: CustomScrollView(
                         physics: const AlwaysScrollableScrollPhysics(),
                         slivers: [
                           SliverToBoxAdapter(
@@ -158,9 +159,14 @@ class _LocalMusicPageState extends State<LocalMusicPage> {
                               child: Container(
                                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 15),
                                 decoration: BoxDecoration(
-                                  color: scheme.surfaceContainerLow,
-                                  borderRadius: BorderRadius.circular(18),
-                                  border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.58)),
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                    colors: [scheme.primaryContainer.withValues(alpha: 0.82), scheme.surfaceContainerLow, scheme.tertiaryContainer.withValues(alpha: 0.24)],
+                                  ),
+                                  borderRadius: BorderRadius.circular(24),
+                                  border: Border.all(color: scheme.primary.withValues(alpha: 0.18)),
+                                  boxShadow: [BoxShadow(color: scheme.primary.withValues(alpha: 0.07), blurRadius: 22, offset: const Offset(0, 8))],
                                 ),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -168,9 +174,9 @@ class _LocalMusicPageState extends State<LocalMusicPage> {
                                     Row(
                                       children: [
                                         Container(
-                                          width: 42,
-                                          height: 42,
-                                          decoration: BoxDecoration(color: scheme.primary, borderRadius: BorderRadius.circular(12)),
+                                          width: 48,
+                                          height: 48,
+                                          decoration: BoxDecoration(gradient: LinearGradient(colors: [scheme.primary, scheme.tertiary]), borderRadius: BorderRadius.circular(16)),
                                           child: Icon(Icons.phone_android_rounded, color: scheme.onPrimary, size: 22),
                                         ),
                                         const SizedBox(width: 11),
@@ -327,7 +333,7 @@ class _LocalMusicPageState extends State<LocalMusicPage> {
                             ),
                         ],
                       ),
-                    )),
+                    ))),
     );
   }
 }

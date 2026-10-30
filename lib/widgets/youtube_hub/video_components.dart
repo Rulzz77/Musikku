@@ -48,51 +48,42 @@ extension _YoutubeHubVideoComponents on _YoutubeHubState {
 
   Widget _topBar({String? title}) {
     final scheme = Theme.of(context).colorScheme;
+    final label = title ?? appName;
+    final icon = switch (label) {
+      'Radio' => Icons.radio_rounded,
+      'Jelajahi' => Icons.explore_rounded,
+      'Koleksi' => Icons.library_music_rounded,
+      _ => Icons.music_note_rounded,
+    };
     return SliverToBoxAdapter(
       child: Padding(
-        padding: EdgeInsets.fromLTRB(17, MediaQuery.paddingOf(context).top + 12, 14, 13),
+        padding: EdgeInsets.fromLTRB(16, MediaQuery.paddingOf(context).top + 10, 14, 12),
         child: Row(
           children: [
             Container(
-              width: 5,
-              height: 29,
+              width: 43,
+              height: 43,
               decoration: BoxDecoration(
-                color: scheme.primary,
-                borderRadius: BorderRadius.circular(4),
+                gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [scheme.primary, scheme.tertiary]),
+                borderRadius: BorderRadius.circular(14),
+                boxShadow: [BoxShadow(color: scheme.primary.withValues(alpha: 0.18), blurRadius: 13, offset: const Offset(0, 5))],
               ),
+              child: Icon(icon, color: scheme.onPrimary, size: 22),
             ),
-            const SizedBox(width: 11),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'MUSIKKU',
-                    style: TextStyle(
-                      color: scheme.primary,
-                      fontSize: 8,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 1.5,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    title ?? appName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 23,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: -0.8,
-                      height: 1.0,
-                    ),
-                  ),
+                  Text('MUSIKKU  /  LISTEN & DISCOVER', style: TextStyle(color: scheme.primary, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 1.25)),
+                  const SizedBox(height: 3),
+                  Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: -0.7, height: 1.0)),
                 ],
               ),
             ),
             Material(
               color: scheme.surfaceContainerHigh,
-              borderRadius: BorderRadius.circular(13),
+              borderRadius: BorderRadius.circular(14),
               child: IconButton(
                 tooltip: 'Cari',
                 visualDensity: VisualDensity.compact,
@@ -105,7 +96,6 @@ extension _YoutubeHubVideoComponents on _YoutubeHubState {
       ),
     );
   }
-
 
   Widget _sectionHeader(String title, {String? action, VoidCallback? onAction}) {
     final scheme = Theme.of(context).colorScheme;

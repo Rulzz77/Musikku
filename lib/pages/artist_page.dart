@@ -411,7 +411,8 @@ class _ArtistPageState extends State<ArtistPage> {
           ? const Center(child: CircularProgressIndicator())
           : _error != null && _songs.isEmpty && _playlists.isEmpty
               ? _ErrorState(message: _error.toString(), onRetry: _load)
-              : Column(
+              : MusicPageEntrance(
+                  child: Column(
                   children: [
                     _header(scheme),
                     Padding(
@@ -428,7 +429,7 @@ class _ArtistPageState extends State<ArtistPage> {
                       child: _tab == 0 ? _buildSongList() : _buildPlaylistList(),
                     ),
                   ],
-                )),
+                ))),
     );
   }
 
@@ -438,9 +439,14 @@ class _ArtistPageState extends State<ArtistPage> {
       child: Container(
         padding: const EdgeInsets.fromLTRB(15, 16, 15, 15),
         decoration: BoxDecoration(
-          color: scheme.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(19),
-          border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.56)),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [scheme.primaryContainer.withValues(alpha: 0.78), scheme.surfaceContainerLow, scheme.surfaceContainerLow],
+          ),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: scheme.primary.withValues(alpha: 0.18)),
+          boxShadow: [BoxShadow(color: scheme.primary.withValues(alpha: 0.07), blurRadius: 20, offset: const Offset(0, 8))],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -449,10 +455,10 @@ class _ArtistPageState extends State<ArtistPage> {
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 ClipRRect(
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(22),
                   child: SizedBox(
-                    width: 76,
-                    height: 76,
+                    width: 82,
+                    height: 82,
                     child: _details?.avatarUrl.isNotEmpty == true
                         ? Image.network(_details!.avatarUrl, fit: BoxFit.cover, errorBuilder: (_, _, _) => _artistPlaceholder(scheme))
                         : _artistPlaceholder(scheme),
@@ -468,7 +474,7 @@ class _ArtistPageState extends State<ArtistPage> {
                         style: TextStyle(color: scheme.primary, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.35),
                       ),
                       const SizedBox(height: 5),
-                      Text(_artistTitle, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w900, height: 1.04, letterSpacing: -0.6)),
+                      Text(_artistTitle, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 23, fontWeight: FontWeight.w900, height: 1.02, letterSpacing: -0.75)),
                       const SizedBox(height: 5),
                       Text('${_songs.length} lagu  /  ${_playlists.length} rilisan', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11)),
                     ],
@@ -503,7 +509,9 @@ class _ArtistPageState extends State<ArtistPage> {
   }
 
   Widget _artistPlaceholder(ColorScheme scheme) => Container(
-        color: scheme.primary,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [scheme.primary, scheme.tertiary]),
+        ),
         alignment: Alignment.center,
         child: const Icon(Icons.graphic_eq_rounded, size: 38, color: Colors.white),
       );
@@ -511,10 +519,19 @@ class _ArtistPageState extends State<ArtistPage> {
   Widget _tabButton(int index, String label, IconData icon) {
     final scheme = Theme.of(context).colorScheme;
     final selected = _tab == index;
-    return Material(
-      color: selected ? scheme.primary : scheme.surfaceContainerLow,
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+      decoration: BoxDecoration(
+        color: selected ? scheme.primary : scheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: selected ? scheme.primary : scheme.outlineVariant.withValues(alpha: 0.48)),
+        boxShadow: selected ? [BoxShadow(color: scheme.primary.withValues(alpha: 0.18), blurRadius: 14, offset: const Offset(0, 5))] : const [],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(15),
+        child: InkWell(
         borderRadius: BorderRadius.circular(14),
         onTap: () => setState(() => _tab = index),
         child: Padding(
@@ -539,6 +556,7 @@ class _ArtistPageState extends State<ArtistPage> {
             ],
           ),
         ),
+      ),
       ),
     );
   }

@@ -23,6 +23,7 @@ import 'channel_avatar.dart';
 import 'live_badge.dart';
 import 'unified_artwork.dart';
 import 'flow_components.dart';
+import 'music_design.dart';
 
 part 'youtube_hub/startup_actions.dart';
 part 'youtube_hub/home_views.dart';
@@ -340,18 +341,21 @@ class _YoutubeHubState extends State<YoutubeHub> {
             // Keep reading widths comfortable on tablets and desktop-sized windows.
             constraints: const BoxConstraints(maxWidth: 1200),
             child: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 300),
-          reverseDuration: const Duration(milliseconds: 210),
+          duration: const Duration(milliseconds: 430),
+          reverseDuration: const Duration(milliseconds: 300),
           switchInCurve: Curves.easeOutCubic,
           switchOutCurve: Curves.easeInCubic,
           transitionBuilder: (child, animation) {
             final slide = Tween<Offset>(
-              begin: const Offset(0, 0.018),
+              begin: const Offset(0, 0.035),
               end: Offset.zero,
             ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic));
+            final scale = Tween<double>(begin: 0.985, end: 1).animate(
+              CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+            );
             return FadeTransition(
               opacity: animation,
-              child: SlideTransition(position: slide, child: child),
+              child: SlideTransition(position: slide, child: ScaleTransition(scale: scale, child: child)),
             );
           },
           child: RefreshIndicator(
@@ -700,8 +704,13 @@ class _EditorialFloatingDockState extends State<_EditorialFloatingDock> {
                       child: IgnorePointer(
                         child: DecoratedBox(
                           decoration: BoxDecoration(
-                            color: scheme.primary,
-                            borderRadius: BorderRadius.circular(13),
+                            gradient: const LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [Color(0xFF67E5F2), Color(0xFF2BB4CD)],
+                            ),
+                            borderRadius: BorderRadius.circular(14),
+                            boxShadow: [BoxShadow(color: scheme.primary.withValues(alpha: 0.22), blurRadius: 13, offset: const Offset(0, 4))],
                           ),
                         ),
                       ),
@@ -781,7 +790,7 @@ class _FlowDockDestination extends StatelessWidget {
                     child: Icon(
                       selected ? selectedIcon : icon,
                       size: 21,
-                      color: selected ? scheme.onPrimary : scheme.onSurfaceVariant,
+                      color: selected ? const Color(0xFF061721) : scheme.onSurfaceVariant,
                     ),
                   ),
                   const SizedBox(height: 3),
@@ -792,7 +801,7 @@ class _FlowDockDestination extends StatelessWidget {
                       fontSize: selected ? 9.7 : 9.2,
                       height: 1.1,
                       fontWeight: selected ? FontWeight.w900 : FontWeight.w600,
-                      color: selected ? scheme.onPrimary : scheme.onSurfaceVariant,
+                      color: selected ? const Color(0xFF061721) : scheme.onSurfaceVariant,
                       letterSpacing: 0,
                     ),
                     child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),

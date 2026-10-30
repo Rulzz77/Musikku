@@ -4,7 +4,6 @@ import '../models/listening_stat.dart';
 import '../services/storage_service.dart';
 import '../widgets/flow_components.dart';
 import '../widgets/music_design.dart';
-import '../theme/app_colors.dart';
 
 class StatsPage extends StatefulWidget {
   const StatsPage({super.key, required this.storage});
@@ -108,7 +107,8 @@ class _StatsPageState extends State<StatsPage> {
               setState(() => _future = _load());
               await _future;
             },
-            child: ListView(
+            child: MusicPageEntrance(
+              child: ListView(
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 44),
               children: [
@@ -221,7 +221,7 @@ class _StatsPageState extends State<StatsPage> {
                   ),
                 ),
               ],
-            ),
+            )),
           );
         },
       )),
@@ -251,9 +251,15 @@ class _StatsHero extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(19, 18, 19, 18),
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(19),
-        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.58)),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [scheme.primaryContainer.withValues(alpha: 0.76), scheme.surfaceContainerLow, scheme.tertiaryContainer.withValues(alpha: 0.26)],
+          stops: const [0, 0.62, 1],
+        ),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: scheme.primary.withValues(alpha: 0.20)),
+        boxShadow: [BoxShadow(color: scheme.primary.withValues(alpha: 0.075), blurRadius: 24, offset: const Offset(0, 10))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -268,7 +274,7 @@ class _StatsHero extends StatelessWidget {
               ),
               const SizedBox(width: 10),
               Text(
-                'RINGKASAN PERSONAL',
+                'PERJALANAN MUSIKMU',
                 style: TextStyle(color: scheme.primary, fontSize: 9, letterSpacing: 1.35, fontWeight: FontWeight.w900),
               ),
             ],
@@ -433,10 +439,10 @@ class _RankTile extends StatelessWidget {
             width: 38,
             height: 38,
             decoration: BoxDecoration(
-              color: appGoldStrong.withValues(alpha: 0.11),
+              color: scheme.primary.withValues(alpha: 0.13),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(Icons.person_outline_rounded, color: appGoldStrong, size: 20),
+            child: Icon(Icons.person_outline_rounded, color: scheme.primary, size: 20),
           ),
           const SizedBox(width: 11),
           Expanded(
@@ -569,7 +575,7 @@ class _SkipTile extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Icon(Icons.skip_next_rounded, color: appGoldStrong, size: 20),
+          Icon(Icons.skip_next_rounded, color: scheme.primary, size: 20),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -611,7 +617,7 @@ class _EmptyState extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Icon(Icons.insights_outlined, color: appGoldStrong),
+          Icon(Icons.insights_outlined, color: scheme.primary),
           const SizedBox(width: 12),
           Expanded(child: Text(message)),
         ],

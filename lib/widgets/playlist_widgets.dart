@@ -63,8 +63,9 @@ class _PlaylistNameDialogState extends State<_PlaylistNameDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      title: Text(widget.title),
+      backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26), side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.55))),
+      title: Text(widget.title, style: const TextStyle(fontWeight: FontWeight.w900, letterSpacing: -0.35)),
       content: TextField(
         controller: _controller,
         autofocus: true,
@@ -103,7 +104,7 @@ void showAddToPlaylistSheet(
 }) {
   showModalBottomSheet(
     context: context,
-    backgroundColor: Theme.of(context).colorScheme.surface,
+    backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
     showDragHandle: true,
     isScrollControlled: true,
     builder: (sheetContext) {
@@ -125,30 +126,11 @@ void showAddToPlaylistSheet(
                     padding: const EdgeInsets.fromLTRB(20, 0, 12, 12),
                     child: Row(
                       children: [
-                        Container(
-                          width: 42,
-                          height: 42,
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(colors: [scheme.primary.withValues(alpha: 0.18), scheme.secondary.withValues(alpha: 0.12)]),
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          child: Icon(
-                            addedCount > 0 ? Icons.playlist_add_check_rounded : Icons.playlist_add_rounded,
-                            color: scheme.primary,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
                         Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text('Tambah ke playlist', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: -0.3)),
-                              if (addedCount > 0)
-                                Text(
-                                  'Sudah ada di $addedCount playlist',
-                                  style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
-                                ),
-                            ],
+                          child: MusicSheetHeading(
+                            icon: addedCount > 0 ? Icons.playlist_add_check_rounded : Icons.playlist_add_rounded,
+                            title: 'Tambah ke playlist',
+                            subtitle: addedCount > 0 ? 'Sudah ada di $addedCount playlist.' : 'Simpan lagu ini ke koleksi pilihanmu.',
                           ),
                         ),
                         TextButton(

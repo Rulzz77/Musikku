@@ -70,15 +70,20 @@ extension _HomeUiLayout on _HomePageState {
               child: IgnorePointer(
                 ignoring: watch == null,
                 child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 340),
-                  reverseDuration: const Duration(milliseconds: 260),
+                  duration: const Duration(milliseconds: 460),
+                  reverseDuration: const Duration(milliseconds: 320),
                   switchInCurve: Curves.easeOutCubic,
                   switchOutCurve: Curves.easeInCubic,
-                  // Fade only: a vertical slide made the whole player appear to
-                  // jump up/down when opening or switching the active player.
+                  // Short, soft lift: gives the player a clear entrance without
+                  // changing the stable layout of the music controls.
                   transitionBuilder: (child, animation) => FadeTransition(
                     opacity: animation,
-                    child: child,
+                    child: SlideTransition(
+                      position: Tween<Offset>(begin: const Offset(0, 0.025), end: Offset.zero).animate(
+                        CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+                      ),
+                      child: child,
+                    ),
                   ),
                   child: watch == null
                       ? const SizedBox.shrink(key: ValueKey<String>('player-closed'))

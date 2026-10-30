@@ -160,7 +160,8 @@ class _LyricsPanelState extends State<LyricsPanel> {
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: scheme.primary.withValues(alpha: widget.synced ? 0.20 : 0.10)),
         boxShadow: [
-          BoxShadow(color: scheme.primary.withValues(alpha: 0.045), blurRadius: 18, offset: const Offset(0, 6)),
+          BoxShadow(color: scheme.primary.withValues(alpha: 0.075), blurRadius: 22, offset: const Offset(0, 8)),
+          BoxShadow(color: scheme.tertiary.withValues(alpha: 0.035), blurRadius: 16, offset: const Offset(0, 2)),
         ],
       ),
       child: Row(

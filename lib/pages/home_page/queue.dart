@@ -404,13 +404,10 @@ extension _HomeQueueSheet on _HomePageState {
                   child: Row(
                     children: [
                       Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text('Antrean putar', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: -0.45)),
-                            const SizedBox(height: 3),
-                            Text('${items.length} lagu menunggu', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12)),
-                          ],
+                        child: MusicSheetHeading(
+                          icon: Icons.queue_music_rounded,
+                          title: 'Antrean putar',
+                          subtitle: '${items.length} lagu menunggu giliran.',
                         ),
                       ),
                       if (items.isNotEmpty)

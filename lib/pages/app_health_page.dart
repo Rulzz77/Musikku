@@ -151,7 +151,8 @@ class _AppHealthPageState extends State<AppHealthPage> {
         future: _eventsFuture,
         builder: (context, snapshot) {
           final events = snapshot.data ?? const <Map<String, dynamic>>[];
-          return ListView(
+          return MusicPageEntrance(
+            child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 32),
             children: [
               const FlowPageHero(
@@ -384,7 +385,7 @@ class _AppHealthPageState extends State<AppHealthPage> {
                 ),
               ],
             ],
-          );
+          ));
         },
       )),
     );
@@ -404,9 +405,9 @@ class _HealthMetricCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(13),
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.55)),
+        gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [scheme.primaryContainer.withValues(alpha: 0.42), scheme.surfaceContainerLow]),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: scheme.primary.withValues(alpha: 0.14)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

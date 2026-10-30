@@ -8,6 +8,7 @@ import '../services/app_settings.dart';
 import '../widgets/app_update_sheet.dart';
 import '../widgets/data_usage_card.dart';
 import '../widgets/music_design.dart';
+import '../widgets/flow_components.dart';
 
 /// Pengaturan global aplikasi. Semua opsi terhubung langsung ke controller
 /// dan disimpan lewat SharedPreferences.
@@ -45,58 +46,15 @@ class AppSettingsPage extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Pengaturan'),
       ),
-      body: MusicBackdrop(child: ListView(
+      body: MusicBackdrop(child: MusicPageEntrance(child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 10, 16, 40),
         children: [
-          Container(
-            margin: const EdgeInsets.only(bottom: 8),
-            padding: const EdgeInsets.fromLTRB(17, 17, 15, 17),
-            decoration: BoxDecoration(
-              color: scheme.surfaceContainerLow,
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.62)),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 46,
-                  height: 46,
-                  decoration: BoxDecoration(
-                    color: scheme.primary,
-                    borderRadius: BorderRadius.circular(13),
-                  ),
-                  child: Icon(Icons.tune_rounded, color: scheme.onPrimary, size: 24),
-                ),
-                const SizedBox(width: 13),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'PUSAT KONTROL',
-                        style: TextStyle(
-                          color: scheme.primary,
-                          fontSize: 9,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 1.45,
-                        ),
-                      ),
-                      const SizedBox(height: 5),
-                      const Text(
-                        'Atur cara kamu mendengarkan.',
-                        style: TextStyle(fontSize: 19, height: 1.08, fontWeight: FontWeight.w900, letterSpacing: -0.55),
-                      ),
-                      const SizedBox(height: 5),
-                      Text(
-                        'Semua preferensi MusikKu tersusun di satu tempat.',
-                        style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11.5, height: 1.35),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+          const FlowPageHero(
+            icon: Icons.tune_rounded,
+            eyebrow: 'PERSONAL STUDIO',
+            title: 'Kendali MusikKu',
+            subtitle: 'Atur tampilan, jaringan, suara, dan cara aplikasi bekerja sesuai kebiasaan mendengarkanmu.',
+            trailing: Icon(Icons.auto_awesome_rounded),
           ),
           // ---------------------------------------------------------------
           // TAMPILAN
@@ -132,7 +90,7 @@ class AppSettingsPage extends StatelessWidget {
                             AppThemeChoice.dark => 'Tema gelap dengan aksen MusikKu.',
                             AppThemeChoice.amoled => 'Latar hitam untuk layar OLED.',
                             AppThemeChoice.light => 'Latar terang untuk ruangan cerah.',
-                            AppThemeChoice.pink => 'Pink lembut, rose, dan glass. Pilih Mode Gelap atau Terang untuk kembali ke tampilan normal.',
+                            AppThemeChoice.pink => 'Pink pastel bernuansa rose. Pilih Mode Gelap atau Terang untuk kembali ke tampilan normal.',
                           }),
                         ),
                       ],
@@ -385,7 +343,7 @@ class AppSettingsPage extends StatelessWidget {
             ),
           ),
         ],
-      )),
+      ))),
     );
   }
 }
@@ -404,13 +362,12 @@ class _SectionLabel extends StatelessWidget {
       child: Row(
         children: [
           Container(
-            width: 4,
-            height: 18,
-            decoration: BoxDecoration(color: scheme.primary, borderRadius: BorderRadius.circular(4)),
+            width: 29,
+            height: 29,
+            decoration: BoxDecoration(color: scheme.primary.withValues(alpha: 0.13), borderRadius: BorderRadius.circular(10)),
+            child: Icon(icon, size: 16, color: scheme.primary),
           ),
-          const SizedBox(width: 9),
-          Icon(icon, size: 15, color: scheme.primary),
-          const SizedBox(width: 7),
+          const SizedBox(width: 10),
           Expanded(
             child: Text(
               title,
@@ -435,9 +392,14 @@ class _Group extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return Container(
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.58)),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [scheme.surfaceContainerLow, scheme.surfaceContainerLow.withValues(alpha: 0.90)],
+        ),
+        borderRadius: BorderRadius.circular(21),
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.56)),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: Theme.of(context).brightness == Brightness.dark ? 0.10 : 0.025), blurRadius: 18, offset: const Offset(0, 7))],
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(

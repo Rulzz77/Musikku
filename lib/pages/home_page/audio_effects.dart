@@ -168,24 +168,13 @@ extension _HomeAudioSettingsUi on _HomePageState {
               mainAxisSize: MainAxisSize.min,
               children: [
                 MusicGlassPanel(
-                  padding: const EdgeInsets.all(15),
+                  padding: const EdgeInsets.all(16),
                   radius: 22,
                   accent: scheme.primary,
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 48,
-                        height: 48,
-                        decoration: BoxDecoration(gradient: LinearGradient(colors: [scheme.primary, scheme.secondary]), borderRadius: BorderRadius.circular(16)),
-                        child: Icon(Icons.graphic_eq_rounded, color: scheme.onPrimary, size: 26),
-                      ),
-                      const SizedBox(width: 13),
-                      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        const Text('Efek audio', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: -0.5)),
-                        const SizedBox(height: 4),
-                        Text('Sesuaikan karakter suara sesuai seleramu.', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12.5)),
-                      ])),
-                    ],
+                  child: const MusicSheetHeading(
+                    icon: Icons.graphic_eq_rounded,
+                    title: 'Studio suara',
+                    subtitle: 'Bentuk karakter audio, atur level volume, dan haluskan perpindahan lagu.',
                   ),
                 ),
                 const SizedBox(height: 22),
@@ -481,32 +470,11 @@ extension _HomeAudioSettingsUi on _HomePageState {
                 children: [
                   Row(
                     children: [
-                      Container(
-                        width: 46,
-                        height: 46,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(16),
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [
-                              scheme.primary.withValues(alpha: 0.24),
-                              scheme.tertiary.withValues(alpha: 0.10),
-                            ],
-                          ),
-                          border: Border.all(color: scheme.primary.withValues(alpha: 0.30)),
-                        ),
-                        child: Icon(Icons.bedtime_rounded, color: scheme.primary, size: 25),
-                      ),
-                      const SizedBox(width: 12),
                       const Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Timer tidur', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900)),
-                            SizedBox(height: 3),
-                            Text('Atur musik berhenti otomatis.'),
-                          ],
+                        child: MusicSheetHeading(
+                          icon: Icons.bedtime_rounded,
+                          title: 'Timer tidur',
+                          subtitle: 'Musik berhenti otomatis saat waktunya tiba.',
                         ),
                       ),
                       IconButton(

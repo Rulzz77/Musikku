@@ -60,6 +60,11 @@ class YoutubePlatformView(
         @Volatile
         var preferredQuality: String = "default"
 
+        // Volume pilihan pengguna harus bertahan ketika YouTubePlayer/WebView
+        // dibuat ulang atau slider digerakkan sebelum callback onReady.
+        @Volatile
+        var preferredVolumePercent: Int = 100
+
         // Mode hemat data (0 mati, 1 hemat, 2 super hemat) dan status app di
         // background. Dipakai untuk menurunkan kualitas otomatis.
         @Volatile
@@ -559,6 +564,9 @@ class YoutubePlatformView(
 
                         isReady =
                             true
+
+                        // Terapkan ulang volume terakhir setelah IFrame player siap.
+                        player.setVolume(preferredVolumePercent.coerceIn(0, 100))
 
                         currentState =
                             "unstarted"
@@ -1548,12 +1556,16 @@ class YoutubePlatformView(
     // ============================================================
 
     fun setVolume(percent: Int) {
-        if (!isReady) {
-            return
-        }
-
         val safe = percent.coerceIn(0, 100)
-        youtubePlayer?.setVolume(safe)
+        preferredVolumePercent = safe
+
+        // Simpan meski player belum siap. Nilai ini akan diterapkan di onReady,
+        // jadi geser slider saat lagu baru mulai tidak hilang begitu saja.
+        handler.post {
+            if (isReady) {
+                youtubePlayer?.setVolume(safe)
+            }
+        }
     }
 
 

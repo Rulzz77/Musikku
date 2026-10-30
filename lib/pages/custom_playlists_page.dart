@@ -157,12 +157,37 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
             child: Column(
               children: [
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(18, 0, 18, 10),
-                  child: Row(
-                    children: [
-                      const Expanded(child: Text('Tambah lagu', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900))),
-                      Text('${selectedIds.length} dipilih', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12)),
-                    ],
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                  child: MusicGlassPanel(
+                    padding: const EdgeInsets.all(14),
+                    radius: 21,
+                    child: Row(
+                      children: [
+                        const Expanded(
+                          child: MusicSheetHeading(
+                            icon: Icons.playlist_add_rounded,
+                            title: 'Tambah lagu',
+                            subtitle: 'Pilih lagu untuk koleksi ini.',
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                          decoration: BoxDecoration(
+                            color: scheme.primaryContainer,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            '${selectedIds.length}',
+                            style: TextStyle(
+                              color: scheme.onPrimaryContainer,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 Expanded(
@@ -322,9 +347,23 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
         ],
       ),
       body: MusicBackdrop(
-        child: playlist == null
-            ? _buildPlaylistList(scheme)
-            : _buildPlaylistSongs(playlist, scheme),
+        child: MusicPageEntrance(
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 260),
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeInCubic,
+            transitionBuilder: (child, animation) => FadeTransition(
+              opacity: animation,
+              child: SlideTransition(
+                position: Tween<Offset>(begin: const Offset(0.035, 0), end: Offset.zero).animate(animation),
+                child: child,
+              ),
+            ),
+            child: playlist == null
+                ? KeyedSubtree(key: const ValueKey<String>('playlist-library'), child: _buildPlaylistList(scheme))
+                : KeyedSubtree(key: ValueKey<String>('playlist-${playlist.id}'), child: _buildPlaylistSongs(playlist, scheme)),
+          ),
+        ),
       ),
     );
   }

@@ -374,9 +374,14 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
       child: Container(
         padding: const EdgeInsets.fromLTRB(14, 14, 14, 13),
         decoration: BoxDecoration(
-          color: scheme.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.56)),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [scheme.primaryContainer.withValues(alpha: 0.78), scheme.surfaceContainerLow, scheme.surfaceContainerLow],
+          ),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: scheme.primary.withValues(alpha: 0.18)),
+          boxShadow: [BoxShadow(color: scheme.primary.withValues(alpha: 0.07), blurRadius: 21, offset: const Offset(0, 8))],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -384,7 +389,7 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
             Row(
               children: [
                 CircleAvatar(
-                  radius: 34,
+                  radius: 39,
                   backgroundColor: scheme.surfaceContainerHighest,
                   backgroundImage: avatar.isNotEmpty ? NetworkImage(avatar) : null,
                   child: avatar.isEmpty ? const Icon(Icons.person_rounded, size: 32) : null,
@@ -396,7 +401,7 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
                     children: [
                       Text('CHANNEL MUSIK', style: TextStyle(color: scheme.primary, fontSize: 9, letterSpacing: 1.3, fontWeight: FontWeight.w900)),
                       const SizedBox(height: 4),
-                      Text(title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, height: 1.05, letterSpacing: -0.55)),
+                      Text(title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 23, fontWeight: FontWeight.w900, height: 1.02, letterSpacing: -0.7)),
                     ],
                   ),
                 ),
@@ -724,7 +729,7 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Scaffold(
-      body: MusicBackdrop(child: CustomScrollView(
+      body: MusicBackdrop(child: MusicPageEntrance(child: CustomScrollView(
         slivers: [
           SliverAppBar(
             pinned: true,
@@ -744,7 +749,7 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
           ..._body(scheme),
           const SliverToBoxAdapter(child: SizedBox(height: 40)),
         ],
-      )),
+      ))),
     );
   }
 }

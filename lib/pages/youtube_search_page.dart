@@ -120,7 +120,7 @@ class _YoutubeSearchPageState extends State<YoutubeSearchPage> {
     ];
 
     return Scaffold(
-      body: MusicBackdrop(child: SafeArea(
+      body: MusicBackdrop(child: MusicPageEntrance(child: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -351,7 +351,7 @@ class _YoutubeSearchPageState extends State<YoutubeSearchPage> {
             ),
           ],
         ),
-      )),
+      ))),
     );
   }
 }

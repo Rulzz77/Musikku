@@ -178,6 +178,9 @@ class MainActivity : AudioServiceActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Pastikan tombol volume perangkat/headset mengubah volume media MusikKu,
+        // bukan ringtone/notifikasi, saat layar player sedang terbuka.
+        setVolumeControlStream(android.media.AudioManager.STREAM_MUSIC)
         // Cancel subscription-monitor work scheduled by older versions.
         // Music playback/media controls are unaffected.
         runCatching {
@@ -819,12 +822,25 @@ class MainActivity : AudioServiceActivity() {
                         call.argument<Int>("percent")?.coerceIn(0, 100) ?: 100
 
                     val requestedVideoId = call.argument<String>("videoId")?.trim().orEmpty()
-                    val serviceVideoId = PlaybackService.currentMediaSnapshot()?.videoId.orEmpty()
-                    if (requestedVideoId.isNotBlank() && requestedVideoId == serviceVideoId &&
-                        PlaybackService.isAudioPlayerActiveStatic()) {
-                        PlaybackService.setAudioVolumeStatic(percent)
-                    } else {
-                        YoutubePlatformView.instance?.setVolume(percent)
+                    val serviceSnapshot = PlaybackService.currentMediaSnapshot()
+                    val serviceVideoId = serviceSnapshot?.videoId.orEmpty()
+                    val nativeAudioActive = PlaybackService.isAudioPlayerActiveStatic()
+                    val requestTargetsNativeAudio = requestedVideoId.isBlank() ||
+                        requestedVideoId == serviceVideoId ||
+                        serviceSnapshot?.sourceType == "local"
+
+                    when {
+                        // Video ID bersifat opsional untuk pemanggil lama. Bila kosong,
+                        // arahkan slider ke sumber audio yang memang sedang aktif.
+                        nativeAudioActive && requestTargetsNativeAudio -> {
+                            PlaybackService.setAudioVolumeStatic(percent)
+                        }
+                        // Abaikan event slider terlambat dari lagu sebelumnya agar tidak
+                        // mengubah volume sumber lain yang baru saja mulai diputar.
+                        nativeAudioActive -> {
+                            MusikKuLogger.d(TAG, "SET VOLUME diabaikan: videoId sudah tidak aktif")
+                        }
+                        else -> YoutubePlatformView.instance?.setVolume(percent)
                     }
                     result.success(null)
                 }

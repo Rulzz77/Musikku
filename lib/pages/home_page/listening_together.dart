@@ -61,7 +61,8 @@ extension _HomeListeningTogether on _HomePageState {
         ),
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-          child: ValueListenableBuilder<String>(
+          child: MusicPageEntrance(
+            child: ValueListenableBuilder<String>(
             valueListenable: _listenTogether.status,
             builder: (context, status, _) {
               final connected = _listenTogether.isConnected;
@@ -74,40 +75,10 @@ extension _HomeListeningTogether on _HomePageState {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 48,
-                        height: 48,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(16),
-                          gradient: LinearGradient(
-                            colors: [
-                              scheme.primary.withValues(alpha: 0.22),
-                              scheme.tertiary.withValues(alpha: 0.10),
-                            ],
-                          ),
-                          border: Border.all(
-                            color: scheme.primary.withValues(alpha: 0.30),
-                          ),
-                        ),
-                        child: Icon(Icons.headphones_rounded, color: scheme.primary, size: 26),
-                      ),
-                      const SizedBox(width: 12),
-                      const Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Dengerin bareng',
-                              style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900),
-                            ),
-                            SizedBox(height: 3),
-                            Text('Bagikan kode kamar sekali. Lagu tersinkron otomatis.'),
-                          ],
-                        ),
-                      ),
-                    ],
+                  MusicSheetHeading(
+                    icon: Icons.headphones_rounded,
+                    title: 'Dengerin bareng',
+                    subtitle: 'Buat ruang musik bersama. Bagikan satu kode, lalu putar dan kontrol lagu dari perangkat masing-masing.',
                   ),
                   const SizedBox(height: 16),
                   MusicGlassPanel(
@@ -301,7 +272,7 @@ extension _HomeListeningTogether on _HomePageState {
                 ],
               );
             },
-          ),
+          )),
         ),
       ),
     ).whenComplete(codeController.dispose);

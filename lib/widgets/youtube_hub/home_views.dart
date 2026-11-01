@@ -190,6 +190,7 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
       _chipRow(),
       SliverToBoxAdapter(child: _homeShortcutRow(actions)),
       SliverToBoxAdapter(child: _featuredMusicBanner()),
+      ..._customPlaylistSection(),
       if (smartPlaylists.isNotEmpty) ...[
         _sectionHeader('Playlist pintar', action: 'Lihat semua', onAction: _showSmartPlaylistPicker),
         SliverToBoxAdapter(
@@ -243,6 +244,158 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
         _homeEmptyState(retry: () => _loadHome(force: true)),
       const SliverToBoxAdapter(child: SizedBox(height: 16)),
     ];
+  }
+
+  /// Playlist buatan sendiri, tampil langsung di beranda supaya mudah diputar.
+  List<Widget> _customPlaylistSection() {
+    final playlists = widget.customPlaylists;
+    final open = widget.onOpenCustomPlaylists;
+    if (playlists.isEmpty && open == null) return const <Widget>[];
+    final shown = playlists.take(12).toList(growable: false);
+    return [
+      _sectionHeader(
+        'Playlist kamu',
+        action: open == null ? null : (playlists.isEmpty ? 'Buat' : 'Lihat semua'),
+        onAction: open,
+      ),
+      SliverToBoxAdapter(
+        child: SizedBox(
+          height: 118,
+          child: ListView.separated(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+            scrollDirection: Axis.horizontal,
+            itemCount: playlists.isEmpty ? 1 : shown.length,
+            separatorBuilder: (_, _) => const SizedBox(width: 10),
+            itemBuilder: (context, index) => playlists.isEmpty
+                ? _createPlaylistCard(open!)
+                : _customPlaylistCard(shown[index]),
+          ),
+        ),
+      ),
+    ];
+  }
+
+  Widget _createPlaylistCard(VoidCallback onTap) {
+    final scheme = Theme.of(context).colorScheme;
+    return SizedBox(
+      width: 190,
+      child: Material(
+        color: scheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(19),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.add_circle_outline_rounded, size: 30, color: scheme.primary),
+              const SizedBox(height: 8),
+              Text(
+                'Buat playlist pertamamu',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: scheme.onSurface,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _customPlaylistCard(Playlist playlist) {
+    final scheme = Theme.of(context).colorScheme;
+    final first = playlist.songs.isEmpty ? null : playlist.songs.first;
+    final play = widget.onPlayCustomPlaylist;
+    final open = widget.onOpenCustomPlaylists;
+    final canPlay = first != null && play != null;
+    return SizedBox(
+      width: 190,
+      child: Material(
+        color: scheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(19),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          // Playlist kosong / tanpa handler putar: buka halaman playlist.
+          onTap: canPlay ? () => unawaited(play(playlist)) : open,
+          onLongPress: open,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              if (first != null)
+                UnifiedArtwork(track: first, fit: BoxFit.cover, iconSize: 30)
+              else
+                ColoredBox(
+                  color: scheme.surfaceContainerHighest,
+                  child: Center(
+                    child: Icon(Icons.queue_music_rounded, size: 34, color: scheme.onSurfaceVariant),
+                  ),
+                ),
+              const DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Color(0x12000000), Color(0xD9000000)],
+                    stops: [0.05, 1],
+                  ),
+                ),
+              ),
+              Positioned(
+                left: 12,
+                right: 10,
+                bottom: 11,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            playlist.name.toUpperCase(),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 0.6,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            playlist.songs.isEmpty ? 'Kosong' : '${playlist.songs.length} lagu',
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.78),
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (canPlay)
+                      Container(
+                        width: 34,
+                        height: 34,
+                        decoration: BoxDecoration(
+                          color: scheme.primary,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(Icons.play_arrow_rounded, color: scheme.onPrimary, size: 22),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   List<SmartPlaylist> _buildSmartPlaylists() {

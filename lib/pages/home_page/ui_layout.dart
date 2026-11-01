@@ -35,6 +35,8 @@ extension _HomeUiLayout on _HomePageState {
                     listeningStats: _listeningStatsById.values.toList(growable: false),
                     customPlaylistCount: _playlists.length,
                     onOpenCustomPlaylists: _openCustomPlaylistsPage,
+                    customPlaylists: _playlists,
+                    onPlayCustomPlaylist: _playCustomPlaylist,
                     currentVideoId: current?.videoId,
                     onStartRadio: _startRadioFromVideo,
                     onPlayFromList: _playFromCustomList,

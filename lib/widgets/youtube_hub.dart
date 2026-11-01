@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../app_info.dart';
 import '../models/listening_stat.dart';
+import '../models/playlist.dart';
 import '../models/youtube_search_result.dart';
 import '../pages/app_settings_page.dart';
 import '../pages/artist_page.dart';
@@ -68,6 +69,9 @@ class YoutubeHub extends StatefulWidget {
   final List<ListeningStat> listeningStats;
   final int customPlaylistCount;
   final VoidCallback? onOpenCustomPlaylists;
+  /// Playlist buatan pengguna, ditampilkan di beranda.
+  final List<Playlist> customPlaylists;
+  final Future<void> Function(Playlist playlist)? onPlayCustomPlaylist;
   final String? currentVideoId;
   final Future<void> Function(YoutubeSearchResult video)? onStartRadio;
   final Future<void> Function(YoutubeSearchResult video, List<YoutubeSearchResult> list) onPlayFromList;
@@ -91,6 +95,8 @@ class YoutubeHub extends StatefulWidget {
     this.listeningStats = const [],
     this.customPlaylistCount = 0,
     this.onOpenCustomPlaylists,
+    this.customPlaylists = const [],
+    this.onPlayCustomPlaylist,
     this.currentVideoId,
     this.onStartRadio,
     required this.onPlayFromList,

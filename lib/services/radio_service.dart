@@ -100,9 +100,11 @@ class RadioService {
   /// (termasuk pilihan manual dan lagu awal Radio), satu artis maksimal
   /// [_maxPerArtistInWindow] kali, dan tidak boleh muncul dalam
   /// [_artistNoRepeatGap] lagu terakhir.
-  static const int _artistWindow = 10;
-  static const int _maxPerArtistInWindow = 2;
-  static const int _artistNoRepeatGap = 3;
+  // Artis yang sama paling banyak 1x dalam 8 lagu terakhir, dan tidak boleh
+  // kembali dalam 4 lagu berikutnya. Ubah angka ini untuk menyetel variasi.
+  static const int _artistWindow = 8;
+  static const int _maxPerArtistInWindow = 1;
+  static const int _artistNoRepeatGap = 4;
   final List<({String id, String artist})> _recentPlayedArtists =
       <({String id, String artist})>[];
 
@@ -427,7 +429,11 @@ class RadioService {
       }
       // Selera pendengar (artis yang sering didengar/dicari, minus skip). Genre
       // tetap menjadi gerbang; ini hanya menggeser bobot di antara kandidat.
-      score += tasteBonus?.call(video) ?? 0.0;
+      // Artis yang baru diputar tidak mendapat bonus selera, supaya artis
+      // favorit tidak mendominasi urutan.
+      final recentlyHeard =
+          artist.isNotEmpty && _artistPlaysInWindow(artist) > 0;
+      score += recentlyHeard ? 0.0 : (tasteBonus?.call(video) ?? 0.0);
       // Jitter kecil membuat urutan kandidat dengan nilai serupa ikut berubah.
       score += _random.nextDouble() * 6.0;
       return (video: video, score: score);
@@ -469,13 +475,10 @@ class RadioService {
     // Utamakan artis hasil baca judul + channel. Nama channel saja menipu:
     // channel lirik/reupload memuat banyak penyanyi, sedangkan satu penyanyi
     // bisa tersebar di channel resmi, Topic, dan cover.
-    final recognized = MusicStyleMatcher.artistKeyFor(video);
-    if (recognized.isNotEmpty) return recognized;
-    final withoutChannelSuffix = video.channelTitle.replaceAll(
-      RegExp(r'\b(?:official|artist|channel|topic|vevo|covers?)\b', caseSensitive: false),
-      ' ',
-    );
-    return normalizePhrase(withoutChannelSuffix);
+    // Artis tidak dikenali = tidak dikelompokkan. Nama channel sengaja TIDAK
+    // dipakai sebagai pengganti: channel lirik/kompilasi/reupload memuat banyak
+    // penyanyi, dan satu penyanyi bisa tersebar di banyak channel.
+    return MusicStyleMatcher.artistKeyFor(video);
   }
 
   void _rememberSelection(YoutubeSearchResult video) {

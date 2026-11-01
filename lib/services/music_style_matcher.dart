@@ -838,7 +838,49 @@ class MusicStyleMatcher {
     if (video.isLocal && video.channelTitle.trim() == 'Artis tidak diketahui') {
       return '';
     }
-    return normalize(_seedArtistFor(video));
+    return normalize(_variationArtistFor(video));
+  }
+
+  /// Channel yang dipastikan milik satu artis (auto-generated "- Topic", VEVO,
+  /// Official Artist Channel). Channel biasa TIDAK termasuk: channel lirik,
+  /// kompilasi, dan reupload memuat banyak penyanyi.
+  static final RegExp _artistOwnedChannel = RegExp(
+    r'(?:\s-\s*topic$|vevo$|official\s+artist\s+channel$)',
+    caseSensitive: false,
+  );
+
+  /// Artis untuk variasi putar. Beda dengan [_seedArtistFor], nama channel
+  /// biasa tidak dianggap artis. Urutan: judul (artis dikenal) -> channel
+  /// milik artis -> pola "Artis - Judul". Kalau tidak yakin, kosong (tidak
+  /// dikelompokkan).
+  static String _variationArtistFor(YoutubeSearchResult video) {
+    final rawChannel = video.channelTitle.trim();
+    final channel = _firstArtist(_radioSeedArtist(rawChannel));
+    final channelKey = normalize(channel);
+    final parts = _radioSeedTitle(video.title)
+        .split(_titleSplit)
+        .map((part) => part.trim())
+        .where((part) => part.isNotEmpty)
+        .toList(growable: false);
+
+    if (parts.length >= 2) {
+      for (final part in parts) {
+        final artist = _firstArtist(part);
+        if (_isKnownArtist(normalize(artist))) return artist;
+      }
+    }
+    if (channelKey.isNotEmpty) {
+      if (_isKnownArtist(channelKey)) return channel;
+      if (_artistOwnedChannel.hasMatch(rawChannel) &&
+          !_isGenericChannel(channelKey)) {
+        return channel;
+      }
+    }
+    if (parts.length >= 2) {
+      final candidate = _firstArtist(parts.first);
+      if (candidate.split(' ').length <= 4) return candidate;
+    }
+    return '';
   }
 
   static String _composeSeed(String artist, String? style) {

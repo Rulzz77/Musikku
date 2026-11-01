@@ -204,6 +204,13 @@ extension _HomeRadio on _HomePageState {
       }
     }
 
+    final lastResort = _pickLastResortTrack();
+    if (lastResort != null) {
+      debugPrint('AUTO NEXT: last-resort pick ${lastResort.title}');
+      await _playVideo(lastResort);
+      return;
+    }
+
     await _stopPlayback();
     if (!fromAutoNext) {
       _toast(
@@ -292,6 +299,29 @@ extension _HomeRadio on _HomePageState {
     }
 
     return null;
+  }
+
+  /// Fallback paling akhir: semua jalur Radio kosong (pool habis, API gagal,
+  /// genre tidak terdeteksi). Lebih baik memutar ulang lagu lama dari favorit /
+  /// terakhir diputar daripada diam. Filter genre dan "sudah pernah diputar"
+  /// sengaja diabaikan, tapi tetap menghormati blokir, dislike, Shorts, bukan
+  /// lagu sekarang, dan bukan 15 lagu terakhir (lewat _pickNonShort).
+  YoutubeSearchResult? _pickLastResortTrack() {
+    final seen = <String>{};
+    final pool = <YoutubeSearchResult>[
+      ..._favorites,
+      ..._recentlyPlayed,
+    ].where((video) {
+      return video.videoId.isNotEmpty &&
+          !video.isLocal &&
+          seen.add(video.videoId) &&
+          !_dislikedIds.contains(video.videoId) &&
+          !ChannelBlockFilter.isBlocked(video, _blockedChannelKeys) &&
+          !video.isLive &&
+          !video.isUpcoming;
+    }).toList(growable: false);
+    if (pool.isEmpty) return null;
+    return _pickNonShort(_radio.preferArtistVariety(pool), random: true);
   }
 
   /// Kandidat radio/cached fallback tidak boleh berupa lagu sekarang atau
@@ -516,6 +546,11 @@ extension _HomeRadio on _HomePageState {
         );
       }
     }
+
+    // Fallback 3: genre tidak terdeteksi / semua kandidat sudah pernah diputar.
+    // Fallback 1 mati di mode Radio (_activeList sengaja dikosongkan) dan
+    // Fallback 2 butuh targetStyle, jadi tanpa ini lagu berhenti diam-diam.
+    next ??= _pickLastResortTrack();
 
     if (next == null) {
       debugPrint(

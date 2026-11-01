@@ -45,6 +45,10 @@ class RadioService {
   // utama di setiap isi ulang. Setiap query punya token halamannya sendiri.
   List<String> _alternateSeeds = const <String>[];
   final Map<String, String?> _pageTokens = <String, String?>{};
+  // Query yang halamannya sudah habis. Tanpa ini token null berarti "mulai dari
+  // halaman 1 lagi", yang hasilnya sudah diputar semua -> pool kosong terus.
+  final Set<String> _exhaustedQueries = <String>{};
+  static const Duration _searchTimeout = Duration(seconds: 12);
   int _queryCursor = 0;
   Future<void>? _fetch;
   DateTime? _lastRefillStartedAt;
@@ -144,6 +148,7 @@ class RadioService {
       _pool.clear();
       _reserve.clear();
       _pageTokens.clear();
+      _exhaustedQueries.clear();
       _queryCursor = 0;
       _fetch = null;
       _lastRefillStartedAt = null;
@@ -178,6 +183,7 @@ class RadioService {
     _pool.clear();
     _reserve.clear();
     _pageTokens.clear();
+    _exhaustedQueries.clear();
     _queryCursor = 0;
     _fetch = null;
     _lastRefillStartedAt = null;
@@ -1052,20 +1058,33 @@ class RadioService {
     for (var attempt = 0; attempt < maxAttempts; attempt++) {
       if (attempt > 0 && _pool.isNotEmpty) break;
       final batchSize = (attempt == 0 && firstFill) ? 2 : 1;
-      final batch = <String>[
-        for (var i = 0; i < batchSize; i++)
-          queries[(_queryCursor++) % queries.length],
-      ];
+      final batch = <String>[];
+      for (var i = 0; i < batchSize; i++) {
+        for (var tries = 0; tries < queries.length; tries++) {
+          final candidate = queries[(_queryCursor++) % queries.length];
+          if (!_exhaustedQueries.contains(candidate) &&
+              !batch.contains(candidate)) {
+            batch.add(candidate);
+            break;
+          }
+        }
+      }
+      if (batch.isEmpty) {
+        debugPrint('RADIO: semua query habis | seed=$seed');
+        break;
+      }
 
       _lastNetworkFetchAt = DateTime.now();
       YoutubeSearchException? apiError;
       Object? otherError;
       final pages = await Future.wait(batch.map((query) async {
         try {
-          return await _searchService.searchLatest(
-            query,
-            pageToken: _pageTokens[query],
-          );
+          return await _searchService
+              .searchLatest(
+                query,
+                pageToken: _pageTokens[query],
+              )
+              .timeout(_searchTimeout);
         } on YoutubeSearchException catch (e) {
           apiError ??= e;
         } catch (e) {
@@ -1080,7 +1099,14 @@ class RadioService {
         final page = pages[i];
         if (page == null) continue;
         gotPage = true;
-        _pageTokens[batch[i]] = page.nextPageToken;
+        // Halaman kosong tanpa token = error sesaat (searchLatest mengembalikan
+        // halaman kosong saat gagal). Jangan timpa token / jangan tandai habis.
+        final nextToken = page.nextPageToken;
+        final hasNext = nextToken != null && nextToken.isNotEmpty;
+        if (page.results.isNotEmpty || hasNext) {
+          _pageTokens[batch[i]] = nextToken;
+          if (!hasNext) _exhaustedQueries.add(batch[i]);
+        }
 
         final related = page.results.where((video) => eligible(video)).toList();
         final ranked = MusicStyleMatcher.rankForRadio(

@@ -109,6 +109,24 @@ extension _HomeControls on _HomePageState {
     await _storage.recordSkip(video);
   }
 
+  /// Posisi terbaik untuk melanjutkan [video] setelah pemutaran gagal/terputus.
+  /// 0 berarti mulai dari awal (belum sempat terdengar, hampir habis, atau
+  /// sudah selesai).
+  double _resumePositionFor(YoutubeSearchResult video) {
+    final nativeBelongs =
+        _nativeState.videoId.isEmpty || _nativeState.videoId == video.videoId;
+    final nativeSeconds =
+        nativeBelongs ? _nativeState.position.inMilliseconds / 1000.0 : 0.0;
+    final goodSeconds =
+        _lastGoodPositionVideoId == video.videoId ? _lastGoodPositionSeconds : 0.0;
+    final best = nativeSeconds > goodSeconds ? nativeSeconds : goodSeconds;
+    if (!best.isFinite || best < 2.0) return 0.0;
+    final duration = video.durationSeconds?.toDouble() ??
+        _nativeState.duration.inMilliseconds / 1000.0;
+    if (duration > 0 && best >= duration - 3.0) return 0.0;
+    return best;
+  }
+
   Future<void> _togglePlayPause() async {
     // Perangkat tamu mengikuti state host, termasuk dari tombol headset/
     // notifikasi. Jangan biarkan kontrol lokal memecah sinkronisasi.
@@ -164,7 +182,15 @@ extension _HomeControls on _HomePageState {
       // service. Never call native Play against that stale item; reload the
       // selected song and resolve a fresh URL instead.
       if (remoteAudioUnavailable || _nativeState.playbackState == NativePlaybackState.error) {
-        await _playVideo(video, recordHistory: false);
+        // Koneksi putus lalu pulih: lanjutkan dari menit terakhir, bukan dari
+        // awal lagu. Posisi native sudah 0 pada state error.
+        final resumeAt = _resumePositionFor(video);
+        await _playVideo(
+          video,
+          recordHistory: false,
+          restorePosition: resumeAt > 0 ? resumeAt : null,
+          restoreDurationSeconds: _nativeState.duration.inMilliseconds / 1000.0,
+        );
         return;
       }
 

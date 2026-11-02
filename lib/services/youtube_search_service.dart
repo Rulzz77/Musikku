@@ -186,6 +186,44 @@ class YoutubeSearchService {
     return '$trimmed official';
   }
 
+  /// "3 months ago" / "5 hari yang lalu" -> perkiraan tanggal. Perkiraan kasar
+  /// (bulan = 30 hari, tahun = 365 hari), cukup untuk menilai baru atau lama.
+  static DateTime? _approximateDateFromRelative(String raw) {
+    if (raw.isEmpty) return null;
+    final match = RegExp(
+      r'(\d+)\s*(second|minute|hour|day|week|month|year|detik|menit|jam|hari|minggu|bulan|tahun)',
+      caseSensitive: false,
+    ).firstMatch(raw);
+    if (match == null) return null;
+    final amount = int.tryParse(match.group(1) ?? '');
+    if (amount == null) return null;
+    final unit = (match.group(2) ?? '').toLowerCase();
+    final Duration span;
+    switch (unit) {
+      case 'second':
+      case 'detik':
+        span = Duration(seconds: amount);
+      case 'minute':
+      case 'menit':
+        span = Duration(minutes: amount);
+      case 'hour':
+      case 'jam':
+        span = Duration(hours: amount);
+      case 'day':
+      case 'hari':
+        span = Duration(days: amount);
+      case 'week':
+      case 'minggu':
+        span = Duration(days: amount * 7);
+      case 'month':
+      case 'bulan':
+        span = Duration(days: amount * 30);
+      default:
+        span = Duration(days: amount * 365);
+    }
+    return DateTime.now().subtract(span);
+  }
+
   static YoutubeSearchResult _fromExplodeVideo(dynamic video) {
     String readString(dynamic Function() read, [String fallback = '']) {
       try {
@@ -224,6 +262,11 @@ class YoutubeSearchService {
       final dynamic date = video.publishDate ?? video.uploadDate;
       if (date is DateTime) publishedAt = date;
     } catch (_) {}
+    // Hasil pencarian sering hanya punya teks relatif ("3 months ago"). Ubah ke
+    // perkiraan tanggal supaya rilisan baru dan kecepatan penonton bisa dinilai.
+    final approxPublishedAt = publishedAt == null
+        ? _approximateDateFromRelative(readString(() => video.uploadDateRaw))
+        : null;
 
     double? durationSeconds;
     try {
@@ -250,6 +293,7 @@ class YoutubeSearchService {
       thumbnailUrl: thumbnailUrl,
       viewCount: viewCount,
       publishedAt: publishedAt,
+      approxPublishedAt: approxPublishedAt,
       durationSeconds: live ? null : durationSeconds,
       liveStatus: live ? 'live' : '',
       channelId: channelId,

@@ -143,6 +143,8 @@ extension _HomePlayback on _HomePageState {
       // Lagu baru selalu dimulai dari posisi 0, kecuali ini adalah
       // pemulihan snapshot lagu terakhir saat aplikasi dibuka kembali.
       _pendingSavedPosition = restorePosition ?? 0.0;
+      _lastGoodPositionSeconds = restorePosition ?? 0.0;
+      _lastGoodPositionVideoId = video.videoId;
 
       _lastPositionSaveAt =
           DateTime.fromMillisecondsSinceEpoch(0);
@@ -332,7 +334,7 @@ extension _HomePlayback on _HomePageState {
         _showPlaybackRecoverySnack(
           video,
           'Pemutaran gagal. Periksa koneksi, lalu coba lagi.',
-          positionSeconds: restorePosition ?? _nativeState.position.inMilliseconds / 1000.0,
+          positionSeconds: restorePosition ?? _resumePositionFor(video),
           durationSeconds: restoreDurationSeconds ?? _nativeState.duration.inMilliseconds / 1000.0,
         );
       }
@@ -471,7 +473,7 @@ extension _HomePlayback on _HomePageState {
     _showPlaybackRecoverySnack(
       video,
       'Lagu gagal diputar. Coba lagi atau pilih lagu berikutnya.',
-      positionSeconds: _nativeState.position.inMilliseconds / 1000.0,
+      positionSeconds: _resumePositionFor(video),
       durationSeconds: _nativeState.duration.inMilliseconds / 1000.0,
     );
   }

@@ -17,6 +17,9 @@ class SmartQueueScorer {
     bool isLiked = false,
     bool isDisliked = false,
     String? currentArtist,
+    // Kunci artis kandidat dari pembaca artis (judul + channel). Kalau diisi,
+    // dipakai menggantikan nama channel; string kosong = artis tidak dikenal.
+    String? candidateArtist,
     int artistPlayCount = 0,
     int artistSkipCount = 0,
     bool artistHasLikedTrack = false,
@@ -61,9 +64,9 @@ class SmartQueueScorer {
       value += 4.0;
     }
 
-    final candidateArtist = normalizeArtist(video.channelTitle);
+    final candidateKey = normalizeArtist(candidateArtist ?? video.channelTitle);
     final activeArtist = normalizeArtist(currentArtist ?? '');
-    if (candidateArtist.isNotEmpty && candidateArtist == activeArtist) {
+    if (candidateKey.isNotEmpty && candidateKey == activeArtist) {
       value -= 11.0;
     }
 

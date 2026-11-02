@@ -838,14 +838,54 @@ class MusicStyleMatcher {
     if (video.isLocal && video.channelTitle.trim() == 'Artis tidak diketahui') {
       return '';
     }
-    return normalize(_variationArtistFor(video));
+    return artistKeyFromParts(
+      title: video.title,
+      channelTitle: video.channelTitle,
+    );
   }
+
+  static final Map<String, String> _artistKeyMemo = <String, String>{};
+
+  /// Kunci artis dari judul + nama channel mentah. Dipakai juga untuk data yang
+  /// hanya punya judul dan channel (statistik dengar), supaya semua fitur
+  /// (variasi Radio, bonus selera, Smart Shuffle) memakai identitas artis yang
+  /// sama. Hasilnya disimpan sementara karena dipanggil berulang untuk
+  /// banyak kandidat.
+  static String artistKeyFromParts({
+    required String title,
+    required String channelTitle,
+  }) {
+    final memoKey = '$channelTitle\u0000$title';
+    final cached = _artistKeyMemo[memoKey];
+    if (cached != null) return cached;
+    final key = _stripBandWords(normalize(_variationArtistFor(title, channelTitle)));
+    if (_artistKeyMemo.length > 4000) _artistKeyMemo.clear();
+    _artistKeyMemo[memoKey] = key;
+    return key;
+  }
+
+  /// "wali band" dan "wali" harus dianggap artis yang sama untuk batas variasi.
+  static String _stripBandWords(String key) => key
+      .replaceAll(
+        RegExp(r'\b(?:band|official|music|group|channel|topic|vevo|resmi)\b'),
+        ' ',
+      )
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+
+  /// Artis lagu seed, dipakai untuk mengenali lagu-lagu artis seed lain di
+  /// Radio. Sengaja memakai pembaca artis yang SAMA dengan batas variasi
+  /// (tanpa menebak dari nama channel biasa): kalau seed-nya dari channel
+  /// kompilasi/lirik, nama channel itu tidak boleh jadi "artis seed" yang
+  /// mengelompokkan semua lagunya.
+  static String seedArtistKeyFor(YoutubeSearchResult video) =>
+      artistKeyFor(video);
 
   /// Channel yang dipastikan milik satu artis (auto-generated "- Topic", VEVO,
   /// Official Artist Channel). Channel biasa TIDAK termasuk: channel lirik,
   /// kompilasi, dan reupload memuat banyak penyanyi.
   static final RegExp _artistOwnedChannel = RegExp(
-    r'(?:\s-\s*topic$|vevo$|official\s+artist\s+channel$)',
+    r'(?:\s-\s*topic$|vevo$|\bofficial\b|\bresmi\b)',
     caseSensitive: false,
   );
 
@@ -853,11 +893,11 @@ class MusicStyleMatcher {
   /// biasa tidak dianggap artis. Urutan: judul (artis dikenal) -> channel
   /// milik artis -> pola "Artis - Judul". Kalau tidak yakin, kosong (tidak
   /// dikelompokkan).
-  static String _variationArtistFor(YoutubeSearchResult video) {
-    final rawChannel = video.channelTitle.trim();
+  static String _variationArtistFor(String rawTitle, String channelTitle) {
+    final rawChannel = channelTitle.trim();
     final channel = _firstArtist(_radioSeedArtist(rawChannel));
     final channelKey = normalize(channel);
-    final parts = _radioSeedTitle(video.title)
+    final parts = _radioSeedTitle(rawTitle)
         .split(_titleSplit)
         .map((part) => part.trim())
         .where((part) => part.isNotEmpty)

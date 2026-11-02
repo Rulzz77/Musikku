@@ -7,6 +7,10 @@ class YoutubeSearchResult {
   final String thumbnailUrl;
   final int? viewCount;
   final DateTime? publishedAt;
+  /// Perkiraan tanggal rilis dari teks relatif YouTube ("3 months ago"). Kasar
+  /// (bisa meleset sampai setahun), hanya untuk menilai baru/lama; jangan
+  /// ditampilkan sebagai tanggal.
+  final DateTime? approxPublishedAt;
 
   /// 'youtube' atau 'local'. Local track tetap memakai model yang sama supaya
   /// Queue/Favorite/History/Playlist dan UI bisa berbagi satu tipe.
@@ -75,6 +79,7 @@ class YoutubeSearchResult {
     required this.thumbnailUrl,
     this.viewCount,
     this.publishedAt,
+    this.approxPublishedAt,
     this.sourceType = 'youtube',
     this.mediaUri = '',
     this.durationSeconds,
@@ -95,6 +100,7 @@ class YoutubeSearchResult {
     String? thumbnailUrl,
     int? viewCount,
     DateTime? publishedAt,
+    DateTime? approxPublishedAt,
     String? sourceType,
     String? mediaUri,
     double? durationSeconds,
@@ -114,6 +120,7 @@ class YoutubeSearchResult {
       thumbnailUrl: thumbnailUrl ?? this.thumbnailUrl,
       viewCount: viewCount ?? this.viewCount,
       publishedAt: publishedAt ?? this.publishedAt,
+      approxPublishedAt: approxPublishedAt ?? this.approxPublishedAt,
       sourceType: sourceType ?? this.sourceType,
       mediaUri: mediaUri ?? this.mediaUri,
       durationSeconds: durationSeconds ?? this.durationSeconds,
@@ -136,6 +143,7 @@ class YoutubeSearchResult {
       'thumbnailUrl': thumbnailUrl,
       'viewCount': viewCount,
       'publishedAt': publishedAt?.toIso8601String(),
+      'approxPublishedAt': approxPublishedAt?.toIso8601String(),
       'sourceType': sourceType,
       'mediaUri': mediaUri,
       'durationSeconds': durationSeconds,
@@ -161,6 +169,8 @@ class YoutubeSearchResult {
       thumbnailUrl: json['thumbnailUrl']?.toString() ?? '',
       viewCount: json['viewCount'] is num ? (json['viewCount'] as num).toInt() : null,
       publishedAt: DateTime.tryParse(json['publishedAt']?.toString() ?? ''),
+      approxPublishedAt:
+          DateTime.tryParse(json['approxPublishedAt']?.toString() ?? ''),
       sourceType: source,
       mediaUri: json['mediaUri']?.toString() ?? '',
       durationSeconds: json['durationSeconds'] is num

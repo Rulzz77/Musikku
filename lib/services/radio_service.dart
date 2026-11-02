@@ -100,6 +100,18 @@ class RadioService {
   /// (termasuk pilihan manual dan lagu awal Radio), satu artis maksimal
   /// [_maxPerArtistInWindow] kali, dan tidak boleh muncul dalam
   /// [_artistNoRepeatGap] lagu terakhir.
+  // Populer per artis: Radio hanya memilih lagu yang lolos salah satu dari:
+  // (1) jumlah penonton di [_popularKeepFraction] teratas lagu artis itu,
+  // (2) kecepatan penonton (penonton per hari) di [_popularKeepFraction]
+  // teratas, supaya lagu baru yang sedang naik tetap masuk, atau
+  // (3) rilis dalam [_popularFreshDays] hari terakhir (terlalu awal dinilai).
+  // Pembanding diambil dari lagu artis itu yang diketahui Radio (pool +
+  // cadangan + yang sudah diputar). 1.0 = fitur dimatikan. Baru berlaku bila ada
+  // minimal [_popularMinSample] lagu artis itu dengan data penonton.
+  static const double _popularKeepFraction = 0.5;
+  static const int _popularMinSample = 6;
+  static const int _popularFreshDays = 14;
+
   // Artis yang sama paling banyak 1x dalam 8 lagu terakhir, dan tidak boleh
   // kembali dalam 4 lagu berikutnya. Ubah angka ini untuk menyetel variasi.
   static const int _artistWindow = 8;
@@ -125,6 +137,7 @@ class RadioService {
     String? preferredLanguage,
     bool lockLanguage = false,
     List<String> alternateSeeds = const <String>[],
+    String seedArtist = '',
   }) {
     final normalized = seed.trim();
 
@@ -156,6 +169,10 @@ class RadioService {
       _lastRefillStartedAt = null;
     }
     _seed = normalized;
+    final seedArtistKey = normalizePhrase(seedArtist);
+    if (changed || seedArtistKey.isNotEmpty) {
+      _seedArtistKey = seedArtistKey;
+    }
     // Pemanggil yang tidak mengirim seed cadangan tidak boleh menghapus seed
     // cadangan yang sudah ada untuk seed yang sama.
     if (changed || cleanedAlternates.isNotEmpty) {
@@ -231,6 +248,123 @@ class RadioService {
     return future;
   }
 
+  /// Artis lagu seed (sudah dinormalisasi). Dipakai untuk mengenali lagu artis
+  /// seed yang judulnya tidak memuat nama artis, misalnya channel resmi
+  /// "Wali Band Official" dengan judul "Cari Jodoh (Official Video)".
+  String _seedArtistKey = '';
+
+  bool _matchesSeedArtist(YoutubeSearchResult video) {
+    final seed = _seedArtistKey;
+    if (seed.length < 3) return false;
+    bool hasWords(String haystack, String needle) =>
+        needle.isNotEmpty && ' $haystack '.contains(' $needle ');
+    final channel = normalizePhrase(video.channelTitle.replaceAll(
+      RegExp(r'\b(?:official|artist|channel|topic|vevo|resmi)\b',
+          caseSensitive: false),
+      ' ',
+    ));
+    if (channel.length >= 3 &&
+        (hasWords(channel, seed) || hasWords(seed, channel))) {
+      return true;
+    }
+    return ' ${normalizePhrase(video.title)}'.startsWith(' $seed ');
+  }
+
+  /// Kunci artis untuk batas variasi. Artis yang tidak terbaca dari judul tetap
+  /// dikenali sebagai artis seed bila channel/judulnya jelas cocok.
+  String _artistOf(YoutubeSearchResult video) {
+    final key = _artistKey(video);
+    if (key.isNotEmpty) return key;
+    return _matchesSeedArtist(video) ? _seedArtistKey : '';
+  }
+
+  /// Penonton per hari sejak rilis (minimal dihitung 14 hari supaya lagu yang
+  /// baru sehari tidak terlihat meledak). Null bila data tidak lengkap.
+  static double? _viewVelocity(YoutubeSearchResult video, DateTime now) {
+    final views = video.viewCount ?? 0;
+    final publishedAt = video.publishedAt ?? video.approxPublishedAt;
+    if (views <= 0 || publishedAt == null) return null;
+    final days = now.difference(publishedAt).inDays;
+    return views / (days < 14 ? 14 : days);
+  }
+
+  /// Utamakan lagu populer atau sedang naik dari tiap artis. Tidak pernah
+  /// mengosongkan pilihan: kalau tidak ada yang lolos, [candidates] dikembalikan
+  /// apa adanya.
+  List<YoutubeSearchResult> _preferPopular(
+    List<YoutubeSearchResult> candidates,
+  ) {
+    if (_popularKeepFraction >= 1.0 || candidates.isEmpty) return candidates;
+
+    final now = DateTime.now();
+    final viewsByArtist = <String, List<int>>{};
+    final velocityByArtist = <String, List<double>>{};
+    final seen = <String>{};
+    void collect(YoutubeSearchResult video) {
+      if (!seen.add(video.videoId)) return;
+      final artist = _artistOf(video);
+      final views = video.viewCount ?? 0;
+      if (artist.isEmpty || views <= 0) return;
+      (viewsByArtist[artist] ??= <int>[]).add(views);
+      final velocity = _viewVelocity(video, now);
+      if (velocity != null) {
+        (velocityByArtist[artist] ??= <double>[]).add(velocity);
+      }
+    }
+
+    for (final video in _pool) {
+      collect(video);
+    }
+    for (final video in _reserve) {
+      collect(video);
+    }
+    for (final video in _playedVideos) {
+      collect(video);
+    }
+    for (final video in candidates) {
+      collect(video);
+    }
+
+    int cutIndex(int length) => (length * (1 - _popularKeepFraction))
+        .floor()
+        .clamp(0, length - 1)
+        .toInt();
+
+    final viewThresholds = <String, int>{};
+    viewsByArtist.forEach((artist, views) {
+      if (views.length < _popularMinSample) return;
+      views.sort();
+      viewThresholds[artist] = views[cutIndex(views.length)];
+    });
+    if (viewThresholds.isEmpty) return candidates;
+
+    final velocityThresholds = <String, double>{};
+    velocityByArtist.forEach((artist, velocities) {
+      if (velocities.length < _popularMinSample) return;
+      velocities.sort();
+      velocityThresholds[artist] = velocities[cutIndex(velocities.length)];
+    });
+
+    final popular = candidates.where((video) {
+      final viewThreshold = viewThresholds[_artistOf(video)];
+      if (viewThreshold == null) return true;
+      final views = video.viewCount ?? 0;
+      if (views <= 0 || views >= viewThreshold) return true;
+
+      final publishedAt = video.publishedAt ?? video.approxPublishedAt;
+      if (publishedAt != null &&
+          now.difference(publishedAt).inDays <= _popularFreshDays) {
+        return true;
+      }
+      final velocityThreshold = velocityThresholds[_artistOf(video)];
+      final velocity = _viewVelocity(video, now);
+      return velocityThreshold != null &&
+          velocity != null &&
+          velocity >= velocityThreshold;
+    }).toList(growable: false);
+    return popular.isEmpty ? candidates : popular;
+  }
+
   int _artistPlaysInWindow(String artist) =>
       _recentPlayedArtists.where((entry) => entry.artist == artist).length;
 
@@ -247,17 +381,17 @@ class RadioService {
   ) {
     if (candidates.isEmpty || _recentPlayedArtists.isEmpty) return candidates;
     bool underCap(YoutubeSearchResult v) {
-      final artist = _artistKey(v);
+      final artist = _artistOf(v);
       return artist.isEmpty || _artistPlaysInWindow(artist) < _maxPerArtistInWindow;
     }
 
     bool outsideGap(YoutubeSearchResult v) {
-      final artist = _artistKey(v);
+      final artist = _artistOf(v);
       return artist.isEmpty || !_artistInRecentGap(artist);
     }
 
     bool notLast(YoutubeSearchResult v) {
-      final artist = _artistKey(v);
+      final artist = _artistOf(v);
       return artist.isEmpty || _recentPlayedArtists.last.artist != artist;
     }
 
@@ -308,11 +442,11 @@ class RadioService {
         .where((video) => !_recentlySelected(video))
         .toList(growable: false);
     if (candidatesPool.isEmpty) return null;
-    final sourcePool = preferArtistVariety(candidatesPool);
+    final sourcePool = preferArtistVariety(_preferPopular(candidatesPool));
     final scored = sourcePool
         .map((video) {
           final key = trackKeyFor(video);
-          final artist = _artistKey(video);
+          final artist = _artistOf(video);
           var value = score(video);
           if (key.isNotEmpty && _recentSelectionTrackKeys.contains(key)) {
             value -= 80.0;
@@ -384,7 +518,7 @@ class RadioService {
     // sebelumnya. Kalau kandidat terlalu sedikit, longgarkan aturan artis.
     final fresh = candidates.where((video) => !_recentlySelected(video)).toList();
     // Batas variasi artis berbasis jendela (lihat preferArtistVariety).
-    final source = preferArtistVariety(fresh);
+    final source = preferArtistVariety(_preferPopular(fresh));
     if (source.isEmpty) return null;
 
     final selected = random
@@ -418,7 +552,7 @@ class RadioService {
         targetStyle: targetStyle,
         targetLanguage: targetLanguage,
       );
-      final artist = _artistKey(video);
+      final artist = _artistOf(video);
       if (artist.isNotEmpty && _recentSelectionArtists.contains(artist)) {
         score -= 8.0;
       }
@@ -471,6 +605,19 @@ class RadioService {
     _pool.removeWhere((candidate) => isSameTrackFamily(candidate, selected));
   }
 
+  /// Nama penyanyi/channel untuk fingerprint judul (BUKAN untuk batas variasi
+  /// artis): membuang segmen penyanyi dari judul dan mengenali channel label.
+  static String _trackChannelKey(YoutubeSearchResult video) {
+    final recognized = MusicStyleMatcher.artistKeyFor(video);
+    if (recognized.isNotEmpty) return recognized;
+    final withoutChannelSuffix = video.channelTitle.replaceAll(
+      RegExp(r'\b(?:official|artist|channel|topic|vevo|covers?)\b',
+          caseSensitive: false),
+      ' ',
+    );
+    return normalizePhrase(withoutChannelSuffix);
+  }
+
   static String _artistKey(YoutubeSearchResult video) {
     // Utamakan artis hasil baca judul + channel. Nama channel saja menipu:
     // channel lirik/reupload memuat banyak penyanyi, sedangkan satu penyanyi
@@ -483,7 +630,7 @@ class RadioService {
 
   void _rememberSelection(YoutubeSearchResult video) {
     final key = trackKeyFor(video);
-    final artist = _artistKey(video);
+    final artist = _artistOf(video);
 
     if (key.isNotEmpty) {
       _recentSelectionTrackKeys.remove(key);
@@ -557,7 +704,7 @@ class RadioService {
       return;
     }
 
-    final playedArtist = _artistKey(video);
+    final playedArtist = _artistOf(video);
     if (playedArtist.isNotEmpty &&
         (_recentPlayedArtists.isEmpty || _recentPlayedArtists.last.id != videoId)) {
       _recentPlayedArtists.add((id: videoId, artist: playedArtist));
@@ -747,7 +894,7 @@ class RadioService {
     final cleaned = _cleanTitle(rawTitle);
     if (cleaned.isEmpty) return <String>{};
 
-    final channel = _artistKey(video);
+    final channel = _trackChannelKey(video);
     final coverArtist = _coverArtistKey(rawTitle);
     final hadCoverCue = RegExp(
       r'\b(?:cover(?:ed)?|versi\s+cover|karaoke)\b',
@@ -1007,7 +1154,7 @@ class RadioService {
 
     int artistCountInPool(String artist) => artist.isEmpty
         ? 0
-        : _pool.where((pooled) => _artistKey(pooled) == artist).length;
+        : _pool.where((pooled) => _artistOf(pooled) == artist).length;
 
     // [capPerArtist] menjaga pool tetap beragam. Dilonggarkan hanya saat pool
     // kosong, supaya Next tidak mati kalau hanya satu artis yang tersedia.
@@ -1019,7 +1166,7 @@ class RadioService {
       for (final video in videos) {
         if (!eligible(video, enforceContext: enforceContext)) continue;
         if (capPerArtist &&
-            artistCountInPool(_artistKey(video)) >= _maxPerArtistInPool) {
+            artistCountInPool(_artistOf(video)) >= _maxPerArtistInPool) {
           if (_reserve.length < _maxReserve &&
               !_reserve.any((item) => item.videoId == video.videoId)) {
             _reserve.add(video);

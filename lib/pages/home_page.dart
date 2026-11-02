@@ -301,6 +301,11 @@ class _HomePageState extends State<HomePage>
       DateTime.fromMillisecondsSinceEpoch(0);
 
   double _pendingSavedPosition = 0;
+  // Posisi terakhir yang benar-benar terdengar. Beda dengan _pendingSavedPosition,
+  // nilai ini TIDAK ditimpa 0 oleh event error/unstarted saat koneksi putus,
+  // jadi Play setelah online lagi bisa lanjut dari menit yang sama.
+  double _lastGoodPositionSeconds = 0;
+  String _lastGoodPositionVideoId = '';
 
   /// Menandai bahwa aplikasi sedang meninggalkan task/foreground.
   /// Selama fase ini event player transien tidak boleh menimpa snapshot

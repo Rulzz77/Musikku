@@ -27,6 +27,7 @@ extension _HomeRadio on _HomePageState {
       preferredLanguage: _radioPreferredLanguageFor(video),
       lockLanguage: false,
       alternateSeeds: MusicStyleMatcher.alternateSeedsFor(video),
+      seedArtist: MusicStyleMatcher.seedArtistKeyFor(video),
     );
   }
 
@@ -62,6 +63,7 @@ extension _HomeRadio on _HomePageState {
       // Artis sejenis + terpopuler di genre yang sama, dipakai bergantian
       // dengan seed utama supaya lagu berikutnya tidak hanya dari satu artis.
       alternateSeeds: MusicStyleMatcher.alternateSeedsFor(video),
+      seedArtist: MusicStyleMatcher.seedArtistKeyFor(video),
     );
 
     // Start the selected song as the radio seed. Recommendations stay in the
@@ -223,15 +225,19 @@ extension _HomeRadio on _HomePageState {
   /// Ambil kandidat dari pool radio yang bukan Shorts, memakai metadata lokal.
   /// Bonus selera untuk Radio: artis yang sering didengar, disukai, atau
   /// sering dicari mendapat bobot lebih; artis yang sering di-skip dikurangi.
-  /// Level artis, bukan lagu, karena lagu yang sudah diputar memang disaring
-  /// anti-ulang. Rentang dibatasi (-10..+10) supaya genre tetap dominan dan
+  /// Level artis (dibaca dari judul + channel, sama dengan batas variasi),
+  /// bukan nama channel dan bukan lagu, karena lagu yang sudah diputar memang
+  /// disaring anti-ulang. Artis yang tidak terbaca tidak mendapat bonus. Rentang dibatasi (-10..+10) supaya genre tetap dominan dan
   /// batas variasi artis tetap berlaku.
   Future<double Function(YoutubeSearchResult)> _buildRadioTasteBonus() async {
     final plays = <String, int>{};
     final skips = <String, int>{};
     final liked = <String>{};
     for (final entry in _listeningStatsById.entries) {
-      final key = SmartQueueScorer.normalizeArtist(entry.value.artist);
+      final key = MusicStyleMatcher.artistKeyFromParts(
+        title: entry.value.title,
+        channelTitle: entry.value.artist,
+      );
       if (key.isEmpty) continue;
       plays[key] = (plays[key] ?? 0) + entry.value.playCount;
       skips[key] = (skips[key] ?? 0) + entry.value.skipCount;
@@ -248,13 +254,15 @@ extension _HomeRadio on _HomePageState {
     } catch (_) {}
 
     return (YoutubeSearchResult video) {
-      final key = SmartQueueScorer.normalizeArtist(video.channelTitle);
+      final key = MusicStyleMatcher.artistKeyFor(video);
       if (key.isEmpty) return 0.0;
       var bonus = 0.0;
       bonus += ((plays[key] ?? 0).clamp(0, 20)) / 20.0 * 6.0;
       if (liked.contains(key)) bonus += 3.0;
       bonus -= ((skips[key] ?? 0).clamp(0, 6)) * 1.5;
-      if (key.length >= 3 && queries.any((q) => q.contains(' $key '))) {
+      final queryKey = SmartQueueScorer.normalizeArtist(key);
+      if (queryKey.length >= 3 &&
+          queries.any((q) => q.contains(' $queryKey '))) {
         bonus += 3.0;
       }
       return bonus.clamp(-10.0, 10.0).toDouble();

@@ -307,6 +307,16 @@ extension _HomeStateSync on _HomePageState {
       }
     }
 
+    if (state.isEnded) {
+      _lastGoodPositionSeconds = 0.0;
+      _lastGoodPositionVideoId = video.videoId;
+    } else if (state.videoId == video.videoId &&
+        (state.isPlaying || state.isBuffering || state.isPaused) &&
+        state.position.inMilliseconds > 1000) {
+      _lastGoodPositionSeconds = state.position.inMilliseconds / 1000.0;
+      _lastGoodPositionVideoId = video.videoId;
+    }
+
     _pendingSavedPosition =
         state.position.inMilliseconds / 1000.0;
 

@@ -110,14 +110,22 @@ extension _HomeQueue on _HomePageState {
     String? currentArtist,
   }) {
     final stat = _listeningStatsById[video.videoId];
-    final artistKey = SmartQueueScorer.normalizeArtist(video.channelTitle);
+    // Artis dibaca dari judul + channel (bukan nama channel saja).
+    final artistKey = MusicStyleMatcher.artistKeyFor(video);
+    final activeVideo = currentArtist == null ? null : _currentVideo;
+    final activeArtistKey =
+        activeVideo == null ? '' : MusicStyleMatcher.artistKeyFor(activeVideo);
     var artistPlayCount = 0;
     var artistSkipCount = 0;
     var artistHasLikedTrack = false;
 
     if (artistKey.isNotEmpty) {
       for (final entry in _listeningStatsById.entries) {
-        if (SmartQueueScorer.normalizeArtist(entry.value.artist) != artistKey) {
+        final entryArtist = MusicStyleMatcher.artistKeyFromParts(
+          title: entry.value.title,
+          channelTitle: entry.value.artist,
+        );
+        if (entryArtist != artistKey) {
           continue;
         }
         artistPlayCount += entry.value.playCount;
@@ -131,7 +139,8 @@ extension _HomeQueue on _HomePageState {
           stat: stat,
           isLiked: _likedIds.contains(video.videoId),
           isDisliked: _dislikedIds.contains(video.videoId),
-          currentArtist: currentArtist,
+          currentArtist: activeArtistKey,
+          candidateArtist: artistKey,
           artistPlayCount: artistPlayCount,
           artistSkipCount: artistSkipCount,
           artistHasLikedTrack: artistHasLikedTrack,

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -32,6 +33,7 @@ import '../services/youtube_controller.dart';
 import '../services/youtube_search_service.dart';
 import '../widgets/youtube_hub.dart';
 import '../widgets/music_player_page.dart';
+import '../widgets/ios_youtube_player.dart';
 import '../widgets/mini_music_player.dart';
 import '../widgets/app_update_sheet.dart';
 import '../widgets/playlist_widgets.dart';
@@ -388,6 +390,7 @@ class _HomePageState extends State<HomePage>
 
   Future<void> _checkForAppUpdateOnLaunch() async {
     // Hormati opt-out: jika dimatikan, jangan menghubungi GitHub saat startup.
+    if (!Platform.isAndroid) return; // APK updater hanya berlaku untuk Android.
     if (!widget.settings.autoUpdateEnabled.value) return;
 
     // Jangan menutupi pemutaran pertama. Cek setelah UI utama stabil dan diam-diam

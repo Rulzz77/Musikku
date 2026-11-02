@@ -35,6 +35,7 @@ class MusicPlayerPage extends StatefulWidget {
     required this.followingRoom,
     this.inPlaylist = false,
     required this.sleepActive,
+    this.platformPlayer,
   });
 
   final YoutubeSearchResult video;
@@ -57,6 +58,7 @@ class MusicPlayerPage extends StatefulWidget {
   final bool followingRoom;
   final bool inPlaylist;
   final ValueListenable<bool> sleepActive;
+  final Widget? platformPlayer;
 
   @override
   State<MusicPlayerPage> createState() => _MusicPlayerPageState();
@@ -227,9 +229,13 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
     final busy = matchesTrack && state.isBuffering;
     final playing = matchesTrack && state.isEffectivelyPlaying;
 
-    if (playing && !_recordRotation.isAnimating) {
-      _recordRotation.repeat();
-    } else if (!playing && _recordRotation.isAnimating) {
+    if (widget.platformPlayer == null) {
+      if (playing && !_recordRotation.isAnimating) {
+        _recordRotation.repeat();
+      } else if (!playing && _recordRotation.isAnimating) {
+        _recordRotation.stop(canceled: false);
+      }
+    } else if (_recordRotation.isAnimating) {
       _recordRotation.stop(canceled: false);
     }
 
@@ -245,11 +251,18 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const SizedBox(height: 3),
-              SizedBox(
-                width: discSize,
-                height: discSize,
-                child: _buildVinylDisc(discSize, playing),
-              ),
+              if (widget.platformPlayer != null)
+                SizedBox(
+                  width: math.min(width * 0.96, 440),
+                  height: math.min(math.min(width * 0.96, 440) * 9 / 16, height * 0.36),
+                  child: widget.platformPlayer!,
+                )
+              else
+                SizedBox(
+                  width: discSize,
+                  height: discSize,
+                  child: _buildVinylDisc(discSize, playing),
+                ),
               const SizedBox(height: 11),
               _buildTrackInfo(busy),
               AnimatedSize(

@@ -71,27 +71,15 @@ extension _HomeUiLayout on _HomePageState {
             Positioned.fill(
               child: IgnorePointer(
                 ignoring: watch == null,
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 460),
-                  reverseDuration: const Duration(milliseconds: 320),
-                  switchInCurve: Curves.easeOutCubic,
-                  switchOutCurve: Curves.easeInCubic,
-                  // Short, soft lift: gives the player a clear entrance without
-                  // changing the stable layout of the music controls.
-                  transitionBuilder: (child, animation) => FadeTransition(
-                    opacity: animation,
-                    child: SlideTransition(
-                      position: Tween<Offset>(begin: const Offset(0, 0.025), end: Offset.zero).animate(
-                        CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
-                      ),
-                      child: child,
-                    ),
-                  ),
-                  child: watch == null
-                      ? const SizedBox.shrink(key: ValueKey<String>('player-closed'))
-                      : MusicPlayerPage(
+                child: Offstage(
+                  // WebView-backed YouTube player must remain mounted after
+                  // closing Now Playing, otherwise iOS tears down the iframe.
+                  offstage: watch == null,
+                  child: (watch != null ||
+                          (Platform.isIOS && current != null && !current.isLocal))
+                      ? MusicPlayerPage(
                           key: const ValueKey<String>('music-player'),
-                          video: watch,
+                          video: watch ?? current!,
                           nextVideo: _queueManager.peekFirst()?.video,
                           nativeState: _nativeStateNotifier,
                           playerUiState: _playerUiState,
@@ -109,19 +97,23 @@ extension _HomeUiLayout on _HomePageState {
                           onToggleShuffle: () => _routeListenTogetherModeAction('shuffle', _toggleShuffle),
                           onToggleSmartShuffle: () => _routeListenTogetherModeAction('smart_shuffle', _toggleSmartShuffle),
                           onCycleLoop: () => _routeListenTogetherModeAction('loop', _cycleLoopMode),
-                          onToggleFavorite: () => _toggleFavorite(watch),
-                          onAddToPlaylist: () => _showAddToPlaylist(watch),
+                          onToggleFavorite: () => _toggleFavorite(watch ?? current!),
+                          onAddToPlaylist: () => _showAddToPlaylist(watch ?? current!),
                           onOpenQueue: _showQueueSheet,
                           onOpenSleepTimer: _showSleepTimerSheet,
                           onOpenListeningRoom: _showListenTogetherSheet,
                           followingRoom: _listenTogether.isGuest,
-                          // Recompute from the saved playlists so the button
-                          // updates immediately after a song is added or removed.
                           inPlaylist: _playlists.any(
-                            (playlist) => playlist.contains(watch.videoId),
+                            (playlist) => playlist.contains((watch ?? current!).videoId),
                           ),
                           sleepActive: _sleepActive,
-                        ),
+                          platformPlayer: Platform.isIOS && !(watch ?? current!).isLocal
+                              ? IOSYoutubePlayerSurface(
+                                  controller: _youtubeController.iosYoutubeController,
+                                )
+                              : null,
+                        )
+                      : const SizedBox.shrink(),
                 ),
               ),
             ),

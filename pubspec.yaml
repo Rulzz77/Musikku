@@ -1,5 +1,5 @@
 name: flutter_application_5
-description: "MusikKu - pemutar musik Android."
+description: "MusikKu - pemutar musik lintas platform."
 publish_to: 'none'
 version: 5.2.4+9
 
@@ -19,6 +19,7 @@ dependencies:
   shared_preferences: ^2.5.5
   supabase_flutter: ^2.18.3
   youtube_explode_dart: ^3.1.0
+  youtube_player_iframe: ^6.0.2
 
 dev_dependencies:
   flutter_test:
@@ -34,6 +35,6 @@ flutter:
 
 flutter_launcher_icons:
   android: true
-  ios: false
+  ios: true
   image_path: "assets/icon/app_icon.png"
   min_sdk_android: 21

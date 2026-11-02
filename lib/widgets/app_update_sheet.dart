@@ -479,6 +479,16 @@ class _AppUpdatePanelState extends State<AppUpdatePanel> with WidgetsBindingObse
     }
 
     switch (result?.status) {
+      case AppUpdateStatus.unsupportedPlatform:
+        return [
+          _StatusPanel(
+            icon: Icons.phone_iphone_rounded,
+            color: colors.primary,
+            title: 'Pembaruan iPhone',
+            message: 'Pemasangan APK otomatis hanya tersedia di Android. Untuk iPhone, instal pembaruan melalui Xcode atau distribusikan build iOS lewat TestFlight/App Store.',
+          ),
+        ];
+
       case AppUpdateStatus.noRelease:
         return [
           _StatusPanel(

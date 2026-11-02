@@ -15,6 +15,7 @@ enum AppUpdateStatus {
   noRelease,
   releaseMissingApk,
   releaseMissingDigest,
+  unsupportedPlatform,
 }
 
 class AppUpdateRelease {
@@ -81,6 +82,12 @@ class AppUpdateService {
   /// Coalesce automatic, Settings, and Hub-triggered checks while one request
   /// is already running. This avoids duplicate GitHub calls and modal races.
   Future<AppUpdateCheckResult> checkForUpdate() {
+    if (!Platform.isAndroid) {
+      return Future<AppUpdateCheckResult>.value(AppUpdateCheckResult(
+        status: AppUpdateStatus.unsupportedPlatform,
+        currentVersion: appVersion,
+      ));
+    }
     final active = _inFlightCheck;
     if (active != null) return active;
 
@@ -530,10 +537,12 @@ class AppUpdateService {
   }
 
   Future<void> requestInstallPermission() async {
+    if (!Platform.isAndroid) throw const AppUpdateException('Pembaruan APK hanya tersedia di Android. Untuk iPhone, gunakan TestFlight atau App Store.');
     await _installerChannel.invokeMethod<void>('requestInstallPermission');
   }
 
   Future<void> installApk(String path) async {
+    if (!Platform.isAndroid) throw const AppUpdateException('File APK tidak bisa dipasang di iPhone. Gunakan TestFlight atau App Store.');
     await _installerChannel.invokeMethod<void>(
       'installApk',
       <String, Object?>{'path': path},

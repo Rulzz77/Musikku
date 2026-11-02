@@ -215,9 +215,9 @@ extension _HomePlayback on _HomePageState {
 
       final hasRestorePosition = safeRestorePosition > 0;
 
-      // Unified playback: local tracks and YouTube audio-only streams both
-      // use Media3. A failed remote stream remains an explicit error; never
-      // mount a video player as a fallback.
+      // Unified playback: local tracks use the platform's native media player.
+      // YouTube uses NewPipe/Media3 on Android and the official iFrame player
+      // on iOS. A failed remote source remains an explicit playback error.
       if (video.isLocal) {
         if (previous != null && !previous.isLocal) {
           try {
@@ -236,8 +236,8 @@ extension _HomePlayback on _HomePageState {
         );
       } else {
         try {
-          // Musik utama diputar oleh ExoPlayer native, sehingga bisa tetap
-          // hidup ketika layar mati tanpa bergantung pada iframe/WebView.
+          // Controller memilih jalur sesuai platform: audio-only native di
+          // Android dan YouTube iFrame resmi di iOS.
           await _youtubeController.loadYoutubeAudioTrack(
             videoId: video.videoId,
             title: video.title,

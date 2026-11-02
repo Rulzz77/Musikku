@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/services.dart';
+import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 
 import '../models/native_youtube_state.dart';
 import '../models/youtube_player_debug.dart';
@@ -13,6 +15,23 @@ class NativeYoutubeController {
       EventChannel('musikku/youtube_player/events');
   static const MethodChannel _newPipe = MethodChannel('musikku/newpipe');
 
+  late final YoutubePlayerController _iosYoutube = YoutubePlayerController(
+    params: const YoutubePlayerParams(
+      showControls: true,
+      showFullscreenButton: true,
+      playsInline: true,
+      privacyEnhancedMode: true,
+      interfaceLanguage: 'id',
+      enableCaption: true,
+      captionLanguage: 'id',
+      videoStateUpdateInterval: 500,
+    ),
+  );
+  YoutubePlayerController get iosYoutubeController => _iosYoutube;
+  StreamSubscription<YoutubePlayerValue>? _iosYoutubeSub;
+  StreamSubscription<YoutubeVideoState>? _iosPositionSub;
+  bool _iosYoutubeSource = false;
+
   NativeYoutubeState _lastState = const NativeYoutubeState();
   bool _usingYoutubeAudio = false;
   String _activeVideoId = ''; // Prevent stale Media3 source controls after resolver errors.
@@ -21,7 +40,12 @@ class NativeYoutubeController {
   int _youtubeAudioLoadGeneration = 0;
 
   NativeYoutubeState get lastState => _lastState;
-  bool get isUsingYoutubeAudio => _usingYoutubeAudio;
+  /// True when a remote YouTube source is active on this platform.
+  /// Android uses the NewPipe/Media3 audio stream; iOS uses the official
+  /// embedded iFrame player, so HomePage queue/room logic must treat both as
+  /// an active remote source even though iOS is not audio-only.
+  bool get isUsingYoutubeAudio =>
+      _usingYoutubeAudio || (Platform.isIOS && _iosYoutubeSource);
 
   // ========================================================
   // PLAYBACK INTENT (optimistic UI)
@@ -93,8 +117,63 @@ class NativeYoutubeController {
       _onNativeEvent,
       onError: _out.addError,
     );
-
+    if (Platform.isIOS) {
+      _iosYoutubeSub ??= _iosYoutube.stream.listen(_onIosYoutubeValue);
+    }
     return _out.stream;
+  }
+
+  void _onIosYoutubeValue(YoutubePlayerValue value) {
+    if (!_iosYoutubeSource) return;
+    final state = value.hasError
+        ? NativePlaybackState.error
+        : switch (value.playerState) {
+      PlayerState.unStarted => NativePlaybackState.unstarted,
+      PlayerState.ended => NativePlaybackState.ended,
+      PlayerState.playing => NativePlaybackState.playing,
+      PlayerState.paused => NativePlaybackState.paused,
+      PlayerState.buffering => NativePlaybackState.buffering,
+      PlayerState.cued => NativePlaybackState.cued,
+      _ => NativePlaybackState.unknown,
+    };
+    final wanted = _intent;
+    if (wanted != null && _confirmsIntent(wanted, state)) _clearIntent();
+    _emit(NativeYoutubeState(
+      playbackState: state,
+      position: _lastState.position,
+      duration: value.metaData.duration,
+      videoId: value.metaData.videoId.isNotEmpty ? value.metaData.videoId : _activeVideoId,
+      bufferedFraction: _lastState.bufferedFraction,
+    ));
+  }
+
+  void _startIosPositionUpdates() {
+    _iosPositionSub?.cancel();
+    // The controller already emits video-state updates every 500 ms via
+    // YoutubePlayerParams.videoStateUpdateInterval. Use the non-deprecated
+    // stream and forward its current position to the progress updater.
+    _iosPositionSub = _iosYoutube.videoStateStream.listen((videoState) {
+      unawaited(_refreshIosProgress(videoState.position));
+    });
+  }
+
+  Future<void> _refreshIosProgress(Duration position) async {
+    if (!_iosYoutubeSource) return;
+    try {
+      final durationSeconds = await _iosYoutube.duration;
+      final buffered = await _iosYoutube.videoLoadedFraction;
+      final duration = Duration(milliseconds: (durationSeconds * 1000).round());
+      if (!_iosYoutubeSource) return;
+      _emit(NativeYoutubeState(
+        playbackState: _lastState.playbackState,
+        position: position,
+        duration: duration,
+        videoId: _activeVideoId,
+        bufferedFraction: buffered,
+      ));
+    } catch (_) {
+      // Keep the last known state if the WebView is initializing or closing.
+    }
   }
 
   void _emit(NativeYoutubeState raw) {
@@ -118,6 +197,9 @@ class NativeYoutubeController {
   }
 
   void _onNativeEvent(dynamic event) {
+    // Saat iFrame YouTube aktif, abaikan event AVPlayer lama yang mungkin
+    // masih terkirim ketika sumber lokal baru saja dihentikan.
+    if (Platform.isIOS && _iosYoutubeSource) return;
     if (event is! Map) {
       _emit(const NativeYoutubeState(
         playbackState: NativePlaybackState.unknown,
@@ -176,6 +258,11 @@ class NativeYoutubeController {
     _youtubeAudioLoadGeneration++;
     _intentTimer?.cancel();
     _nativeSub?.cancel();
+    _iosYoutubeSub?.cancel();
+    _iosPositionSub?.cancel();
+    if (Platform.isIOS) {
+      unawaited(_iosYoutube.close());
+    }
     _out.close();
   }
 
@@ -195,6 +282,19 @@ class NativeYoutubeController {
     final safeStart = startSeconds.isFinite && startSeconds > 0
         ? startSeconds
         : 0.0;
+
+    if (Platform.isIOS) {
+      try { await _methods.invokeMethod('pauseActiveAudio'); } catch (_) {}
+      _iosYoutubeSource = true;
+      _emit(NativeYoutubeState(
+        playbackState: NativePlaybackState.buffering,
+        position: Duration(milliseconds: (safeStart * 1000).round()),
+        videoId: videoId,
+      ));
+      await _iosYoutube.loadVideoById(videoId: videoId, startSeconds: safeStart);
+      _startIosPositionUpdates();
+      return;
+    }
 
     PlatformException? lastError;
 
@@ -240,17 +340,34 @@ class NativeYoutubeController {
       throw ArgumentError.value(videoId, 'videoId', 'ID YouTube tidak valid');
     }
 
+    final safeStart = startSeconds.isFinite && startSeconds > 0 ? startSeconds : 0.0;
+    final safeDuration = durationSeconds.isFinite && durationSeconds > 0 ? durationSeconds : 0.0;
+    if (Platform.isIOS) {
+      ++_youtubeAudioLoadGeneration;
+      try { await _methods.invokeMethod('pauseActiveAudio'); } catch (_) {}
+      _activeVideoId = videoId;
+      _usingYoutubeAudio = false;
+      _iosYoutubeSource = true;
+      _setIntent(playing);
+      _emit(NativeYoutubeState(
+        playbackState: playing ? NativePlaybackState.buffering : NativePlaybackState.cued,
+        position: Duration(milliseconds: (safeStart * 1000).round()),
+        duration: Duration(milliseconds: (safeDuration * 1000).round()),
+        videoId: videoId,
+      ));
+      if (playing) {
+        await _iosYoutube.loadVideoById(videoId: videoId, startSeconds: safeStart);
+      } else {
+        await _iosYoutube.cueVideoById(videoId: videoId, startSeconds: safeStart);
+      }
+      _startIosPositionUpdates();
+      return;
+    }
+
     final generation = ++_youtubeAudioLoadGeneration;
     _activeVideoId = videoId;
     _usingYoutubeAudio = false;
     _setIntent(playing);
-
-    final safeStart = startSeconds.isFinite && startSeconds > 0
-        ? startSeconds
-        : 0.0;
-    final safeDuration = durationSeconds.isFinite && durationSeconds > 0
-        ? durationSeconds
-        : 0.0;
 
     // Audio-only: pause the previous source first. Do not load/prepare a
     // YouTube video surface, which was the source of overlapping sound and
@@ -370,6 +487,11 @@ class NativeYoutubeController {
     double durationSeconds = 0.0,
   }) async {
     _youtubeAudioLoadGeneration++; // invalidate a pending YouTube resolver
+    if (Platform.isIOS && _iosYoutubeSource) {
+      await _iosYoutube.pauseVideo();
+      _iosPositionSub?.cancel();
+    }
+    _iosYoutubeSource = false;
     _activeVideoId = 'local:$mediaId';
     _usingYoutubeAudio = false;
     _setIntent(true);
@@ -392,6 +514,10 @@ class NativeYoutubeController {
 
   Future<void> playVideo() async {
     _setIntent(true);
+    if (Platform.isIOS && _iosYoutubeSource) {
+      await _iosYoutube.playVideo();
+      return;
+    }
     await _methods.invokeMethod('play', {'videoId': _activeVideoId});
   }
 
@@ -401,6 +527,10 @@ class NativeYoutubeController {
 
   Future<void> pauseVideo() async {
     _setIntent(false);
+    if (Platform.isIOS && _iosYoutubeSource) {
+      await _iosYoutube.pauseVideo();
+      return;
+    }
     await _methods.invokeMethod('pause', {'videoId': _activeVideoId});
   }
 
@@ -514,6 +644,10 @@ class NativeYoutubeController {
   Future<void> seekTo({
     required double seconds,
   }) async {
+    if (Platform.isIOS && _iosYoutubeSource) {
+      await _iosYoutube.seekTo(seconds: seconds, allowSeekAhead: true);
+      return;
+    }
     await _methods.invokeMethod(
       'seek',
       {
@@ -529,6 +663,10 @@ class NativeYoutubeController {
 
   Future<void> setVolume(int percent) async {
     final safe = percent.clamp(0, 100);
+    if (Platform.isIOS && _iosYoutubeSource) {
+      await _iosYoutube.setVolume(safe.toInt());
+      return;
+    }
     await _methods.invokeMethod('setVolume', {'percent': safe, 'videoId': _activeVideoId});
   }
 
@@ -569,6 +707,9 @@ class NativeYoutubeController {
   // ========================================================
 
   Future<double> get currentTime async {
+    if (Platform.isIOS && _iosYoutubeSource) {
+      return _iosYoutube.currentTime;
+    }
     final value =
         await _methods.invokeMethod<dynamic>(
       'currentTime',

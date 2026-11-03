@@ -238,17 +238,23 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
         final compact = height < 660;
         final side = width >= 700 ? 44.0 : 20.0;
         final maxCover = math.min(width - (side * 2), width >= 700 ? 420.0 : 356.0);
+        // Reserve a deliberately shorter artwork stage. The previous stage
+        // consumed all remaining height and centered the cover between two
+        // large empty bands. A shorter stage moves the artwork upward and
+        // brings title / seek / transport controls closer together.
+        final artworkStageHeight = math.min(
+          height * (compact ? 0.42 : 0.50),
+          maxCover + (compact ? 18.0 : 40.0),
+        ).toDouble();
 
         return Padding(
-          // Keep the lower action dock at its original position. Only the
-          // transport controls are nudged upward below.
+          // The action dock remains anchored to the bottom safe area. Any
+          // reclaimed height becomes breathing room immediately above it.
           padding: EdgeInsets.fromLTRB(side, compact ? 0 : 3, side, compact ? 2 : 7),
           child: Column(
             children: [
-              // Flexible stage: the artwork uses the available space instead of
-              // being pushed down by a fixed spacer (the old source of dead space).
-              Expanded(
-                flex: compact ? 43 : 50,
+              SizedBox(
+                height: artworkStageHeight,
                 child: LayoutBuilder(
                   builder: (context, stage) {
                     if (widget.platformPlayer != null) {
@@ -288,16 +294,20 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
               SizedBox(height: compact ? 0 : 3),
               _buildVolumeControl(compact: compact),
               SizedBox(height: compact ? 1 : 5),
-              _buildBottomActions(context),
               if (matchesTrack && state.playbackState == NativePlaybackState.error)
                 const Padding(
-                  padding: EdgeInsets.only(top: 5),
+                  padding: EdgeInsets.only(bottom: 5),
                   child: Text(
                     'Audio gagal dimuat. Coba putar ulang atau pilih lagu berikutnya.',
                     textAlign: TextAlign.center,
                     style: TextStyle(color: Color(0xFFFF9A91), fontSize: 10.5),
                   ),
                 ),
+              // Keep the Playlist / Lyrics / Timer / Queue dock fixed at the
+              // bottom while the artwork and the actual playback controls sit
+              // higher on the screen with a comfortable gap above the dock.
+              const Spacer(),
+              _buildBottomActions(context),
             ],
           ),
         );

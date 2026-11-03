@@ -238,20 +238,18 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
         final compact = height < 660;
         final side = width >= 700 ? 44.0 : 20.0;
         final maxCover = math.min(width - (side * 2), width >= 700 ? 420.0 : 356.0);
-        // Reserve a deliberately shorter artwork stage. The previous stage
-        // consumed all remaining height and centered the cover between two
-        // large empty bands. A shorter stage moves the artwork upward and
-        // brings title / seek / transport controls closer together.
+        // Keep the artwork stage only slightly taller than the cover.
+        // Extra screen height is distributed between the content sections
+        // instead of being collected in one large gap above the bottom dock.
         final artworkStageHeight = math.min(
           height * (compact ? 0.42 : 0.50),
-          maxCover + (compact ? 18.0 : 40.0),
+          maxCover + (compact ? 6.0 : 12.0),
         ).toDouble();
 
         return Padding(
-          // The action dock remains anchored to the bottom safe area. Any
-          // reclaimed height becomes breathing room immediately above it.
           padding: EdgeInsets.fromLTRB(side, compact ? 0 : 3, side, compact ? 2 : 7),
           child: Column(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               SizedBox(
                 height: artworkStageHeight,
@@ -268,7 +266,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                         ),
                       );
                     }
-                    final size = math.min(maxCover, stage.maxHeight * 0.94).clamp(132.0, 420.0).toDouble();
+                    final size = math.min(maxCover, stage.maxHeight * 0.98).clamp(132.0, 420.0).toDouble();
                     return Center(child: _buildAlbumCover(size));
                   },
                 ),
@@ -303,10 +301,9 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                     style: TextStyle(color: Color(0xFFFF9A91), fontSize: 10.5),
                   ),
                 ),
-              // Keep the Playlist / Lyrics / Timer / Queue dock fixed at the
-              // bottom while the artwork and the actual playback controls sit
-              // higher on the screen with a comfortable gap above the dock.
-              const Spacer(),
+              // MainAxisAlignment.spaceBetween above shares remaining height
+              // across the whole player. This keeps the lower dock anchored,
+              // without leaving one oversized empty area beneath the volume.
               _buildBottomActions(context),
             ],
           ),

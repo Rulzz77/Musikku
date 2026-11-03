@@ -82,6 +82,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
   double? _seekHoldMs;
   DateTime? _seekHoldAt;
   late int _volumePreview;
+  bool _showVolumeControl = false;
 
   @override
   void initState() {
@@ -239,6 +240,8 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
         final maxCover = math.min(width - (side * 2), width >= 700 ? 420.0 : 356.0);
 
         return Padding(
+          // Keep the lower action dock at its original position. Only the
+          // transport controls are nudged upward below.
           padding: EdgeInsets.fromLTRB(side, compact ? 0 : 3, side, compact ? 2 : 7),
           child: Column(
             children: [
@@ -275,9 +278,15 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                 bufferedTrackValue: bufferedTrackValue,
               ),
               SizedBox(height: compact ? 0 : 3),
-              _buildControlDeck(busy: busy, playing: playing, compact: compact),
+              Transform.translate(
+                // Raise only Shuffle / Previous / Play-Pause / Next / Repeat.
+                // The volume control and Playlist-Lyrics-Timer-Queue dock
+                // keep their existing positions.
+                offset: Offset(0, compact ? -5 : -9),
+                child: _buildControlDeck(busy: busy, playing: playing, compact: compact),
+              ),
               SizedBox(height: compact ? 0 : 3),
-              _buildVolumeButtons(compact: compact),
+              _buildVolumeControl(compact: compact),
               SizedBox(height: compact ? 1 : 5),
               _buildBottomActions(context),
               if (matchesTrack && state.playbackState == NativePlaybackState.error)
@@ -434,67 +443,101 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
   }
 
 
-  void _setVolumePreview(int value) {
+  void _setVolumePreview(int value, {bool persist = false}) {
     final next = value.clamp(0, 100).toInt();
-    if (next == _volumePreview) return;
+    if (next == _volumePreview) {
+      if (persist) unawaited(widget.onVolumeChanged(next, true));
+      return;
+    }
     setState(() => _volumePreview = next);
-    // Persist each tap so the user's preferred volume survives app restarts.
-    unawaited(widget.onVolumeChanged(next, true));
+    unawaited(widget.onVolumeChanged(next, persist));
   }
 
-  Widget _buildVolumeButtons({required bool compact}) {
-    final buttonSize = compact ? 29.0 : 31.0;
-    return SizedBox(
-      height: compact ? 31 : 34,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          _volumeButton(
-            icon: _volumePreview == 0 ? Icons.volume_off_rounded : Icons.volume_down_rounded,
-            tooltip: 'Turunkan volume 5% • tekan lama untuk bisu',
-            size: buttonSize,
-            onTap: () => _setVolumePreview(_volumePreview - 5),
-            onLongPress: () => _setVolumePreview(0),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: Text(
-              '$_volumePreview%',
-              style: const TextStyle(color: _muted, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 0.3),
+  Widget _buildVolumeControl({required bool compact}) {
+    final expanded = _showVolumeControl;
+    final sliderWidth = compact ? 116.0 : 150.0;
+
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+      alignment: Alignment.center,
+      child: SizedBox(
+        height: expanded ? 48 : 34,
+        child: Center(
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOutCubic,
+            padding: EdgeInsets.symmetric(horizontal: expanded ? 8 : 0, vertical: 1),
+            decoration: BoxDecoration(
+              color: expanded ? const Color(0xFF151F30).withValues(alpha: 0.92) : Colors.transparent,
+              borderRadius: BorderRadius.circular(18),
+              border: expanded
+                  ? Border.all(color: const Color(0xFFEEF3FA).withValues(alpha: 0.09))
+                  : Border.all(color: Colors.transparent),
             ),
-          ),
-          _volumeButton(
-            icon: Icons.volume_up_rounded,
-            tooltip: 'Naikkan volume 5% • tekan lama untuk maksimum',
-            size: buttonSize,
-            onTap: () => _setVolumePreview(_volumePreview + 5),
-            onLongPress: () => _setVolumePreview(100),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _volumeButton({
-    required IconData icon,
-    required String tooltip,
-    required double size,
-    required VoidCallback onTap,
-    required VoidCallback onLongPress,
-  }) {
-    return Tooltip(
-      message: tooltip,
-      child: Material(
-        color: Colors.transparent,
-        shape: const CircleBorder(),
-        child: InkWell(
-          customBorder: const CircleBorder(),
-          onTap: onTap,
-          onLongPress: onLongPress,
-          child: SizedBox(
-            width: size,
-            height: size,
-            child: Icon(icon, color: _muted, size: 19),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Tooltip(
+                  message: expanded ? 'Tutup pengatur volume' : 'Atur volume',
+                  child: InkWell(
+                    customBorder: const CircleBorder(),
+                    onTap: () => setState(() => _showVolumeControl = !_showVolumeControl),
+                    child: SizedBox(
+                      width: 34,
+                      height: 34,
+                      child: Icon(
+                        _volumePreview == 0 ? Icons.volume_off_rounded : Icons.volume_up_rounded,
+                        color: expanded ? _citrus : _muted,
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                ),
+                AnimatedSize(
+                  duration: const Duration(milliseconds: 220),
+                  curve: Curves.easeOutCubic,
+                  alignment: Alignment.centerLeft,
+                  child: expanded
+                      ? Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            SizedBox(
+                              width: sliderWidth,
+                              child: SliderTheme(
+                                data: SliderTheme.of(context).copyWith(
+                                  trackHeight: 3,
+                                  activeTrackColor: _citrus,
+                                  inactiveTrackColor: const Color(0xFFEEF3FA).withValues(alpha: 0.16),
+                                  thumbColor: _citrus,
+                                  overlayColor: _citrus.withValues(alpha: 0.12),
+                                  thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                                  overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+                                ),
+                                child: Slider(
+                                  min: 0,
+                                  max: 100,
+                                  divisions: 100,
+                                  value: _volumePreview.toDouble(),
+                                  onChanged: (value) => _setVolumePreview(value.round()),
+                                  onChangeEnd: (value) => _setVolumePreview(value.round(), persist: true),
+                                ),
+                              ),
+                            ),
+                            SizedBox(
+                              width: 34,
+                              child: Text(
+                                '$_volumePreview%',
+                                textAlign: TextAlign.end,
+                                style: const TextStyle(color: _muted, fontSize: 10, fontWeight: FontWeight.w800),
+                              ),
+                            ),
+                          ],
+                        )
+                      : const SizedBox(width: 0, height: 34),
+                ),
+              ],
+            ),
           ),
         ),
       ),

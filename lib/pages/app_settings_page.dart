@@ -1,14 +1,103 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' hide appBuildNumber;
+import 'package:path_provider/path_provider.dart';
 
 import '../app_info.dart';
+import '../models/youtube_search_result.dart';
+import '../services/storage_service.dart';
+import 'music_studio_page.dart';
 import 'app_health_page.dart';
 import '../services/app_settings.dart';
 import '../widgets/app_update_sheet.dart';
 import '../widgets/data_usage_card.dart';
 import '../widgets/music_design.dart';
 import '../widgets/flow_components.dart';
+
+Future<void> _exportMusikKuBackup(BuildContext context) async {
+  try {
+    final raw = await StorageService().exportBackupJson();
+    final documents = await getApplicationDocumentsDirectory();
+    final now = DateTime.now();
+    final stamp = '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}_${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}';
+    final file = File('${documents.path}/MusikKu_Backup_$stamp.json');
+    await file.writeAsString(raw, flush: true);
+    var copiedToClipboard = false;
+    // Clipboard implementations on mobile may reject very large JSON files.
+    // The backup file is already saved, so this optional convenience must not
+    // turn a successful export into a reported failure.
+    try {
+      await Clipboard.setData(ClipboardData(text: raw));
+      copiedToClipboard = true;
+    } catch (_) {}
+    if (!context.mounted) return;
+    final message = copiedToClipboard
+        ? 'Backup disimpan dan JSON disalin ke clipboard.'
+        : 'Backup disimpan. Clipboard tidak menerima JSON ini; gunakan file: ${file.path}';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), duration: const Duration(seconds: 7)),
+    );
+  } catch (error) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Backup gagal: $error')));
+  }
+}
+
+Future<void> _restoreMusikKuBackup(BuildContext context) async {
+  final clipboard = await Clipboard.getData('text/plain');
+  if (!context.mounted) return;
+  final controller = TextEditingController(text: clipboard?.text ?? '');
+  final raw = await showDialog<String>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Pulihkan backup'),
+      content: SizedBox(
+        width: 520,
+        child: TextField(
+          controller: controller,
+          autofocus: true,
+          minLines: 5,
+          maxLines: 10,
+          keyboardType: TextInputType.multiline,
+          decoration: const InputDecoration(
+            hintText: 'Tempel JSON backup MusikKu di sini',
+            border: OutlineInputBorder(),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Batal')),
+        FilledButton(onPressed: () => Navigator.pop(dialogContext, controller.text), child: const Text('Pulihkan')),
+      ],
+    ),
+  );
+  controller.dispose();
+  if (raw == null || raw.trim().isEmpty || !context.mounted) return;
+  final confirm = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Ganti data lokal?'),
+      content: const Text('Data favorit, playlist, antrean, riwayat, dan statistik yang cocok di backup akan ditimpa. Pastikan kamu sudah membuat backup terbaru.'),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Batal')),
+        FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Lanjutkan')),
+      ],
+    ),
+  );
+  if (confirm != true || !context.mounted) return;
+  try {
+    await StorageService().restoreBackupJson(raw);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Backup dipulihkan. Tutup lalu buka kembali MusikKu agar semua data dimuat ulang.')),
+    );
+  } catch (error) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Backup tidak dapat dipulihkan: $error')));
+  }
+}
 
 /// Pengaturan global aplikasi. Semua opsi terhubung langsung ke controller
 /// dan disimpan lewat SharedPreferences.
@@ -17,10 +106,32 @@ import '../widgets/flow_components.dart';
 /// blok lembut berisi baris-baris pengaturan yang dipisah garis tipis. Tidak
 /// ada kartu hero, gradien, atau lencana dekoratif.
 class AppSettingsPage extends StatelessWidget {
-  const AppSettingsPage({super.key, required this.settings, this.onOpenAudioSettings});
+  const AppSettingsPage({
+    super.key,
+    required this.settings,
+    this.onOpenAudioSettings,
+    this.recentlyPlayed = const <YoutubeSearchResult>[],
+    this.currentVideo,
+    this.onPlayFromList,
+    this.onPlayPause,
+    this.onNext,
+    this.onPrevious,
+    this.onOpenLyrics,
+    this.onOpenListeningRoom,
+    this.isPlaying = false,
+  });
 
   final AppSettingsController settings;
   final VoidCallback? onOpenAudioSettings;
+  final List<YoutubeSearchResult> recentlyPlayed;
+  final YoutubeSearchResult? currentVideo;
+  final Future<void> Function(YoutubeSearchResult, List<YoutubeSearchResult>)? onPlayFromList;
+  final Future<void> Function()? onPlayPause;
+  final Future<void> Function()? onNext;
+  final Future<void> Function()? onPrevious;
+  final VoidCallback? onOpenLyrics;
+  final VoidCallback? onOpenListeningRoom;
+  final bool isPlaying;
 
   String _themeLabel(AppThemeChoice choice) => switch (choice) {
         AppThemeChoice.system => 'Ikuti perangkat',
@@ -47,6 +158,43 @@ class AppSettingsPage extends StatelessWidget {
             title: 'Kendali MusikKu',
             subtitle: 'Atur tampilan, jaringan, suara, dan cara aplikasi bekerja sesuai kebiasaan mendengarkanmu.',
             trailing: Icon(Icons.auto_awesome_rounded),
+          ),
+          const SizedBox(height: 12),
+          Material(
+            color: scheme.primaryContainer.withValues(alpha: 0.48),
+            borderRadius: BorderRadius.circular(18),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(18),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                builder: (_) => MusicStudioPage(
+                  storage: StorageService(),
+                  settings: settings,
+                  recentlyPlayed: recentlyPlayed,
+                  currentVideo: currentVideo,
+                  onPlayFromList: onPlayFromList,
+                  onPlayPause: onPlayPause,
+                  onNext: onNext,
+                  onPrevious: onPrevious,
+                  onOpenLyrics: onOpenLyrics,
+                  onOpenListeningRoom: onOpenListeningRoom,
+                  onOpenAudioSettings: onOpenAudioSettings,
+                  isPlaying: isPlaying,
+                ),
+              )),
+              child: Padding(
+                padding: const EdgeInsets.all(15),
+                child: Row(children: [
+                  Icon(Icons.auto_awesome_rounded, color: scheme.primary, size: 25),
+                  const SizedBox(width: 12),
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text('Buka MusikKu Studio', style: TextStyle(color: scheme.onSurface, fontWeight: FontWeight.w900, fontSize: 13)),
+                    const SizedBox(height: 3),
+                    Text('Music DNA, Flow, Memories, Radio Diary, Focus, dan Car Mode', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10.5)),
+                  ])),
+                  Icon(Icons.arrow_forward_rounded, color: scheme.primary),
+                ]),
+              ),
+            ),
           ),
           // ---------------------------------------------------------------
           // TAMPILAN
@@ -148,6 +296,31 @@ class AppSettingsPage extends StatelessWidget {
               ),
             ],
           ),
+
+          // ---------------------------------------------------------------
+          // BACKUP DAN PEMULIHAN
+          // ---------------------------------------------------------------
+          const _SectionLabel(icon: Icons.backup_rounded, title: 'Backup dan pemulihan'),
+          _Group(
+            children: [
+              ListTile(
+                leading: const Icon(Icons.save_alt_rounded),
+                title: const Text('Buat backup lokal', style: TextStyle(fontWeight: FontWeight.w800)),
+                subtitle: const Text('Simpan koleksi, antrean, riwayat, statistik, pengaturan, dan cover custom ke JSON.'),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: () => unawaited(_exportMusikKuBackup(context)),
+              ),
+              const _InsetDivider(),
+              ListTile(
+                leading: const Icon(Icons.restore_rounded),
+                title: const Text('Pulihkan dari JSON', style: TextStyle(fontWeight: FontWeight.w800)),
+                subtitle: const Text('Tempel isi backup yang pernah disalin dari perangkat lain.'),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: () => unawaited(_restoreMusikKuBackup(context)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
 
           // ---------------------------------------------------------------
           // DATA DAN JARINGAN

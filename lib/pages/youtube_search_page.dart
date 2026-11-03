@@ -2,17 +2,126 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../models/youtube_search_result.dart';
 import '../services/search_suggest_service.dart';
 import '../widgets/music_design.dart';
 
 /// Mode pencarian MusikKu: katalog lagu saja.
 enum YoutubeSearchMode { music }
 
+enum SearchDurationFilter { any, underFourMinutes, fourToTwentyMinutes, overTwentyMinutes }
+enum SearchContentFilter { any, officialAudio, musicVideo, livePerformance }
+enum SearchSortOrder { relevance, newest, mostViewed }
+enum SearchLanguageFilter { any, indonesian, english }
+
+class YoutubeSearchFilters {
+  const YoutubeSearchFilters({
+    this.duration = SearchDurationFilter.any,
+    this.content = SearchContentFilter.any,
+    this.sort = SearchSortOrder.relevance,
+    this.language = SearchLanguageFilter.any,
+  });
+
+  final SearchDurationFilter duration;
+  final SearchContentFilter content;
+  final SearchSortOrder sort;
+  final SearchLanguageFilter language;
+
+  bool get isDefault =>
+      duration == SearchDurationFilter.any &&
+      content == SearchContentFilter.any &&
+      sort == SearchSortOrder.relevance &&
+      language == SearchLanguageFilter.any;
+
+  String buildQuery(String query) {
+    final additions = <String>[];
+    switch (content) {
+      case SearchContentFilter.any:
+        break;
+      case SearchContentFilter.officialAudio:
+        additions.add('official audio');
+        break;
+      case SearchContentFilter.musicVideo:
+        additions.add('official music video');
+        break;
+      case SearchContentFilter.livePerformance:
+        additions.add('live performance');
+        break;
+    }
+    switch (language) {
+      case SearchLanguageFilter.any:
+        break;
+      case SearchLanguageFilter.indonesian:
+        additions.add('Indonesia');
+        break;
+      case SearchLanguageFilter.english:
+        additions.add('English');
+        break;
+    }
+    return <String>[query.trim(), ...additions].where((v) => v.isNotEmpty).join(' ');
+  }
+
+  List<YoutubeSearchResult> apply(List<YoutubeSearchResult> input) {
+    var output = List<YoutubeSearchResult>.from(input);
+    switch (duration) {
+      case SearchDurationFilter.any:
+        break;
+      case SearchDurationFilter.underFourMinutes:
+        output = output.where((song) => song.durationSeconds != null && song.durationSeconds! < 240).toList();
+        break;
+      case SearchDurationFilter.fourToTwentyMinutes:
+        output = output.where((song) => song.durationSeconds != null && song.durationSeconds! >= 240 && song.durationSeconds! <= 1200).toList();
+        break;
+      case SearchDurationFilter.overTwentyMinutes:
+        output = output.where((song) => song.durationSeconds != null && song.durationSeconds! > 1200).toList();
+        break;
+    }
+    switch (content) {
+      case SearchContentFilter.any:
+        break;
+      case SearchContentFilter.officialAudio:
+        output = output.where((song) {
+          final text = '${song.title} ${song.description} ${song.channelTitle}'.toLowerCase();
+          return text.contains('official audio') || text.contains('audio resmi') || song.channelTitle.toLowerCase().endsWith(' - topic');
+        }).toList();
+        break;
+      case SearchContentFilter.musicVideo:
+        output = output.where((song) {
+          final text = '${song.title} ${song.description}'.toLowerCase();
+          return text.contains('official music video') || text.contains('official video') || RegExp(r'\bmv\b').hasMatch(text);
+        }).toList();
+        break;
+      case SearchContentFilter.livePerformance:
+        output = output.where((song) {
+          final text = '${song.title} ${song.description}'.toLowerCase();
+          return song.isLive || song.isLiveRecording || text.contains('live performance') || text.contains('live at') || text.contains('konser');
+        }).toList();
+        break;
+    }
+    switch (sort) {
+      case SearchSortOrder.relevance:
+        break;
+      case SearchSortOrder.newest:
+        output.sort((a, b) => (b.publishedAt ?? b.approxPublishedAt ?? DateTime.fromMillisecondsSinceEpoch(0)).compareTo(a.publishedAt ?? a.approxPublishedAt ?? DateTime.fromMillisecondsSinceEpoch(0)));
+        break;
+      case SearchSortOrder.mostViewed:
+        output.sort((a, b) => (b.viewCount ?? 0).compareTo(a.viewCount ?? 0));
+        break;
+    }
+    return output;
+  }
+}
+
 class YoutubeSearchRequest {
   final String query;
   final YoutubeSearchMode mode;
+  final YoutubeSearchFilters filters;
 
-  const YoutubeSearchRequest({required this.query, required this.mode});
+  const YoutubeSearchRequest({
+    required this.query,
+    required this.mode,
+    this.filters = const YoutubeSearchFilters(),
+  });
 }
 
 /// Pencarian musik: saran kata kunci dan riwayat lokal.
@@ -39,6 +148,7 @@ class _YoutubeSearchPageState extends State<YoutubeSearchPage> {
   final _focus = FocusNode();
   Timer? _debounce;
   List<String> _suggestions = const [];
+  YoutubeSearchFilters _filters = const YoutubeSearchFilters();
   late List<String> _history;
   int _requestId = 0;
   @override
@@ -89,7 +199,7 @@ class _YoutubeSearchPageState extends State<YoutubeSearchPage> {
     final q = value.trim();
     if (q.isEmpty) return;
     Navigator.of(context).pop(
-      YoutubeSearchRequest(query: q, mode: YoutubeSearchMode.music),
+      YoutubeSearchRequest(query: q, mode: YoutubeSearchMode.music, filters: _filters),
     );
   }
 
@@ -100,6 +210,69 @@ class _YoutubeSearchPageState extends State<YoutubeSearchPage> {
       selection: TextSelection.collapsed(offset: text.length),
     );
     _focus.requestFocus();
+  }
+
+  Future<void> _openAdvancedFilters() async {
+    var duration = _filters.duration;
+    var content = _filters.content;
+    var sort = _filters.sort;
+    var language = _filters.language;
+    final selected = await showModalBottomSheet<YoutubeSearchFilters>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          final scheme = Theme.of(context).colorScheme;
+          Widget choice<T>(String title, T value, T current, ValueChanged<T> onChanged) =>
+              ChoiceChip(label: Text(title), selected: value == current, onSelected: (_) => onChanged(value));
+          Widget section(String title, List<Widget> chips) => Padding(
+            padding: const EdgeInsets.only(bottom: 14),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(title, style: TextStyle(fontWeight: FontWeight.w900, color: scheme.onSurface)),
+              const SizedBox(height: 8),
+              Wrap(spacing: 8, runSpacing: 7, children: chips),
+            ]),
+          );
+          return SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Text('Filter pencarian', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900)),
+              const SizedBox(height: 18),
+              section('Jenis konten', [
+                choice('Semua', SearchContentFilter.any, content, (v) => setSheetState(() => content = v)),
+                choice('Official Audio', SearchContentFilter.officialAudio, content, (v) => setSheetState(() => content = v)),
+                choice('Music Video', SearchContentFilter.musicVideo, content, (v) => setSheetState(() => content = v)),
+                choice('Live', SearchContentFilter.livePerformance, content, (v) => setSheetState(() => content = v)),
+              ]),
+              section('Durasi', [
+                choice('Semua', SearchDurationFilter.any, duration, (v) => setSheetState(() => duration = v)),
+                choice('< 4 menit', SearchDurationFilter.underFourMinutes, duration, (v) => setSheetState(() => duration = v)),
+                choice('4–20 menit', SearchDurationFilter.fourToTwentyMinutes, duration, (v) => setSheetState(() => duration = v)),
+                choice('> 20 menit', SearchDurationFilter.overTwentyMinutes, duration, (v) => setSheetState(() => duration = v)),
+              ]),
+              section('Bahasa pencarian', [
+                choice('Semua', SearchLanguageFilter.any, language, (v) => setSheetState(() => language = v)),
+                choice('Indonesia', SearchLanguageFilter.indonesian, language, (v) => setSheetState(() => language = v)),
+                choice('Inggris', SearchLanguageFilter.english, language, (v) => setSheetState(() => language = v)),
+              ]),
+              section('Urutan', [
+                choice('Relevansi', SearchSortOrder.relevance, sort, (v) => setSheetState(() => sort = v)),
+                choice('Terbaru', SearchSortOrder.newest, sort, (v) => setSheetState(() => sort = v)),
+                choice('Paling banyak ditonton', SearchSortOrder.mostViewed, sort, (v) => setSheetState(() => sort = v)),
+              ]),
+              Row(children: [
+                TextButton(onPressed: () => setSheetState(() { duration = SearchDurationFilter.any; content = SearchContentFilter.any; language = SearchLanguageFilter.any; sort = SearchSortOrder.relevance; }), child: const Text('Reset')),
+                const Spacer(),
+                FilledButton(onPressed: () => Navigator.pop(sheetContext, YoutubeSearchFilters(duration: duration, content: content, language: language, sort: sort)), child: const Text('Terapkan filter')),
+              ]),
+            ]),
+          );
+        },
+      ),
+    );
+    if (selected != null && mounted) setState(() => _filters = selected);
   }
 
   @override
@@ -189,6 +362,22 @@ class _YoutubeSearchPageState extends State<YoutubeSearchPage> {
                         ),
                       ],
                     ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(17, 0, 17, 12),
+                  child: Row(
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: _openAdvancedFilters,
+                        icon: const Icon(Icons.tune_rounded, size: 17),
+                        label: Text(_filters.isDefault ? 'Filter pencarian' : 'Filter aktif'),
+                      ),
+                      if (!_filters.isDefault) ...[
+                        const SizedBox(width: 8),
+                        Expanded(child: Text('Filter diterapkan ke hasil pencarian', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 10, fontWeight: FontWeight.w700))),
+                      ],
+                    ],
                   ),
                 ),
                 if (!typing && _history.isEmpty) ...[

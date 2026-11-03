@@ -25,6 +25,8 @@ void showVideoMenuSheet(
   required VoidCallback onToggleFavorite,
   required VoidCallback onAddToPlaylist,
   required VoidCallback onStartRadio,
+  VoidCallback? onChangeArtwork,
+  VoidCallback? onResetArtwork,
   VoidCallback? onRemoveFromPlaylist,
 }) {
   showModalBottomSheet<void>(
@@ -245,6 +247,20 @@ void showVideoMenuSheet(
                     icon: Icons.person_search_rounded,
                     title: 'Lihat artis / channel',
                     onTap: () => closeThen(onOpenArtist),
+                  ),
+                if (onChangeArtwork != null)
+                  actionTile(
+                    icon: Icons.image_outlined,
+                    title: 'Ganti cover lagu',
+                    subtitle: 'Pilih artwork sendiri dari galeri perangkat.',
+                    onTap: () => closeThen(onChangeArtwork),
+                  ),
+                if (onResetArtwork != null)
+                  actionTile(
+                    icon: Icons.restore_rounded,
+                    title: 'Pulihkan cover asli',
+                    subtitle: 'Gunakan kembali artwork bawaan lagu.',
+                    onTap: () => closeThen(onResetArtwork),
                   ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 15, 20, 6),

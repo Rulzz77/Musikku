@@ -1,9 +1,11 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
 import '../models/youtube_search_result.dart';
 import '../services/local_media_service.dart';
+import '../services/track_artwork_service.dart';
 
 class UnifiedArtwork extends StatefulWidget {
   final YoutubeSearchResult track;
@@ -35,11 +37,18 @@ class _UnifiedArtworkState extends State<UnifiedArtwork> {
   static final Map<String, Future<Uint8List?>> _pending = <String, Future<Uint8List?>>{};
 
   Future<Uint8List?>? _future;
+  Future<String?>? _customArtworkFuture;
 
   @override
   void initState() {
     super.initState();
+    TrackArtworkService.revision.addListener(_onCustomArtworkChanged);
     _prepare();
+  }
+
+  void _onCustomArtworkChanged() {
+    _prepare();
+    if (mounted) setState(() {});
   }
 
   @override
@@ -51,6 +60,7 @@ class _UnifiedArtworkState extends State<UnifiedArtwork> {
   }
 
   void _prepare() {
+    _customArtworkFuture = TrackArtworkService.pathFor(widget.track.videoId);
     if (!widget.track.isLocal) {
       _future = null;
       return;
@@ -85,6 +95,12 @@ class _UnifiedArtworkState extends State<UnifiedArtwork> {
     }
   }
 
+  @override
+  void dispose() {
+    TrackArtworkService.revision.removeListener(_onCustomArtworkChanged);
+    super.dispose();
+  }
+
   Widget _fallback(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return DecoratedBox(
@@ -97,9 +113,8 @@ class _UnifiedArtworkState extends State<UnifiedArtwork> {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final child = widget.track.isLocal
+  Widget _originalArtwork(BuildContext context) {
+    return widget.track.isLocal
         ? FutureBuilder<Uint8List?>(
             future: _future,
             builder: (context, snapshot) {
@@ -129,15 +144,32 @@ class _UnifiedArtworkState extends State<UnifiedArtwork> {
                 },
                 errorBuilder: (context, error, stackTrace) => _fallback(context),
               ));
+  }
 
-    Widget result = child;
+  @override
+  Widget build(BuildContext context) {
+    Widget result = FutureBuilder<String?>(
+      future: _customArtworkFuture,
+      builder: (context, snapshot) {
+        final path = snapshot.data;
+        if (path != null && path.isNotEmpty) {
+          return Image.file(
+            File(path),
+            fit: widget.fit,
+            gaplessPlayback: true,
+            filterQuality: FilterQuality.medium,
+            errorBuilder: (context, error, stackTrace) => _originalArtwork(context),
+          );
+        }
+        return _originalArtwork(context);
+      },
+    );
     if (widget.borderRadius != null) {
       result = ClipRRect(
         borderRadius: widget.borderRadius!,
         child: result,
       );
     }
-
     if (widget.width != null || widget.height != null) {
       result = SizedBox(
         width: widget.width,
@@ -145,7 +177,6 @@ class _UnifiedArtworkState extends State<UnifiedArtwork> {
         child: result,
       );
     }
-
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 220),
       switchInCurve: Curves.easeOutCubic,
@@ -156,12 +187,11 @@ class _UnifiedArtworkState extends State<UnifiedArtwork> {
       ),
       child: KeyedSubtree(
         key: ValueKey<String>(
-          widget.track.isLocal
-              ? 'local-${widget.track.localMediaId}'
-              : 'online-${widget.track.videoId}',
+          '${widget.track.videoId}-${widget.track.localMediaId}',
         ),
         child: result,
       ),
     );
   }
+
 }

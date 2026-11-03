@@ -20,6 +20,7 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
     setState(() {
       _activeChip = -1;
       _searchMode = 'music';
+      _activeSearchFilters = picked.filters;
     });
     _searchController.text = picked.query.trim();
     await _search();
@@ -265,7 +266,9 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
     });
 
     try {
-      final videos = await _searchService.search(query, filter: _searchMode);
+      final filters = _activeSearchFilters;
+      final searchQuery = filters.buildQuery(query);
+      final videos = await _searchService.search(searchQuery, filter: _searchMode);
       if (!mounted || requestId != _searchRequestId) return;
 
       final updatedHistory = List<String>.from(_searchHistory)
@@ -275,7 +278,7 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
         updatedHistory.removeRange(StorageService.maxHistory, updatedHistory.length);
       }
 
-      final visibleVideos = videos.take(30).toList(growable: false);
+      final visibleVideos = filters.apply(videos).take(30).toList(growable: false);
       setState(() {
         _searchResults = visibleVideos;
         _searchHistory = updatedHistory;

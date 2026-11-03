@@ -7,6 +7,9 @@ class Playlist {
     required this.name,
     List<YoutubeSearchResult>? songs,
     this.artworkPath,
+    this.description = '',
+    this.folderName = 'Umum',
+    this.accentColorValue,
   }) : songs = songs ?? <YoutubeSearchResult>[];
 
   final String id;
@@ -15,6 +18,9 @@ class Playlist {
 
   /// Local cover selected by the user; independent from song order.
   String? artworkPath;
+  String description;
+  String folderName;
+  int? accentColorValue;
 
   bool contains(String videoId) =>
       songs.any((song) => song.videoId == videoId);
@@ -40,6 +46,9 @@ class Playlist {
       'name': name,
       'songs': songs.map((song) => song.toJson()).toList(),
       'artworkPath': artworkPath,
+      'description': description,
+      'folderName': folderName,
+      'accentColorValue': accentColorValue,
     };
   }
 
@@ -68,6 +77,9 @@ class Playlist {
       name: json['name']?.toString() ?? 'Playlist',
       songs: songs,
       artworkPath: json['artworkPath']?.toString(),
+      description: json['description']?.toString() ?? '',
+      folderName: json['folderName']?.toString() ?? 'Umum',
+      accentColorValue: (json['accentColorValue'] as num?)?.toInt(),
     );
   }
 }

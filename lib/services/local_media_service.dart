@@ -29,6 +29,7 @@ class LocalMediaService {
           album: map['album']?.toString() ?? '',
           durationMs: (map['durationMs'] as num?)?.toInt() ?? 0,
           genre: map['genre']?.toString() ?? '',
+          dateAddedSeconds: (map['dateAddedSeconds'] as num?)?.toInt() ?? 0,
           uri: uri,
         ),
       );

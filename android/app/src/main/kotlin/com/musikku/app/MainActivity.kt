@@ -1600,6 +1600,7 @@ class MainActivity : AudioServiceActivity() {
             MediaStore.Audio.Media.ALBUM,
             MediaStore.Audio.Media.DURATION,
             MediaStore.Audio.Media.IS_MUSIC,
+            MediaStore.Audio.Media.DATE_ADDED,
         )
 
         val result = mutableListOf<Map<String, Any?>>()
@@ -1642,6 +1643,7 @@ class MainActivity : AudioServiceActivity() {
             val artistIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
             val albumIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
             val durationIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
+            val dateAddedIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_ADDED)
 
             while (cursor.moveToNext()) {
                 val id = cursor.getLong(idIndex)
@@ -1653,6 +1655,7 @@ class MainActivity : AudioServiceActivity() {
                     "artist" to (cursor.getString(artistIndex) ?: ""),
                     "album" to (cursor.getString(albumIndex) ?: ""),
                     "durationMs" to cursor.getLong(durationIndex),
+                    "dateAddedSeconds" to cursor.getLong(dateAddedIndex),
                     "genre" to (genreBySongId[id] ?: ""),
                 )
             }

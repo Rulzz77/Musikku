@@ -61,6 +61,9 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
   final ImagePicker _imagePicker = ImagePicker();
   String? _selectedPlaylistId;
   bool _changingArtwork = false;
+  bool _songSelectionMode = false;
+  final Set<String> _selectedSongIds = <String>{};
+  _PlaylistSortMode _sortMode = _PlaylistSortMode.recent;
 
   Playlist? get _selectedPlaylist {
     final id = _selectedPlaylistId;
@@ -224,6 +227,121 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
     if (confirm != true || !mounted) return;
     setState(() => playlist.songs.removeWhere((item) => item.videoId == song.videoId));
     widget.onChanged();
+  }
+
+  Future<void> _editPlaylistDetails(Playlist playlist) async {
+    final noteController = TextEditingController(text: playlist.description);
+    final folderController = TextEditingController(text: playlist.folderName);
+    const colors = <Color>[
+      Color(0xFF91D9CF), Color(0xFFB8B8EE), Color(0xFFFF9676),
+      Color(0xFFE7BD67), Color(0xFFE58AAE), Color(0xFF8CB5E8),
+    ];
+    var selectedColor = Color(playlist.accentColorValue ?? colors.first.toARGB32());
+    final result = await showDialog<({String description, String folder, int color})>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Detail playlist'),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              TextField(controller: noteController, maxLines: 3, decoration: const InputDecoration(labelText: 'Catatan / deskripsi', hintText: 'Tambahkan cerita playlist ini')),
+              const SizedBox(height: 12),
+              TextField(controller: folderController, decoration: const InputDecoration(labelText: 'Folder', hintText: 'Contoh: Santai, Kerja, Perjalanan')),
+              const SizedBox(height: 16),
+              const Text('Warna playlist', style: TextStyle(fontWeight: FontWeight.w800)),
+              const SizedBox(height: 10),
+              Wrap(spacing: 10, runSpacing: 10, children: [
+                for (final color in colors)
+                  InkWell(
+                    customBorder: const CircleBorder(),
+                    onTap: () => setDialogState(() => selectedColor = color),
+                    child: Container(
+                      width: 32, height: 32,
+                      decoration: BoxDecoration(color: color, shape: BoxShape.circle, border: Border.all(color: selectedColor.toARGB32() == color.toARGB32() ? Theme.of(context).colorScheme.onSurface : Colors.transparent, width: 3)),
+                      child: selectedColor.toARGB32() == color.toARGB32() ? const Icon(Icons.check_rounded, size: 17, color: Colors.black) : null,
+                    ),
+                  ),
+              ]),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Batal')),
+            FilledButton(onPressed: () => Navigator.pop(dialogContext, (description: noteController.text.trim(), folder: folderController.text.trim().isEmpty ? 'Umum' : folderController.text.trim(), color: selectedColor.toARGB32())), child: const Text('Simpan')),
+          ],
+        ),
+      ),
+    );
+    noteController.dispose();
+    folderController.dispose();
+    if (result == null || !mounted) return;
+    setState(() {
+      playlist.description = result.description;
+      playlist.folderName = result.folder;
+      playlist.accentColorValue = result.color;
+    });
+    widget.onChanged();
+  }
+
+  Future<void> _mergePlaylist(Playlist source) async {
+    final destinations = widget.playlists.where((item) => item.id != source.id).toList();
+    if (destinations.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Buat playlist lain dulu untuk tujuan penggabungan.')));
+      return;
+    }
+    final targetId = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => SimpleDialog(
+        title: Text('Gabungkan "${source.name}" ke'),
+        children: [
+          for (final target in destinations)
+            SimpleDialogOption(onPressed: () => Navigator.pop(dialogContext, target.id), child: Row(children: [const Icon(Icons.queue_music_rounded), const SizedBox(width: 10), Expanded(child: Text('${target.name} · ${target.songs.length} lagu'))])),
+        ],
+      ),
+    );
+    if (targetId == null || !mounted) return;
+    final target = destinations.firstWhere((item) => item.id == targetId);
+    final ids = target.songs.map((song) => song.videoId).toSet();
+    for (final song in source.songs) {
+      if (song.videoId.isNotEmpty && ids.add(song.videoId)) target.songs.add(song);
+    }
+    final oldArtwork = source.artworkPath;
+    setState(() {
+      widget.playlists.removeWhere((item) => item.id == source.id);
+      if (_selectedPlaylistId == source.id) _selectedPlaylistId = target.id;
+    });
+    widget.onChanged();
+    _deleteManagedArtwork(oldArtwork);
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Playlist digabung ke "${target.name}".')));
+  }
+
+  Future<void> _removeSelectedSongs(Playlist playlist) async {
+    if (_selectedSongIds.isEmpty) return;
+    final count = _selectedSongIds.length;
+    setState(() {
+      playlist.songs.removeWhere((song) => _selectedSongIds.contains(song.videoId));
+      _selectedSongIds.clear();
+      _songSelectionMode = false;
+    });
+    widget.onChanged();
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$count lagu dihapus dari playlist.')));
+  }
+
+  List<Playlist> get _sortedPlaylists {
+    final result = List<Playlist>.from(widget.playlists);
+    switch (_sortMode) {
+      case _PlaylistSortMode.recent:
+        break;
+      case _PlaylistSortMode.name:
+        result.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+        break;
+      case _PlaylistSortMode.songs:
+        result.sort((a, b) => b.songs.length.compareTo(a.songs.length));
+        break;
+      case _PlaylistSortMode.folder:
+        result.sort((a, b) => a.folderName.toLowerCase().compareTo(b.folderName.toLowerCase()));
+        break;
+    }
+    return result;
   }
 
   Future<void> _showAddSongsSheet(Playlist playlist) async {
@@ -445,6 +563,33 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
               onPressed: () => unawaited(_showAddSongsSheet(playlist)),
               icon: const Icon(Icons.playlist_add_rounded),
             ),
+          if (playlist != null)
+            IconButton(
+              tooltip: _songSelectionMode ? 'Batalkan pilih lagu' : 'Pilih beberapa lagu',
+              onPressed: () => setState(() {
+                _songSelectionMode = !_songSelectionMode;
+                _selectedSongIds.clear();
+              }),
+              icon: Icon(_songSelectionMode ? Icons.close_rounded : Icons.checklist_rounded),
+            ),
+          if (_songSelectionMode && playlist != null)
+            IconButton(
+              tooltip: 'Hapus ${_selectedSongIds.length} lagu terpilih',
+              onPressed: _selectedSongIds.isEmpty ? null : () => unawaited(_removeSelectedSongs(playlist)),
+              icon: const Icon(Icons.delete_sweep_rounded),
+            ),
+          if (playlist == null && widget.playlists.length > 1)
+            PopupMenuButton<_PlaylistSortMode>(
+              tooltip: 'Urutkan playlist',
+              initialValue: _sortMode,
+              onSelected: (value) => setState(() => _sortMode = value),
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: _PlaylistSortMode.recent, child: Text('Urutan terbaru')),
+                PopupMenuItem(value: _PlaylistSortMode.name, child: Text('Nama A–Z')),
+                PopupMenuItem(value: _PlaylistSortMode.songs, child: Text('Jumlah lagu terbanyak')),
+                PopupMenuItem(value: _PlaylistSortMode.folder, child: Text('Folder')),
+              ],
+            ),
           IconButton(
             tooltip: 'Playlist baru',
             onPressed: () => unawaited(_createPlaylist()),
@@ -456,6 +601,8 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
                 if (value == 'cover') unawaited(_changePlaylistArtwork(playlist));
                 if (value == 'reset_cover') unawaited(_removePlaylistArtwork(playlist));
                 if (value == 'rename') unawaited(_renamePlaylist(playlist));
+                if (value == 'details') unawaited(_editPlaylistDetails(playlist));
+                if (value == 'merge') unawaited(_mergePlaylist(playlist));
                 if (value == 'delete') unawaited(_deletePlaylist(playlist));
               },
               itemBuilder: (_) => [
@@ -463,6 +610,8 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
                 if (playlist.artworkPath != null && playlist.artworkPath!.isNotEmpty)
                   const PopupMenuItem(value: 'reset_cover', child: Text('Pakai cover lagu pertama')),
                 const PopupMenuDivider(),
+                const PopupMenuItem(value: 'details', child: Text('Catatan, folder & warna')) ,
+                const PopupMenuItem(value: 'merge', child: Text('Gabungkan ke playlist lain')),
                 const PopupMenuItem(value: 'rename', child: Text('Ubah nama')),
                 const PopupMenuItem(value: 'delete', child: Text('Hapus playlist')),
               ],
@@ -565,7 +714,7 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
           ],
         ),
         const SizedBox(height: 13),
-        for (final playlist in widget.playlists) ...[
+        for (final playlist in _sortedPlaylists) ...[
           _playlistPoster(playlist, scheme),
           const SizedBox(height: 9),
         ],
@@ -616,13 +765,14 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
                     children: [
                       Text(playlist.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurface, fontSize: 14, height: 1.12, fontWeight: FontWeight.w900, letterSpacing: -0.25)),
                       const SizedBox(height: 6),
-                      Text(playlist.songs.isEmpty ? 'Belum ada lagu' : '${playlist.songs.length} lagu tersimpan', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10.5, fontWeight: FontWeight.w600)),
+                      Text(playlist.songs.isEmpty ? 'Belum ada lagu' : '${playlist.songs.length} lagu · ${playlist.folderName}', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10.5, fontWeight: FontWeight.w600)),
+                      if (playlist.description.trim().isNotEmpty) ...[const SizedBox(height: 3), Text(playlist.description, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 9.5))],
                       const SizedBox(height: 8),
                       Row(
                         children: [
                           Icon(Icons.photo_camera_back_outlined, size: 13, color: scheme.primary),
                           const SizedBox(width: 4),
-                          Text(playlist.artworkPath?.isNotEmpty == true ? 'Cover kustom' : 'Artwork otomatis', style: TextStyle(color: scheme.primary, fontSize: 9.5, fontWeight: FontWeight.w800)),
+                          Text(playlist.artworkPath?.isNotEmpty == true ? 'Cover kustom' : 'Artwork otomatis', style: TextStyle(color: Color(playlist.accentColorValue ?? scheme.primary.toARGB32()), fontSize: 9.5, fontWeight: FontWeight.w800)),
                         ],
                       ),
                     ],
@@ -696,7 +846,8 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
                   const SizedBox(height: 7),
                   Text(playlist.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurface, fontSize: 21, height: 1.05, fontWeight: FontWeight.w900, letterSpacing: -0.65)),
                   const SizedBox(height: 7),
-                  Text('${playlist.songs.length} lagu · Cover dapat diganti', maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10.5, fontWeight: FontWeight.w600)),
+                  Text('${playlist.songs.length} lagu · ${playlist.folderName}', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10.5, fontWeight: FontWeight.w600)),
+                  if (playlist.description.trim().isNotEmpty) ...[const SizedBox(height: 4), Text(playlist.description, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10))],
                   const SizedBox(height: 9),
                   Row(
                     children: [
@@ -831,7 +982,8 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
                         return Material(
                           color: isCurrent ? scheme.primaryContainer.withValues(alpha: 0.22) : Colors.transparent,
                           child: InkWell(
-                            onTap: () => unawaited(_playSongAndReturn(playlist, song)),
+                            onTap: _songSelectionMode ? () => setState(() { _selectedSongIds.contains(song.videoId) ? _selectedSongIds.remove(song.videoId) : _selectedSongIds.add(song.videoId); }) : () => unawaited(_playSongAndReturn(playlist, song)),
+                            onLongPress: () => setState(() { _songSelectionMode = true; _selectedSongIds.add(song.videoId); }),
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 7),
                               decoration: BoxDecoration(
@@ -839,6 +991,12 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
                               ),
                               child: Row(
                                 children: [
+                                  if (_songSelectionMode)
+                                    Checkbox(
+                                      value: _selectedSongIds.contains(song.videoId),
+                                      onChanged: (selected) => setState(() { if (selected == true) { _selectedSongIds.add(song.videoId); } else { _selectedSongIds.remove(song.videoId); } }),
+                                      visualDensity: VisualDensity.compact,
+                                    ),
                                   ClipRRect(
                                     borderRadius: BorderRadius.circular(8),
                                     child: SizedBox(
@@ -912,6 +1070,8 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
   }
 
 }
+
+enum _PlaylistSortMode { recent, name, songs, folder }
 
 class _PlaylistDock extends StatelessWidget {
   const _PlaylistDock({required this.onSelect});

@@ -1,7 +1,10 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../models/youtube_search_result.dart';
 import '../services/album_artwork_service.dart';
+import '../services/track_artwork_service.dart';
 import 'unified_artwork.dart';
 
 /// Displays album art for the active player, with local-art and YouTube
@@ -28,10 +31,12 @@ class AlbumArtworkImage extends StatefulWidget {
 
 class _AlbumArtworkImageState extends State<AlbumArtworkImage> {
   late Future<String> _coverFuture;
+  late Future<String?> _customArtworkFuture;
 
   @override
   void initState() {
     super.initState();
+    TrackArtworkService.revision.addListener(_onCustomArtworkChanged);
     _prepare();
   }
 
@@ -47,8 +52,20 @@ class _AlbumArtworkImageState extends State<AlbumArtworkImage> {
     }
   }
 
+  void _onCustomArtworkChanged() {
+    _prepare();
+    if (mounted) setState(() {});
+  }
+
   void _prepare() {
     _coverFuture = AlbumArtworkService.resolveCoverUrl(widget.track);
+    _customArtworkFuture = TrackArtworkService.pathFor(widget.track.videoId);
+  }
+
+  @override
+  void dispose() {
+    TrackArtworkService.revision.removeListener(_onCustomArtworkChanged);
+    super.dispose();
   }
 
   Widget _placeholder(BuildContext context) {
@@ -101,8 +118,28 @@ class _AlbumArtworkImageState extends State<AlbumArtworkImage> {
         iconSize: widget.iconSize,
       );
     }
+    return FutureBuilder<String?>(
+      future: _customArtworkFuture,
+      builder: (context, customSnapshot) {
+        final customPath = customSnapshot.data;
+        if (customPath != null && customPath.isNotEmpty) {
+          return Image.file(
+            File(customPath),
+            width: widget.width,
+            height: widget.height,
+            fit: widget.fit,
+            gaplessPlayback: true,
+            filterQuality: FilterQuality.medium,
+            errorBuilder: (context, error, stackTrace) => _resolvedArtwork(context),
+          );
+        }
+        return _resolvedArtwork(context);
+      },
+    );
+  }
 
-    final thumbnail = track.coverUrl;
+  Widget _resolvedArtwork(BuildContext context) {
+    final thumbnail = widget.track.coverUrl;
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 240),
       switchInCurve: Curves.easeOutCubic,
@@ -112,17 +149,11 @@ class _AlbumArtworkImageState extends State<AlbumArtworkImage> {
         child: child,
       ),
       child: FutureBuilder<String>(
-        key: ValueKey<String>('album-cover-${track.videoId}'),
+        key: ValueKey<String>('album-cover-${widget.track.videoId}'),
         future: _coverFuture,
         builder: (context, snapshot) {
-          // Tampilkan thumbnail YouTube dulu; ganti ke sampul album persegi
-          // begitu MusicBrainz/Cover Art Archive selesai, supaya player tidak
-          // sempat kosong. Jika future gagal, snapshot.data null dan thumbnail
-          // tetap dipakai.
           final resolved = snapshot.data;
-          final url = (resolved != null && resolved.isNotEmpty)
-              ? resolved
-              : thumbnail;
+          final url = (resolved != null && resolved.isNotEmpty) ? resolved : thumbnail;
           if (url.isEmpty) return _placeholder(context);
           return _networkImage(context, url);
         },

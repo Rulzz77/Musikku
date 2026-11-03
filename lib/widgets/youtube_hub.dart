@@ -10,6 +10,7 @@ import '../models/youtube_search_result.dart';
 import '../pages/app_settings_page.dart';
 import '../pages/artist_page.dart';
 import '../pages/local_music_page.dart';
+import '../pages/music_studio_page.dart';
 import '../pages/stats_page.dart';
 import '../pages/youtube_channel_page.dart';
 import '../pages/youtube_search_page.dart';
@@ -78,6 +79,11 @@ class YoutubeHub extends StatefulWidget {
   final List<Playlist> customPlaylists;
   final Future<void> Function(Playlist playlist)? onPlayCustomPlaylist;
   final String? currentVideoId;
+  final YoutubeSearchResult? currentVideo;
+  final Future<void> Function()? onPlayPause;
+  final Future<void> Function()? onNext;
+  final Future<void> Function()? onPrevious;
+  final bool isPlaying;
   final Future<void> Function(YoutubeSearchResult video)? onStartRadio;
   final Future<void> Function(YoutubeSearchResult video, List<YoutubeSearchResult> list) onPlayFromList;
   final ValueChanged<YoutubeSearchResult> onAddToQueue;
@@ -104,6 +110,11 @@ class YoutubeHub extends StatefulWidget {
     this.customPlaylists = const [],
     this.onPlayCustomPlaylist,
     this.currentVideoId,
+    this.currentVideo,
+    this.onPlayPause,
+    this.onNext,
+    this.onPrevious,
+    this.isPlaying = false,
     this.onStartRadio,
     required this.onPlayFromList,
     required this.onAddToQueue,
@@ -150,6 +161,7 @@ class _YoutubeHubState extends State<YoutubeHub> {
   String _error = '';
   String _query = '';
   String _searchMode = 'music';
+  YoutubeSearchFilters _activeSearchFilters = const YoutubeSearchFilters();
   List<String> _searchHistory = const [];
   List<YoutubeSearchResult> _searchResults = const [];
   List<YoutubeChannelSearchResult> _searchChannels = const [];

@@ -8,6 +8,7 @@ class LocalSong {
   final int durationMs;
   final String uri;
   final String genre;
+  final int dateAddedSeconds;
 
   const LocalSong({
     required this.mediaId,
@@ -17,6 +18,7 @@ class LocalSong {
     required this.durationMs,
     required this.uri,
     this.genre = '',
+    this.dateAddedSeconds = 0,
   });
 
   double get durationSeconds => durationMs / 1000.0;

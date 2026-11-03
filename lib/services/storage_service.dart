@@ -51,6 +51,8 @@ class StorageService {
   static const String _likedKey = 'liked_v1';
   static const String _dislikedKey = 'disliked_v1';
   static const String _blockedChannelKeysKey = 'blocked_channel_keys_v1';
+  static const String _favoriteArtistNamesKey = 'favorite_artist_names_v1';
+  static const String _hiddenFlowTrackIdsKey = 'hidden_flow_track_ids_v1';
 
   static const int maxHistory = 12;
   static const int maxRecentlyPlayed = 30;
@@ -74,6 +76,21 @@ class StorageService {
 
   Future<void> saveBlockedChannelKeys(Set<String> keys) async =>
       _saveIdSet(_blockedChannelKeysKey, keys);
+
+  /// Artist names the user explicitly follows in their local music space.
+  Future<Set<String>> loadFavoriteArtistNames() async =>
+      _loadIdSet(_favoriteArtistNamesKey);
+
+  Future<void> saveFavoriteArtistNames(Set<String> names) async =>
+      _saveIdSet(_favoriteArtistNamesKey, names);
+
+  /// Tracks excluded from local mood mixes. This does not remove them from
+  /// playlists, search results, or the user's playback history.
+  Future<Set<String>> loadHiddenFlowTrackIds() async =>
+      _loadIdSet(_hiddenFlowTrackIdsKey);
+
+  Future<void> saveHiddenFlowTrackIds(Set<String> ids) async =>
+      _saveIdSet(_hiddenFlowTrackIdsKey, ids);
 
   Future<void> saveFeedback({
     required String videoId,
@@ -851,11 +868,12 @@ class StorageService {
   }
 
   Future<String> exportBackupJson() async {
-    // Pastikan statistik terbaru sudah di cache/disk sebelum diekspor.
-    await _watchWriteChain;
+    // Flush statistik dan progres agar backup menangkap data terbaru.
+    await flushPendingWrites();
     final prefs = await _prefsFuture;
+    final customArtworkAssets = await _exportCustomTrackArtworkAssets(prefs);
     final data = <String, dynamic>{
-      'version': 2,
+      'version': 3,
       'createdAt': DateTime.now().toIso8601String(),
       'favorites':
           await loadFavorites().then((v) => v.map((e) => e.toJson()).toList()),
@@ -886,8 +904,89 @@ class StorageService {
       'likedIds': (await loadLikedIds()).toList(),
       'dislikedIds': (await loadDislikedIds()).toList(),
       'blockedChannelKeys': (await loadBlockedChannelKeys()).toList(),
+      'favoriteArtistNames': (await loadFavoriteArtistNames()).toList(),
+      'hiddenFlowTrackIds': (await loadHiddenFlowTrackIds()).toList(),
+      // Artwork paths are device-specific. Export image bytes instead so
+      // custom song covers can be restored on another device.
+      'customTrackArtworkAssets': customArtworkAssets,
+      'radioDiary': _safeDecode(prefs.getString('musikku_radio_diary_v1'), <dynamic>[]),
     };
     return jsonEncode(data);
+  }
+
+  Future<Map<String, dynamic>> _exportCustomTrackArtworkAssets(
+    SharedPreferences prefs,
+  ) async {
+    const maxFileBytes = 3 * 1024 * 1024;
+    const maxTotalBytes = 12 * 1024 * 1024;
+    final raw = _safeDecode(
+      prefs.getString('custom_track_artwork_v1'),
+      <String, dynamic>{},
+    );
+    if (raw is! Map) return <String, dynamic>{};
+    final output = <String, dynamic>{};
+    var totalBytes = 0;
+    for (final entry in raw.entries) {
+      final videoId = entry.key.toString().trim();
+      final sourcePath = entry.value?.toString() ?? '';
+      if (videoId.isEmpty || sourcePath.isEmpty) continue;
+      try {
+        final file = File(sourcePath);
+        if (!await file.exists()) continue;
+        final length = await file.length();
+        if (length <= 0 || length > maxFileBytes || totalBytes + length > maxTotalBytes) {
+          continue;
+        }
+        final bytes = await file.readAsBytes();
+        final extension = file.uri.pathSegments.isEmpty
+            ? '.jpg'
+            : RegExp(r'\.[A-Za-z0-9]{2,5}$')
+                .stringMatch(file.uri.pathSegments.last)?.toLowerCase() ?? '.jpg';
+        output[videoId] = <String, dynamic>{
+          'fileName': '${videoId.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_')}$extension',
+          'base64': base64Encode(bytes),
+        };
+        totalBytes += bytes.length;
+      } catch (error) {
+        debugPrint('EXPORT CUSTOM ARTWORK ERROR [$videoId]: $error');
+      }
+    }
+    return output;
+  }
+
+  Future<void> _restoreCustomTrackArtworkAssets(
+    Map<String, dynamic> assets,
+    SharedPreferences prefs,
+  ) async {
+    const maxFileBytes = 3 * 1024 * 1024;
+    const maxTotalBytes = 12 * 1024 * 1024;
+    final documents = await getApplicationDocumentsDirectory();
+    final directory = Directory('${documents.path}/musikku_track_artwork');
+    await directory.create(recursive: true);
+    final restored = <String, String>{};
+    var totalBytes = 0;
+    for (final entry in assets.entries) {
+      final videoId = entry.key.trim();
+      if (videoId.isEmpty || entry.value is! Map) continue;
+      final asset = Map<String, dynamic>.from(entry.value as Map);
+      final encoded = asset['base64']?.toString() ?? '';
+      if (encoded.isEmpty || encoded.length > (maxFileBytes * 4 ~/ 3) + 16) continue;
+      try {
+        final bytes = base64Decode(encoded);
+        if (bytes.isEmpty || bytes.length > maxFileBytes || totalBytes + bytes.length > maxTotalBytes) continue;
+        final rawName = asset['fileName']?.toString() ?? '';
+        final extMatch = RegExp(r'\.(jpg|jpeg|png|webp)$', caseSensitive: false).firstMatch(rawName);
+        final extension = extMatch?.group(0)?.toLowerCase() ?? '.jpg';
+        final safeId = videoId.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_');
+        final destination = File('${directory.path}/${safeId}_backup_${DateTime.now().microsecondsSinceEpoch}$extension');
+        await destination.writeAsBytes(bytes, flush: true);
+        restored[videoId] = destination.path;
+        totalBytes += bytes.length;
+      } catch (error) {
+        debugPrint('RESTORE CUSTOM ARTWORK ERROR [$videoId]: $error');
+      }
+    }
+    await prefs.setString('custom_track_artwork_v1', jsonEncode(restored));
   }
 
   Future<void> restoreBackupJson(String raw) async {
@@ -1001,6 +1100,39 @@ class StorageService {
         Set<String>.from(
             decoded['blockedChannelKeys'].map((e) => e.toString())),
       );
+    }
+    if (decoded['favoriteArtistNames'] is List) {
+      await _saveIdSet(
+        _favoriteArtistNamesKey,
+        Set<String>.from(decoded['favoriteArtistNames'].map((e) => e.toString())),
+      );
+    }
+    if (decoded['hiddenFlowTrackIds'] is List) {
+      await _saveIdSet(
+        _hiddenFlowTrackIdsKey,
+        Set<String>.from(decoded['hiddenFlowTrackIds'].map((e) => e.toString())),
+      );
+    }
+    if (decoded['customTrackArtworkAssets'] is Map) {
+      await _restoreCustomTrackArtworkAssets(
+        Map<String, dynamic>.from(decoded['customTrackArtworkAssets'] as Map),
+        prefs,
+      );
+    } else if (decoded['customTrackArtwork'] is Map) {
+      // Backward compatibility for older same-device backups that stored paths.
+      final rawArtwork = Map<String, dynamic>.from(decoded['customTrackArtwork'] as Map);
+      final validPaths = <String, String>{};
+      for (final entry in rawArtwork.entries) {
+        final path = entry.value?.toString() ?? '';
+        if (path.isEmpty) continue;
+        try {
+          if (await File(path).exists()) validPaths[entry.key] = path;
+        } catch (_) {}
+      }
+      await prefs.setString('custom_track_artwork_v1', jsonEncode(validPaths));
+    }
+    if (decoded['radioDiary'] is List) {
+      await prefs.setString('musikku_radio_diary_v1', jsonEncode(decoded['radioDiary']));
     }
   }
 

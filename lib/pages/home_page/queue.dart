@@ -288,6 +288,38 @@ extension _HomeQueue on _HomePageState {
     );
   }
 
+  Future<void> _chooseTrackArtwork(YoutubeSearchResult video) async {
+    try {
+      final picked = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 92,
+        maxWidth: 1800,
+        maxHeight: 1800,
+      );
+      if (picked == null) return;
+      final documents = await getApplicationDocumentsDirectory();
+      final directory = Directory('${documents.path}/musikku_track_artwork');
+      await directory.create(recursive: true);
+      final safeId = video.videoId.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
+      final ext = picked.name.contains('.') ? '.${picked.name.split('.').last.toLowerCase()}' : '.jpg';
+      final destination = File('${directory.path}/${safeId}_${DateTime.now().millisecondsSinceEpoch}$ext');
+      await File(picked.path).copy(destination.path);
+      await TrackArtworkService.setArtwork(video.videoId, destination.path);
+      if (!mounted) return;
+      setState(() {});
+      _toast('Cover lagu berhasil diperbarui.');
+    } catch (error) {
+      if (mounted) _toast('Cover lagu gagal diperbarui: $error');
+    }
+  }
+
+  Future<void> _resetTrackArtwork(YoutubeSearchResult video) async {
+    await TrackArtworkService.clearArtwork(video.videoId);
+    if (!mounted) return;
+    setState(() {});
+    _toast('Cover asli lagu dipulihkan.');
+  }
+
   void _showVideoMenu(YoutubeSearchResult video, {Playlist? fromPlaylist}) {
     showVideoMenuSheet(
       context,
@@ -308,6 +340,8 @@ extension _HomeQueue on _HomePageState {
       onToggleFavorite: () => _toggleFavorite(video),
       onAddToPlaylist: () => _showAddToPlaylist(video),
       onStartRadio: () => _startRadioFromVideo(video),
+      onChangeArtwork: () => _chooseTrackArtwork(video),
+      onResetArtwork: () => _resetTrackArtwork(video),
       onRemoveFromPlaylist: fromPlaylist == null
           ? null
           : () => _removeFromPlaylist(fromPlaylist, video),

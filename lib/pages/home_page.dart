@@ -5,6 +5,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../models/loop_mode.dart';
 import '../models/listening_stat.dart';
@@ -28,6 +30,7 @@ import '../services/playback_source_policy.dart';
 import '../services/playback_session_guard.dart';
 import '../services/radio_service.dart';
 import '../services/storage_service.dart';
+import '../services/track_artwork_service.dart';
 import '../services/smart_queue_scorer.dart';
 import '../services/youtube_controller.dart';
 import '../services/youtube_search_service.dart';

@@ -22,7 +22,7 @@ class LocalMusicPage extends StatefulWidget {
   State<LocalMusicPage> createState() => _LocalMusicPageState();
 }
 
-enum _LocalSort { title, artist, duration }
+enum _LocalSort { title, artist, duration, recentlyAdded }
 
 class _LocalMusicPageState extends State<LocalMusicPage> {
   final LocalMediaService _service = LocalMediaService();
@@ -102,6 +102,9 @@ class _LocalMusicPageState extends State<LocalMusicPage> {
       case _LocalSort.duration:
         result.sort((a, b) => b.durationMs.compareTo(a.durationMs));
         break;
+      case _LocalSort.recentlyAdded:
+        result.sort((a, b) => b.dateAddedSeconds.compareTo(a.dateAddedSeconds));
+        break;
     }
     return result;
   }
@@ -110,6 +113,21 @@ class _LocalMusicPageState extends State<LocalMusicPage> {
     final seconds = (milliseconds / 1000).floor();
     final minutes = seconds ~/ 60;
     return '$minutes:${(seconds % 60).toString().padLeft(2, '0')}';
+  }
+
+  String _songMeta(LocalSong song) {
+    if (_sort == _LocalSort.recentlyAdded && song.dateAddedSeconds > 0) {
+      final date = DateTime.fromMillisecondsSinceEpoch(
+        song.dateAddedSeconds * 1000,
+      ).toLocal();
+      final dateLabel =
+          '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+      return 'Ditambahkan $dateLabel';
+    }
+    if (_sort == _LocalSort.duration) {
+      return 'Durasi ${_duration(song.durationMs)}';
+    }
+    return 'Audio lokal · ${_duration(song.durationMs)}';
   }
 
   @override
@@ -245,6 +263,7 @@ class _LocalMusicPageState extends State<LocalMusicPage> {
                                       PopupMenuItem(value: _LocalSort.title, child: Text('Urutkan: judul')),
                                       PopupMenuItem(value: _LocalSort.artist, child: Text('Urutkan: artis')),
                                       PopupMenuItem(value: _LocalSort.duration, child: Text('Durasi terpanjang')),
+                                      PopupMenuItem(value: _LocalSort.recentlyAdded, child: Text('Baru ditambahkan')),
                                     ],
                                   ),
                                 ],
@@ -309,7 +328,7 @@ class _LocalMusicPageState extends State<LocalMusicPage> {
                                                     const SizedBox(height: 4),
                                                     Text([song.artist.isEmpty ? 'Artis tidak diketahui' : song.artist, if (song.album.isNotEmpty) song.album].join(' · '), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11.5)),
                                                     const SizedBox(height: 5),
-                                                    Text(_sort == _LocalSort.duration ? 'Durasi ${_duration(song.durationMs)}' : 'Audio lokal · ${_duration(song.durationMs)}', style: TextStyle(color: scheme.primary, fontSize: 10, fontWeight: FontWeight.w800)),
+                                                    Text(_songMeta(song), style: TextStyle(color: scheme.primary, fontSize: 10, fontWeight: FontWeight.w800)),
                                                   ],
                                                 ),
                                               ),

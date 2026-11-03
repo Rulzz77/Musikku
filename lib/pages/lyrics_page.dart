@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/lyric.dart';
 import '../models/native_youtube_state.dart';
@@ -31,6 +34,86 @@ class _LyricsPageState extends State<LyricsPage> {
   final Map<int, GlobalKey> _lineKeys = <int, GlobalKey>{};
   int _lastCenteredIndex = -1;
   String _trackedVideoId = '';
+  int _syncOffsetMs = 0;
+  double _lyricsFontSize = 25;
+  String _settingsVideoId = '';
+
+  String _offsetKey(String videoId) => 'lyrics_sync_offset_${videoId.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_')}_v1';
+
+  Future<void> _loadTrackPreferences(String videoId) async {
+    if (videoId.isEmpty || _settingsVideoId == videoId) return;
+    _settingsVideoId = videoId;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final offset = prefs.getInt(_offsetKey(videoId)) ?? 0;
+      final font = prefs.getDouble('lyrics_font_size_v1') ?? 25.0;
+      if (!mounted || _settingsVideoId != videoId) return;
+      setState(() {
+        _syncOffsetMs = offset.clamp(-8000, 8000).toInt();
+        _lyricsFontSize = font.clamp(15.0, 32.0).toDouble();
+      });
+    } catch (_) {
+      // Prefer default sync and font size if local preferences are unavailable.
+    }
+  }
+
+  Future<void> _saveLyricsPreferences({int? offset, double? fontSize}) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (offset != null) {
+      final safe = offset.clamp(-8000, 8000).toInt();
+      if (mounted) setState(() => _syncOffsetMs = safe);
+      if (_trackedVideoId.isNotEmpty) await prefs.setInt(_offsetKey(_trackedVideoId), safe);
+    }
+    if (fontSize != null) {
+      final safe = fontSize.clamp(15.0, 32.0).toDouble();
+      if (mounted) setState(() => _lyricsFontSize = safe);
+      await prefs.setDouble('lyrics_font_size_v1', safe);
+    }
+  }
+
+  Future<void> _openLyricsSettings() async {
+    var offset = _syncOffsetMs.toDouble();
+    var fontSize = _lyricsFontSize;
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      useSafeArea: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          final scheme = Theme.of(context).colorScheme;
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(22, 8, 22, 24),
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Text('Pengaturan lirik', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900)),
+              const SizedBox(height: 6),
+              Text('Sesuaikan waktu dan ukuran teks untuk lagu ini.', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12)),
+              const SizedBox(height: 18),
+              Row(children: [const Expanded(child: Text('Sinkronisasi manual', style: TextStyle(fontWeight: FontWeight.w800))), Text('${offset.round()} ms', style: TextStyle(color: scheme.primary, fontWeight: FontWeight.w900))]),
+              Slider(
+                value: offset, min: -8000, max: 8000, divisions: 160,
+                label: '${offset.round()} ms',
+                onChanged: (value) => setSheetState(() => offset = value),
+              ),
+              Row(children: [const Expanded(child: Text('Ukuran teks', style: TextStyle(fontWeight: FontWeight.w800))), Text('${fontSize.round()} px', style: TextStyle(color: scheme.primary, fontWeight: FontWeight.w900))]),
+              Slider(
+                value: fontSize, min: 15, max: 32, divisions: 17,
+                label: '${fontSize.round()} px',
+                onChanged: (value) => setSheetState(() => fontSize = value),
+              ),
+              Row(children: [
+                TextButton(onPressed: () => setSheetState(() { offset = 0; fontSize = 25; }), child: const Text('Reset')),
+                const Spacer(),
+                FilledButton(onPressed: () async {
+                  await _saveLyricsPreferences(offset: offset.round(), fontSize: fontSize);
+                  if (sheetContext.mounted) Navigator.pop(sheetContext);
+                }, child: const Text('Simpan')),
+              ]),
+            ]),
+          );
+        },
+      ),
+    );
+  }
 
   int _currentLine(List<LyricLine> lyrics, Duration position) {
     if (lyrics.isEmpty) return -1;
@@ -85,6 +168,7 @@ class _LyricsPageState extends State<LyricsPage> {
       valueListenable: widget.playerUiState,
       builder: (context, player, _) {
         final activeVideo = player.video ?? widget.video;
+        unawaited(_loadTrackPreferences(activeVideo.videoId));
         final lyrics = player.lyrics;
         if (_trackedVideoId != activeVideo.videoId || _lineKeys.length != lyrics.length) {
           final changedTrack = _trackedVideoId != activeVideo.videoId;
@@ -110,7 +194,8 @@ class _LyricsPageState extends State<LyricsPage> {
                     ? native.position
                     : Duration.zero;
                 final duration = native.duration;
-                final currentIndex = player.lyricsSynced ? _currentLine(lyrics, position) : -1;
+                final lyricPosition = position + Duration(milliseconds: _syncOffsetMs);
+                final currentIndex = player.lyricsSynced ? _currentLine(lyrics, lyricPosition) : -1;
                 if (currentIndex >= 0) _centerLine(currentIndex);
                 final progress = duration.inMilliseconds > 0
                     ? (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0).toDouble()
@@ -139,6 +224,12 @@ class _LyricsPageState extends State<LyricsPage> {
                             ),
                           ),
                           _LyricsStatus(isPlaying: native.isEffectivelyPlaying),
+                          const SizedBox(width: 7),
+                          _LyricsIconButton(
+                            icon: Icons.tune_rounded,
+                            tooltip: 'Pengaturan lirik',
+                            onTap: _openLyricsSettings,
+                          ),
                         ],
                       ),
                     ),
@@ -172,7 +263,7 @@ class _LyricsPageState extends State<LyricsPage> {
                         children: [
                           Text('SING WITH THE MOMENT', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.4)),
                           const Spacer(),
-                          Text(player.lyricsSynced ? 'SYNCED' : 'UNSYNCED', style: TextStyle(color: player.lyricsSynced ? scheme.primary : scheme.onSurfaceVariant, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 0.9)),
+                          Text(player.lyricsSynced ? 'SYNCED · ${_syncOffsetMs}MS' : 'UNSYNCED', style: TextStyle(color: player.lyricsSynced ? scheme.primary : scheme.onSurfaceVariant, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 0.4)),
                         ],
                       ),
                     ),
@@ -183,6 +274,8 @@ class _LyricsPageState extends State<LyricsPage> {
                         lyrics: lyrics,
                         currentIndex: currentIndex,
                         loading: player.lyricsLoading,
+                        fontSize: _lyricsFontSize,
+                        syncOffsetMs: _syncOffsetMs,
                         scheme: scheme,
                       ),
                     ),
@@ -232,6 +325,8 @@ class _LyricsPageState extends State<LyricsPage> {
     required List<LyricLine> lyrics,
     required int currentIndex,
     required bool loading,
+    required double fontSize,
+    required int syncOffsetMs,
     required ColorScheme scheme,
   }) {
     if (loading && lyrics.isEmpty) {
@@ -276,7 +371,12 @@ class _LyricsPageState extends State<LyricsPage> {
           key: _lineKeys[index],
           padding: const EdgeInsets.symmetric(vertical: 11),
           child: InkWell(
-            onTap: player.lyricsSynced ? () => widget.onSeek(line.time) : null,
+            onTap: player.lyricsSynced
+                ? () {
+                    final target = line.time - Duration(milliseconds: syncOffsetMs);
+                    widget.onSeek(target.isNegative ? Duration.zero : target);
+                  }
+                : null,
             borderRadius: BorderRadius.circular(10),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 260),
@@ -290,7 +390,7 @@ class _LyricsPageState extends State<LyricsPage> {
                 curve: Curves.easeOutCubic,
                 style: TextStyle(
                   color: active ? scheme.primary : scheme.onSurface.withValues(alpha: past ? 0.28 : 0.66),
-                  fontSize: active ? 25 : 18,
+                  fontSize: active ? fontSize : fontSize * 0.72,
                   height: 1.28,
                   fontWeight: active ? FontWeight.w900 : FontWeight.w600,
                   letterSpacing: active ? -0.65 : -0.25,

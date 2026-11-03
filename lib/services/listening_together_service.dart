@@ -117,6 +117,9 @@ const Set<String> listeningRoomControlActions = <String>{
   'sync_request',
 };
 
+const Set<String> listeningRoomPartyEmojis = <String>{'👏', '❤️', '🔥', '🎵', '😂', '👍'};
+const int listeningRoomMaxPollOptions = 4;
+
 /// Controls that must broadcast a fresh snapshot immediately after the host
 /// processes them. A slow heartbeat must never be the first ack for
 /// a pause/resume request.
@@ -223,6 +226,10 @@ class ListeningTogetherService {
       ValueNotifier<String>('Belum ada sesi sinkronisasi');
   final ValueNotifier<int> peerCount = ValueNotifier<int>(0);
   final ValueNotifier<String> inviteAddress = ValueNotifier<String>('');
+  final ValueNotifier<List<Map<String, dynamic>>> partyActivity =
+      ValueNotifier<List<Map<String, dynamic>>>(<Map<String, dynamic>>[]);
+  final ValueNotifier<Map<String, dynamic>?> activePartyPoll =
+      ValueNotifier<Map<String, dynamic>?>(null);
   final ValueNotifier<String> roomCode = ValueNotifier<String>('');
   final StreamController<Map<String, dynamic>> _messages =
       StreamController<Map<String, dynamic>>.broadcast();
@@ -704,6 +711,66 @@ class ListeningTogetherService {
       }
     });
 
+    channel.onBroadcast(event: 'party_event', callback: (frame) {
+      if (!_onlineMode || _disposed || !(_hosting || _joined)) return;
+      final message = unwrapRealtimeBroadcastPayload(frame);
+      if (message['code']?.toString() != roomCode.value) return;
+      final action = message['action']?.toString() ?? '';
+      final clientId = message['clientId']?.toString() ?? '';
+      if (clientId.isEmpty) return;
+      if (_hosting &&
+          action != 'poll' &&
+          clientId != 'host-${roomCode.value}' &&
+          !_onlinePeers.contains(clientId)) {
+        return;
+      }
+      final accepted = <String, dynamic>{
+        'type': 'party_event',
+        'action': action,
+        'clientId': clientId,
+        'createdAtMs': (message['createdAtMs'] as num?)?.toInt() ?? DateTime.now().millisecondsSinceEpoch,
+      };
+      if (action == 'reaction') {
+        final emoji = message['emoji']?.toString() ?? '';
+        if (!listeningRoomPartyEmojis.contains(emoji)) return;
+        accepted['emoji'] = emoji;
+        accepted['videoId'] = message['videoId']?.toString() ?? '';
+      } else if (action == 'poll') {
+        // Only the host identity may publish a poll. The room channel is a
+        // public Realtime broadcast channel protected by its unguessable room
+        // code, so clients still validate the sender role on receipt.
+        if (clientId != 'host-${roomCode.value}') return;
+        final pollId = message['pollId']?.toString() ?? '';
+        final question = message['question']?.toString().trim() ?? '';
+        final rawOptions = message['options'];
+        if (pollId.isEmpty || pollId.length > 40 || question.isEmpty || question.length > 100 || rawOptions is! List) return;
+        final options = rawOptions.whereType<String>().map((value) => value.trim()).where((value) => value.isNotEmpty && value.length <= 50).take(listeningRoomMaxPollOptions).toList();
+        if (options.length < 2) return;
+        accepted['pollId'] = pollId;
+        accepted['question'] = question;
+        accepted['options'] = options;
+        accepted['votes'] = <String, dynamic>{};
+      } else if (action == 'vote') {
+        final pollId = message['pollId']?.toString() ?? '';
+        final optionIndex = (message['optionIndex'] as num?)?.toInt();
+        final poll = activePartyPoll.value;
+        final options = poll?['options'] is List ? poll!['options'] as List : const [];
+        if (pollId.isEmpty ||
+            poll?['pollId']?.toString() != pollId ||
+            optionIndex == null ||
+            optionIndex < 0 ||
+            optionIndex >= options.length) {
+          return;
+        }
+        accepted['pollId'] = pollId;
+        accepted['optionIndex'] = optionIndex;
+      } else {
+        return;
+      }
+      _applyPartyEvent(accepted);
+      if (!_messages.isClosed) _messages.add(accepted);
+    });
+
     channel.onBroadcast(event: 'room_host_heartbeat', callback: (frame) {
       if (hosting || !_onlineMode || !_joined || _disposed) return;
       final message = unwrapRealtimeBroadcastPayload(frame);
@@ -805,6 +872,116 @@ class ListeningTogetherService {
         if (!_disposed) status.value = 'Gangguan koneksi realtime: $error';
       }
     }());
+  }
+
+  void _applyPartyEvent(Map<String, dynamic> event) {
+    final action = event['action']?.toString() ?? '';
+    if (action == 'reaction') {
+      final next = <Map<String, dynamic>>[event, ...partyActivity.value].take(24).toList(growable: false);
+      partyActivity.value = next;
+      return;
+    }
+    if (action == 'poll') {
+      activePartyPoll.value = Map<String, dynamic>.from(event);
+      return;
+    }
+    if (action == 'vote') {
+      final current = activePartyPoll.value;
+      if (current == null || current['pollId']?.toString() != event['pollId']?.toString()) return;
+      final votes = Map<String, dynamic>.from(current['votes'] is Map ? current['votes'] as Map : const <String, dynamic>{});
+      votes[event['clientId'].toString()] = (event['optionIndex'] as num).toInt();
+      activePartyPoll.value = <String, dynamic>{...current, 'votes': votes};
+    }
+  }
+
+  Future<void> sendPartyReaction(String emoji, {String videoId = ''}) async {
+    if (!_onlineMode || !(_hosting || _joined)) {
+      throw StateError('Gabung ruang online untuk mengirim reaksi.');
+    }
+    if (!listeningRoomPartyEmojis.contains(emoji)) {
+      throw ArgumentError.value(emoji, 'emoji', 'Reaksi tidak tersedia.');
+    }
+    final clientId = _hosting ? 'host-${roomCode.value}' : _onlineClientId;
+    await _sendOnline('party_event', <String, dynamic>{
+      'code': roomCode.value,
+      'clientId': clientId,
+      'action': 'reaction',
+      'emoji': emoji,
+      'videoId': videoId,
+      'createdAtMs': DateTime.now().millisecondsSinceEpoch,
+    });
+    final local = <String, dynamic>{
+      'type': 'party_event',
+      'action': 'reaction',
+      'clientId': clientId,
+      'emoji': emoji,
+      'videoId': videoId,
+      'createdAtMs': DateTime.now().millisecondsSinceEpoch,
+    };
+    _applyPartyEvent(local);
+  }
+
+  Future<void> createPartyPoll(String question, List<String> rawOptions) async {
+    if (!_onlineMode || !_hosting) {
+      throw StateError('Hanya host ruang online yang dapat membuat polling.');
+    }
+    final cleanQuestion = question.trim();
+    final options = rawOptions.map((value) => value.trim()).where((value) => value.isNotEmpty).take(listeningRoomMaxPollOptions).toList();
+    if (cleanQuestion.isEmpty || cleanQuestion.length > 100 || options.length < 2 || options.any((value) => value.length > 50)) {
+      throw const FormatException('Polling perlu pertanyaan dan 2–4 pilihan yang valid.');
+    }
+    final pollId = DateTime.now().microsecondsSinceEpoch.toString();
+    final clientId = 'host-${roomCode.value}';
+    await _sendOnline('party_event', <String, dynamic>{
+      'code': roomCode.value,
+      'clientId': clientId,
+      'action': 'poll',
+      'pollId': pollId,
+      'question': cleanQuestion,
+      'options': options,
+      'createdAtMs': DateTime.now().millisecondsSinceEpoch,
+    });
+    _applyPartyEvent(<String, dynamic>{
+      'type': 'party_event',
+      'action': 'poll',
+      'clientId': clientId,
+      'pollId': pollId,
+      'question': cleanQuestion,
+      'options': options,
+      'votes': <String, dynamic>{},
+      'createdAtMs': DateTime.now().millisecondsSinceEpoch,
+    });
+  }
+
+  Future<void> votePartyPoll(String pollId, int optionIndex) async {
+    if (!_onlineMode || !(_hosting || _joined)) {
+      throw StateError('Gabung ruang online untuk ikut polling.');
+    }
+    final current = activePartyPoll.value;
+    if (current == null || current['pollId']?.toString() != pollId) {
+      throw StateError('Polling sudah tidak aktif.');
+    }
+    final options = current['options'] is List ? current['options'] as List : const [];
+    if (optionIndex < 0 || optionIndex >= options.length) {
+      throw RangeError.index(optionIndex, options);
+    }
+    final clientId = _hosting ? 'host-${roomCode.value}' : _onlineClientId;
+    await _sendOnline('party_event', <String, dynamic>{
+      'code': roomCode.value,
+      'clientId': clientId,
+      'action': 'vote',
+      'pollId': pollId,
+      'optionIndex': optionIndex,
+      'createdAtMs': DateTime.now().millisecondsSinceEpoch,
+    });
+    _applyPartyEvent(<String, dynamic>{
+      'type': 'party_event',
+      'action': 'vote',
+      'clientId': clientId,
+      'pollId': pollId,
+      'optionIndex': optionIndex,
+      'createdAtMs': DateTime.now().millisecondsSinceEpoch,
+    });
   }
 
   Future<void> requestControl(String action,
@@ -960,6 +1137,8 @@ class ListeningTogetherService {
     _hosting = false;
     _joined = false;
     peerCount.value = 0;
+    partyActivity.value = <Map<String, dynamic>>[];
+    activePartyPoll.value = null;
     inviteAddress.value = '';
     roomCode.value = '';
     if (!_disposed) status.value = 'Belum terhubung';
@@ -975,6 +1154,8 @@ class ListeningTogetherService {
     status.dispose();
     syncStatus.dispose();
     peerCount.dispose();
+    partyActivity.dispose();
+    activePartyPoll.dispose();
     inviteAddress.dispose();
     roomCode.dispose();
   }

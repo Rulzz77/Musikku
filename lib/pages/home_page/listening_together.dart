@@ -44,6 +44,48 @@ extension _HomeListeningTogether on _HomePageState {
     return ms;
   }
 
+  Future<void> _createListenTogetherPoll() async {
+    final question = TextEditingController(text: 'Lagu berikutnya?');
+    final options = List<TextEditingController>.generate(4, (index) => TextEditingController());
+    final submitted = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Polling lagu'),
+        content: SizedBox(
+          width: 480,
+          child: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              TextField(controller: question, maxLength: 100, decoration: const InputDecoration(labelText: 'Pertanyaan')),
+              const SizedBox(height: 8),
+              for (var i = 0; i < options.length; i++)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: TextField(controller: options[i], maxLength: 50, decoration: InputDecoration(labelText: 'Pilihan ${i + 1}')),
+                ),
+            ]),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Batal')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Mulai polling')),
+        ],
+      ),
+    );
+    final cleanOptions = options.map((controller) => controller.text.trim()).where((value) => value.isNotEmpty).toList();
+    final cleanQuestion = question.text.trim();
+    question.dispose();
+    for (final controller in options) {
+      controller.dispose();
+    }
+    if (submitted != true || !mounted) return;
+    try {
+      await _listenTogether.createPartyPoll(cleanQuestion, cleanOptions);
+      _toast('Polling berhasil dibagikan ke ruang.');
+    } catch (error) {
+      _toast('Polling gagal dibuat: $error');
+    }
+  }
+
   void _showListenTogetherSheet() {
     // The room can be opened from Beranda before a song is selected. If the
     // host starts playing later, the existing broadcaster synchronizes it.
@@ -233,6 +275,15 @@ extension _HomeListeningTogether on _HomePageState {
                           style: TextStyle(color: scheme.error, fontSize: 12),
                         ),
                       ),
+                  ],
+                  if (connected) ...[
+                    const SizedBox(height: 14),
+                    _ListenTogetherPartyPanel(
+                      service: _listenTogether,
+                      isHost: isHost,
+                      currentVideoId: _currentVideo?.videoId ?? '',
+                      onCreatePoll: isHost ? _createListenTogetherPoll : null,
+                    ),
                   ],
                   if (!connected) ...[
                     const SizedBox(height: 14),
@@ -1030,5 +1081,106 @@ extension _HomeListeningTogether on _HomePageState {
         }
       }
     }
+  }
+}
+
+class _ListenTogetherPartyPanel extends StatelessWidget {
+  const _ListenTogetherPartyPanel({
+    required this.service,
+    required this.isHost,
+    required this.currentVideoId,
+    this.onCreatePoll,
+  });
+
+  final ListeningTogetherService service;
+  final bool isHost;
+  final String currentVideoId;
+  final VoidCallback? onCreatePoll;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    const emojis = <String>['👏', '❤️', '🔥', '🎵', '😂', '👍'];
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.6)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Row(children: [
+          Expanded(child: Text('MUSIKKU PARTY', style: TextStyle(color: scheme.primary, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.2))),
+          if (onCreatePoll != null) TextButton.icon(onPressed: onCreatePoll, icon: const Icon(Icons.poll_rounded, size: 16), label: const Text('Buat polling')),
+        ]),
+        const SizedBox(height: 3),
+        Text('Kirim reaksi saat mendengarkan bersama.', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11)),
+        const SizedBox(height: 9),
+        Wrap(spacing: 7, runSpacing: 7, children: [
+          for (final emoji in emojis)
+            ActionChip(
+              label: Text(emoji, style: const TextStyle(fontSize: 18)),
+              onPressed: () async {
+                try {
+                  await service.sendPartyReaction(emoji, videoId: currentVideoId);
+                } catch (error) {
+                  if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Reaksi gagal dikirim: $error')));
+                }
+              },
+            ),
+        ]),
+        ValueListenableBuilder<Map<String, dynamic>?>(
+          valueListenable: service.activePartyPoll,
+          builder: (context, poll, _) {
+            if (poll == null) return const SizedBox.shrink();
+            final options = poll['options'] is List ? List<String>.from(poll['options'] as List) : <String>[];
+            final votes = poll['votes'] is Map ? Map<String, dynamic>.from(poll['votes'] as Map) : <String, dynamic>{};
+            final counts = List<int>.generate(options.length, (index) => votes.values.where((value) => value == index).length);
+            final total = counts.fold<int>(0, (sum, value) => sum + value);
+            return Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                Divider(color: scheme.outlineVariant),
+                Text(poll['question']?.toString() ?? 'Polling aktif', style: TextStyle(color: scheme.onSurface, fontWeight: FontWeight.w900, fontSize: 13)),
+                const SizedBox(height: 8),
+                for (var i = 0; i < options.length; i++)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: OutlinedButton(
+                      onPressed: () async {
+                        try {
+                          await service.votePartyPoll(poll['pollId'].toString(), i);
+                        } catch (error) {
+                          if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Vote gagal: $error')));
+                        }
+                      },
+                      style: OutlinedButton.styleFrom(alignment: Alignment.centerLeft, padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12)),
+                      child: Row(children: [Expanded(child: Text(options[i], maxLines: 2, overflow: TextOverflow.ellipsis)), Text('${counts[i]}', style: TextStyle(color: scheme.primary, fontWeight: FontWeight.w900))]),
+                    ),
+                  ),
+                Text('$total suara · peserta online dapat mengubah pilihan', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10)),
+              ]),
+            );
+          },
+        ),
+        ValueListenableBuilder<List<Map<String, dynamic>>>(
+          valueListenable: service.partyActivity,
+          builder: (context, activity, _) {
+            if (activity.isEmpty) return const SizedBox.shrink();
+            return Padding(
+              padding: const EdgeInsets.only(top: 9),
+              child: Wrap(spacing: 7, children: [
+                for (final event in activity.take(6))
+                  Chip(
+                    visualDensity: VisualDensity.compact,
+                    label: Text(event['emoji']?.toString() ?? '🎵'),
+                    avatar: const Icon(Icons.bolt_rounded, size: 13),
+                  ),
+              ]),
+            );
+          },
+        ),
+      ]),
+    );
   }
 }

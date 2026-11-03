@@ -164,6 +164,7 @@ extension _YoutubeHubLibraryViews on _YoutubeHubState {
                 (title: 'Favorit MusikKu', subtitle: '${widget.favorites.length} lagu tersimpan', icon: Icons.favorite_rounded, action: _openFavoritesList),
                 (title: 'Musik lokal', subtitle: 'File di perangkat', icon: Icons.library_music_rounded, action: _openLocalMusic),
                 (title: 'Radio otomatis', subtitle: 'Putar lagu serupa', icon: Icons.radio_rounded, action: _startRadioFromCollection),
+                (title: 'MusikKu Studio', subtitle: 'Flow, DNA, Focus & Car Mode', icon: Icons.auto_awesome_rounded, action: _openMusicStudio),
               ].indexed)
                 TweenAnimationBuilder<double>(
                   key: ValueKey<String>('library-shortcut-${tile.$1}'),
@@ -235,8 +236,37 @@ extension _YoutubeHubLibraryViews on _YoutubeHubState {
     Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => LocalMusicPage(onPlayFromList: widget.onPlayFromList, onAddToQueue: widget.onAddToQueue)));
   }
 
+  void _openMusicStudio() {
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => MusicStudioPage(
+      storage: _storage,
+      settings: widget.settings,
+      recentlyPlayed: widget.recentlyPlayed,
+      currentVideo: widget.currentVideo,
+      onPlayFromList: widget.onPlayFromList,
+      onPlayPause: widget.onPlayPause,
+      onNext: widget.onNext,
+      onPrevious: widget.onPrevious,
+      onOpenLyrics: widget.onOpenCurrentLyrics,
+      onOpenListeningRoom: widget.onOpenListeningRoom,
+      onOpenAudioSettings: widget.onOpenAudioSettings,
+      isPlaying: widget.isPlaying,
+    )));
+  }
+
   void _showAppSettings() {
-    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AppSettingsPage(settings: widget.settings, onOpenAudioSettings: widget.onOpenAudioSettings)));
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AppSettingsPage(
+      settings: widget.settings,
+      onOpenAudioSettings: widget.onOpenAudioSettings,
+      recentlyPlayed: widget.recentlyPlayed,
+      currentVideo: widget.currentVideo,
+      onPlayFromList: widget.onPlayFromList,
+      onPlayPause: widget.onPlayPause,
+      onNext: widget.onNext,
+      onPrevious: widget.onPrevious,
+      onOpenLyrics: widget.onOpenCurrentLyrics,
+      onOpenListeningRoom: widget.onOpenListeningRoom,
+      isPlaying: widget.isPlaying,
+    )));
   }
 
   void _startRadioFromCollection() {

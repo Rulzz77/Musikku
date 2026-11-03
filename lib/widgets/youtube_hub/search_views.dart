@@ -449,37 +449,60 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
     return [
       SliverToBoxAdapter(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+          padding: const EdgeInsets.fromLTRB(18, 15, 18, 16),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              FlowPageHero(
-                icon: Icons.radio_rounded,
-                eyebrow: 'MUSIC DISCOVERY',
-                title: 'Radio untuk selera kamu',
-                subtitle: 'Mulai dari satu lagu, lalu temukan lagu lain yang nyambung. Rekomendasi mempertimbangkan gaya musik, artis, dan bahasa.',
-              ),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
+              Row(
                 children: [
-                  FilledButton.icon(
-                    onPressed: videos.isEmpty ? null : () => unawaited(widget.onPlayFromList(videos.first, videos)),
-                    icon: const Icon(Icons.shuffle_rounded, size: 18),
-                    label: const Text('Putar mix'),
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(color: scheme.primaryContainer, borderRadius: BorderRadius.circular(12)),
+                    child: Icon(Icons.radio_rounded, color: scheme.onPrimaryContainer, size: 20),
                   ),
-                  OutlinedButton.icon(
-                    onPressed: radioSeed == null || widget.onStartRadio == null
-                        ? null
-                        : () => unawaited(widget.onStartRadio!(radioSeed)),
-                    icon: const Icon(Icons.radio_rounded, size: 18),
-                    label: const Text('Mulai radio'),
+                  const SizedBox(width: 11),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('DISCOVERY STATION', style: TextStyle(color: scheme.primary, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.7)),
+                        const SizedBox(height: 3),
+                        Text('Ikuti alur musikmu', style: TextStyle(color: scheme.onSurface, fontSize: 23, height: 1, fontWeight: FontWeight.w900, letterSpacing: -0.8)),
+                      ],
+                    ),
                   ),
-                  OutlinedButton.icon(
+                  IconButton.filledTonal(
                     onPressed: _feedLoading ? null : () => unawaited(_loadHome(force: true)),
-                    icon: const Icon(Icons.refresh_rounded, size: 18),
-                    label: const Text('Segarkan'),
+                    tooltip: 'Segarkan radio',
+                    icon: const Icon(Icons.refresh_rounded),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 15),
+              Text(
+                'Mulai dari satu lagu. MusikKu akan menyusun perjalanan berikutnya berdasarkan gaya, bahasa, dan artis yang berkaitan.',
+                style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12, height: 1.45),
+              ),
+              const SizedBox(height: 15),
+              Row(
+                children: [
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: radioSeed == null || widget.onStartRadio == null ? null : () => unawaited(widget.onStartRadio!(radioSeed)),
+                      icon: const Icon(Icons.radio_rounded, size: 18),
+                      label: const Text('Mulai radio'),
+                      style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 13)),
+                    ),
+                  ),
+                  const SizedBox(width: 9),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: videos.isEmpty ? null : () => unawaited(widget.onPlayFromList(videos.first, videos)),
+                      icon: const Icon(Icons.shuffle_rounded, size: 18),
+                      label: const Text('Putar mix'),
+                      style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 13)),
+                    ),
                   ),
                 ],
               ),
@@ -492,19 +515,19 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
       else if (videos.isEmpty)
         SliverToBoxAdapter(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
+            padding: const EdgeInsets.all(18),
             child: Material(
               color: scheme.surfaceContainerLow,
-              borderRadius: BorderRadius.circular(22),
+              borderRadius: BorderRadius.circular(18),
               child: Padding(
                 padding: const EdgeInsets.all(20),
                 child: Column(
                   children: [
-                    const Icon(Icons.explore_rounded, size: 44),
+                    Icon(Icons.radar_rounded, size: 38, color: scheme.primary),
                     const SizedBox(height: 10),
-                    const Text('Radio belum tersedia', style: TextStyle(fontWeight: FontWeight.w800)),
+                    Text('Radio belum tersedia', style: TextStyle(color: scheme.onSurface, fontWeight: FontWeight.w900)),
                     const SizedBox(height: 6),
-                    Text(_feedError.isNotEmpty ? _feedError : 'Muat rekomendasi musik terlebih dahulu.', textAlign: TextAlign.center, style: TextStyle(color: scheme.onSurfaceVariant)),
+                    Text(_feedError.isNotEmpty ? _feedError : 'Muat rekomendasi musik terlebih dahulu.', textAlign: TextAlign.center, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12)),
                     const SizedBox(height: 12),
                     FilledButton.icon(onPressed: () => unawaited(_loadHome(force: true)), icon: const Icon(Icons.refresh_rounded), label: const Text('Muat ulang')),
                   ],
@@ -515,44 +538,47 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
         )
       else ...[
         SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(18, 12, 18, 9),
+            child: Row(
+              children: [
+                Container(width: 4, height: 20, decoration: BoxDecoration(color: scheme.primary, borderRadius: BorderRadius.circular(4))),
+                const SizedBox(width: 9),
+                Expanded(child: Text('Mulai dari lagu ini', style: TextStyle(color: scheme.onSurface, fontSize: 17, fontWeight: FontWeight.w900, letterSpacing: -0.45))),
+                Text('${videos.length} pilihan', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10, fontWeight: FontWeight.w700)),
+              ],
+            ),
+          ),
+        ),
+        SliverToBoxAdapter(
           child: SizedBox(
-            height: 260,
+            height: 244,
             child: ListView.separated(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 18),
               scrollDirection: Axis.horizontal,
-              itemCount: min(videos.length, 14).toInt(),
+              itemCount: min(videos.length, 12).toInt(),
               separatorBuilder: (_, _) => const SizedBox(width: 12),
               itemBuilder: (context, index) => _sampleCard(videos[index]),
             ),
           ),
         ),
-        _sectionHeader('Terus jelajahi'),
+        _sectionHeader('Lanjutkan eksplorasi'),
         SliverList.builder(
           itemCount: videos.length,
           itemBuilder: (context, index) => _videoCard(videos[index]),
         ),
       ],
-      const SliverToBoxAdapter(child: SizedBox(height: 12)),
+      const SliverToBoxAdapter(child: SizedBox(height: 20)),
     ];
   }
 
   List<Widget> _exploreView() {
     final scheme = Theme.of(context).colorScheme;
     final exploreSource = _exploreCategory == 'Sedang tren' ? _trending : _exploreResults;
-    final shownResults = exploreSource
-        .where((video) => YoutubeSearchService.isMusicCandidate(video))
-        .toList(growable: false);
+    final shownResults = exploreSource.where((video) => YoutubeSearchService.isMusicCandidate(video)).toList(growable: false);
     final shownLoading = _exploreCategory == 'Sedang tren' ? _feedLoading : _exploreLoading;
     final shownError = _exploreCategory == 'Sedang tren' ? _feedError : _exploreError;
 
-    final genreColors = <Color>[
-      scheme.primary,
-      scheme.secondary,
-      scheme.tertiary,
-      Color.lerp(scheme.primary, scheme.secondary, 0.38)!,
-      Color.lerp(scheme.primary, scheme.tertiary, 0.42)!,
-      Color.lerp(scheme.secondary, scheme.tertiary, 0.45)!,
-    ];
     IconData genreIcon(String category) => switch (category) {
       'Sedang tren' => Icons.trending_up_rounded,
       'Pop Indonesia' => Icons.mic_rounded,
@@ -563,144 +589,102 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
       'Jazz' => Icons.graphic_eq_rounded,
       'Lo-fi' => Icons.nightlight_round,
       'Musik religi' => Icons.favorite_rounded,
-      _ => Icons.movie_rounded,
+      _ => Icons.headphones_rounded,
     };
 
     return [
       SliverToBoxAdapter(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(17, 14, 17, 16),
+          padding: const EdgeInsets.fromLTRB(18, 16, 18, 12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const FlowPageHero(
-                icon: Icons.explore_rounded,
-                eyebrow: 'PILIH SUASANANYA',
-                title: 'Apa yang ingin kamu dengar?',
-                subtitle: 'Masuk ke genre favoritmu. MusikKu akan menampilkan pilihan yang sesuai.',
-              ),
-              const SizedBox(height: 13),
-              Text(
-                'JELAJAHI BERDASARKAN GENRE',
-                style: TextStyle(
-                  color: scheme.onSurfaceVariant,
-                  fontSize: 9,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 1.3,
-                ),
-              ),
+              Text('FIND YOUR NEXT SOUND', style: TextStyle(color: scheme.primary, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.8)),
+              const SizedBox(height: 5),
+              Text('Jelajahi musik', style: TextStyle(color: scheme.onSurface, fontSize: 27, height: 1, fontWeight: FontWeight.w900, letterSpacing: -1.1)),
+              const SizedBox(height: 7),
+              Text('Pilih suasana, bukan sekadar mencari judul.', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12)),
             ],
           ),
         ),
       ),
-      SliverPadding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
-        sliver: SliverGrid(
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            crossAxisSpacing: 10,
-            mainAxisSpacing: 10,
-            mainAxisExtent: 94,
-          ),
-          delegate: SliverChildBuilderDelegate(
-            (context, index) {
+      SliverToBoxAdapter(
+        child: SizedBox(
+          height: 52,
+          child: ListView.separated(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
+            scrollDirection: Axis.horizontal,
+            itemCount: _YoutubeHubState._exploreCategories.length,
+            separatorBuilder: (_, _) => const SizedBox(width: 8),
+            itemBuilder: (context, index) {
               final category = _YoutubeHubState._exploreCategories[index];
               final selected = _exploreCategory == category;
-              final accent = genreColors[index % genreColors.length];
-              final dark = Theme.of(context).brightness == Brightness.dark;
-              return Material(
-                color: selected ? scheme.primaryContainer : scheme.surfaceContainerLow,
-                borderRadius: BorderRadius.circular(17),
-                clipBehavior: Clip.antiAlias,
-                child: InkWell(
-                  onTap: () {
-                    if (!selected) unawaited(_loadExploreCategory(category));
-                  },
-                  child: Stack(
+              return ChoiceChip(
+                avatar: Icon(genreIcon(category), size: 15, color: selected ? scheme.onPrimary : scheme.onSurfaceVariant),
+                label: Text(category),
+                selected: selected,
+                showCheckmark: false,
+                onSelected: (_) { if (!selected) unawaited(_loadExploreCategory(category)); },
+                backgroundColor: scheme.surfaceContainerLow,
+                selectedColor: scheme.primary,
+                side: BorderSide(color: selected ? scheme.primary : scheme.outlineVariant.withValues(alpha: 0.65)),
+                labelStyle: TextStyle(color: selected ? scheme.onPrimary : scheme.onSurface, fontSize: 11, fontWeight: FontWeight.w800),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              );
+            },
+          ),
+        ),
+      ),
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 11, 18, 14),
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(16, 15, 14, 15),
+            decoration: BoxDecoration(
+              color: scheme.primaryContainer,
+              borderRadius: const BorderRadius.only(topLeft: Radius.circular(20), topRight: Radius.circular(20), bottomRight: Radius.circular(20), bottomLeft: Radius.circular(5)),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Positioned(
-                        right: -18,
-                        bottom: -26,
-                        child: Icon(
-                          genreIcon(category),
-                          size: 94,
-                          color: (selected ? scheme.primary : accent).withValues(alpha: dark ? 0.16 : 0.20),
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(13, 12, 10, 10),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Container(
-                              width: 30,
-                              height: 30,
-                              decoration: BoxDecoration(
-                                color: selected ? scheme.primary : accent.withValues(alpha: dark ? 0.19 : 0.24),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Icon(
-                                genreIcon(category),
-                                size: 18,
-                                color: selected ? scheme.onPrimary : (dark ? accent : Color.lerp(accent, Colors.black, 0.20)!),
-                              ),
-                            ),
-                            Text(
-                              category,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: selected ? scheme.onPrimaryContainer : scheme.onSurface,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: -0.15,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      if (selected)
-                        Positioned(
-                          top: 10,
-                          right: 10,
-                          child: Icon(Icons.check_circle_rounded, color: scheme.primary, size: 16),
-                        ),
+                      Text('SEDANG KAMU JELAJAHI', style: TextStyle(color: scheme.onPrimaryContainer.withValues(alpha: 0.7), fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 1.3)),
+                      const SizedBox(height: 5),
+                      Text(_exploreCategory, style: TextStyle(color: scheme.onPrimaryContainer, fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: -0.45)),
+                      const SizedBox(height: 4),
+                      Text('Pilihan lagu yang dikurasi dari genre ini', style: TextStyle(color: scheme.onPrimaryContainer.withValues(alpha: 0.74), fontSize: 10.5)),
                     ],
                   ),
                 ),
-              );
-            },
-            childCount: _YoutubeHubState._exploreCategories.length,
+                const SizedBox(width: 10),
+                Icon(genreIcon(_exploreCategory), size: 42, color: scheme.onPrimaryContainer.withValues(alpha: 0.82)),
+              ],
+            ),
           ),
         ),
       ),
       if (shownLoading && shownResults.isEmpty)
-        const SliverToBoxAdapter(
-          child: Padding(padding: EdgeInsets.all(28), child: Center(child: CircularProgressIndicator())),
-        )
+        const SliverToBoxAdapter(child: Padding(padding: EdgeInsets.all(28), child: Center(child: CircularProgressIndicator())))
       else if (shownError.isNotEmpty && shownResults.isEmpty)
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.all(18),
             child: Material(
               color: scheme.surfaceContainerLow,
-              borderRadius: BorderRadius.circular(18),
+              borderRadius: BorderRadius.circular(16),
               child: Padding(
                 padding: const EdgeInsets.all(20),
                 child: Column(
                   children: [
-                    const Icon(Icons.wifi_off_rounded, size: 40),
+                    Icon(Icons.wifi_off_rounded, color: scheme.primary, size: 36),
                     const SizedBox(height: 10),
-                    const Text('Musik belum bisa dimuat', style: TextStyle(fontWeight: FontWeight.w800)),
+                    Text('Musik belum bisa dimuat', style: TextStyle(color: scheme.onSurface, fontWeight: FontWeight.w900)),
                     const SizedBox(height: 6),
-                    Text(shownError, textAlign: TextAlign.center, style: TextStyle(color: scheme.onSurfaceVariant)),
+                    Text(shownError, textAlign: TextAlign.center, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12)),
                     const SizedBox(height: 12),
-                    FilledButton.icon(
-                      onPressed: () => unawaited(_loadExploreCategory(_exploreCategory, force: true)),
-                      icon: const Icon(Icons.refresh_rounded),
-                      label: const Text('Coba lagi'),
-                    ),
+                    FilledButton.icon(onPressed: () => unawaited(_loadExploreCategory(_exploreCategory, force: true)), icon: const Icon(Icons.refresh_rounded), label: const Text('Coba lagi')),
                   ],
                 ),
               ),
@@ -708,22 +692,12 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
           ),
         )
       else if (shownResults.isEmpty)
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Center(
-              child: Text('Belum ada hasil untuk genre ini.', style: TextStyle(color: scheme.onSurfaceVariant)),
-            ),
-          ),
-        )
+        SliverToBoxAdapter(child: Padding(padding: const EdgeInsets.all(24), child: Center(child: Text('Belum ada hasil untuk genre ini.', style: TextStyle(color: scheme.onSurfaceVariant)))))
       else ...[
-        _sectionHeader('Pilihan ${_exploreCategory.toLowerCase()}'),
-        SliverList.builder(
-          itemCount: shownResults.length,
-          itemBuilder: (context, index) => _videoCard(shownResults[index]),
-        ),
+        _sectionHeader('Pilihan untukmu'),
+        SliverList.builder(itemCount: shownResults.length, itemBuilder: (context, index) => _videoCard(shownResults[index])),
       ],
-      const SliverToBoxAdapter(child: SizedBox(height: 12)),
+      const SliverToBoxAdapter(child: SizedBox(height: 20)),
     ];
   }
 

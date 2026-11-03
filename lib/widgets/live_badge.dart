@@ -14,49 +14,43 @@ class LiveBadge extends StatelessWidget {
 
     final String label;
     final Color background;
-    final IconData? icon;
+    final IconData icon;
     if (video.isLive) {
       label = 'LIVE';
-      background = const Color(0xFFE53935);
+      background = const Color(0xFFE23D4D);
       icon = Icons.sensors_rounded;
     } else if (video.isUpcoming) {
-      label = 'Terjadwal';
-      background = const Color(0xCC37474F);
+      label = 'TERJADWAL';
+      background = const Color(0xFF34453B);
       icon = Icons.schedule_rounded;
     } else {
-      label = 'Rekaman live';
-      background = const Color(0xCC212121);
+      label = 'REKAMAN LIVE';
+      background = const Color(0xFF34453B);
       icon = Icons.history_rounded;
     }
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 180),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
       decoration: BoxDecoration(
         color: background,
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
+        borderRadius: const BorderRadius.only(topLeft: Radius.circular(7), topRight: Radius.circular(7), bottomRight: Radius.circular(7), bottomLeft: Radius.circular(2)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.17)),
         boxShadow: video.isLive
-            ? [BoxShadow(color: background.withValues(alpha: 0.22), blurRadius: 8, spreadRadius: 0.3)]
+            ? [BoxShadow(color: background.withValues(alpha: 0.28), blurRadius: 10, offset: const Offset(0, 3))]
             : const [],
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 12, color: Colors.white),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 11,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
+          Icon(icon, size: 11, color: Colors.white),
+          const SizedBox(width: 5),
+          Text(label, style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 0.65)),
         ],
       ),
     );
   }
+
 }
 
 /// "1,2 rb menonton" untuk live, "Dijadwalkan 5 Okt 19.00" untuk upcoming.
@@ -103,20 +97,14 @@ class DurationBadge extends StatelessWidget {
       return const SizedBox.shrink();
     }
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.82),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
+        color: const Color(0xE8101915),
+        borderRadius: const BorderRadius.only(topLeft: Radius.circular(7), topRight: Radius.circular(7), bottomRight: Radius.circular(7), bottomLeft: Radius.circular(2)),
+        border: Border.all(color: const Color(0x55FFFFFF)),
       ),
-      child: Text(
-        formatVideoDuration(seconds),
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
+      child: Text(formatVideoDuration(seconds), style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 0.25)),
     );
   }
+
 }

@@ -176,6 +176,7 @@ class _StatsPageState extends State<StatsPage> {
                         title: item.key,
                         subtitle: '${item.value}× diputar',
                         trailing: _formatMinutes(artistSeconds[item.key] ?? 0),
+                        progress: topArtists.isEmpty ? 0 : item.value / topArtists.first.value,
                       );
                     },
                   ),
@@ -247,51 +248,71 @@ class _StatsHero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(2, 4, 2, 2),
+    return Container(
+      padding: const EdgeInsets.fromLTRB(17, 17, 17, 15),
+      decoration: BoxDecoration(
+        color: scheme.primaryContainer,
+        borderRadius: const BorderRadius.only(topLeft: Radius.circular(23), topRight: Radius.circular(23), bottomRight: Radius.circular(23), bottomLeft: Radius.circular(7)),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(Icons.insights_rounded, color: scheme.primary, size: 18),
+              Icon(Icons.graphic_eq_rounded, color: scheme.onPrimaryContainer, size: 17),
               const SizedBox(width: 8),
-              Text(
-                'RINGKASAN PERJALANAN MUSIK',
-                style: TextStyle(color: scheme.primary, fontSize: 9, letterSpacing: 1.5, fontWeight: FontWeight.w900),
-              ),
+              Text('YOUR LISTENING RECAP', style: TextStyle(color: scheme.onPrimaryContainer.withValues(alpha: 0.78), fontSize: 9, letterSpacing: 1.35, fontWeight: FontWeight.w900)),
+              const Spacer(),
+              Icon(Icons.auto_awesome_rounded, color: scheme.onPrimaryContainer.withValues(alpha: 0.70), size: 18),
             ],
           ),
           const SizedBox(height: 13),
-          Text(
-            formatMinutes(totalSeconds),
-            style: TextStyle(fontSize: 38, height: 0.98, letterSpacing: -1.5, fontWeight: FontWeight.w900, color: scheme.onSurface),
-          ),
-          const SizedBox(height: 6),
-          Text('total waktu mendengarkan', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12)),
-          const SizedBox(height: 17),
           Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Expanded(child: _SummaryDatum(label: 'Lagu diputar', value: '$totalPlays')),
-              if (topArtist != null) ...[
-                Container(width: 1, height: 30, color: scheme.outlineVariant),
-                const SizedBox(width: 14),
-                Expanded(child: _SummaryDatum(label: 'Artis teratas', value: '$topArtist · ${formatMinutes(topArtistMinutes)}')),
-              ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(formatMinutes(totalSeconds), style: TextStyle(color: scheme.onPrimaryContainer, fontSize: 38, height: 0.98, letterSpacing: -1.5, fontWeight: FontWeight.w900)),
+                    const SizedBox(height: 5),
+                    Text('total waktu mendengarkan', style: TextStyle(color: scheme.onPrimaryContainer.withValues(alpha: 0.78), fontSize: 11, fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ),
+              Container(
+                width: 76,
+                height: 76,
+                decoration: BoxDecoration(color: scheme.onPrimaryContainer.withValues(alpha: 0.08), shape: BoxShape.circle, border: Border.all(color: scheme.onPrimaryContainer.withValues(alpha: 0.18), width: 5)),
+                child: Center(child: Icon(Icons.headphones_rounded, color: scheme.onPrimaryContainer, size: 31)),
+              ),
             ],
           ),
           const SizedBox(height: 16),
-          Divider(color: scheme.outlineVariant.withValues(alpha: 0.7), height: 1),
+          Container(height: 1, color: scheme.onPrimaryContainer.withValues(alpha: 0.16)),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(child: _SummaryDatum(label: 'LAGU DIPUTAR', value: '$totalPlays')),
+              if (topArtist != null) ...[
+                Container(width: 1, height: 32, color: scheme.onPrimaryContainer.withValues(alpha: 0.18)),
+                const SizedBox(width: 13),
+                Expanded(child: _SummaryDatum(label: 'ARTIS TERATAS', value: topArtist!, detail: formatMinutes(topArtistMinutes))),
+              ],
+            ],
+          ),
         ],
       ),
     );
   }
+
 }
 
 class _SummaryDatum extends StatelessWidget {
-  const _SummaryDatum({required this.label, required this.value});
+  const _SummaryDatum({required this.label, required this.value, this.detail});
   final String label;
   final String value;
+  final String? detail;
 
   @override
   Widget build(BuildContext context) {
@@ -300,9 +321,13 @@ class _SummaryDatum extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(label, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10)),
+        Text(label, style: TextStyle(color: scheme.onPrimaryContainer.withValues(alpha: 0.68), fontSize: 8.5, fontWeight: FontWeight.w800, letterSpacing: 0.6)),
         const SizedBox(height: 3),
-        Text(value, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurface, fontSize: 12, fontWeight: FontWeight.w800)),
+        Text(value, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onPrimaryContainer, fontSize: 13, fontWeight: FontWeight.w900)),
+        if (detail != null) ...[
+          const SizedBox(height: 2),
+          Text(detail!, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onPrimaryContainer.withValues(alpha: 0.74), fontSize: 9.5, fontWeight: FontWeight.w600)),
+        ],
       ],
     );
   }
@@ -390,12 +415,14 @@ class _RankTile extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.trailing,
+    this.progress = 0,
   });
 
   final int rank;
   final String title;
   final String subtitle;
   final String trailing;
+  final double progress;
 
   @override
   Widget build(BuildContext context) {
@@ -440,6 +467,11 @@ class _RankTile extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11),
+                ),
+                const SizedBox(height: 7),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(5),
+                  child: LinearProgressIndicator(value: progress.clamp(0.0, 1.0).toDouble(), minHeight: 4, backgroundColor: scheme.outlineVariant.withValues(alpha: 0.5)),
                 ),
               ],
             ),

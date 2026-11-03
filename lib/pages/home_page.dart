@@ -32,6 +32,7 @@ import '../services/smart_queue_scorer.dart';
 import '../services/youtube_controller.dart';
 import '../services/youtube_search_service.dart';
 import '../widgets/youtube_hub.dart';
+import '../widgets/album_artwork_image.dart';
 import '../widgets/music_player_page.dart';
 import '../widgets/ios_youtube_player.dart';
 import '../widgets/mini_music_player.dart';

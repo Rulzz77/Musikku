@@ -235,28 +235,39 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
       builder: (context, constraints) {
         final width = constraints.maxWidth;
         final height = constraints.maxHeight;
-        final coverSize = math.min(width * 0.82, height * 0.29)
-            .clamp(140.0, 292.0)
-            .toDouble();
+        final compact = height < 660;
+        final side = width >= 700 ? 44.0 : 20.0;
+        final maxCover = math.min(width - (side * 2), width >= 700 ? 420.0 : 356.0);
 
         return Padding(
-          padding: const EdgeInsets.fromLTRB(22, 0, 22, 8),
+          padding: EdgeInsets.fromLTRB(side, compact ? 0 : 3, side, compact ? 2 : 7),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.start,
             children: [
-              // Lower the artwork block slightly for a more relaxed player composition.
-              SizedBox(height: (height * 0.092).clamp(38.0, 66.0).toDouble()),
-              if (widget.platformPlayer != null)
-                SizedBox(
-                  width: math.min(width * 0.96, 440),
-                  height: math.min(math.min(width * 0.96, 440) * 9 / 16, height * 0.32),
-                  child: widget.platformPlayer!,
-                )
-              else
-                _buildAlbumCover(coverSize),
-              const SizedBox(height: 19),
+              // Flexible stage: the artwork uses the available space instead of
+              // being pushed down by a fixed spacer (the old source of dead space).
+              Expanded(
+                flex: compact ? 43 : 50,
+                child: LayoutBuilder(
+                  builder: (context, stage) {
+                    if (widget.platformPlayer != null) {
+                      final playerWidth = math.min(width - 12, 480.0).toDouble();
+                      final playerHeight = math.min(playerWidth * 9 / 16, stage.maxHeight * 0.86).toDouble();
+                      return Center(
+                        child: SizedBox(
+                          width: playerWidth,
+                          height: playerHeight,
+                          child: widget.platformPlayer!,
+                        ),
+                      );
+                    }
+                    final size = math.min(maxCover, stage.maxHeight * 0.94).clamp(132.0, 420.0).toDouble();
+                    return Center(child: _buildAlbumCover(size));
+                  },
+                ),
+              ),
+              SizedBox(height: compact ? 7 : 12),
               _buildTrackInfo(busy),
-              const SizedBox(height: 15),
+              SizedBox(height: compact ? 5 : 9),
               _buildSeekBar(
                 context: context,
                 duration: duration,
@@ -264,17 +275,15 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                 sliderValue: sliderValue,
                 bufferedTrackValue: bufferedTrackValue,
               ),
-              const SizedBox(height: 3),
-              _buildPlaybackModes(),
-              const SizedBox(height: 5),
-              _buildTransportRow(busy: busy, playing: playing),
-              const SizedBox(height: 5),
+              SizedBox(height: compact ? 0 : 3),
+              _buildControlDeck(busy: busy, playing: playing, compact: compact),
+              SizedBox(height: compact ? 0 : 3),
               _buildVolumeSlider(),
-              const SizedBox(height: 7),
+              SizedBox(height: compact ? 1 : 5),
               _buildBottomActions(context),
               if (matchesTrack && state.playbackState == NativePlaybackState.error)
                 const Padding(
-                  padding: EdgeInsets.only(top: 7),
+                  padding: EdgeInsets.only(top: 5),
                   child: Text(
                     'Audio gagal dimuat. Coba putar ulang atau pilih lagu berikutnya.',
                     textAlign: TextAlign.center,
@@ -305,7 +314,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
         width: size,
         height: size,
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(24),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.42),
@@ -343,7 +352,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                 MusicTitleFormatter.clean(widget.video.title),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Color(0xFFF1F1E8), fontSize: 24, height: 1.06, fontWeight: FontWeight.w900, letterSpacing: -0.7),
+                style: const TextStyle(color: Color(0xFFF1F1E8), fontSize: 22, height: 1.04, fontWeight: FontWeight.w900, letterSpacing: -0.7),
               ),
               const SizedBox(height: 5),
               Text(
@@ -469,82 +478,81 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
     );
   }
 
-  Widget _buildPlaybackModes() {
+  Widget _buildControlDeck({required bool busy, required bool playing, required bool compact}) {
     return ValueListenableBuilder<PlayerUiState>(
       valueListenable: widget.playerUiState,
-      builder: (context, ui, _) => Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          _transportSideButton(
-            icon: ui.isSmartShuffle ? Icons.auto_awesome_rounded : Icons.shuffle_rounded,
-            selected: ui.isShuffle,
-            tooltip: ui.isSmartShuffle ? 'Smart Shuffle aktif • tekan lama untuk mematikan' : 'Shuffle • tekan lama untuk Smart Shuffle',
-            onPressed: widget.onToggleShuffle,
-            onLongPress: widget.onToggleSmartShuffle,
-          ),
-          const SizedBox(width: 24),
-          _transportSideButton(
-            icon: ui.loopMode == LoopModeCustom.one ? Icons.repeat_one_rounded : Icons.repeat_rounded,
-            selected: ui.loopMode != LoopModeCustom.off,
-            tooltip: switch (ui.loopMode) {
-              LoopModeCustom.off => 'Aktifkan repeat',
-              LoopModeCustom.all => 'Repeat semua aktif',
-              LoopModeCustom.one => 'Repeat satu aktif',
-            },
-            onPressed: widget.onCycleLoop,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTransportRow({required bool busy, required bool playing}) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        IconButton(
-          tooltip: 'Lagu sebelumnya',
-          onPressed: () => widget.onPrevious(),
-          icon: const Icon(Icons.skip_previous_rounded, size: 48, color: Color(0xFFF1F1E8)),
-        ),
-        const SizedBox(width: 23),
-        SizedBox(
-          width: 76,
-          height: 76,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [Color(0xFFD8F17A), Color(0xFFB6D65D)],
+      builder: (context, ui, _) {
+        final sideSize = compact ? 35.0 : 39.0;
+        final transportSize = compact ? 43.0 : 48.0;
+        final playSize = compact ? 64.0 : 70.0;
+        final gap = compact ? 2.0 : 7.0;
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            SizedBox(
+              width: sideSize,
+              height: sideSize,
+              child: _transportSideButton(
+                icon: ui.isSmartShuffle ? Icons.auto_awesome_rounded : Icons.shuffle_rounded,
+                selected: ui.isShuffle,
+                tooltip: ui.isSmartShuffle ? 'Smart Shuffle aktif • tekan lama untuk mematikan' : 'Shuffle • tekan lama untuk Smart Shuffle',
+                onPressed: widget.onToggleShuffle,
+                onLongPress: widget.onToggleSmartShuffle,
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFFF1F1E8).withValues(alpha: 0.18),
-                  blurRadius: 24,
-                  offset: const Offset(0, 8),
+            ),
+            SizedBox(width: gap),
+            IconButton(
+              tooltip: 'Lagu sebelumnya',
+              visualDensity: VisualDensity.compact,
+              onPressed: () => widget.onPrevious(),
+              icon: Icon(Icons.skip_previous_rounded, size: transportSize, color: const Color(0xFFF1F1E8)),
+            ),
+            SizedBox(
+              width: playSize,
+              height: playSize,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: _citrus,
+                  boxShadow: [
+                    BoxShadow(color: _citrus.withValues(alpha: 0.20), blurRadius: 22, offset: const Offset(0, 8)),
+                  ],
                 ),
-              ],
-            ),
-            child: IconButton(
-              tooltip: playing ? 'Jeda' : 'Putar',
-              onPressed: (busy && !widget.followingRoom) ? null : () => widget.onPlayPause(),
-              icon: Icon(
-                busy ? Icons.hourglass_top_rounded : (playing ? Icons.pause_rounded : Icons.play_arrow_rounded),
-                size: 43,
-                color: _canvas,
+                child: IconButton(
+                  tooltip: playing ? 'Jeda' : 'Putar',
+                  onPressed: (busy && !widget.followingRoom) ? null : () => widget.onPlayPause(),
+                  icon: Icon(
+                    busy ? Icons.hourglass_top_rounded : (playing ? Icons.pause_rounded : Icons.play_arrow_rounded),
+                    size: compact ? 37 : 41,
+                    color: _canvas,
+                  ),
+                ),
               ),
             ),
-          ),
-        ),
-        const SizedBox(width: 23),
-        IconButton(
-          tooltip: 'Lagu berikutnya',
-          onPressed: () => widget.onNext(),
-          icon: const Icon(Icons.skip_next_rounded, size: 48, color: Color(0xFFF1F1E8)),
-        ),
-      ],
+            IconButton(
+              tooltip: 'Lagu berikutnya',
+              visualDensity: VisualDensity.compact,
+              onPressed: () => widget.onNext(),
+              icon: Icon(Icons.skip_next_rounded, size: transportSize, color: const Color(0xFFF1F1E8)),
+            ),
+            SizedBox(width: gap),
+            SizedBox(
+              width: sideSize,
+              height: sideSize,
+              child: _transportSideButton(
+                icon: ui.loopMode == LoopModeCustom.one ? Icons.repeat_one_rounded : Icons.repeat_rounded,
+                selected: ui.loopMode != LoopModeCustom.off,
+                tooltip: switch (ui.loopMode) {
+                  LoopModeCustom.off => 'Aktifkan repeat',
+                  LoopModeCustom.all => 'Repeat semua aktif',
+                  LoopModeCustom.one => 'Repeat satu aktif',
+                },
+                onPressed: widget.onCycleLoop,
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -573,18 +581,26 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
   }
 
   Widget _buildBottomActions(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(child: _bottomAction(icon: widget.inPlaylist ? Icons.check_circle_rounded : Icons.playlist_add_rounded, label: 'Playlist', selected: widget.inPlaylist, onPressed: widget.onAddToPlaylist)),
-        Expanded(child: _bottomAction(icon: Icons.lyrics_rounded, label: 'Lirik', onPressed: widget.onOpenLyrics)),
-        Expanded(
-          child: ValueListenableBuilder<bool>(
-            valueListenable: widget.sleepActive,
-            builder: (context, active, _) => _bottomAction(icon: active ? Icons.timer_rounded : Icons.bedtime_outlined, label: 'Timer', selected: active, onPressed: widget.followingRoom ? null : widget.onOpenSleepTimer),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF1F1E8).withValues(alpha: 0.055),
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: const Color(0xFFF1F1E8).withValues(alpha: 0.075)),
+      ),
+      child: Row(
+        children: [
+          Expanded(child: _bottomAction(icon: widget.inPlaylist ? Icons.check_circle_rounded : Icons.playlist_add_rounded, label: 'Playlist', selected: widget.inPlaylist, onPressed: widget.onAddToPlaylist)),
+          Expanded(child: _bottomAction(icon: Icons.lyrics_rounded, label: 'Lirik', onPressed: widget.onOpenLyrics)),
+          Expanded(
+            child: ValueListenableBuilder<bool>(
+              valueListenable: widget.sleepActive,
+              builder: (context, active, _) => _bottomAction(icon: active ? Icons.timer_rounded : Icons.bedtime_outlined, label: 'Timer', selected: active, onPressed: widget.followingRoom ? null : widget.onOpenSleepTimer),
+            ),
           ),
-        ),
-        Expanded(child: _bottomAction(icon: Icons.queue_music_rounded, label: 'Antrean', onPressed: widget.onOpenQueue)),
-      ],
+          Expanded(child: _bottomAction(icon: Icons.queue_music_rounded, label: 'Antrean', onPressed: widget.onOpenQueue)),
+        ],
+      ),
     );
   }
 
@@ -593,29 +609,21 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
       message: label,
       child: InkWell(
         onTap: onPressed,
-        borderRadius: BorderRadius.circular(13),
+        borderRadius: BorderRadius.circular(11),
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 2),
+          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 2),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
-                width: 37,
-                height: 34,
-                decoration: BoxDecoration(
-                  color: selected ? _citrus.withValues(alpha: 0.16) : Colors.transparent,
-                  borderRadius: BorderRadius.circular(11),
-                ),
-                child: Icon(icon, color: selected ? _citrus : const Color(0xFFB5C1B5), size: 24),
-              ),
-              const SizedBox(height: 4),
-              Text(label, style: TextStyle(color: selected ? _citrus : _muted, fontSize: 9.5, fontWeight: FontWeight.w700)),
+              Icon(icon, color: selected ? _citrus : const Color(0xFFB5C1B5), size: 19),
+              const SizedBox(height: 3),
+              Text(label, style: TextStyle(color: selected ? _citrus : _muted, fontSize: 9, fontWeight: FontWeight.w700)),
             ],
           ),
         ),
       ),
     );
   }
+
 
 }

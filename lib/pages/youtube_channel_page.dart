@@ -466,49 +466,62 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
       meta.add(_relativeTime(video.publishedAt!));
     }
     return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 0, 14, 20),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(18),
-        onTap: () {
-          // Mode route lama: tutup halaman dulu. Mode lapisan (onClose != null):
-          // halaman tetap ada di bawah halaman tonton.
-          if (widget.onClose == null) Navigator.of(context).pop();
-          unawaited(widget.onPlay(video));
-        },
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            AspectRatio(
-              aspectRatio: 16 / 9,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(18),
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    Image.network(
-                      video.coverUrl,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, _, _) => ColoredBox(color: scheme.surfaceContainerHighest),
-                    ),
-                    if (video.liveStatus.isNotEmpty)
-                      Positioned(left: 8, top: 8, child: LiveBadge(video: video)),
-                    Positioned(right: 8, bottom: 8, child: DurationBadge(video: video)),
-                  ],
+      padding: const EdgeInsets.fromLTRB(13, 0, 13, 9),
+      child: Material(
+        color: scheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(17),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () {
+            if (widget.onClose == null) Navigator.of(context).pop();
+            unawaited(widget.onPlay(video));
+          },
+          child: SizedBox(
+            height: 108,
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 142,
+                  height: double.infinity,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Image.network(video.coverUrl, fit: BoxFit.cover, errorBuilder: (_, _, _) => ColoredBox(color: scheme.surfaceContainerHighest)),
+                      if (video.liveStatus.isNotEmpty) Positioned(left: 6, top: 6, child: LiveBadge(video: video)),
+                      Positioned(right: 6, bottom: 6, child: DurationBadge(video: video)),
+                      Positioned(
+                        left: 7,
+                        bottom: 7,
+                        child: Container(
+                          width: 28,
+                          height: 28,
+                          decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.66), shape: BoxShape.circle),
+                          child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 20),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(11, 10, 9, 9),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Expanded(child: Text(video.title, maxLines: 3, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurface, fontSize: 12.5, height: 1.18, fontWeight: FontWeight.w900, letterSpacing: -0.15))),
+                        if (meta.isNotEmpty) ...[
+                          const SizedBox(height: 5),
+                          Text(meta.join('  ·  '), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 9.5, fontWeight: FontWeight.w600)),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+                Padding(padding: const EdgeInsets.only(right: 5), child: Icon(Icons.chevron_right_rounded, color: scheme.onSurfaceVariant, size: 19)),
+              ],
             ),
-            const SizedBox(height: 8),
-            Text(
-              video.title,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700, height: 1.25),
-            ),
-            if (meta.isNotEmpty) ...[
-              const SizedBox(height: 3),
-              Text(meta.join(' • '), style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12)),
-            ],
-          ],
+          ),
         ),
       ),
     );

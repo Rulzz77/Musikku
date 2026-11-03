@@ -75,29 +75,60 @@ extension _HomeListeningTogether on _HomePageState {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  MusicSheetHeading(
-                    icon: Icons.headphones_rounded,
-                    title: 'Dengerin bareng',
-                    subtitle: 'Buat ruang musik bersama. Bagikan satu kode, lalu putar dan kontrol lagu dari perangkat masing-masing.',
-                  ),
-                  const SizedBox(height: 16),
-                  MusicGlassPanel(
-                    padding: const EdgeInsets.all(13),
-                    radius: 16,
-                    accent: onlineReady ? scheme.primary : scheme.error,
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(17, 17, 15, 18),
+                    decoration: BoxDecoration(
+                      color: scheme.primary,
+                      borderRadius: BorderRadius.circular(23),
+                    ),
                     child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(onlineReady ? Icons.cloud_done_rounded : Icons.cloud_off_rounded, color: scheme.primary, size: 20),
+                        Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: scheme.onPrimary.withValues(alpha: 0.14),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Icon(Icons.headphones_rounded, color: scheme.onPrimary, size: 25),
+                        ),
+                        const SizedBox(width: 13),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('LISTENING ROOM', style: TextStyle(color: scheme.onPrimary.withValues(alpha: 0.78), fontSize: 9, letterSpacing: 1.6, fontWeight: FontWeight.w900)),
+                              const SizedBox(height: 4),
+                              Text('Dengerin bareng', style: TextStyle(color: scheme.onPrimary, fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: -0.6)),
+                              const SizedBox(height: 3),
+                              Text('Satu ruang, satu antrean, semua bisa mengontrol.', style: TextStyle(color: scheme.onPrimary.withValues(alpha: 0.82), fontSize: 10.5)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 13),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: onlineReady ? scheme.primary.withValues(alpha: 0.08) : scheme.error.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(15),
+                      border: Border.all(color: (onlineReady ? scheme.primary : scheme.error).withValues(alpha: 0.22)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(onlineReady ? Icons.cloud_done_rounded : Icons.cloud_off_rounded, color: onlineReady ? scheme.primary : scheme.error, size: 19),
                         const SizedBox(width: 10),
                         Expanded(
                           child: Text(
                             onlineReady
-                                ? 'Online aktif. Teman dari Wi-Fi atau jaringan seluler mana pun cukup memasukkan kode 8 digit. Tidak perlu alamat IP atau login. Semua anggota bisa mengontrol pemutaran; status terbaru disinkronkan ke seluruh kamar.'
-                                : 'Server online belum dikonfigurasi pada build ini. Tambahkan SUPABASE_URL dan SUPABASE_PUBLISHABLE_KEY di GitHub Actions, lalu buat APK baru. Alamat IP lokal tidak digunakan di layar ini.',
-                            style: TextStyle(color: scheme.onSurfaceVariant, height: 1.35, fontSize: 12.5),
+                                ? 'Online aktif · Kode 8 digit bisa dipakai lintas Wi-Fi dan data seluler, tanpa login.'
+                                : 'Server online belum dikonfigurasi. Tambahkan kredensial Supabase saat build APK.',
+                            style: TextStyle(color: scheme.onSurface, height: 1.3, fontSize: 11.5, fontWeight: FontWeight.w600),
                           ),
                         ),
+                        Icon(onlineReady ? Icons.check_circle_rounded : Icons.info_outline_rounded, color: onlineReady ? scheme.primary : scheme.error, size: 17),
                       ],
                     ),
                   ),

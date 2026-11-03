@@ -521,109 +521,54 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
   }
 
   Widget _buildPlaylistList(ColorScheme scheme) {
-    final hero = const FlowPageHero(
+    const hero = FlowPageHero(
       icon: Icons.queue_music_rounded,
       eyebrow: 'YOUR MUSIC SPACE',
-      title: 'Playlist kamu',
-      subtitle: 'Simpan lagu favorit dan susun antrean sesuai suasana hati.',
-      trailing: Icon(Icons.auto_awesome_rounded),
+      title: 'Ruang playlist',
+      subtitle: 'Susun soundtrack sendiri. Ganti artwork, atur urutan lagu, lalu putar sesuai mood.',
     );
-
     if (widget.playlists.isEmpty) {
       return ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 184),
         children: [
           hero,
           const SizedBox(height: 18),
-          Container(
-            padding: const EdgeInsets.fromLTRB(22, 28, 22, 28),
-            decoration: BoxDecoration(
-              color: scheme.surfaceContainerLow,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.72)),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 76,
-                  height: 76,
-                  decoration: BoxDecoration(
-                    color: scheme.primaryContainer,
-                    borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(22),
-                      topRight: Radius.circular(22),
-                      bottomRight: Radius.circular(22),
-                      bottomLeft: Radius.circular(6),
-                    ),
-                  ),
-                  child: Icon(Icons.library_music_rounded, size: 36, color: scheme.primary),
-                ),
-                const SizedBox(height: 14),
-                const Text('Belum ada playlist', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: -0.35)),
-                const SizedBox(height: 7),
-                Text('Buat playlist pertama kamu, lalu tambahkan lagu dari hasil pencarian atau antrean.', textAlign: TextAlign.center, style: TextStyle(color: scheme.onSurfaceVariant, height: 1.4)),
-                const SizedBox(height: 18),
-                FilledButton.icon(
-                  onPressed: () => unawaited(_createPlaylist()),
-                  icon: const Icon(Icons.add_rounded),
-                  label: const Text('Buat playlist'),
-                ),
-              ],
-            ),
+          MusicEmptyState(
+            icon: Icons.library_music_rounded,
+            title: 'Mulai dari playlist pertama',
+            message: 'Buat ruang untuk lagu yang ingin kamu simpan bersama. Kamu bisa memilih cover sendiri dari galeri.',
+            actionLabel: 'Buat playlist',
+            onAction: () => unawaited(_createPlaylist()),
           ),
         ],
       );
     }
-
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 184),
       children: [
         hero,
-        const SizedBox(height: 17),
-        FlowSectionHeader(
-          icon: Icons.library_music_rounded,
-          title: '${widget.playlists.length} playlist tersimpan',
-          trailing: IconButton.filledTonal(
-            tooltip: 'Playlist baru',
-            onPressed: () => unawaited(_createPlaylist()),
-            icon: const Icon(Icons.add_rounded),
-          ),
-        ),
-        const SizedBox(height: 12),
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final columns = constraints.maxWidth >= 620 ? 3 : 2;
-            return GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: widget.playlists.length,
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: columns,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                childAspectRatio: 0.82,
+        const SizedBox(height: 4),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('KOLEKSI PERSONAL', style: TextStyle(color: scheme.primary, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+                  const SizedBox(height: 4),
+                  Text('${widget.playlists.length} playlist', style: TextStyle(color: scheme.onSurface, fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: -0.7)),
+                ],
               ),
-              itemBuilder: (context, index) {
-                final playlist = widget.playlists[index];
-                return TweenAnimationBuilder<double>(
-                  key: ValueKey<String>('playlist-poster-${playlist.id}'),
-                  tween: Tween<double>(begin: 0.0, end: 1.0),
-                  duration: Duration(milliseconds: 300 + (index.clamp(0, 7).toInt() * 28)),
-                  curve: Curves.easeOutCubic,
-                  builder: (context, value, child) => Opacity(
-                    opacity: value.clamp(0.0, 1.0).toDouble(),
-                    child: Transform.translate(
-                      offset: Offset(0, 18 * (1 - value)),
-                      child: child,
-                    ),
-                  ),
-                  child: _playlistPoster(playlist, scheme),
-                );
-              },
-            );
-          },
+            ),
+            FilledButton.tonalIcon(onPressed: () => unawaited(_createPlaylist()), icon: const Icon(Icons.add_rounded, size: 18), label: const Text('Baru')),
+          ],
         ),
+        const SizedBox(height: 13),
+        for (final playlist in widget.playlists) ...[
+          _playlistPoster(playlist, scheme),
+          const SizedBox(height: 9),
+        ],
       ],
     );
   }
@@ -631,180 +576,140 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
   Widget _playlistPoster(Playlist playlist, ColorScheme scheme) {
     return Material(
       color: scheme.surfaceContainerLow,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.72)),
-      ),
+      borderRadius: BorderRadius.circular(18),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () => setState(() => _selectedPlaylistId = playlist.id),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  PlaylistArtwork(
-                    playlist: playlist,
-                    fit: BoxFit.cover,
-                    iconSize: 42,
-                  ),
-                  DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [Colors.black.withValues(alpha: 0.04), Colors.transparent, Colors.black.withValues(alpha: 0.58)],
-                        stops: const [0, 0.48, 1],
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    left: 10,
-                    top: 10,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-                      decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.54), borderRadius: BorderRadius.circular(8)),
-                      child: Text('${playlist.songs.length} lagu', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800)),
-                    ),
-                  ),
-                  Positioned(
-                    right: 9,
-                    bottom: 9,
-                    child: IconButton.filled(
-                      tooltip: 'Putar ${playlist.name}',
-                      onPressed: playlist.songs.isEmpty ? null : () => unawaited(_playPlaylistAndReturn(playlist)),
-                      style: IconButton.styleFrom(backgroundColor: scheme.primary, foregroundColor: scheme.onPrimary),
-                      icon: const Icon(Icons.play_arrow_rounded, size: 24),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(11, 11, 9, 12),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+        child: SizedBox(
+          height: 112,
+          child: Padding(
+            padding: const EdgeInsets.all(9),
+            child: Row(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(13),
+                  child: SizedBox(
+                    width: 94,
+                    height: 94,
+                    child: Stack(
+                      fit: StackFit.expand,
                       children: [
-                        Text(playlist.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13, height: 1.15)),
-                        const SizedBox(height: 4),
-                        Text(playlist.songs.isEmpty ? 'Kosong · ketuk untuk isi' : 'Playlist pribadi', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10.5)),
+                        PlaylistArtwork(playlist: playlist, fit: BoxFit.cover, iconSize: 32),
+                        Positioned(
+                          right: 5,
+                          bottom: 5,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                            decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.72), borderRadius: BorderRadius.circular(6)),
+                            child: Text('${playlist.songs.length}', style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w900)),
+                          ),
+                        ),
                       ],
                     ),
                   ),
-                  const SizedBox(width: 3),
-                  Icon(Icons.chevron_right_rounded, color: scheme.onSurfaceVariant, size: 20),
-                ],
-              ),
+                ),
+                const SizedBox(width: 13),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(playlist.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurface, fontSize: 14, height: 1.12, fontWeight: FontWeight.w900, letterSpacing: -0.25)),
+                      const SizedBox(height: 6),
+                      Text(playlist.songs.isEmpty ? 'Belum ada lagu' : '${playlist.songs.length} lagu tersimpan', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10.5, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Icon(Icons.photo_camera_back_outlined, size: 13, color: scheme.primary),
+                          const SizedBox(width: 4),
+                          Text(playlist.artworkPath?.isNotEmpty == true ? 'Cover kustom' : 'Artwork otomatis', style: TextStyle(color: scheme.primary, fontSize: 9.5, fontWeight: FontWeight.w800)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 4),
+                IconButton.filledTonal(
+                  tooltip: 'Putar ${playlist.name}',
+                  onPressed: playlist.songs.isEmpty ? null : () => unawaited(_playPlaylistAndReturn(playlist)),
+                  icon: const Icon(Icons.play_arrow_rounded, size: 22),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
   }
 
-
   Widget _playlistDetailArtwork(Playlist playlist, ColorScheme scheme) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(22, 14, 22, 2),
-      child: Column(
-        children: [
-          Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 360),
-              child: AspectRatio(
-                aspectRatio: 1,
-                child: Container(
-                  clipBehavior: Clip.antiAlias,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(10),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.18),
-                        blurRadius: 28,
-                        offset: const Offset(0, 14),
-                      ),
-                    ],
-                  ),
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      PlaylistArtwork(
-                        playlist: playlist,
-                        fit: BoxFit.cover,
-                        iconSize: 68,
-                      ),
-                      Positioned(
-                        right: 12,
-                        bottom: 12,
-                        child: Material(
-                          color: Colors.black.withValues(alpha: 0.58),
-                          shape: const CircleBorder(),
-                          child: InkWell(
-                            customBorder: const CircleBorder(),
-                            onTap: _changingArtwork
-                                ? null
-                                : () => unawaited(_changePlaylistArtwork(playlist)),
-                            child: SizedBox(
-                              width: 44,
-                              height: 44,
-                              child: _changingArtwork
-                                  ? const Padding(
-                                      padding: EdgeInsets.all(12),
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: Colors.white,
-                                      ),
-                                    )
-                                  : const Icon(
-                                      Icons.edit_rounded,
-                                      color: Colors.white,
-                                      size: 21,
-                                    ),
-                            ),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: Container(
+        padding: const EdgeInsets.all(13),
+        decoration: BoxDecoration(
+          color: scheme.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.62)),
+        ),
+        child: Row(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(15),
+              child: SizedBox(
+                width: 116,
+                height: 116,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    PlaylistArtwork(playlist: playlist, fit: BoxFit.cover, iconSize: 42),
+                    Positioned(
+                      right: 6,
+                      bottom: 6,
+                      child: Material(
+                        color: Colors.black.withValues(alpha: 0.62),
+                        shape: const CircleBorder(),
+                        child: InkWell(
+                          customBorder: const CircleBorder(),
+                          onTap: _changingArtwork ? null : () => unawaited(_changePlaylistArtwork(playlist)),
+                          child: SizedBox(
+                            width: 36,
+                            height: 36,
+                            child: _changingArtwork
+                                ? const Padding(padding: EdgeInsets.all(10), child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                : const Icon(Icons.edit_rounded, color: Colors.white, size: 18),
                           ),
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),
-          ),
-          const SizedBox(height: 17),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              playlist.name,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: scheme.onSurface,
-                fontSize: 27,
-                height: 1.05,
-                fontWeight: FontWeight.w900,
-                letterSpacing: -1,
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text('PLAYLIST PRIBADI', style: TextStyle(color: scheme.primary, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 1.15)),
+                  const SizedBox(height: 7),
+                  Text(playlist.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurface, fontSize: 21, height: 1.05, fontWeight: FontWeight.w900, letterSpacing: -0.65)),
+                  const SizedBox(height: 7),
+                  Text('${playlist.songs.length} lagu · Cover dapat diganti', maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10.5, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 9),
+                  Row(
+                    children: [
+                      Icon(Icons.photo_camera_back_outlined, size: 14, color: scheme.primary),
+                      const SizedBox(width: 5),
+                      Text('Ubah foto cover', style: TextStyle(color: scheme.primary, fontSize: 9.5, fontWeight: FontWeight.w800)),
+                    ],
+                  ),
+                ],
               ),
             ),
-          ),
-          const SizedBox(height: 5),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              'Playlist pribadi  ·  ${playlist.songs.length} lagu',
-              style: TextStyle(
-                color: scheme.onSurfaceVariant,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

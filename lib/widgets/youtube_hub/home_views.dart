@@ -625,12 +625,12 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
     List<({String title, String subtitle, IconData icon, VoidCallback onTap})> actions,
   ) {
     return SizedBox(
-      height: 76,
+      height: 88,
       child: ListView.separated(
-        padding: const EdgeInsets.fromLTRB(16, 2, 16, 6),
+        padding: const EdgeInsets.fromLTRB(16, 1, 16, 7),
         scrollDirection: Axis.horizontal,
         itemCount: actions.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 9),
+        separatorBuilder: (_, _) => const SizedBox(width: 10),
         itemBuilder: (context, index) => _homeShortcutItem(
           title: actions[index].title,
           subtitle: actions[index].subtitle,
@@ -654,30 +654,39 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
     return Tooltip(
       message: subtitle,
       child: SizedBox(
-        width: 82,
+        width: 116,
         child: Material(
           color: scheme.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(15),
+          borderRadius: BorderRadius.circular(16),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: onTap,
-            borderRadius: BorderRadius.circular(16),
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(8, 7, 7, 7),
+              padding: const EdgeInsets.fromLTRB(10, 9, 9, 8),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Container(
-                    width: 29,
-                    height: 29,
-                    decoration: BoxDecoration(
-                      color: accent.withValues(alpha: 0.16),
-                      borderRadius: const BorderRadius.only(topLeft: Radius.circular(11), topRight: Radius.circular(11), bottomRight: Radius.circular(11), bottomLeft: Radius.circular(3)),
-                    ),
-                    child: Icon(icon, size: 16, color: accent),
+                  Row(
+                    children: [
+                      Container(
+                        width: 30,
+                        height: 30,
+                        decoration: BoxDecoration(color: accent.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(10)),
+                        child: Icon(icon, size: 17, color: accent),
+                      ),
+                      const Spacer(),
+                      Icon(Icons.arrow_outward_rounded, size: 13, color: scheme.onSurfaceVariant.withValues(alpha: 0.65)),
+                    ],
                   ),
-                  Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurface, fontSize: 9.5, fontWeight: FontWeight.w900)),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurface, fontSize: 10.5, fontWeight: FontWeight.w900)),
+                      const SizedBox(height: 2),
+                      Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 8.5, fontWeight: FontWeight.w600)),
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -687,122 +696,69 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
     );
   }
 
-
   Widget _modernWelcomeHeader() {
     final scheme = Theme.of(context).colorScheme;
     final topInset = MediaQuery.paddingOf(context).top;
     final hour = DateTime.now().hour;
     final greeting = hour < 11
-        ? 'Selamat pagi'
+        ? 'SELAMAT PAGI'
         : hour < 15
-            ? 'Selamat siang'
+            ? 'SELAMAT SIANG'
             : hour < 18
-                ? 'Selamat sore'
-                : 'Selamat malam';
+                ? 'SELAMAT SORE'
+                : 'SELAMAT MALAM';
 
     return Padding(
-      padding: EdgeInsets.fromLTRB(20, topInset + 14, 20, 13),
+      padding: EdgeInsets.fromLTRB(19, topInset + 12, 19, 13),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              ClipRRect(
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(12),
-                  topRight: Radius.circular(12),
-                  bottomRight: Radius.circular(12),
-                  bottomLeft: Radius.circular(3),
-                ),
-                child: Image.asset(
-                  'assets/icon/app_icon.png',
-                  width: 34,
-                  height: 34,
-                  fit: BoxFit.cover,
-                ),
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(color: scheme.primary, borderRadius: BorderRadius.circular(12)),
+                clipBehavior: Clip.antiAlias,
+                child: Image.asset('assets/icon/app_icon.png', fit: BoxFit.cover),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      greeting,
-                      style: TextStyle(
-                        color: scheme.onSurfaceVariant,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    Text(
-                      'MusikKu',
-                      style: TextStyle(
-                        color: scheme.onSurface,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: -0.65,
-                      ),
-                    ),
+                    Text(greeting, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 8.5, fontWeight: FontWeight.w900, letterSpacing: 1.2)),
+                    Text('MusikKu', style: TextStyle(color: scheme.onSurface, fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: -0.6)),
                   ],
                 ),
               ),
-              IconButton(
+              IconButton.filledTonal(
                 tooltip: 'Cari musik',
                 onPressed: _openSearch,
-                style: IconButton.styleFrom(
-                  backgroundColor: scheme.primary,
-                  foregroundColor: scheme.onPrimary,
-                  fixedSize: const Size(42, 42),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
-                ),
-                icon: const Icon(Icons.search_rounded, size: 21),
+                style: IconButton.styleFrom(fixedSize: const Size(44, 44), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
+                icon: const Icon(Icons.search_rounded, size: 22),
               ),
             ],
           ),
-          const SizedBox(height: 25),
+          const SizedBox(height: 19),
           Text(
-            'RUANG DENGAR PRIBADI',
-            style: TextStyle(
-              color: scheme.primary,
-              fontSize: 9,
-              fontWeight: FontWeight.w900,
-              letterSpacing: 1.9,
-            ),
-          ),
-          const SizedBox(height: 7),
-          Text(
-            'Musik yang\nmenemani harimu.',
-            style: TextStyle(
-              color: scheme.onSurface,
-              fontSize: 34,
-              height: 0.98,
-              fontWeight: FontWeight.w900,
-              letterSpacing: -1.55,
-            ),
+            'Cari nada yang\npas dengan harimu.',
+            style: TextStyle(color: scheme.onSurface, fontSize: 29, height: 1.02, fontWeight: FontWeight.w900, letterSpacing: -1.2),
           ),
           const SizedBox(height: 13),
           Material(
             color: scheme.surfaceContainerLow,
-            borderRadius: BorderRadius.circular(13),
+            borderRadius: BorderRadius.circular(15),
             child: InkWell(
               onTap: _openSearch,
-              borderRadius: BorderRadius.circular(13),
+              borderRadius: BorderRadius.circular(15),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
                 child: Row(
                   children: [
                     Icon(Icons.search_rounded, color: scheme.primary, size: 20),
                     const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        'Cari lagu, artis, album, atau suasana',
-                        style: TextStyle(
-                          color: scheme.onSurfaceVariant,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
+                    Expanded(child: Text('Lagu, artis, album, atau suasana', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11.5, fontWeight: FontWeight.w600))),
                     Icon(Icons.arrow_forward_rounded, color: scheme.onSurfaceVariant, size: 17),
                   ],
                 ),
@@ -818,9 +774,7 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
     final scheme = Theme.of(context).colorScheme;
     YoutubeSearchResult? featuredTrack;
     for (final candidate in _trending) {
-      if (!candidate.isLive &&
-          !candidate.isUpcoming &&
-          YoutubeSearchService.isMusicCandidate(candidate)) {
+      if (!candidate.isLive && !candidate.isUpcoming && YoutubeSearchService.isMusicCandidate(candidate)) {
         featuredTrack = candidate;
         break;
       }
@@ -834,92 +788,64 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
       }
     }
     final track = featuredTrack;
-    final title = track == null ? 'Mulai dari satu lagu.' : MusicTitleFormatter.clean(track.title);
+    final title = track == null ? 'Temukan lagu baru.' : MusicTitleFormatter.clean(track.title);
     final artist = track?.channelTitle.trim() ?? '';
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 7, 16, 14),
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 13),
       child: Material(
-        color: scheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(19),
+        color: scheme.surfaceContainerLow,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.55)),
+        ),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: track == null ? _openSearch : () => unawaited(widget.onPlay(track)),
           child: SizedBox(
-            height: 172,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                if (track != null)
-                  UnifiedArtwork(track: track, fit: BoxFit.cover, iconSize: 40)
-                else
-                  ColoredBox(color: scheme.primaryContainer),
-                const DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.centerLeft,
-                      end: Alignment.centerRight,
-                      colors: [Color(0xED101915), Color(0xA6101915), Color(0x30101915)],
-                      stops: [0, 0.62, 1],
+            height: 142,
+            child: Padding(
+              padding: const EdgeInsets.all(9),
+              child: Row(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(14),
+                    child: SizedBox(
+                      width: 124,
+                      height: 124,
+                      child: track == null
+                          ? ColoredBox(color: scheme.primaryContainer, child: Icon(Icons.graphic_eq_rounded, size: 42, color: scheme.onPrimaryContainer))
+                          : UnifiedArtwork(track: track, fit: BoxFit.cover, iconSize: 36),
                     ),
                   ),
-                ),
-                Positioned(
-                  left: 17,
-                  top: 16,
-                  bottom: 15,
-                  right: 90,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        track == null ? 'MULAI MENJELAJAH' : 'PILIHAN MUSIK HARI INI',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Color(0xFFD8F17A),
-                          fontSize: 8.5,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 1.45,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        title,
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 20,
-                          height: 1.05,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: -0.7,
-                        ),
-                      ),
-                      if (artist.isNotEmpty) ...[
-                        const SizedBox(height: 5),
-                        Text(
-                          artist,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(color: Colors.white.withValues(alpha: 0.78), fontSize: 10.5, fontWeight: FontWeight.w600),
+                  const SizedBox(width: 13),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(track == null ? 'MULAI JELAJAHI' : 'PILIHAN UNTUKMU', style: TextStyle(color: scheme.primary, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 1.15)),
+                        const SizedBox(height: 7),
+                        Text(title, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurface, fontSize: 15, height: 1.12, fontWeight: FontWeight.w900, letterSpacing: -0.35)),
+                        if (artist.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(artist, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10.5, fontWeight: FontWeight.w600)),
+                        ],
+                        const SizedBox(height: 9),
+                        Row(
+                          children: [
+                            Icon(Icons.play_circle_fill_rounded, size: 18, color: scheme.primary),
+                            const SizedBox(width: 5),
+                            Text(track == null ? 'Cari musik' : 'Putar sekarang', style: TextStyle(color: scheme.primary, fontSize: 10, fontWeight: FontWeight.w900)),
+                          ],
                         ),
                       ],
-                    ],
+                    ),
                   ),
-                ),
-                Positioned(
-                  right: 15,
-                  bottom: 15,
-                  child: Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(color: scheme.primary, shape: BoxShape.circle),
-                    child: Icon(Icons.play_arrow_rounded, color: scheme.onPrimary, size: 29),
-                  ),
-                ),
-              ],
+                  const SizedBox(width: 4),
+                  Icon(Icons.chevron_right_rounded, color: scheme.onSurfaceVariant, size: 22),
+                ],
+              ),
             ),
           ),
         ),

@@ -30,14 +30,6 @@ class AppSettingsPage extends StatelessWidget {
         AppThemeChoice.pink => 'Pink pastel aesthetic',
       };
 
-  IconData _themeIcon(AppThemeChoice choice) => switch (choice) {
-        AppThemeChoice.system => Icons.brightness_auto_rounded,
-        AppThemeChoice.dark => Icons.dark_mode_rounded,
-        AppThemeChoice.amoled => Icons.contrast_rounded,
-        AppThemeChoice.light => Icons.light_mode_rounded,
-        AppThemeChoice.pink => Icons.favorite_rounded,
-      };
-
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -64,36 +56,92 @@ class AppSettingsPage extends StatelessWidget {
             children: [
               ValueListenableBuilder<AppThemeChoice>(
                 valueListenable: settings.theme,
-                builder: (context, selected, _) => RadioGroup<AppThemeChoice>(
-                  groupValue: selected,
-                  onChanged: (value) {
-                    if (value != null) unawaited(settings.setTheme(value));
-                  },
+                builder: (context, selected, _) => Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 15, 14, 15),
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      for (var i = 0; i < AppThemeChoice.values.length; i++) ...[
-                        if (i > 0) const _InsetDivider(),
-                        RadioListTile<AppThemeChoice>(
-                          value: AppThemeChoice.values[i],
-                          secondary: Icon(
-                            _themeIcon(AppThemeChoice.values[i]),
-                            color: selected == AppThemeChoice.values[i]
-                                ? scheme.primary
-                                : scheme.onSurfaceVariant,
-                          ),
-                          title: Text(
-                            _themeLabel(AppThemeChoice.values[i]),
-                            style: const TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                          subtitle: Text(switch (AppThemeChoice.values[i]) {
-                            AppThemeChoice.system => 'Ikuti mode terang/gelap sistem.',
-                            AppThemeChoice.dark => 'Tema gelap dengan aksen MusikKu.',
-                            AppThemeChoice.amoled => 'Latar hitam untuk layar OLED.',
-                            AppThemeChoice.light => 'Latar terang untuk ruangan cerah.',
-                            AppThemeChoice.pink => 'Pink pastel bernuansa rose. Pilih Mode Gelap atau Terang untuk kembali ke tampilan normal.',
-                          }),
-                        ),
-                      ],
+                      Row(
+                        children: [
+                          Expanded(child: Text('Pilih suasana aplikasi', style: TextStyle(color: scheme.onSurface, fontSize: 13, fontWeight: FontWeight.w900))),
+                          Text(_themeLabel(selected), style: TextStyle(color: scheme.primary, fontSize: 10, fontWeight: FontWeight.w800)),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final columns = constraints.maxWidth >= 430 ? 5 : 3;
+                          final itemWidth = (constraints.maxWidth - ((columns - 1) * 8)) / columns;
+                          return Wrap(
+                            spacing: 8,
+                            runSpacing: 10,
+                            children: [
+                              for (final choice in AppThemeChoice.values)
+                                SizedBox(
+                                  width: itemWidth,
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(13),
+                                    onTap: () => unawaited(settings.setTheme(choice)),
+                                    child: Column(
+                                      children: [
+                                        AnimatedContainer(
+                                          duration: const Duration(milliseconds: 180),
+                                          width: double.infinity,
+                                          height: 48,
+                                          decoration: BoxDecoration(
+                                            color: switch (choice) {
+                                              AppThemeChoice.system => scheme.surfaceContainerHighest,
+                                              AppThemeChoice.dark => const Color(0xFF1B2821),
+                                              AppThemeChoice.amoled => Colors.black,
+                                              AppThemeChoice.light => const Color(0xFFF3F0E6),
+                                              AppThemeChoice.pink => const Color(0xFFFFE2EC),
+                                            },
+                                            borderRadius: BorderRadius.circular(11),
+                                            border: Border.all(color: selected == choice ? scheme.primary : scheme.outlineVariant, width: selected == choice ? 2 : 1),
+                                          ),
+                                          child: Stack(
+                                            children: [
+                                              Positioned(
+                                                left: 8,
+                                                top: 8,
+                                                child: Container(
+                                                  width: 21,
+                                                  height: 21,
+                                                  decoration: BoxDecoration(
+                                                    color: switch (choice) {
+                                                      AppThemeChoice.pink => const Color(0xFFCE5C8B),
+                                                      AppThemeChoice.light => const Color(0xFF657F2F),
+                                                      AppThemeChoice.system => scheme.primary,
+                                                      _ => const Color(0xFFD8F17A),
+                                                    },
+                                                    shape: BoxShape.circle,
+                                                  ),
+                                                ),
+                                              ),
+                                              if (selected == choice)
+                                                Positioned(
+                                                  right: 6,
+                                                  bottom: 5,
+                                                  child: Container(
+                                                    width: 19,
+                                                    height: 19,
+                                                    decoration: BoxDecoration(color: scheme.primary, shape: BoxShape.circle),
+                                                    child: Icon(Icons.check_rounded, size: 13, color: scheme.onPrimary),
+                                                  ),
+                                                ),
+                                            ],
+                                          ),
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Text(_themeLabel(choice), maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: TextStyle(color: selected == choice ? scheme.primary : scheme.onSurfaceVariant, fontSize: 9.5, fontWeight: selected == choice ? FontWeight.w900 : FontWeight.w600)),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          );
+                        },
+                      ),
                     ],
                   ),
                 ),

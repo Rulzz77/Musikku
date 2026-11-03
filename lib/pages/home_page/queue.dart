@@ -413,10 +413,24 @@ extension _HomeQueueSheet on _HomePageState {
                   child: Row(
                     children: [
                       Expanded(
-                        child: MusicSheetHeading(
-                          icon: Icons.queue_music_rounded,
-                          title: 'Antrean putar',
-                          subtitle: '${items.length} lagu menunggu giliran.',
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'UP NEXT',
+                              style: TextStyle(color: scheme.primary, fontSize: 9, letterSpacing: 1.7, fontWeight: FontWeight.w900),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              'Antrean putar',
+                              style: TextStyle(color: scheme.onSurface, fontSize: 21, fontWeight: FontWeight.w900, letterSpacing: -0.65),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              '${items.length} lagu menunggu giliran',
+                              style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11),
+                            ),
+                          ],
                         ),
                       ),
                       if (items.isNotEmpty)
@@ -441,27 +455,62 @@ extension _HomeQueueSheet on _HomePageState {
                   ),
                 ),
                 if (current != null)
-                  MusicGlassPanel(
-                    margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                    padding: const EdgeInsets.all(10),
-                    radius: 16,
-                    accent: scheme.primary,
-                    child: Row(
-                      children: [
-                        Icon(Icons.graphic_eq_rounded, color: scheme.primary),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('SEDANG DIPUTAR', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1, color: scheme.primary)),
-                              const SizedBox(height: 3),
-                              Text(current.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800)),
-                              Text(current.channelTitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11)),
-                            ],
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+                    child: Container(
+                      padding: const EdgeInsets.all(11),
+                      decoration: BoxDecoration(
+                        color: scheme.primary.withValues(alpha: 0.09),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: scheme.primary.withValues(alpha: 0.22)),
+                      ),
+                      child: Row(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(13),
+                            child: AlbumArtworkImage(
+                              track: current,
+                              width: 70,
+                              height: 70,
+                              fit: BoxFit.cover,
+                            ),
                           ),
-                        ),
-                      ],
+                          const SizedBox(width: 13),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(Icons.graphic_eq_rounded, color: scheme.primary, size: 14),
+                                    const SizedBox(width: 5),
+                                    Text(
+                                      'NOW PLAYING',
+                                      style: TextStyle(color: scheme.primary, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.1),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  current.title,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(color: scheme.onSurface, fontSize: 14, height: 1.2, fontWeight: FontWeight.w900),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  current.channelTitle,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Icon(Icons.equalizer_rounded, color: scheme.primary, size: 25),
+                        ],
+                      ),
                     ),
                   ),
                 Expanded(
@@ -512,13 +561,12 @@ extension _HomeQueueSheet on _HomePageState {
                                     child: Row(
                                       children: [
                                         ClipRRect(
-                                          borderRadius: BorderRadius.circular(10),
-                                          child: SizedBox(
-                                            width: 54,
-                                            height: 54,
-                                            child: video.coverUrl.isEmpty
-                                                ? ColoredBox(color: scheme.surfaceContainerHighest, child: Icon(Icons.music_note_rounded, color: scheme.onSurfaceVariant))
-                                                : Image.network(video.coverUrl, fit: BoxFit.cover, errorBuilder: (_, _, _) => ColoredBox(color: scheme.surfaceContainerHighest, child: Icon(Icons.music_note_rounded, color: scheme.onSurfaceVariant))),
+                                          borderRadius: BorderRadius.circular(12),
+                                          child: AlbumArtworkImage(
+                                            track: video,
+                                            width: 58,
+                                            height: 58,
+                                            fit: BoxFit.cover,
                                           ),
                                         ),
                                         const SizedBox(width: 12),

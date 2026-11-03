@@ -70,7 +70,7 @@ extension _YoutubeHubLibraryViews on _YoutubeHubState {
   Widget _librarySectionLabel(String text) {
     final scheme = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(22, 26, 22, 10),
+      padding: const EdgeInsets.fromLTRB(19, 20, 19, 9),
       child: Text(
         text.toUpperCase(),
         maxLines: 1,
@@ -114,8 +114,8 @@ extension _YoutubeHubLibraryViews on _YoutubeHubState {
               FlowPageHero(
                 icon: Icons.library_music_rounded,
                 eyebrow: 'RUANG PRIBADI',
-                title: 'Semua yang\nkamu simpan.',
-                subtitle: 'Koleksi, lagu favorit, dan kebiasaan mendengarkanmu ada di satu tempat.',
+                title: 'Koleksi musikmu.',
+                subtitle: 'Playlist, favorit, riwayat, dan musik lokal dalam satu ruang.',
                 trailing: IconButton(
                   tooltip: 'Pembaruan aplikasi',
                   onPressed: () => unawaited(AppUpdateSheet.show(context)),

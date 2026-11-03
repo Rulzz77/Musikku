@@ -167,24 +167,54 @@ extension _HomeAudioSettingsUi on _HomePageState {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                MusicGlassPanel(
-                  padding: const EdgeInsets.all(16),
-                  radius: 22,
-                  accent: scheme.primary,
-                  child: const MusicSheetHeading(
-                    icon: Icons.graphic_eq_rounded,
-                    title: 'Studio suara',
-                    subtitle: 'Bentuk karakter audio, atur level volume, dan haluskan perpindahan lagu.',
+                Container(
+                  padding: const EdgeInsets.fromLTRB(17, 17, 17, 16),
+                  decoration: BoxDecoration(
+                    color: scheme.primary,
+                    borderRadius: BorderRadius.circular(22),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.graphic_eq_rounded, color: scheme.onPrimary, size: 21),
+                          const SizedBox(width: 8),
+                          Text('AUDIO WORKSHOP', style: TextStyle(color: scheme.onPrimary.withValues(alpha: 0.78), fontSize: 9, letterSpacing: 1.7, fontWeight: FontWeight.w900)),
+                          const Spacer(),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                            decoration: BoxDecoration(color: scheme.onPrimary.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(20)),
+                            child: Text('STUDIO', style: TextStyle(color: scheme.onPrimary, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 1)),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Text('Bentuk suara kamu.', style: TextStyle(color: scheme.onPrimary, fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: -0.7)),
+                      const SizedBox(height: 4),
+                      Text('Atur karakter audio, volume, dan perpindahan lagu tanpa mengubah antrean.', style: TextStyle(color: scheme.onPrimary.withValues(alpha: 0.82), fontSize: 11.5, height: 1.35)),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 22),
+                const SizedBox(height: 20),
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Icon(Icons.equalizer_rounded, color: scheme.primary),
-                    const SizedBox(width: 9),
-                    const Text('Equalizer', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
-                    const Spacer(),
-                    Text(_equalizerPreset, style: TextStyle(color: scheme.primary, fontWeight: FontWeight.w800, fontSize: 12)),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('TONE PROFILE', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+                          const SizedBox(height: 4),
+                          Text('Equalizer', style: TextStyle(color: scheme.onSurface, fontSize: 19, fontWeight: FontWeight.w900, letterSpacing: -0.4)),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+                      decoration: BoxDecoration(color: scheme.primary.withValues(alpha: 0.10), borderRadius: BorderRadius.circular(10)),
+                      child: Text(_equalizerPreset.toUpperCase(), style: TextStyle(color: scheme.primary, fontSize: 9.5, fontWeight: FontWeight.w900, letterSpacing: 0.7)),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 10),

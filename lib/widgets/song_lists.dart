@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
 
 import '../models/youtube_search_result.dart';
-import 'flow_components.dart';
 import 'music_design.dart';
 
-/// Membangun satu kartu lagu. Diberikan oleh halaman induk supaya aksi
-/// (putar, antrean, favorit) tetap diurus di sana.
+/// A parent-owned song renderer keeps playback, queue and favorite actions in
+/// the screen that owns the player state.
 typedef SongCardBuilder = Widget Function(YoutubeSearchResult video);
 
-/// Daftar "Terakhir diputar".
 class RecentSongsList extends StatelessWidget {
   const RecentSongsList({
     super.key,
@@ -21,24 +19,50 @@ class RecentSongsList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return ListView.builder(
-      padding: const EdgeInsets.only(bottom: 90),
+      padding: const EdgeInsets.fromLTRB(0, 8, 0, 104),
       itemCount: songs.length + 1,
       itemBuilder: (context, index) {
         if (index == 0) {
-          return const Padding(
-            padding: EdgeInsets.fromLTRB(16, 8, 16, 10),
-            child: FlowSectionHeader(icon: Icons.history_rounded, title: 'Terakhir diputar'),
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(18, 8, 18, 18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('YOUR TIMELINE', style: TextStyle(color: scheme.primary, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.8)),
+                          const SizedBox(height: 5),
+                          Text('Putar kembali', style: TextStyle(color: scheme.onSurface, fontSize: 25, height: 1, fontWeight: FontWeight.w900, letterSpacing: -1.0)),
+                        ],
+                      ),
+                    ),
+                    _CountMark(count: songs.length, label: 'lagu'),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text('Lanjutkan suasana dari lagu yang terakhir kamu dengarkan.', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12, height: 1.4)),
+                const SizedBox(height: 12),
+                Container(height: 1, color: scheme.outlineVariant.withValues(alpha: 0.6)),
+              ],
+            ),
           );
         }
-
-        return cardBuilder(songs[index - 1]);
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 5),
+          child: cardBuilder(songs[index - 1]),
+        );
       },
     );
   }
 }
 
-/// Daftar riwayat kata kunci pencarian.
 class SearchHistoryList extends StatelessWidget {
   const SearchHistoryList({
     super.key,
@@ -55,49 +79,88 @@ class SearchHistoryList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return ListView(
-      padding: const EdgeInsets.only(bottom: 90),
+      padding: const EdgeInsets.fromLTRB(18, 14, 18, 110),
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 8, 10),
-          child: FlowSectionHeader(
-            icon: Icons.manage_search_rounded,
-            title: 'Pencarian terakhir',
-            trailing: TextButton(onPressed: onClearAll, child: const Text('Hapus')),
-          ),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('SEARCH MEMORY', style: TextStyle(color: scheme.primary, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.8)),
+                  const SizedBox(height: 5),
+                  Text('Cari lagi', style: TextStyle(color: scheme.onSurface, fontSize: 25, fontWeight: FontWeight.w900, letterSpacing: -1)),
+                ],
+              ),
+            ),
+            if (queries.isNotEmpty)
+              TextButton.icon(
+                onPressed: onClearAll,
+                icon: const Icon(Icons.delete_sweep_outlined, size: 17),
+                label: const Text('Bersihkan'),
+              ),
+          ],
         ),
-        for (final query in queries)
+        const SizedBox(height: 6),
+        Text('Kata kunci yang pernah kamu cari.', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12)),
+        const SizedBox(height: 18),
+        if (queries.isEmpty)
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
-            child: Material(
-              color: Theme.of(context).colorScheme.surfaceContainerLow.withValues(alpha: 0.82),
-              borderRadius: BorderRadius.circular(17),
-              child: ListTile(
-                leading: Container(
-                  width: 38,
-                  height: 38,
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.72),
-                    borderRadius: BorderRadius.circular(12),
+            padding: const EdgeInsets.only(top: 32),
+            child: MusicEmptyState(
+              icon: Icons.manage_search_rounded,
+              title: 'Belum ada riwayat',
+              message: 'Pencarian yang kamu lakukan akan muncul di sini.',
+            ),
+          )
+        else
+          for (var i = 0; i < queries.length; i++)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 9),
+              child: Material(
+                color: scheme.surfaceContainerLow,
+                borderRadius: BorderRadius.circular(15),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  onTap: () => onSelect(queries[i]),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(13, 10, 8, 10),
+                    child: Row(
+                      children: [
+                        SizedBox(
+                          width: 28,
+                          child: Text('${i + 1}'.padLeft(2, '0'), style: TextStyle(color: scheme.primary, fontSize: 10, fontWeight: FontWeight.w900)),
+                        ),
+                        Container(
+                          width: 35,
+                          height: 35,
+                          decoration: BoxDecoration(color: scheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(11)),
+                          child: Icon(Icons.history_rounded, size: 18, color: scheme.onSurfaceVariant),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(queries[i], maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurface, fontSize: 13, fontWeight: FontWeight.w700)),
+                        ),
+                        IconButton(
+                          tooltip: 'Hapus riwayat',
+                          onPressed: () => onRemove(queries[i]),
+                          visualDensity: VisualDensity.compact,
+                          icon: Icon(Icons.close_rounded, color: scheme.onSurfaceVariant, size: 18),
+                        ),
+                      ],
+                    ),
                   ),
-                  child: Icon(Icons.history_rounded, color: Theme.of(context).colorScheme.primary, size: 20),
-                ),
-                title: Text(query, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
-                onTap: () => onSelect(query),
-                trailing: IconButton(
-                  tooltip: 'Hapus',
-                  onPressed: () => onRemove(query),
-                  icon: Icon(Icons.close_rounded, color: Theme.of(context).colorScheme.onSurfaceVariant, size: 20),
                 ),
               ),
             ),
-          ),
       ],
     );
   }
 }
 
-/// Daftar lagu favorit (termasuk tampilan kosong).
 class FavoriteSongsList extends StatelessWidget {
   const FavoriteSongsList({
     super.key,
@@ -112,40 +175,88 @@ class FavoriteSongsList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     if (songs.isEmpty) {
       return Center(
         child: Padding(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(24),
           child: MusicEmptyState(
             icon: Icons.favorite_rounded,
-            title: 'Belum ada lagu favorit',
-            message: 'Ketuk ikon hati pada lagu untuk menyimpannya ke koleksi pribadimu.',
+            title: 'Ruang favoritmu masih kosong',
+            message: 'Simpan lagu dengan ikon hati. Semua pilihanmu akan terkumpul di sini.',
           ),
         ),
       );
     }
 
     return ListView.builder(
-      padding: const EdgeInsets.only(bottom: 90),
+      padding: const EdgeInsets.fromLTRB(0, 8, 0, 110),
       itemCount: songs.length + 1,
       itemBuilder: (context, index) {
         if (index == 0) {
           return Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 8, 10),
-            child: FlowSectionHeader(
-              icon: Icons.favorite_rounded,
-              title: 'Favorit (${songs.length})',
-              trailing: TextButton.icon(
-                onPressed: onPlayAll,
-                icon: const Icon(Icons.play_arrow_rounded),
-                label: const Text('Putar semua'),
+            padding: const EdgeInsets.fromLTRB(18, 8, 18, 19),
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(17, 16, 15, 16),
+              decoration: BoxDecoration(
+                color: scheme.primaryContainer,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(22),
+                  topRight: Radius.circular(22),
+                  bottomRight: Radius.circular(22),
+                  bottomLeft: Radius.circular(5),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('SAVED BY YOU', style: TextStyle(color: scheme.onPrimaryContainer.withValues(alpha: 0.72), fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.6)),
+                        const SizedBox(height: 5),
+                        Text('Favorit', style: TextStyle(color: scheme.onPrimaryContainer, fontSize: 27, height: 1, fontWeight: FontWeight.w900, letterSpacing: -1)),
+                        const SizedBox(height: 7),
+                        Text('${songs.length} lagu tersimpan', style: TextStyle(color: scheme.onPrimaryContainer.withValues(alpha: 0.78), fontSize: 11, fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Material(
+                    color: scheme.onPrimaryContainer,
+                    shape: const CircleBorder(),
+                    child: InkWell(
+                      customBorder: const CircleBorder(),
+                      onTap: onPlayAll,
+                      child: SizedBox(width: 54, height: 54, child: Icon(Icons.play_arrow_rounded, color: scheme.primaryContainer, size: 32)),
+                    ),
+                  ),
+                ],
               ),
             ),
           );
         }
-
-        return cardBuilder(songs[index - 1]);
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 5),
+          child: cardBuilder(songs[index - 1]),
+        );
       },
+    );
+  }
+}
+
+class _CountMark extends StatelessWidget {
+  const _CountMark({required this.count, required this.label});
+  final int count;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+      decoration: BoxDecoration(color: scheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(9)),
+      child: Text('$count $label', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10, fontWeight: FontWeight.w800)),
     );
   }
 }

@@ -7,7 +7,6 @@ import '../models/youtube_search_result.dart';
 import '../services/local_media_service.dart';
 import '../widgets/unified_artwork.dart';
 import '../widgets/music_design.dart';
-import '../widgets/flow_components.dart';
 
 class LocalMusicPage extends StatefulWidget {
   const LocalMusicPage({
@@ -156,16 +155,56 @@ class _LocalMusicPageState extends State<LocalMusicPage> {
                         slivers: [
                           SliverToBoxAdapter(
                             child: Padding(
-                              padding: const EdgeInsets.fromLTRB(18, 15, 18, 9),
-                              child: FlowPageHero(
-                                icon: Icons.phone_android_rounded,
-                                eyebrow: 'ON THIS DEVICE',
-                                title: 'Musik lokal',
-                                subtitle: '${_songs.length} lagu dari perangkatmu · privat dan tetap tersimpan di sini.',
-                                trailing: IconButton.filledTonal(
-                                  tooltip: 'Putar semua lagu lokal',
-                                  onPressed: playableSongs.isEmpty ? null : () => widget.onPlayFromList(playableSongs.first, playableSongs),
-                                  icon: const Icon(Icons.play_arrow_rounded),
+                              padding: const EdgeInsets.fromLTRB(16, 12, 16, 15),
+                              child: Container(
+                                padding: const EdgeInsets.fromLTRB(17, 17, 13, 15),
+                                decoration: BoxDecoration(
+                                  color: scheme.primaryContainer,
+                                  borderRadius: const BorderRadius.only(topLeft: Radius.circular(24), topRight: Radius.circular(24), bottomRight: Radius.circular(24), bottomLeft: Radius.circular(7)),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Icon(Icons.phone_android_rounded, color: scheme.onPrimaryContainer, size: 17),
+                                        const SizedBox(width: 7),
+                                        Text('OFFLINE LIBRARY', style: TextStyle(color: scheme.onPrimaryContainer.withValues(alpha: 0.78), fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.4)),
+                                        const Spacer(),
+                                        IconButton.filledTonal(tooltip: 'Pindai ulang perangkat', onPressed: _loading ? null : () => unawaited(_load()), icon: const Icon(Icons.refresh_rounded, size: 19)),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      crossAxisAlignment: CrossAxisAlignment.end,
+                                      children: [
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text('${_songs.length}', style: TextStyle(color: scheme.onPrimaryContainer, fontSize: 43, height: 0.95, fontWeight: FontWeight.w900, letterSpacing: -1.7)),
+                                              const SizedBox(height: 5),
+                                              Text('lagu tersimpan di perangkat', style: TextStyle(color: scheme.onPrimaryContainer.withValues(alpha: 0.80), fontSize: 11, fontWeight: FontWeight.w600)),
+                                            ],
+                                          ),
+                                        ),
+                                        FilledButton.icon(
+                                          onPressed: playableSongs.isEmpty ? null : () => widget.onPlayFromList(playableSongs.first, playableSongs),
+                                          style: FilledButton.styleFrom(backgroundColor: scheme.onPrimaryContainer, foregroundColor: scheme.primaryContainer),
+                                          icon: const Icon(Icons.play_arrow_rounded, size: 19),
+                                          label: const Text('Putar semua'),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 12),
+                                    Row(
+                                      children: [
+                                        Icon(Icons.lock_outline_rounded, color: scheme.onPrimaryContainer.withValues(alpha: 0.7), size: 13),
+                                        const SizedBox(width: 5),
+                                        Text('Privat · tidak diunggah ke server', style: TextStyle(color: scheme.onPrimaryContainer.withValues(alpha: 0.76), fontSize: 9.5, fontWeight: FontWeight.w700)),
+                                      ],
+                                    ),
+                                  ],
                                 ),
                               ),
                             ),

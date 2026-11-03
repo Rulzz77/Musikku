@@ -41,11 +41,11 @@ class MiniMusicPlayer extends StatelessWidget {
         final artist = video.channelTitle.trim().isEmpty ? 'Artis tidak diketahui' : video.channelTitle.trim();
 
         return ClipRRect(
-          borderRadius: BorderRadius.circular(13),
+          borderRadius: BorderRadius.circular(17),
           child: Container(
               decoration: BoxDecoration(
                 color: scheme.surfaceContainerHigh,
-                borderRadius: BorderRadius.circular(13),
+                borderRadius: BorderRadius.circular(17),
                 border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.78), width: 1),
                 boxShadow: [
                   BoxShadow(color: Colors.black.withValues(alpha: theme.brightness == Brightness.dark ? 0.16 : 0.055), blurRadius: 18, offset: const Offset(0, 7)),
@@ -60,7 +60,7 @@ class MiniMusicPlayer extends StatelessWidget {
                   child: InkWell(
                     onTap: onOpen,
                     child: SizedBox(
-                      height: 68,
+                      height: 76,
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(9, 9, 7, 9),
                         child: Row(
@@ -71,14 +71,14 @@ class MiniMusicPlayer extends StatelessWidget {
                               transitionBuilder: (child, animation) => ScaleTransition(scale: animation, child: FadeTransition(opacity: animation, child: child)),
                               child: ClipRRect(
                                 key: ValueKey<String>('mini-cover-${video.videoId}'),
-                                borderRadius: BorderRadius.circular(9),
+                                borderRadius: BorderRadius.circular(12),
                                 child: SizedBox(
-                                  width: 48,
-                                  height: 48,
+                                  width: 54,
+                                  height: 54,
                                   child: Stack(
                                     fit: StackFit.expand,
                                     children: [
-                                      AlbumArtworkImage(track: video, width: 51, height: 51, fit: BoxFit.cover, iconSize: 24),
+                                      AlbumArtworkImage(track: video, width: 54, height: 54, fit: BoxFit.cover, iconSize: 24),
                                       if (isPlaying)
                                         DecoratedBox(
                                           decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.17)),
@@ -103,7 +103,7 @@ class MiniMusicPlayer extends StatelessWidget {
                                         Padding(padding: const EdgeInsets.only(right: 5), child: SizedBox(width: 10, height: 10, child: CircularProgressIndicator(strokeWidth: 1.6, color: scheme.primary)))
                                       else if (isPlaying)
                                         Padding(padding: const EdgeInsets.only(right: 5), child: Icon(Icons.volume_up_rounded, size: 12, color: scheme.primary)),
-                                      Expanded(child: Text(isBuffering ? 'Menyiapkan audio…' : artist, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant, fontSize: 10.5, fontWeight: FontWeight.w600))),
+                                      Expanded(child: Text(isBuffering ? 'Menyiapkan audio…' : artist, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant, fontSize: 11, fontWeight: FontWeight.w600))),
                                     ],
                                   ),
                                 ],

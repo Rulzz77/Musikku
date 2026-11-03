@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../models/playlist.dart';
 import 'unified_artwork.dart';
+import 'playlist_artwork.dart';
 import '../models/youtube_search_result.dart';
-import '../theme/app_colors.dart';
-import 'song_lists.dart';
 import 'music_design.dart';
+import 'song_lists.dart';
 
 // ============================================================
 // DIALOG NAMA PLAYLIST
@@ -102,87 +102,170 @@ void showAddToPlaylistSheet(
   required void Function(Playlist playlist) onToggle,
   required VoidCallback onCreateNew,
 }) {
-  showModalBottomSheet(
+  showModalBottomSheet<void>(
     context: context,
-    backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
+    backgroundColor: Theme.of(context).colorScheme.surface,
     showDragHandle: true,
     isScrollControlled: true,
+    useSafeArea: true,
     builder: (sheetContext) {
       return StatefulBuilder(
         builder: (innerContext, setSheetState) {
           final scheme = Theme.of(sheetContext).colorScheme;
-          final addedCount =
-              playlists.where((p) => p.contains(video.videoId)).length;
-
-          return SafeArea(
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                maxHeight: MediaQuery.of(sheetContext).size.height * 0.6,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(18, 0, 12, 10),
+          final addedCount = playlists.where((playlist) => playlist.contains(video.videoId)).length;
+          return ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: MediaQuery.of(sheetContext).size.height * 0.78),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 4, 18, 13),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('SIMPAN LAGU', style: TextStyle(color: scheme.primary, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.8)),
+                            const SizedBox(height: 5),
+                            Text('Masukkan ke koleksi', style: TextStyle(color: scheme.onSurface, fontSize: 21, fontWeight: FontWeight.w900, letterSpacing: -0.6)),
+                            const SizedBox(height: 3),
+                            Text(addedCount == 0 ? 'Pilih playlist untuk menyimpan lagu ini.' : 'Sudah tersimpan di $addedCount playlist.', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11.5)),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Selesai',
+                        onPressed: () => Navigator.pop(sheetContext),
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 0, 18, 14),
+                  child: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: scheme.surfaceContainerLow,
+                      borderRadius: BorderRadius.circular(17),
+                      border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.58)),
+                    ),
                     child: Row(
                       children: [
-                        Expanded(
-                          child: MusicSheetHeading(
-                            icon: addedCount > 0 ? Icons.playlist_add_check_rounded : Icons.playlist_add_rounded,
-                            title: 'Tambah ke playlist',
-                            subtitle: addedCount > 0 ? 'Sudah ada di $addedCount playlist.' : 'Simpan lagu ini ke koleksi pilihanmu.',
-                          ),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(11),
+                          child: UnifiedArtwork(track: video, width: 58, height: 58),
                         ),
-                        TextButton(
-                          onPressed: () => Navigator.pop(sheetContext),
-                          child: const Text('Selesai'),
+                        const SizedBox(width: 11),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(video.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurface, fontSize: 12.5, fontWeight: FontWeight.w900, height: 1.2)),
+                              const SizedBox(height: 4),
+                              Text(video.channelTitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10.5)),
+                            ],
+                          ),
                         ),
                       ],
                     ),
                   ),
-                  ListTile(
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    leading: Container(width: 36, height: 36, decoration: BoxDecoration(color: scheme.primaryContainer, borderRadius: BorderRadius.circular(10)), child: Icon(Icons.add_rounded, color: scheme.onPrimaryContainer)),
-                    title: const Text('Playlist baru'),
-                    onTap: () {
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 0, 18, 10),
+                  child: OutlinedButton.icon(
+                    onPressed: () {
                       Navigator.pop(sheetContext);
                       onCreateNew();
                     },
+                    icon: const Icon(Icons.add_rounded),
+                    label: const Text('Buat playlist baru'),
+                    style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(46), alignment: Alignment.centerLeft),
                   ),
-                  Flexible(
-                    child: ListView(
-                      shrinkWrap: true,
-                      children: [
-                        for (final playlist in playlists)
-                          ListTile(
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            leading: Container(width: 36, height: 36, decoration: BoxDecoration(color: scheme.surfaceContainerHigh, borderRadius: BorderRadius.circular(10)), child: Icon(Icons.queue_music_rounded, color: scheme.onSurfaceVariant)),
-                            title: Text(
-                              playlist.name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            subtitle: Text(
-                              playlist.contains(video.videoId)
-                                  ? '${playlist.songs.length} lagu • sudah ada, ketuk untuk menghapus'
-                                  : '${playlist.songs.length} lagu',
-                            ),
-                            trailing: playlist.contains(video.videoId)
-                                ? const Icon(Icons.check_circle, color: appGold)
-                                : Icon(Icons.add_circle_outline, color: scheme.onSurfaceVariant),
-                            onTap: () {
-                              // Jangan tutup sheet: ubah playlist ini lalu
-                              // segarkan centang supaya bisa lanjut memilih
-                              // playlist lain.
-                              onToggle(playlist);
-                              setSheetState(() {});
-                            },
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 2, 20, 8),
+                  child: Row(
+                    children: [
+                      Text('PLAYLIST KAMU', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.4)),
+                      const Spacer(),
+                      Text('${playlists.length} koleksi', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10, fontWeight: FontWeight.w700)),
+                    ],
+                  ),
+                ),
+                Flexible(
+                  child: playlists.isEmpty
+                      ? Padding(
+                          padding: const EdgeInsets.fromLTRB(24, 20, 24, 28),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.library_music_outlined, size: 36, color: scheme.onSurfaceVariant),
+                              const SizedBox(height: 8),
+                              Text('Belum ada playlist', style: TextStyle(color: scheme.onSurface, fontWeight: FontWeight.w800)),
+                              const SizedBox(height: 4),
+                              Text('Buat playlist baru untuk mulai mengumpulkan lagu.', textAlign: TextAlign.center, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11.5)),
+                            ],
                           ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+                        )
+                      : ListView.separated(
+                          shrinkWrap: true,
+                          padding: const EdgeInsets.fromLTRB(18, 0, 18, 22),
+                          itemCount: playlists.length,
+                          separatorBuilder: (_, _) => const SizedBox(height: 7),
+                          itemBuilder: (context, index) {
+                            final playlist = playlists[index];
+                            final contains = playlist.contains(video.videoId);
+                            return Material(
+                              color: contains ? scheme.primary.withValues(alpha: 0.10) : scheme.surfaceContainerLow,
+                              borderRadius: BorderRadius.circular(15),
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(15),
+                                onTap: () {
+                                  onToggle(playlist);
+                                  setSheetState(() {});
+                                },
+                                child: Padding(
+                                  padding: const EdgeInsets.all(9),
+                                  child: Row(
+                                    children: [
+                                      ClipRRect(
+                                        borderRadius: BorderRadius.circular(10),
+                                        child: SizedBox(
+                                          width: 48,
+                                          height: 48,
+                                          child: PlaylistArtwork(
+                                            playlist: playlist,
+                                            width: 48,
+                                            height: 48,
+                                            iconSize: 22,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 11),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(playlist.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurface, fontSize: 12.5, fontWeight: FontWeight.w900)),
+                                            const SizedBox(height: 4),
+                                            Text('${playlist.songs.length} lagu${contains ? ' · lagu ini sudah ada' : ''}', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10.5)),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Icon(contains ? Icons.check_circle_rounded : Icons.add_circle_outline_rounded, color: contains ? scheme.primary : scheme.onSurfaceVariant, size: 22),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              ],
             ),
           );
         },
@@ -237,36 +320,49 @@ class PlaylistsView extends StatelessWidget {
               onAction: onCreate,
             ),
           ),
-        for (final playlist in playlists)
-          ListTile(
-            leading: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: SizedBox(
-                width: 56,
-                height: 56,
-                child: playlist.songs.isEmpty
-                    ? Container(
-                        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                        child: const Icon(Icons.queue_music),
-                      )
-                    : UnifiedArtwork(
-                        track: playlist.songs.first,
-                        width: 56,
-                        height: 56,
-                        cacheWidth: 168,
-                        borderRadius: BorderRadius.circular(8),
+        for (var index = 0; index < playlists.length; index++)
+          Builder(
+            builder: (context) {
+              final playlist = playlists[index];
+              final scheme = Theme.of(context).colorScheme;
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 9),
+                child: Material(
+                  color: scheme.surfaceContainerLow,
+                  borderRadius: BorderRadius.circular(18),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(18),
+                    onTap: () => onOpen(playlist),
+                    child: Padding(
+                      padding: const EdgeInsets.all(10),
+                      child: Row(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(13),
+                            child: PlaylistArtwork(playlist: playlist, width: 68, height: 68, iconSize: 28),
+                          ),
+                          const SizedBox(width: 13),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(playlist.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurface, fontSize: 14, fontWeight: FontWeight.w900)),
+                                const SizedBox(height: 5),
+                                Text('${playlist.songs.length} lagu · Koleksi pribadi', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10.5)),
+                                const SizedBox(height: 8),
+                                Container(width: 34, height: 3, decoration: BoxDecoration(color: scheme.primary, borderRadius: BorderRadius.circular(4))),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 7),
+                          Icon(Icons.arrow_forward_rounded, color: scheme.primary, size: 19),
+                        ],
                       ),
-              ),
-            ),
-            title: Text(
-              playlist.name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-            subtitle: Text('${playlist.songs.length} lagu'),
-            trailing: Icon(Icons.chevron_right, color: Theme.of(context).colorScheme.onSurfaceVariant),
-            onTap: () => onOpen(playlist),
+                    ),
+                  ),
+                ),
+              );
+            },
           ),
       ],
     );

@@ -97,7 +97,7 @@ class MusikKuApp extends StatelessWidget {
     final surface = pink ? const Color(0xFFFFFBFC) : (isDark ? (amoled ? Colors.black : appPanel) : appLightPanel);
 
     final base = ColorScheme.fromSeed(
-      seedColor: pink ? const Color(0xFFE879A6) : const Color(0xFFB6D65D),
+      seedColor: pink ? const Color(0xFFE879A6) : const Color(0xFF91D9CF),
       brightness: brightness,
       surface: surface,
     );
@@ -129,29 +129,29 @@ class MusikKuApp extends StatelessWidget {
             error: const Color(0xFFD94A5C),
           )
         : base.copyWith(
-            // MusikKu identity: warm paper, deep forest and citrus.
-            primary: isDark ? const Color(0xFFD8F17A) : const Color(0xFF657F2F),
-            onPrimary: isDark ? const Color(0xFF172012) : Colors.white,
-            primaryContainer: isDark ? const Color(0xFF354526) : const Color(0xFFE5EDC8),
-            onPrimaryContainer: isDark ? const Color(0xFFE4F5B7) : const Color(0xFF35451D),
-            secondary: isDark ? const Color(0xFFFF9676) : const Color(0xFFB75B42),
-            onSecondary: isDark ? const Color(0xFF2B130D) : Colors.white,
-            secondaryContainer: isDark ? const Color(0xFF4B2B22) : const Color(0xFFF8DED4),
-            onSecondaryContainer: isDark ? const Color(0xFFFFD9CA) : const Color(0xFF6D3021),
-            tertiary: isDark ? const Color(0xFFFFC978) : const Color(0xFF9A6B23),
-            tertiaryContainer: isDark ? const Color(0xFF46391E) : const Color(0xFFF4E6C8),
-            onTertiary: isDark ? const Color(0xFF211607) : Colors.white,
-            onTertiaryContainer: isDark ? const Color(0xFFFFE9BC) : const Color(0xFF62400D),
+            // MusikKu identity: warm paper in light mode, Midnight Slate in dark mode.
+            primary: isDark ? const Color(0xFF91D9CF) : const Color(0xFF657F2F),
+            onPrimary: isDark ? const Color(0xFF10231F) : Colors.white,
+            primaryContainer: isDark ? const Color(0xFF25413F) : const Color(0xFFE5EDC8),
+            onPrimaryContainer: isDark ? const Color(0xFFD3F6F0) : const Color(0xFF35451D),
+            secondary: isDark ? const Color(0xFFB8B8EE) : const Color(0xFFB75B42),
+            onSecondary: isDark ? const Color(0xFF211F3B) : Colors.white,
+            secondaryContainer: isDark ? const Color(0xFF343250) : const Color(0xFFF8DED4),
+            onSecondaryContainer: isDark ? const Color(0xFFE1DFFF) : const Color(0xFF6D3021),
+            tertiary: isDark ? const Color(0xFFE6BE98) : const Color(0xFF9A6B23),
+            tertiaryContainer: isDark ? const Color(0xFF49382B) : const Color(0xFFF4E6C8),
+            onTertiary: isDark ? const Color(0xFF24180F) : Colors.white,
+            onTertiaryContainer: isDark ? const Color(0xFFFBE6D3) : const Color(0xFF62400D),
             surface: surface,
-            surfaceContainerLowest: isDark ? const Color(0xFF111A15) : const Color(0xFFFFFEFA),
-            surfaceContainerLow: isDark ? const Color(0xFF1C2A22) : const Color(0xFFF9F7EF),
-            surfaceContainer: isDark ? const Color(0xFF223329) : const Color(0xFFECEBDD),
-            surfaceContainerHigh: isDark ? const Color(0xFF2A3B30) : const Color(0xFFE3E5D5),
-            surfaceContainerHighest: isDark ? const Color(0xFF35493A) : const Color(0xFFD8DEC7),
-            onSurface: isDark ? const Color(0xFFF1F1E8) : const Color(0xFF202B23),
-            onSurfaceVariant: isDark ? const Color(0xFFB0BCAF) : const Color(0xFF687469),
-            outline: isDark ? const Color(0xFF526858) : const Color(0xFFB8C1AD),
-            outlineVariant: isDark ? const Color(0xFF35483A) : const Color(0xFFDDE1D2),
+            surfaceContainerLowest: isDark ? const Color(0xFF101827) : const Color(0xFFFFFEFA),
+            surfaceContainerLow: isDark ? const Color(0xFF182337) : const Color(0xFFF9F7EF),
+            surfaceContainer: isDark ? const Color(0xFF1E2A3D) : const Color(0xFFECEBDD),
+            surfaceContainerHigh: isDark ? const Color(0xFF26354B) : const Color(0xFFE3E5D5),
+            surfaceContainerHighest: isDark ? const Color(0xFF34445C) : const Color(0xFFD8DEC7),
+            onSurface: isDark ? const Color(0xFFEEF3FA) : const Color(0xFF202B23),
+            onSurfaceVariant: isDark ? const Color(0xFFAAB7C8) : const Color(0xFF687469),
+            outline: isDark ? const Color(0xFF53647A) : const Color(0xFFB8C1AD),
+            outlineVariant: isDark ? const Color(0xFF394A61) : const Color(0xFFDDE1D2),
             error: const Color(0xFFE45B66),
           );
 

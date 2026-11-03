@@ -74,7 +74,7 @@ class MusicPlayerPage extends StatefulWidget {
 
 class _MusicPlayerPageState extends State<MusicPlayerPage> {
   static const Color _canvas = appInk;
-  static const Color _muted = Color(0xFFAAB7AA);
+  static const Color _muted = Color(0xFFAAB7C8);
   static const Color _citrus = appGold;
   static const Color _coral = appSecondary;
 
@@ -82,7 +82,6 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
   double? _seekHoldMs;
   DateTime? _seekHoldAt;
   late int _volumePreview;
-  bool _adjustingVolume = false;
 
   @override
   void initState() {
@@ -93,7 +92,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
   @override
   void didUpdateWidget(covariant MusicPlayerPage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!_adjustingVolume && oldWidget.volumePercent != widget.volumePercent) {
+    if (oldWidget.volumePercent != widget.volumePercent) {
       _volumePreview = widget.volumePercent.clamp(0, 100).toInt();
     }
     if (oldWidget.video.videoId != widget.video.videoId) {
@@ -135,7 +134,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: [Color(0xB5101915), Color(0xE8101915), _canvas],
+                  colors: [Color(0xB50D1422), Color(0xE80D1422), _canvas],
                   stops: [0, 0.48, 1],
                 ),
               ),
@@ -199,12 +198,12 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
     return Tooltip(
       message: tooltip,
       child: Material(
-        color: const Color(0xFFF1F1E8).withValues(alpha: 0.07),
+        color: const Color(0xFFEEF3FA).withValues(alpha: 0.07),
         shape: const CircleBorder(),
         child: InkWell(
           customBorder: const CircleBorder(),
           onTap: onPressed,
-          child: SizedBox(width: 43, height: 43, child: Icon(icon, color: const Color(0xFFF1F1E8), size: 23)),
+          child: SizedBox(width: 43, height: 43, child: Icon(icon, color: const Color(0xFFEEF3FA), size: 23)),
         ),
       ),
     );
@@ -278,7 +277,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
               SizedBox(height: compact ? 0 : 3),
               _buildControlDeck(busy: busy, playing: playing, compact: compact),
               SizedBox(height: compact ? 0 : 3),
-              _buildVolumeSlider(),
+              _buildVolumeButtons(compact: compact),
               SizedBox(height: compact ? 1 : 5),
               _buildBottomActions(context),
               if (matchesTrack && state.playbackState == NativePlaybackState.error)
@@ -322,7 +321,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
               offset: const Offset(0, 18),
             ),
             BoxShadow(
-              color: const Color(0xFFF1F1E8).withValues(alpha: 0.055),
+              color: const Color(0xFFEEF3FA).withValues(alpha: 0.055),
               blurRadius: 1,
               spreadRadius: 1,
             ),
@@ -374,7 +373,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
           builder: (context, ui, _) => IconButton(
             tooltip: ui.isFavorite ? 'Hapus dari favorit' : 'Tambah ke favorit',
             onPressed: widget.onToggleFavorite,
-            icon: Icon(ui.isFavorite ? Icons.favorite_rounded : Icons.favorite_border_rounded, color: ui.isFavorite ? _coral : const Color(0xFFB5C1B5), size: 25),
+            icon: Icon(ui.isFavorite ? Icons.favorite_rounded : Icons.favorite_border_rounded, color: ui.isFavorite ? _coral : const Color(0xFFAAB7C8), size: 25),
           ),
         ),
       ],
@@ -395,10 +394,10 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
           data: SliderTheme.of(context).copyWith(
             trackHeight: 4,
             activeTrackColor: _citrus,
-            secondaryActiveTrackColor: const Color(0xFFF1F1E8).withValues(alpha: 0.34),
-            inactiveTrackColor: const Color(0xFFF1F1E8).withValues(alpha: 0.15),
+            secondaryActiveTrackColor: const Color(0xFFEEF3FA).withValues(alpha: 0.34),
+            inactiveTrackColor: const Color(0xFFEEF3FA).withValues(alpha: 0.15),
             thumbColor: _citrus,
-            overlayColor: const Color(0xFFF1F1E8).withValues(alpha: 0.12),
+            overlayColor: const Color(0xFFEEF3FA).withValues(alpha: 0.12),
             thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
             overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
           ),
@@ -435,46 +434,70 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
   }
 
 
-  Widget _buildVolumeSlider() {
-    return Row(
-      children: [
-        const Icon(Icons.volume_down_rounded, color: _muted, size: 20),
-        Expanded(
-          child: SliderTheme(
-            data: SliderTheme.of(context).copyWith(
-              trackHeight: 3,
-              activeTrackColor: _citrus,
-              inactiveTrackColor: const Color(0xFFF1F1E8).withValues(alpha: 0.18),
-              thumbColor: _citrus,
-              overlayColor: const Color(0xFFF1F1E8).withValues(alpha: 0.10),
-              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5),
-              overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
-            ),
-            child: Slider(
-              min: 0,
-              max: 100,
-              value: _volumePreview.clamp(0, 100).toDouble(),
-              onChanged: (value) {
-                final next = value.round();
-                setState(() {
-                  _volumePreview = next;
-                  _adjustingVolume = true;
-                });
-                unawaited(widget.onVolumeChanged(next, false));
-              },
-              onChangeEnd: (value) {
-                final next = value.round();
-                setState(() {
-                  _volumePreview = next;
-                  _adjustingVolume = false;
-                });
-                unawaited(widget.onVolumeChanged(next, true));
-              },
+  void _setVolumePreview(int value) {
+    final next = value.clamp(0, 100).toInt();
+    if (next == _volumePreview) return;
+    setState(() => _volumePreview = next);
+    // Persist each tap so the user's preferred volume survives app restarts.
+    unawaited(widget.onVolumeChanged(next, true));
+  }
+
+  Widget _buildVolumeButtons({required bool compact}) {
+    final buttonSize = compact ? 29.0 : 31.0;
+    return SizedBox(
+      height: compact ? 31 : 34,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          _volumeButton(
+            icon: _volumePreview == 0 ? Icons.volume_off_rounded : Icons.volume_down_rounded,
+            tooltip: 'Turunkan volume 5% • tekan lama untuk bisu',
+            size: buttonSize,
+            onTap: () => _setVolumePreview(_volumePreview - 5),
+            onLongPress: () => _setVolumePreview(0),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Text(
+              '$_volumePreview%',
+              style: const TextStyle(color: _muted, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 0.3),
             ),
           ),
+          _volumeButton(
+            icon: Icons.volume_up_rounded,
+            tooltip: 'Naikkan volume 5% • tekan lama untuk maksimum',
+            size: buttonSize,
+            onTap: () => _setVolumePreview(_volumePreview + 5),
+            onLongPress: () => _setVolumePreview(100),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _volumeButton({
+    required IconData icon,
+    required String tooltip,
+    required double size,
+    required VoidCallback onTap,
+    required VoidCallback onLongPress,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Colors.transparent,
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onTap,
+          onLongPress: onLongPress,
+          child: SizedBox(
+            width: size,
+            height: size,
+            child: Icon(icon, color: _muted, size: 19),
+          ),
         ),
-        const Icon(Icons.volume_up_rounded, color: _muted, size: 20),
-      ],
+      ),
     );
   }
 
@@ -505,7 +528,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
               tooltip: 'Lagu sebelumnya',
               visualDensity: VisualDensity.compact,
               onPressed: () => widget.onPrevious(),
-              icon: Icon(Icons.skip_previous_rounded, size: transportSize, color: const Color(0xFFF1F1E8)),
+              icon: Icon(Icons.skip_previous_rounded, size: transportSize, color: const Color(0xFFEEF3FA)),
             ),
             SizedBox(
               width: playSize,
@@ -533,7 +556,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
               tooltip: 'Lagu berikutnya',
               visualDensity: VisualDensity.compact,
               onPressed: () => widget.onNext(),
-              icon: Icon(Icons.skip_next_rounded, size: transportSize, color: const Color(0xFFF1F1E8)),
+              icon: Icon(Icons.skip_next_rounded, size: transportSize, color: const Color(0xFFEEF3FA)),
             ),
             SizedBox(width: gap),
             SizedBox(
@@ -574,7 +597,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
           width: 40,
           height: 40,
           decoration: BoxDecoration(shape: BoxShape.circle, color: selected ? _citrus.withValues(alpha: 0.16) : Colors.transparent),
-          child: Icon(icon, color: selected ? _citrus : const Color(0xFFB5C1B5), size: 20),
+          child: Icon(icon, color: selected ? _citrus : const Color(0xFFAAB7C8), size: 20),
         ),
       ),
     );
@@ -584,9 +607,9 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
       decoration: BoxDecoration(
-        color: const Color(0xFFF1F1E8).withValues(alpha: 0.055),
+        color: const Color(0xFFEEF3FA).withValues(alpha: 0.055),
         borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: const Color(0xFFF1F1E8).withValues(alpha: 0.075)),
+        border: Border.all(color: const Color(0xFFEEF3FA).withValues(alpha: 0.075)),
       ),
       child: Row(
         children: [
@@ -615,7 +638,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, color: selected ? _citrus : const Color(0xFFB5C1B5), size: 19),
+              Icon(icon, color: selected ? _citrus : const Color(0xFFAAB7C8), size: 19),
               const SizedBox(height: 3),
               Text(label, style: TextStyle(color: selected ? _citrus : _muted, fontSize: 9, fontWeight: FontWeight.w700)),
             ],

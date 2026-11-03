@@ -24,7 +24,7 @@ class AppSettingsPage extends StatelessWidget {
 
   String _themeLabel(AppThemeChoice choice) => switch (choice) {
         AppThemeChoice.system => 'Ikuti perangkat',
-        AppThemeChoice.dark => 'Gelap',
+        AppThemeChoice.dark => 'Midnight Slate',
         AppThemeChoice.amoled => 'AMOLED hitam',
         AppThemeChoice.light => 'Terang',
         AppThemeChoice.pink => 'Pink pastel aesthetic',
@@ -91,7 +91,7 @@ class AppSettingsPage extends StatelessWidget {
                                           decoration: BoxDecoration(
                                             color: switch (choice) {
                                               AppThemeChoice.system => scheme.surfaceContainerHighest,
-                                              AppThemeChoice.dark => const Color(0xFF1B2821),
+                                              AppThemeChoice.dark => const Color(0xFF151F30),
                                               AppThemeChoice.amoled => Colors.black,
                                               AppThemeChoice.light => const Color(0xFFF3F0E6),
                                               AppThemeChoice.pink => const Color(0xFFFFE2EC),
@@ -112,7 +112,7 @@ class AppSettingsPage extends StatelessWidget {
                                                       AppThemeChoice.pink => const Color(0xFFCE5C8B),
                                                       AppThemeChoice.light => const Color(0xFF657F2F),
                                                       AppThemeChoice.system => scheme.primary,
-                                                      _ => const Color(0xFFD8F17A),
+                                                      _ => const Color(0xFF91D9CF),
                                                     },
                                                     shape: BoxShape.circle,
                                                   ),

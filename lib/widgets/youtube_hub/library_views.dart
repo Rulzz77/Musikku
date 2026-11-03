@@ -93,16 +93,16 @@ extension _YoutubeHubLibraryViews on _YoutubeHubState {
         child: Container(
           padding: const EdgeInsets.fromLTRB(12, 12, 8, 12),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.085),
+            color: scheme.surface.withValues(alpha: 0.58),
             borderRadius: BorderRadius.circular(15),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+            border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.32)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(value, style: const TextStyle(color: Color(0xFF83EAF2), fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: -0.7)),
+              Text(value, style: TextStyle(color: scheme.primary, fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: -0.7)),
               const SizedBox(height: 3),
-              Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.white.withValues(alpha: 0.66), fontSize: 9.5, fontWeight: FontWeight.w700)),
+              Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 9.5, fontWeight: FontWeight.w700)),
             ],
           ),
         ),
@@ -117,35 +117,40 @@ extension _YoutubeHubLibraryViews on _YoutubeHubState {
             padding: const EdgeInsets.fromLTRB(18, 17, 18, 17),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(27),
-              gradient: const LinearGradient(
+              gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [Color(0xFF243D58), Color(0xFF142A42), Color(0xFF18253A)],
+                colors: [
+                  scheme.primaryContainer.withValues(alpha: 0.92),
+                  scheme.surfaceContainerLow,
+                  scheme.secondaryContainer.withValues(alpha: 0.56),
+                ],
               ),
-              boxShadow: [BoxShadow(color: scheme.primary.withValues(alpha: 0.10), blurRadius: 24, offset: const Offset(0, 10))],
+              border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.38)),
+              boxShadow: [BoxShadow(color: scheme.primary.withValues(alpha: 0.08), blurRadius: 24, offset: const Offset(0, 10))],
             ),
             clipBehavior: Clip.antiAlias,
             child: Stack(
               children: [
-                Positioned(right: -38, top: -54, child: Icon(Icons.album_rounded, size: 190, color: Colors.white.withValues(alpha: 0.045))),
+                Positioned(right: -38, top: -54, child: Icon(Icons.album_rounded, size: 190, color: scheme.onSurface.withValues(alpha: 0.045))),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
-                        const Expanded(child: Text('RUANG MUSIKMU', style: TextStyle(color: Color(0xFF81EAF2), fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.5))),
+                        Expanded(child: Text('RUANG MUSIKMU', style: TextStyle(color: scheme.primary, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.5))),
                         IconButton.filledTonal(
                           tooltip: 'Pembaruan aplikasi',
                           onPressed: () => unawaited(AppUpdateSheet.show(context)),
-                          style: IconButton.styleFrom(backgroundColor: Colors.white.withValues(alpha: 0.12), foregroundColor: Colors.white),
+                          style: IconButton.styleFrom(backgroundColor: scheme.surface.withValues(alpha: 0.62), foregroundColor: scheme.onSurface),
                           icon: const Icon(Icons.system_update_alt_rounded, size: 19),
                         ),
                       ],
                     ),
                     const SizedBox(height: 8),
-                    const Text('Musik yang\nselalu dekat.', style: TextStyle(color: Colors.white, fontSize: 29, height: 1.0, fontWeight: FontWeight.w900, letterSpacing: -1.0)),
+                    Text('Musik yang\nselalu dekat.', style: TextStyle(color: scheme.onSurface, fontSize: 29, height: 1.0, fontWeight: FontWeight.w900, letterSpacing: -1.0)),
                     const SizedBox(height: 7),
-                    Text('Tempat untuk menyimpan, merapikan, dan kembali ke lagu favoritmu.', style: TextStyle(color: Colors.white.withValues(alpha: 0.72), fontSize: 11.5, height: 1.4)),
+                    Text('Tempat untuk menyimpan, merapikan, dan kembali ke lagu favoritmu.', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11.5, height: 1.4)),
                     const SizedBox(height: 17),
                     Row(
                       children: [

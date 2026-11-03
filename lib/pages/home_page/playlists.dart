@@ -36,6 +36,13 @@ extension _HomePlaylists on _HomePageState {
           },
           onPlayPlaylist: _playCustomPlaylist,
           onPlaySong: _playCustomPlaylistSong,
+          onShufflePlaylist: _playShuffledCustomPlaylist,
+          currentVideo: _currentVideo,
+          nativeState: _nativeStateNotifier,
+          onOpenCurrentPlayer: _openYoutubeWatchFromPlayer,
+          onMiniPlayPause: () => _routeListenTogetherAction('play_pause', _togglePlayPause),
+          onMiniNext: () => _routeListenTogetherAction('next', () => _next()),
+          onSelectTab: _hubController.selectTab,
         ),
       ),
     );
@@ -47,6 +54,22 @@ extension _HomePlaylists on _HomePageState {
       return;
     }
     await _playCustomPlaylistSong(playlist, playlist.songs.first);
+  }
+
+  Future<void> _playShuffledCustomPlaylist(Playlist playlist) async {
+    if (playlist.songs.isEmpty) {
+      _toast('Playlist ini masih kosong');
+      return;
+    }
+    final shuffledSongs = List<YoutubeSearchResult>.from(playlist.songs)..shuffle();
+    _activeList = PlaybackSourcePolicy.explicitPlaylistItems(shuffledSongs);
+    _activeSource = _ListSource.playlist;
+    _activePlaylistId = playlist.id;
+    final firstSong = shuffledSongs.first;
+    if (_playerUiState.value.isShuffle) {
+      _prepareShufflePool(excludeCurrent: true, sourceVideo: firstSong);
+    }
+    await _openYoutubeVideo(firstSong, preserveListContext: true);
   }
 
   Future<void> _playCustomPlaylistSong(

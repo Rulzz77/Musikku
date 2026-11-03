@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
@@ -38,6 +39,10 @@ part 'youtube_hub/library_views.dart';
 class YoutubeHubController {
   bool Function()? _onBack;
   void Function(String channelId, String title, String thumbnailUrl)? _onOpenChannel;
+  ValueChanged<int>? _onSelectTab;
+
+  /// Select one of the persistent hub destinations from an overlay page.
+  void selectTab(int index) => _onSelectTab?.call(index);
 
   /// true kalau Back dipakai untuk menutup halaman channel di hub.
   bool handleBack() => _onBack?.call() ?? false;
@@ -231,6 +236,7 @@ class _YoutubeHubState extends State<YoutubeHub> {
     super.initState();
     widget.controller?._onBack = _handleControllerBack;
     widget.controller?._onOpenChannel = _handleControllerOpenChannel;
+    widget.controller?._onSelectTab = _selectDockDestination;
     unawaited(_restore());
   }
 
@@ -239,6 +245,7 @@ class _YoutubeHubState extends State<YoutubeHub> {
     if (widget.controller?._onBack == _handleControllerBack) {
       widget.controller?._onBack = null;
       widget.controller?._onOpenChannel = null;
+      widget.controller?._onSelectTab = null;
     }
     _searchController.dispose();
     super.dispose();
@@ -647,7 +654,6 @@ class _EditorialFloatingDockState extends State<_EditorialFloatingDock> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return SizedBox(
       height: 66,
       child: LayoutBuilder(
@@ -682,22 +688,28 @@ class _EditorialFloatingDockState extends State<_EditorialFloatingDock> {
               if (target != widget.selectedIndex) widget.onSelect(target);
             },
             onHorizontalDragCancel: () => setState(() => _dragX = null),
-            child: Container(
-              decoration: BoxDecoration(
-                color: scheme.surface,
-                borderRadius: BorderRadius.circular(19),
-                border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.92)),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: Theme.of(context).brightness == Brightness.dark ? 0.34 : 0.10),
-                    blurRadius: 22,
-                    offset: const Offset(0, 8),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(24),
+              child: BackdropFilter(
+                filter: ui.ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? Colors.black.withValues(alpha: 0.34)
+                        : Colors.white.withValues(alpha: 0.46),
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: Colors.white.withValues(alpha: Theme.of(context).brightness == Brightness.dark ? 0.20 : 0.70)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: Theme.of(context).brightness == Brightness.dark ? 0.30 : 0.075),
+                        blurRadius: 22,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(18),
-                child: Stack(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(23),
+                    child: Stack(
                   fit: StackFit.expand,
                   children: [
                     AnimatedPositioned(
@@ -710,13 +722,11 @@ class _EditorialFloatingDockState extends State<_EditorialFloatingDock> {
                       child: IgnorePointer(
                         child: DecoratedBox(
                           decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [Color(0xFF67E5F2), Color(0xFF2BB4CD)],
-                            ),
-                            borderRadius: BorderRadius.circular(14),
-                            boxShadow: [BoxShadow(color: scheme.primary.withValues(alpha: 0.22), blurRadius: 13, offset: const Offset(0, 4))],
+                            color: Theme.of(context).brightness == Brightness.dark
+                                ? Colors.white.withValues(alpha: 0.16)
+                                : Colors.white.withValues(alpha: 0.74),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: Colors.white.withValues(alpha: 0.42)),
                           ),
                         ),
                       ),
@@ -739,6 +749,8 @@ class _EditorialFloatingDockState extends State<_EditorialFloatingDock> {
                       ],
                     ),
                   ],
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -796,7 +808,7 @@ class _FlowDockDestination extends StatelessWidget {
                     child: Icon(
                       selected ? selectedIcon : icon,
                       size: 21,
-                      color: selected ? const Color(0xFF061721) : scheme.onSurfaceVariant,
+                      color: selected ? scheme.onSurface : scheme.onSurfaceVariant,
                     ),
                   ),
                   const SizedBox(height: 3),
@@ -807,7 +819,7 @@ class _FlowDockDestination extends StatelessWidget {
                       fontSize: selected ? 9.7 : 9.2,
                       height: 1.1,
                       fontWeight: selected ? FontWeight.w900 : FontWeight.w600,
-                      color: selected ? const Color(0xFF061721) : scheme.onSurfaceVariant,
+                      color: selected ? scheme.onSurface : scheme.onSurfaceVariant,
                       letterSpacing: 0,
                     ),
                     child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),

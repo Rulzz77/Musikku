@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 
@@ -40,32 +41,31 @@ class MiniMusicPlayer extends StatelessWidget {
         final buffered = math.max(progress, matchesTrack ? state.safeBufferedFraction : progress).clamp(0.0, 1.0).toDouble();
         final artist = video.channelTitle.trim().isEmpty ? 'Artis tidak diketahui' : video.channelTitle.trim();
 
-        return Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: theme.brightness == Brightness.dark
-                  ? const [Color(0xFF1B3046), Color(0xFF101D2D)]
-                  : [scheme.surface, scheme.surfaceContainerLow],
-            ),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: scheme.primary.withValues(alpha: 0.25), width: 1),
-            boxShadow: [
-              BoxShadow(color: Colors.black.withValues(alpha: theme.brightness == Brightness.dark ? 0.28 : 0.09), blurRadius: 25, offset: const Offset(0, 9)),
-              BoxShadow(color: scheme.primary.withValues(alpha: 0.06), blurRadius: 20, spreadRadius: -6),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(19),
-            child: Stack(
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(24),
+          child: BackdropFilter(
+            filter: ui.ImageFilter.blur(sigmaX: 22, sigmaY: 22),
+            child: Container(
+              decoration: BoxDecoration(
+                color: theme.brightness == Brightness.dark
+                    ? Colors.black.withValues(alpha: 0.36)
+                    : Colors.white.withValues(alpha: 0.48),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: Colors.white.withValues(alpha: theme.brightness == Brightness.dark ? 0.20 : 0.64), width: 1),
+                boxShadow: [
+                  BoxShadow(color: Colors.black.withValues(alpha: theme.brightness == Brightness.dark ? 0.26 : 0.075), blurRadius: 25, offset: const Offset(0, 9)),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(23),
+                child: Stack(
               children: [
                 Material(
                   color: Colors.transparent,
                   child: InkWell(
                     onTap: onOpen,
                     child: SizedBox(
-                      height: 76,
+                      height: 72,
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(9, 9, 7, 9),
                         child: Row(
@@ -76,14 +76,14 @@ class MiniMusicPlayer extends StatelessWidget {
                               transitionBuilder: (child, animation) => ScaleTransition(scale: animation, child: FadeTransition(opacity: animation, child: child)),
                               child: ClipRRect(
                                 key: ValueKey<String>('mini-cover-${video.videoId}'),
-                                borderRadius: BorderRadius.circular(13),
+                                borderRadius: BorderRadius.circular(11),
                                 child: SizedBox(
-                                  width: 57,
-                                  height: 57,
+                                  width: 51,
+                                  height: 51,
                                   child: Stack(
                                     fit: StackFit.expand,
                                     children: [
-                                      AlbumArtworkImage(track: video, width: 57, height: 57, fit: BoxFit.cover, iconSize: 24),
+                                      AlbumArtworkImage(track: video, width: 51, height: 51, fit: BoxFit.cover, iconSize: 24),
                                       if (isPlaying)
                                         DecoratedBox(
                                           decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.17)),
@@ -105,9 +105,9 @@ class MiniMusicPlayer extends StatelessWidget {
                                   Row(
                                     children: [
                                       if (isBuffering)
-                                        const Padding(padding: EdgeInsets.only(right: 5), child: SizedBox(width: 10, height: 10, child: CircularProgressIndicator(strokeWidth: 1.6, color: Color(0xFF67E5F2))))
+                                        Padding(padding: const EdgeInsets.only(right: 5), child: SizedBox(width: 10, height: 10, child: CircularProgressIndicator(strokeWidth: 1.6, color: scheme.primary)))
                                       else if (isPlaying)
-                                        const Padding(padding: EdgeInsets.only(right: 5), child: Icon(Icons.volume_up_rounded, size: 12, color: Color(0xFF67E5F2))),
+                                        Padding(padding: const EdgeInsets.only(right: 5), child: Icon(Icons.volume_up_rounded, size: 12, color: scheme.primary)),
                                       Expanded(child: Text(isBuffering ? 'Menyiapkan audio…' : artist, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant, fontSize: 10.5, fontWeight: FontWeight.w600))),
                                     ],
                                   ),
@@ -115,15 +115,6 @@ class MiniMusicPlayer extends StatelessWidget {
                               ),
                             ),
                             const SizedBox(width: 5),
-                            IconButton(
-                              tooltip: 'Lagu berikutnya',
-                              visualDensity: VisualDensity.compact,
-                              constraints: const BoxConstraints.tightFor(width: 36, height: 44),
-                              padding: EdgeInsets.zero,
-                              onPressed: () => unawaited(onNext()),
-                              icon: Icon(Icons.skip_next_rounded, size: 25, color: scheme.onSurface),
-                            ),
-                            const SizedBox(width: 2),
                             AnimatedContainer(
                               duration: const Duration(milliseconds: 220),
                               width: 43,
@@ -149,6 +140,15 @@ class MiniMusicPlayer extends StatelessWidget {
                                 ),
                               ),
                             ),
+                            IconButton(
+                              tooltip: 'Lagu berikutnya',
+                              visualDensity: VisualDensity.compact,
+                              constraints: const BoxConstraints.tightFor(width: 36, height: 44),
+                              padding: EdgeInsets.zero,
+                              onPressed: () => unawaited(onNext()),
+                              icon: Icon(Icons.skip_next_rounded, size: 25, color: scheme.onSurface),
+                            ),
+                            const SizedBox(width: 2),
                           ],
                         ),
                       ),
@@ -173,6 +173,8 @@ class MiniMusicPlayer extends StatelessWidget {
                   ),
                 ),
               ],
+                ),
+              ),
             ),
           ),
         );

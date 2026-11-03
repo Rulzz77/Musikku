@@ -1,15 +1,18 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show ValueListenable;
 
 import '../models/playlist.dart';
 import '../models/player_ui_state.dart';
+import '../models/native_youtube_state.dart';
 import '../models/youtube_search_result.dart';
 import '../widgets/playlist_widgets.dart' show showPlaylistNameDialog;
 import '../widgets/unified_artwork.dart';
 import '../widgets/flow_components.dart';
 import '../widgets/music_design.dart';
+import '../widgets/mini_music_player.dart';
 
 /// Management screen for MusikKu's locally saved playlists.
 /// The supplied playlist list is shared with HomePage; every mutation is
@@ -23,6 +26,13 @@ class CustomPlaylistsPage extends StatefulWidget {
     required this.onChanged,
     required this.onPlayPlaylist,
     required this.onPlaySong,
+    this.onShufflePlaylist,
+    this.currentVideo,
+    this.nativeState,
+    this.onOpenCurrentPlayer,
+    this.onMiniPlayPause,
+    this.onMiniNext,
+    this.onSelectTab,
   });
 
   final List<Playlist> playlists;
@@ -32,6 +42,13 @@ class CustomPlaylistsPage extends StatefulWidget {
   final Future<void> Function(Playlist playlist) onPlayPlaylist;
   final Future<void> Function(Playlist playlist, YoutubeSearchResult song)
       onPlaySong;
+  final Future<void> Function(Playlist playlist)? onShufflePlaylist;
+  final YoutubeSearchResult? currentVideo;
+  final ValueListenable<NativeYoutubeState>? nativeState;
+  final VoidCallback? onOpenCurrentPlayer;
+  final Future<void> Function()? onMiniPlayPause;
+  final Future<void> Function()? onMiniNext;
+  final ValueChanged<int>? onSelectTab;
 
   @override
   State<CustomPlaylistsPage> createState() => _CustomPlaylistsPageState();
@@ -47,6 +64,11 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
       if (playlist.id == id) return playlist;
     }
     return null;
+  }
+
+  void _selectMainTab(int index) {
+    if (Navigator.of(context).canPop()) Navigator.of(context).pop();
+    widget.onSelectTab?.call(index);
   }
 
   Future<void> _createPlaylist() async {
@@ -284,6 +306,24 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
     }
   }
 
+  Future<void> _shufflePlaylistAndReturn(Playlist playlist) async {
+    final action = widget.onShufflePlaylist;
+    if (action == null || playlist.songs.isEmpty) return;
+    try {
+      final playback = action(playlist);
+      if (mounted && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+      await playback;
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Playlist belum bisa diacak. Coba lagi ya.')),
+        );
+      }
+    }
+  }
+
   Future<void> _playSongAndReturn(Playlist playlist, YoutubeSearchResult song) async {
     try {
       final playback = widget.onPlaySong(playlist, song);
@@ -307,6 +347,8 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
 
     return Scaffold(
       appBar: AppBar(
+        centerTitle: true,
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor.withValues(alpha: 0.94),
         leading: playlist == null
             ? null
             : IconButton(
@@ -347,8 +389,11 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
         ],
       ),
       body: MusicBackdrop(
-        child: MusicPageEntrance(
-          child: AnimatedSwitcher(
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: MusicPageEntrance(
+                child: AnimatedSwitcher(
             duration: const Duration(milliseconds: 260),
             switchInCurve: Curves.easeOutCubic,
             switchOutCurve: Curves.easeInCubic,
@@ -362,7 +407,33 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
             child: playlist == null
                 ? KeyedSubtree(key: const ValueKey<String>('playlist-library'), child: _buildPlaylistList(scheme))
                 : KeyedSubtree(key: ValueKey<String>('playlist-${playlist.id}'), child: _buildPlaylistSongs(playlist, scheme)),
-          ),
+                ),
+              ),
+            ),
+            if (widget.currentVideo != null &&
+                widget.nativeState != null &&
+                widget.onOpenCurrentPlayer != null &&
+                widget.onMiniPlayPause != null &&
+                widget.onMiniNext != null)
+              Positioned(
+                left: 12,
+                right: 12,
+                bottom: MediaQuery.paddingOf(context).bottom + 66 + 18,
+                child: MiniMusicPlayer(
+                  video: widget.currentVideo!,
+                  nativeState: widget.nativeState!,
+                  onOpen: widget.onOpenCurrentPlayer!,
+                  onPlayPause: widget.onMiniPlayPause!,
+                  onNext: widget.onMiniNext!,
+                ),
+              ),
+            Positioned(
+              left: 14,
+              right: 14,
+              bottom: MediaQuery.paddingOf(context).bottom + 8,
+              child: _PlaylistGlassDock(onSelect: _selectMainTab),
+            ),
+          ],
         ),
       ),
     );
@@ -379,7 +450,7 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
 
     if (widget.playlists.isEmpty) {
       return ListView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 34),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 184),
         children: [
           hero,
           const SizedBox(height: 18),
@@ -420,7 +491,7 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
     }
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 184),
       children: [
         hero,
         const SizedBox(height: 17),
@@ -568,147 +639,327 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
         child: Center(child: Icon(Icons.queue_music_rounded, color: scheme.onPrimaryContainer, size: 44)),
       );
 
-  Widget _buildPlaylistSongs(Playlist playlist, ColorScheme scheme) {
-    if (playlist.songs.isEmpty) {
-      return ListView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
-        children: [
-          FlowPageHero(
-            icon: Icons.queue_music_rounded,
-            eyebrow: 'PLAYLIST',
-            title: playlist.name,
-            subtitle: 'Playlist ini siap diisi dengan lagu pilihanmu.',
-            compact: true,
+  Widget _playlistDetailArtwork(Playlist playlist, ColorScheme scheme) {
+    final firstTrack = playlist.songs.isEmpty ? null : playlist.songs.first;
+    final accent = scheme.primaryContainer;
+    return Container(
+      margin: const EdgeInsets.fromLTRB(18, 12, 18, 4),
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: accent,
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: [
+          BoxShadow(
+            color: scheme.primary.withValues(alpha: 0.12),
+            blurRadius: 24,
+            offset: const Offset(0, 9),
           ),
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: scheme.surfaceContainerLow,
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.6)),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.library_music_outlined, size: 56, color: scheme.primary),
-                const SizedBox(height: 10),
-                const Text('Playlist masih kosong', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17)),
-                const SizedBox(height: 6),
-                Text('Tambahkan lagu dari favorit, riwayat, atau daftar yang baru dimuat.', textAlign: TextAlign.center, style: TextStyle(color: scheme.onSurfaceVariant, height: 1.4)),
-                const SizedBox(height: 14),
-                FilledButton.icon(
-                  onPressed: () => unawaited(_showAddSongsSheet(playlist)),
-                  icon: const Icon(Icons.playlist_add_rounded),
-                  label: const Text('Tambah lagu'),
-                ),
-              ],
+        ],
+      ),
+      child: Column(
+        children: [
+          SizedBox(
+            height: 174,
+            width: double.infinity,
+            child: firstTrack == null
+                ? DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [scheme.secondaryContainer, scheme.primaryContainer, scheme.surfaceContainerHigh],
+                      ),
+                    ),
+                    child: Center(child: Icon(Icons.queue_music_rounded, size: 58, color: scheme.onPrimaryContainer.withValues(alpha: 0.78))),
+                  )
+                : UnifiedArtwork(track: firstTrack, width: double.infinity, height: 174, fit: BoxFit.cover),
+          ),
+          SizedBox(
+            width: double.infinity,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 10, 14, 13),
+              child: Column(
+                children: [
+                  Text(
+                    playlist.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: scheme.onPrimaryContainer, fontSize: 25, fontWeight: FontWeight.w900, letterSpacing: -0.8),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    'MusikKu  ·  Playlist  ·  ${playlist.songs.length} lagu',
+                    style: TextStyle(color: scheme.onPrimaryContainer.withValues(alpha: 0.72), fontSize: 11.5, fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
-      );
-    }
+      ),
+    );
+  }
 
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
-          child: FlowPageHero(
-            icon: Icons.queue_music_rounded,
-            eyebrow: 'PLAYLIST AKTIF',
-            title: playlist.name,
-            subtitle: '${playlist.songs.length} lagu · bisa diurutkan sesuai keinginanmu.',
-            compact: true,
-            trailing: IconButton.filledTonal(
-              tooltip: 'Putar playlist',
-              onPressed: () => unawaited(_playPlaylistAndReturn(playlist)),
-              icon: const Icon(Icons.play_arrow_rounded),
+  Widget _playlistActionRow(Playlist playlist, ColorScheme scheme) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 10),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 52,
+            height: 52,
+            child: OutlinedButton(
+              onPressed: playlist.songs.isEmpty || widget.onShufflePlaylist == null
+                  ? null
+                  : () => unawaited(_shufflePlaylistAndReturn(playlist)),
+              style: OutlinedButton.styleFrom(
+                shape: const CircleBorder(),
+                padding: EdgeInsets.zero,
+                side: BorderSide(color: scheme.primary.withValues(alpha: 0.42)),
+                foregroundColor: scheme.primary,
+              ),
+              child: const Icon(Icons.shuffle_rounded, size: 22),
             ),
           ),
-        ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: SizedBox(
+              height: 52,
+              child: FilledButton.icon(
+                onPressed: playlist.songs.isEmpty
+                    ? null
+                    : () => unawaited(_playPlaylistAndReturn(playlist)),
+                style: FilledButton.styleFrom(
+                  backgroundColor: scheme.primaryContainer,
+                  foregroundColor: scheme.onPrimaryContainer,
+                  shape: const StadiumBorder(),
+                  elevation: 0,
+                ),
+                icon: const Icon(Icons.play_arrow_rounded, size: 24),
+                label: const Text('Play', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          SizedBox(
+            width: 52,
+            height: 52,
+            child: IconButton.filledTonal(
+              tooltip: 'Tambah lagu',
+              onPressed: () => unawaited(_showAddSongsSheet(playlist)),
+              style: IconButton.styleFrom(
+                shape: const CircleBorder(),
+                backgroundColor: scheme.secondaryContainer.withValues(alpha: 0.78),
+                foregroundColor: scheme.onSecondaryContainer,
+              ),
+              icon: const Icon(Icons.add_rounded, size: 25),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPlaylistSongs(Playlist playlist, ColorScheme scheme) {
+    return Column(
+      children: [
+        _playlistDetailArtwork(playlist, scheme),
+        _playlistActionRow(playlist, scheme),
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 6),
+          padding: const EdgeInsets.fromLTRB(23, 2, 20, 8),
           child: Row(
             children: [
-              Expanded(child: Text('${playlist.songs.length} lagu · tahan ikon untuk mengurutkan', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12))),
-              TextButton.icon(
-                onPressed: () => unawaited(_playPlaylistAndReturn(playlist)),
-                icon: const Icon(Icons.play_arrow_rounded),
-                label: const Text('Putar'),
+              Expanded(
+                child: Text(
+                  'Daftar lagu',
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900, color: scheme.onSurface),
+                ),
+              ),
+              Text(
+                '${playlist.songs.length} lagu',
+                style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant, fontWeight: FontWeight.w600),
               ),
             ],
           ),
         ),
         Expanded(
-          child: ReorderableListView.builder(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
-            itemCount: playlist.songs.length,
-            // onReorderItem already provides the final destination index.
-            onReorderItem: (oldIndex, newIndex) =>
-                _reorderSongs(playlist, oldIndex, newIndex),
-            itemBuilder: (context, index) {
-              final song = playlist.songs[index];
-              return ValueListenableBuilder<PlayerUiState>(
-                key: ValueKey<String>('${playlist.id}:${song.videoId}'),
-                valueListenable: widget.playerUiState,
-                builder: (context, playerState, _) {
-                  final isCurrent = playerState.video?.videoId == song.videoId;
-                  return Card(
-                    margin: const EdgeInsets.symmetric(vertical: 3),
-                    color: isCurrent ? scheme.primaryContainer.withValues(alpha: 0.72) : null,
-                    child: ListTile(
-                      onTap: () => unawaited(_playSongAndReturn(playlist, song)),
-                      leading: ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            UnifiedArtwork(track: song, width: 52, height: 52, fit: BoxFit.cover),
-                            if (isCurrent)
-                              Container(
-                                width: 52,
-                                height: 52,
-                                color: scheme.primary.withValues(alpha: 0.42),
-                                child: const Icon(Icons.graphic_eq_rounded, color: Colors.white, size: 24),
-                              ),
-                          ],
+          child: playlist.songs.isEmpty
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(28, 8, 28, 28),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.music_note_rounded, size: 44, color: scheme.onSurfaceVariant.withValues(alpha: 0.7)),
+                        const SizedBox(height: 9),
+                        const Text('Playlist masih kosong', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+                        const SizedBox(height: 5),
+                        Text(
+                          'Tambahkan lagu dari favorit, riwayat, atau hasil pencarian.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12, height: 1.4),
                         ),
-                      ),
-                      title: Text(
-                        song.title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: isCurrent ? TextStyle(color: scheme.primary, fontWeight: FontWeight.w900) : null,
-                      ),
-                      subtitle: Text(
-                        isCurrent ? 'SEDANG DIPUTAR · ${song.channelTitle}' : song.channelTitle,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: isCurrent ? TextStyle(color: scheme.primary, fontWeight: FontWeight.w700) : null,
-                      ),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (isCurrent) Icon(Icons.graphic_eq_rounded, color: scheme.primary, size: 20),
-                          IconButton(
-                            tooltip: 'Hapus dari playlist',
-                            onPressed: () => unawaited(_removeSong(playlist, song)),
-                            icon: const Icon(Icons.remove_circle_outline_rounded),
-                          ),
-                          ReorderableDragStartListener(
-                            index: index,
-                            child: Icon(Icons.drag_handle_rounded, color: scheme.onSurfaceVariant),
-                          ),
-                        ],
-                      ),
+                      ],
                     ),
-                  );
-                },
-              );
-            },
-          ),
+                  ),
+                )
+              : ReorderableListView.builder(
+                  padding: const EdgeInsets.fromLTRB(13, 0, 13, 184),
+                  itemCount: playlist.songs.length,
+                  onReorderItem: (oldIndex, newIndex) => _reorderSongs(playlist, oldIndex, newIndex),
+                  itemBuilder: (context, index) {
+                    final song = playlist.songs[index];
+                    return ValueListenableBuilder<PlayerUiState>(
+                      key: ValueKey<String>('${playlist.id}:${song.videoId}'),
+                      valueListenable: widget.playerUiState,
+                      builder: (context, playerState, _) {
+                        final isCurrent = playerState.video?.videoId == song.videoId;
+                        return Material(
+                          color: isCurrent ? scheme.primaryContainer.withValues(alpha: 0.22) : Colors.transparent,
+                          child: InkWell(
+                            onTap: () => unawaited(_playSongAndReturn(playlist, song)),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+                              decoration: BoxDecoration(
+                                border: Border(bottom: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.42))),
+                              ),
+                              child: Row(
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(9),
+                                    child: SizedBox(
+                                      width: 54,
+                                      height: 54,
+                                      child: Stack(
+                                        fit: StackFit.expand,
+                                        children: [
+                                          UnifiedArtwork(track: song, width: 54, height: 54, fit: BoxFit.cover),
+                                          if (isCurrent)
+                                            ColoredBox(
+                                              color: Colors.black.withValues(alpha: 0.34),
+                                              child: const Icon(Icons.equalizer_rounded, color: Colors.white, size: 24),
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 13),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          song.title,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(fontSize: 14, fontWeight: isCurrent ? FontWeight.w900 : FontWeight.w700, color: isCurrent ? scheme.primary : scheme.onSurface),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          song.channelTitle,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  if (isCurrent)
+                                    Padding(
+                                      padding: const EdgeInsets.only(right: 2),
+                                      child: Icon(Icons.volume_up_rounded, color: scheme.primary, size: 18),
+                                    ),
+                                  PopupMenuButton<String>(
+                                    tooltip: 'Opsi lagu',
+                                    onSelected: (value) {
+                                      if (value == 'remove') unawaited(_removeSong(playlist, song));
+                                    },
+                                    itemBuilder: (_) => const [
+                                      PopupMenuItem(value: 'remove', child: Text('Hapus dari playlist')),
+                                    ],
+                                    icon: Icon(Icons.more_vert_rounded, color: scheme.onSurfaceVariant),
+                                  ),
+                                  ReorderableDragStartListener(
+                                    index: index,
+                                    child: Icon(Icons.drag_handle_rounded, color: scheme.onSurfaceVariant.withValues(alpha: 0.8)),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
         ),
       ],
+    );
+  }
+
+}
+
+class _PlaylistGlassDock extends StatelessWidget {
+  const _PlaylistGlassDock({required this.onSelect});
+
+  final ValueChanged<int> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    Widget destination(int index, String label, IconData icon, IconData activeIcon) {
+      final selected = index == 3;
+      return Expanded(
+        child: InkWell(
+          onTap: () => onSelect(index),
+          borderRadius: BorderRadius.circular(18),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 2),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(selected ? activeIcon : icon, size: 21, color: selected ? scheme.onSurface : scheme.onSurfaceVariant),
+                const SizedBox(height: 3),
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 9.5, fontWeight: selected ? FontWeight.w900 : FontWeight.w600, color: selected ? scheme.onSurface : scheme.onSurfaceVariant),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+        child: Container(
+          height: 66,
+          decoration: BoxDecoration(
+            color: theme.brightness == Brightness.dark
+                ? Colors.black.withValues(alpha: 0.34)
+                : Colors.white.withValues(alpha: 0.48),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: Colors.white.withValues(alpha: theme.brightness == Brightness.dark ? 0.20 : 0.68)),
+            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: theme.brightness == Brightness.dark ? 0.25 : 0.07), blurRadius: 22, offset: const Offset(0, 8))],
+          ),
+          child: Row(
+            children: [
+              destination(0, 'Beranda', Icons.home_outlined, Icons.home_rounded),
+              destination(1, 'Jelajah', Icons.explore_outlined, Icons.explore_rounded),
+              destination(2, 'Radio', Icons.radio_outlined, Icons.radio_rounded),
+              destination(3, 'Koleksi', Icons.library_music_outlined, Icons.library_music_rounded),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

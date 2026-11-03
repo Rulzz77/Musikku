@@ -98,6 +98,9 @@ extension _HomeUiLayout on _HomePageState {
                           onToggleSmartShuffle: () => _routeListenTogetherModeAction('smart_shuffle', _toggleSmartShuffle),
                           onCycleLoop: () => _routeListenTogetherModeAction('loop', _cycleLoopMode),
                           onToggleFavorite: () => _toggleFavorite(watch ?? current!),
+                          volumePercent: _playerVolumePercent,
+                          onVolumeChanged: (percent, persist) =>
+                              _setPlayerVolume(percent, persist: persist),
                           onAddToPlaylist: () => _showAddToPlaylist(watch ?? current!),
                           onOpenQueue: _showQueueSheet,
                           onOpenSleepTimer: _showSleepTimerSheet,

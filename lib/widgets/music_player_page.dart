@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 
@@ -28,6 +30,8 @@ class MusicPlayerPage extends StatefulWidget {
     required this.onToggleSmartShuffle,
     required this.onCycleLoop,
     required this.onToggleFavorite,
+    required this.volumePercent,
+    required this.onVolumeChanged,
     required this.onAddToPlaylist,
     required this.onOpenQueue,
     required this.onOpenSleepTimer,
@@ -51,6 +55,8 @@ class MusicPlayerPage extends StatefulWidget {
   final VoidCallback onToggleSmartShuffle;
   final VoidCallback onCycleLoop;
   final VoidCallback onToggleFavorite;
+  final int volumePercent;
+  final Future<void> Function(int percent, bool persist) onVolumeChanged;
   final VoidCallback onAddToPlaylist;
   final VoidCallback onOpenQueue;
   final VoidCallback onOpenSleepTimer;
@@ -64,41 +70,34 @@ class MusicPlayerPage extends StatefulWidget {
   State<MusicPlayerPage> createState() => _MusicPlayerPageState();
 }
 
-class _MusicPlayerPageState extends State<MusicPlayerPage>
-    with SingleTickerProviderStateMixin {
-  static const Color _canvas = Color(0xFF07111F);
-  static const Color _muted = Color(0xFF9EB1C5);
-  static const Color _cyan = Color(0xFF67E5F2);
-  static const Color _coral = Color(0xFFFF8C78);
+class _MusicPlayerPageState extends State<MusicPlayerPage> {
+  static const Color _canvas = Color(0xFF08090B);
+  static const Color _muted = Color(0xFFB3B3B8);
+  static const Color _cyan = Color(0xFFF3F3F4);
+  static const Color _coral = Color(0xFFFF8796);
 
-  late final AnimationController _recordRotation;
   double? _dragPositionMs;
   double? _seekHoldMs;
   DateTime? _seekHoldAt;
+  late int _volumePreview;
+  bool _adjustingVolume = false;
 
   @override
   void initState() {
     super.initState();
-    _recordRotation = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 22),
-    );
-  }
-
-  @override
-  void dispose() {
-    _recordRotation.dispose();
-    super.dispose();
+    _volumePreview = widget.volumePercent.clamp(0, 100).toInt();
   }
 
   @override
   void didUpdateWidget(covariant MusicPlayerPage oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!_adjustingVolume && oldWidget.volumePercent != widget.volumePercent) {
+      _volumePreview = widget.volumePercent.clamp(0, 100).toInt();
+    }
     if (oldWidget.video.videoId != widget.video.videoId) {
       _dragPositionMs = null;
       _seekHoldMs = null;
       _seekHoldAt = null;
-      _recordRotation.value = 0;
     }
   }
 
@@ -119,25 +118,26 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
       child: Stack(
         fit: StackFit.expand,
         children: [
-          const DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [Color(0xFF0C2135), _canvas, Color(0xFF101B2C)],
-                stops: [0, 0.48, 1],
+          Positioned.fill(
+            child: ImageFiltered(
+              imageFilter: ui.ImageFilter.blur(sigmaX: 38, sigmaY: 38),
+              child: Opacity(
+                opacity: 0.22,
+                child: AlbumArtworkImage(track: widget.video, fit: BoxFit.cover),
               ),
             ),
           ),
-          Positioned(
-            top: -135,
-            right: -115,
-            child: _GlowOrb(color: _cyan.withValues(alpha: 0.14), size: 330),
-          ),
-          Positioned(
-            bottom: -150,
-            left: -130,
-            child: _GlowOrb(color: _coral.withValues(alpha: 0.11), size: 350),
+          const Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color(0xB509090B), Color(0xE808090B), _canvas],
+                  stops: [0, 0.48, 1],
+                ),
+              ),
+            ),
           ),
           SafeArea(
             child: Column(
@@ -177,7 +177,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
               ),
               const SizedBox(height: 4),
               Text(
-                widget.followingRoom ? 'LISTENING ROOM' : 'MUSIKKU PLAYER',
+                widget.followingRoom ? 'LISTENING ROOM' : 'NOW PLAYING',
                 style: const TextStyle(color: _muted, fontSize: 8.5, fontWeight: FontWeight.w700, letterSpacing: 1.15),
               ),
             ],
@@ -229,28 +229,20 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
     final busy = matchesTrack && state.isBuffering;
     final playing = matchesTrack && state.isEffectivelyPlaying;
 
-    if (widget.platformPlayer == null) {
-      if (playing && !_recordRotation.isAnimating) {
-        _recordRotation.repeat();
-      } else if (!playing && _recordRotation.isAnimating) {
-        _recordRotation.stop(canceled: false);
-      }
-    } else if (_recordRotation.isAnimating) {
-      _recordRotation.stop(canceled: false);
-    }
-
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
         final height = constraints.maxHeight;
-        final discSize = math.min(width * 0.72, height * 0.34).clamp(164.0, 260.0).toDouble();
+        final coverSize = math.min(width * 0.86, height * 0.36)
+            .clamp(145.0, 330.0)
+            .toDouble();
 
         return Padding(
-          padding: const EdgeInsets.fromLTRB(22, 6, 22, 8),
+          padding: const EdgeInsets.fromLTRB(22, 5, 22, 8),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            mainAxisAlignment: MainAxisAlignment.start,
             children: [
-              const SizedBox(height: 3),
+              const SizedBox(height: 4),
               if (widget.platformPlayer != null)
                 SizedBox(
                   width: math.min(width * 0.96, 440),
@@ -258,19 +250,12 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
                   child: widget.platformPlayer!,
                 )
               else
-                SizedBox(
-                  width: discSize,
-                  height: discSize,
-                  child: _buildVinylDisc(discSize, playing),
-                ),
-              const SizedBox(height: 11),
+                _buildAlbumCover(coverSize),
+              const SizedBox(height: 17),
               _buildTrackInfo(busy),
-              AnimatedSize(
-                duration: const Duration(milliseconds: 220),
-                curve: Curves.easeOutCubic,
-                alignment: Alignment.centerLeft,
-                child: _buildCurrentLyricText(),
-              ),
+              const SizedBox(height: 7),
+              _buildCurrentLyricText(),
+              const SizedBox(height: 7),
               _buildSeekBar(
                 context: context,
                 duration: duration,
@@ -278,20 +263,23 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
                 sliderValue: sliderValue,
                 bufferedTrackValue: bufferedTrackValue,
               ),
-              const SizedBox(height: 7),
-              _buildTransportRow(busy: busy, playing: playing),
               const SizedBox(height: 3),
+              _buildPlaybackModes(),
+              const SizedBox(height: 5),
+              _buildTransportRow(busy: busy, playing: playing),
+              const SizedBox(height: 5),
+              _buildVolumeSlider(),
+              const SizedBox(height: 7),
               _buildBottomActions(context),
               if (matchesTrack && state.playbackState == NativePlaybackState.error)
                 const Padding(
-                  padding: EdgeInsets.only(top: 4),
+                  padding: EdgeInsets.only(top: 7),
                   child: Text(
                     'Audio gagal dimuat. Coba putar ulang atau pilih lagu berikutnya.',
                     textAlign: TextAlign.center,
                     style: TextStyle(color: Color(0xFFFF9A91), fontSize: 10.5),
                   ),
                 ),
-              const SizedBox(height: 3),
             ],
           ),
         );
@@ -299,87 +287,45 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
     );
   }
 
-  Widget _buildVinylDisc(double size, bool playing) {
-    return AnimatedBuilder(
-      animation: _recordRotation,
-      builder: (context, child) => Transform.rotate(
-        angle: _recordRotation.value * math.pi * 2,
-        child: child,
+  Widget _buildAlbumCover(double size) {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 420),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      transitionBuilder: (child, animation) => FadeTransition(
+        opacity: animation,
+        child: ScaleTransition(
+          scale: Tween<double>(begin: 0.96, end: 1).animate(animation),
+          child: child,
+        ),
       ),
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          Container(
-            width: size,
-            height: size,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: const RadialGradient(
-                colors: [Color(0xFF26374D), Color(0xFF111B2A), Color(0xFF050A12)],
-                stops: [0.1, 0.72, 1],
-              ),
-              boxShadow: [
-                BoxShadow(color: _cyan.withValues(alpha: playing ? 0.16 : 0.08), blurRadius: playing ? 42 : 28, spreadRadius: 2),
-                const BoxShadow(color: Colors.black54, blurRadius: 25, offset: Offset(0, 16)),
-              ],
-              border: Border.all(color: Colors.white.withValues(alpha: 0.13), width: 1.2),
+      child: Container(
+        key: ValueKey<String>('player-cover-frame-${widget.video.videoId}'),
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(13),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.42),
+              blurRadius: 38,
+              offset: const Offset(0, 18),
             ),
-            child: CustomPaint(painter: _VinylGroovesPainter(color: Colors.white.withValues(alpha: 0.10))),
-          ),
-          Container(
-            width: size * 0.74,
-            height: size * 0.74,
-            clipBehavior: Clip.antiAlias,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: Colors.white.withValues(alpha: 0.65), width: 3),
-              boxShadow: const [BoxShadow(color: Colors.black45, blurRadius: 18, offset: Offset(0, 8))],
+            BoxShadow(
+              color: Colors.white.withValues(alpha: 0.055),
+              blurRadius: 1,
+              spreadRadius: 1,
             ),
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 480),
-              switchInCurve: Curves.easeOutBack,
-              switchOutCurve: Curves.easeInCubic,
-              transitionBuilder: (child, animation) => FadeTransition(
-                opacity: animation,
-                child: ScaleTransition(scale: Tween<double>(begin: 0.92, end: 1).animate(animation), child: child),
-              ),
-              child: ClipOval(
-                key: ValueKey<String>('player-cover-${widget.video.videoId}'),
-                child: AlbumArtworkImage(track: widget.video, fit: BoxFit.cover, iconSize: 58),
-              ),
-            ),
-          ),
-          Container(
-            width: 14,
-            height: 14,
-            decoration: BoxDecoration(
-              color: _cyan,
-              shape: BoxShape.circle,
-              border: Border.all(color: const Color(0xFF09111D), width: 4),
-            ),
-          ),
-          Positioned(
-            top: 12,
-            right: 12,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 260),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: playing ? _cyan : Colors.black.withValues(alpha: 0.55),
-                borderRadius: BorderRadius.circular(99),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(playing ? Icons.graphic_eq_rounded : Icons.album_rounded, size: 13, color: playing ? _canvas : Colors.white70),
-                  const SizedBox(width: 5),
-                  Text(playing ? 'PLAYING' : 'PAUSED', style: TextStyle(color: playing ? _canvas : Colors.white70, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 1.0)),
-                ],
-              ),
-            ),
-          ),
-        ],
+          ],
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: AlbumArtworkImage(
+          track: widget.video,
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          iconSize: 58,
+        ),
       ),
     );
   }
@@ -396,14 +342,14 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
                 MusicTitleFormatter.clean(widget.video.title),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Colors.white, fontSize: 20, height: 1.08, fontWeight: FontWeight.w900, letterSpacing: -0.65),
+                style: const TextStyle(color: Colors.white, fontSize: 23, height: 1.08, fontWeight: FontWeight.w900, letterSpacing: -0.7),
               ),
               const SizedBox(height: 5),
               Text(
                 widget.video.channelTitle.trim().isEmpty ? 'Artis tidak diketahui' : widget.video.channelTitle.trim(),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: _muted, fontSize: 12.5, fontWeight: FontWeight.w600),
+                style: const TextStyle(color: _muted, fontSize: 14, fontWeight: FontWeight.w600),
               ),
             ],
           ),
@@ -456,15 +402,21 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
               duration: const Duration(milliseconds: 240),
               transitionBuilder: (child, animation) => FadeTransition(
                 opacity: animation,
-                child: SlideTransition(position: Tween<Offset>(begin: const Offset(0, 0.3), end: Offset.zero).animate(animation), child: child),
+                child: SlideTransition(
+                  position: Tween<Offset>(begin: const Offset(0, 0.18), end: Offset.zero).animate(animation),
+                  child: child,
+                ),
               ),
-              child: Container(
+              child: Padding(
                 key: ValueKey<String>('lyric-$lineIndex-$lyric'),
-                width: double.infinity,
-                alignment: Alignment.centerLeft,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-                decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.055), borderRadius: BorderRadius.circular(11)),
-                child: Text(lyric, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: _cyan, fontSize: 11.5, fontWeight: FontWeight.w700, height: 1.2)),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                child: Text(
+                  lyric,
+                  maxLines: 2,
+                  textAlign: TextAlign.center,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: _cyan, fontSize: 14, fontWeight: FontWeight.w700, height: 1.25),
+                ),
               ),
             );
           },
@@ -486,11 +438,11 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
         SliderTheme(
           data: SliderTheme.of(context).copyWith(
             trackHeight: 4,
-            activeTrackColor: _cyan,
+            activeTrackColor: Colors.white,
             secondaryActiveTrackColor: Colors.white.withValues(alpha: 0.34),
             inactiveTrackColor: Colors.white.withValues(alpha: 0.15),
             thumbColor: Colors.white,
-            overlayColor: _cyan.withValues(alpha: 0.12),
+            overlayColor: Colors.white.withValues(alpha: 0.12),
             thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
             overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
           ),
@@ -526,11 +478,55 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
     );
   }
 
-  Widget _buildTransportRow({required bool busy, required bool playing}) {
+
+  Widget _buildVolumeSlider() {
+    return Row(
+      children: [
+        const Icon(Icons.volume_down_rounded, color: _muted, size: 20),
+        Expanded(
+          child: SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              trackHeight: 3,
+              activeTrackColor: Colors.white,
+              inactiveTrackColor: Colors.white.withValues(alpha: 0.18),
+              thumbColor: Colors.white,
+              overlayColor: Colors.white.withValues(alpha: 0.10),
+              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5),
+              overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+            ),
+            child: Slider(
+              min: 0,
+              max: 100,
+              value: _volumePreview.clamp(0, 100).toDouble(),
+              onChanged: (value) {
+                final next = value.round();
+                setState(() {
+                  _volumePreview = next;
+                  _adjustingVolume = true;
+                });
+                unawaited(widget.onVolumeChanged(next, false));
+              },
+              onChangeEnd: (value) {
+                final next = value.round();
+                setState(() {
+                  _volumePreview = next;
+                  _adjustingVolume = false;
+                });
+                unawaited(widget.onVolumeChanged(next, true));
+              },
+            ),
+          ),
+        ),
+        const Icon(Icons.volume_up_rounded, color: _muted, size: 20),
+      ],
+    );
+  }
+
+  Widget _buildPlaybackModes() {
     return ValueListenableBuilder<PlayerUiState>(
       valueListenable: widget.playerUiState,
       builder: (context, ui, _) => Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           _transportSideButton(
             icon: ui.isSmartShuffle ? Icons.auto_awesome_rounded : Icons.shuffle_rounded,
@@ -539,24 +535,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
             onPressed: widget.onToggleShuffle,
             onLongPress: widget.onToggleSmartShuffle,
           ),
-          IconButton(tooltip: 'Lagu sebelumnya', onPressed: () => widget.onPrevious(), icon: const Icon(Icons.skip_previous_rounded, size: 34, color: Colors.white)),
-          SizedBox(
-            width: 68,
-            height: 68,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [_cyan, Color(0xFF26AFC4)]),
-                boxShadow: [BoxShadow(color: _cyan.withValues(alpha: 0.27), blurRadius: 22, offset: const Offset(0, 7))],
-              ),
-              child: IconButton(
-                tooltip: playing ? 'Jeda' : 'Putar',
-                onPressed: (busy && !widget.followingRoom) ? null : () => widget.onPlayPause(),
-                icon: Icon(busy ? Icons.hourglass_top_rounded : (playing ? Icons.pause_rounded : Icons.play_arrow_rounded), size: 39, color: _canvas),
-              ),
-            ),
-          ),
-          IconButton(tooltip: 'Lagu berikutnya', onPressed: () => widget.onNext(), icon: const Icon(Icons.skip_next_rounded, size: 34, color: Colors.white)),
+          const SizedBox(width: 24),
           _transportSideButton(
             icon: ui.loopMode == LoopModeCustom.one ? Icons.repeat_one_rounded : Icons.repeat_rounded,
             selected: ui.loopMode != LoopModeCustom.off,
@@ -569,6 +548,56 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildTransportRow({required bool busy, required bool playing}) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        IconButton(
+          tooltip: 'Lagu sebelumnya',
+          onPressed: () => widget.onPrevious(),
+          icon: const Icon(Icons.skip_previous_rounded, size: 48, color: Colors.white),
+        ),
+        const SizedBox(width: 23),
+        SizedBox(
+          width: 76,
+          height: 76,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFFFFFFFF), Color(0xFFDADADD)],
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.white.withValues(alpha: 0.18),
+                  blurRadius: 24,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: IconButton(
+              tooltip: playing ? 'Jeda' : 'Putar',
+              onPressed: (busy && !widget.followingRoom) ? null : () => widget.onPlayPause(),
+              icon: Icon(
+                busy ? Icons.hourglass_top_rounded : (playing ? Icons.pause_rounded : Icons.play_arrow_rounded),
+                size: 43,
+                color: _canvas,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 23),
+        IconButton(
+          tooltip: 'Lagu berikutnya',
+          onPressed: () => widget.onNext(),
+          icon: const Icon(Icons.skip_next_rounded, size: 48, color: Colors.white),
+        ),
+      ],
     );
   }
 
@@ -589,8 +618,8 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
           duration: const Duration(milliseconds: 180),
           width: 40,
           height: 40,
-          decoration: BoxDecoration(shape: BoxShape.circle, color: selected ? _cyan.withValues(alpha: 0.15) : Colors.transparent),
-          child: Icon(icon, color: selected ? _cyan : Colors.white70, size: 20),
+          decoration: BoxDecoration(shape: BoxShape.circle, color: selected ? Colors.white.withValues(alpha: 0.12) : Colors.transparent),
+          child: Icon(icon, color: selected ? Colors.white : Colors.white70, size: 20),
         ),
       ),
     );
@@ -627,11 +656,11 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
                 duration: const Duration(milliseconds: 180),
                 width: 37,
                 height: 34,
-                decoration: BoxDecoration(color: selected ? _cyan.withValues(alpha: 0.17) : Colors.white.withValues(alpha: 0.055), borderRadius: BorderRadius.circular(11)),
-                child: Icon(icon, color: selected ? _cyan : Colors.white70, size: 19),
+                decoration: const BoxDecoration(),
+                child: Icon(icon, color: selected ? Colors.white : Colors.white70, size: 24),
               ),
               const SizedBox(height: 4),
-              Text(label, style: TextStyle(color: selected ? _cyan : _muted, fontSize: 9.5, fontWeight: FontWeight.w700)),
+              Text(label, style: TextStyle(color: selected ? Colors.white : _muted, fontSize: 9.5, fontWeight: FontWeight.w700)),
             ],
           ),
         ),
@@ -643,7 +672,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
-      backgroundColor: Theme.of(context).colorScheme.surface,
+      backgroundColor: const Color(0xFF111214),
       elevation: 0,
       useSafeArea: true,
       isScrollControlled: true,
@@ -667,43 +696,4 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
       ),
     );
   }
-}
-
-class _GlowOrb extends StatelessWidget {
-  const _GlowOrb({required this.color, required this.size});
-  final Color color;
-  final double size;
-
-  @override
-  Widget build(BuildContext context) => IgnorePointer(
-        child: Container(
-          width: size,
-          height: size,
-          decoration: BoxDecoration(shape: BoxShape.circle, gradient: RadialGradient(colors: [color, Colors.transparent])),
-        ),
-      );
-}
-
-class _VinylGroovesPainter extends CustomPainter {
-  const _VinylGroovesPainter({required this.color});
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final base = math.min(size.width, size.height) * 0.38;
-    final paint = Paint()..style = PaintingStyle.stroke..strokeWidth = 0.8..color = color;
-    for (var i = 0; i < 8; i++) {
-      final radius = base + (i * 5.1);
-      if (radius < size.width / 2 - 2) canvas.drawCircle(center, radius, paint);
-    }
-    final shine = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.0
-      ..shader = const SweepGradient(colors: [Colors.transparent, Color(0x22FFFFFF), Colors.transparent, Color(0x11FFFFFF), Colors.transparent]).createShader(Offset.zero & size);
-    canvas.drawCircle(center, size.width * 0.48, shine);
-  }
-
-  @override
-  bool shouldRepaint(covariant _VinylGroovesPainter oldDelegate) => oldDelegate.color != color;
 }

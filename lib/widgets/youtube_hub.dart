@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:math';
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
@@ -658,7 +657,7 @@ class _EditorialFloatingDockState extends State<_EditorialFloatingDock> {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 66,
+      height: 62,
       child: LayoutBuilder(
         builder: (context, constraints) {
           final maxWidth = constraints.maxWidth;
@@ -669,92 +668,61 @@ class _EditorialFloatingDockState extends State<_EditorialFloatingDock> {
           final visualIndex = dragging
               ? (dragX / cellWidth - 0.5).clamp(0.0, _lastIndex.toDouble()).toDouble()
               : activeIndex.toDouble();
-          final activeLeft = (visualIndex * cellWidth + 5).clamp(0.0, maxWidth - cellWidth + 5).toDouble();
+          final activeLeft = (visualIndex * cellWidth + 4).clamp(0.0, maxWidth - cellWidth + 4).toDouble();
+          final scheme = Theme.of(context).colorScheme;
 
           return GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onHorizontalDragStart: (details) {
-              setState(() => _dragX = _clampDragX(details.localPosition.dx, cellWidth, maxWidth));
-            },
-            onHorizontalDragUpdate: (details) {
-              setState(() {
-                final nextX = (_dragX ?? ((activeIndex + 0.5) * cellWidth)) + details.delta.dx;
-                _dragX = _clampDragX(nextX, cellWidth, maxWidth);
-              });
-            },
+            onHorizontalDragStart: (details) => setState(() => _dragX = _clampDragX(details.localPosition.dx, cellWidth, maxWidth)),
+            onHorizontalDragUpdate: (details) => setState(() {
+              final nextX = (_dragX ?? ((activeIndex + 0.5) * cellWidth)) + details.delta.dx;
+              _dragX = _clampDragX(nextX, cellWidth, maxWidth);
+            }),
             onHorizontalDragEnd: (_) {
               final endX = _dragX;
-              final target = endX == null
-                  ? activeIndex
-                  : (endX / cellWidth - 0.5).round().clamp(0, _lastIndex).toInt();
+              final target = endX == null ? activeIndex : (endX / cellWidth - 0.5).round().clamp(0, _lastIndex).toInt();
               setState(() => _dragX = null);
               if (target != widget.selectedIndex) widget.onSelect(target);
             },
             onHorizontalDragCancel: () => setState(() => _dragX = null),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(24),
-              child: BackdropFilter(
-                filter: ui.ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).brightness == Brightness.dark
-                        ? Colors.black.withValues(alpha: 0.34)
-                        : Colors.white.withValues(alpha: 0.46),
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: Colors.white.withValues(alpha: Theme.of(context).brightness == Brightness.dark ? 0.20 : 0.70)),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: Theme.of(context).brightness == Brightness.dark ? 0.30 : 0.075),
-                        blurRadius: 22,
-                        offset: const Offset(0, 8),
+            child: Container(
+              decoration: BoxDecoration(
+                color: scheme.surfaceContainerLowest,
+                borderRadius: BorderRadius.circular(17),
+                border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.72)),
+              ),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  AnimatedPositioned(
+                    duration: dragging ? Duration.zero : const Duration(milliseconds: 220),
+                    curve: Curves.easeOutCubic,
+                    left: activeLeft,
+                    top: 5,
+                    bottom: 5,
+                    width: cellWidth - 8,
+                    child: IgnorePointer(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(color: scheme.primaryContainer.withValues(alpha: 0.72), borderRadius: BorderRadius.circular(12)),
                       ),
-                    ],
+                    ),
                   ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(23),
-                    child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    AnimatedPositioned(
-                      duration: dragging ? Duration.zero : const Duration(milliseconds: 230),
-                      curve: Curves.easeOutCubic,
-                      left: activeLeft,
-                      top: 6,
-                      bottom: 6,
-                      width: cellWidth - 10,
-                      child: IgnorePointer(
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            color: Theme.of(context).brightness == Brightness.dark
-                                ? Colors.white.withValues(alpha: 0.16)
-                                : Colors.white.withValues(alpha: 0.74),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: Colors.white.withValues(alpha: 0.42)),
+                  Row(
+                    children: [
+                      for (var i = 0; i < _dockItems.length; i++)
+                        Expanded(
+                          child: _FlowDockDestination(
+                            label: _dockItems[i].label,
+                            icon: _dockItems[i].icon,
+                            selectedIcon: _dockItems[i].selectedIcon,
+                            selected: dragging ? (i - visualIndex).abs() < 0.48 : activeIndex == i,
+                            magnification: _dockMagnification(i, visualIndex, dragging, activeIndex),
+                            onTap: () => widget.onSelect(i),
                           ),
                         ),
-                      ),
-                    ),
-                    Row(
-                      children: [
-                        for (var i = 0; i < _dockItems.length; i++)
-                          Expanded(
-                            child: _FlowDockDestination(
-                              label: _dockItems[i].label,
-                              icon: _dockItems[i].icon,
-                              selectedIcon: _dockItems[i].selectedIcon,
-                              selected: dragging
-                                  ? (i - visualIndex).abs() < 0.48
-                                  : activeIndex == i,
-                              magnification: _dockMagnification(i, visualIndex, dragging, activeIndex),
-                              onTap: () => widget.onSelect(i),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ],
-                    ),
+                    ],
                   ),
-                ),
+                ],
               ),
             ),
           );
@@ -766,7 +734,7 @@ class _EditorialFloatingDockState extends State<_EditorialFloatingDock> {
 
 /// Destination untuk floating dock: ikon dan label ikut bergerak halus,
 /// bukan hanya mengganti warna NavigationBar standar. Permukaan "terpilih"
-/// disediakan oleh lensa kaca di belakang baris, bukan oleh destination.
+/// disediakan oleh penanda warna yang bergerak di belakang destination.
 class _FlowDockDestination extends StatelessWidget {
   const _FlowDockDestination({
     required this.label,
@@ -811,7 +779,7 @@ class _FlowDockDestination extends StatelessWidget {
                     child: Icon(
                       selected ? selectedIcon : icon,
                       size: 21,
-                      color: selected ? scheme.onSurface : scheme.onSurfaceVariant,
+                      color: selected ? scheme.primary : scheme.onSurfaceVariant,
                     ),
                   ),
                   const SizedBox(height: 3),
@@ -822,7 +790,7 @@ class _FlowDockDestination extends StatelessWidget {
                       fontSize: selected ? 9.7 : 9.2,
                       height: 1.1,
                       fontWeight: selected ? FontWeight.w900 : FontWeight.w600,
-                      color: selected ? scheme.onSurface : scheme.onSurfaceVariant,
+                      color: selected ? scheme.primary : scheme.onSurfaceVariant,
                       letterSpacing: 0,
                     ),
                     child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),

@@ -1,4 +1,3 @@
-import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
@@ -103,32 +102,14 @@ class _LyricsPageState extends State<LyricsPage> {
           }
         }
 
+        final theme = Theme.of(context);
+        final scheme = theme.colorScheme;
         return Scaffold(
-          backgroundColor: const Color(0xFF08090B),
+          backgroundColor: theme.scaffoldBackgroundColor,
           body: Stack(
             fit: StackFit.expand,
             children: [
-              Positioned.fill(
-                child: ImageFiltered(
-                  imageFilter: ui.ImageFilter.blur(sigmaX: 48, sigmaY: 48),
-                  child: Opacity(
-                    opacity: 0.18,
-                    child: AlbumArtworkImage(track: activeVideo, fit: BoxFit.cover),
-                  ),
-                ),
-              ),
-              const Positioned.fill(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [Color(0xCB08090B), Color(0xF508090B), Color(0xFF08090B)],
-                      stops: [0, 0.48, 1],
-                    ),
-                  ),
-                ),
-              ),
+              Positioned.fill(child: ColoredBox(color: theme.scaffoldBackgroundColor)),
               SafeArea(
                 child: Column(
                   children: [
@@ -139,19 +120,19 @@ class _LyricsPageState extends State<LyricsPage> {
                           IconButton(
                             tooltip: 'Kembali ke pemutar',
                             onPressed: () => Navigator.of(context).maybePop(),
-                            icon: const Icon(
+                            icon: Icon(
                               Icons.keyboard_arrow_down_rounded,
-                              color: Colors.white,
+                              color: scheme.onSurface,
                               size: 30,
                             ),
                           ),
                           const SizedBox(width: 8),
-                          const Expanded(
+                          Expanded(
                             child: Text(
-                              'LIRIK LAGU',
+                              'KATA & NADA',
                               style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 11,
+                                color: scheme.primary,
+                                fontSize: 10,
                                 fontWeight: FontWeight.w900,
                                 letterSpacing: 2.1,
                               ),
@@ -162,7 +143,7 @@ class _LyricsPageState extends State<LyricsPage> {
                             builder: (context, state, _) => Container(
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                               decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.075),
+                                color: scheme.surfaceContainerHigh,
                                 borderRadius: BorderRadius.circular(20),
                               ),
                               child: Row(
@@ -172,14 +153,14 @@ class _LyricsPageState extends State<LyricsPage> {
                                     state.isEffectivelyPlaying
                                         ? Icons.graphic_eq_rounded
                                         : Icons.pause_rounded,
-                                    color: Colors.white70,
+                                    color: scheme.onSurfaceVariant,
                                     size: 14,
                                   ),
                                   const SizedBox(width: 5),
                                   Text(
                                     state.isEffectivelyPlaying ? 'SEDANG DIPUTAR' : 'JEDA',
-                                    style: const TextStyle(
-                                      color: Colors.white70,
+                                    style: TextStyle(
+                                      color: scheme.onSurfaceVariant,
                                       fontSize: 8.5,
                                       fontWeight: FontWeight.w800,
                                       letterSpacing: 0.7,
@@ -214,8 +195,8 @@ class _LyricsPageState extends State<LyricsPage> {
                                   activeVideo.title,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    color: Colors.white,
+                                  style: TextStyle(
+                                    color: scheme.onSurface,
                                     fontSize: 14,
                                     fontWeight: FontWeight.w800,
                                   ),
@@ -225,8 +206,8 @@ class _LyricsPageState extends State<LyricsPage> {
                                   activeVideo.channelTitle,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    color: Color(0xFFB3B3B8),
+                                  style: TextStyle(
+                                    color: scheme.onSurfaceVariant,
                                     fontSize: 11.5,
                                   ),
                                 ),
@@ -236,7 +217,7 @@ class _LyricsPageState extends State<LyricsPage> {
                         ],
                       ),
                     ),
-                    const Divider(height: 1, color: Color(0x24FFFFFF)),
+                    Divider(height: 1, color: scheme.outlineVariant.withValues(alpha: 0.7)),
                     Expanded(
                       child: ValueListenableBuilder<NativeYoutubeState>(
                         valueListenable: widget.nativeState,
@@ -247,7 +228,7 @@ class _LyricsPageState extends State<LyricsPage> {
                           if (currentIndex >= 0) _centerLine(currentIndex);
 
                           if (player.lyricsLoading && lyrics.isEmpty) {
-                            return const Center(
+                            return Center(
                               child: Column(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
@@ -256,13 +237,13 @@ class _LyricsPageState extends State<LyricsPage> {
                                     height: 25,
                                     child: CircularProgressIndicator(
                                       strokeWidth: 2.2,
-                                      color: Colors.white,
+                                      color: scheme.primary,
                                     ),
                                   ),
                                   SizedBox(height: 14),
                                   Text(
                                     'Mencari lirik…',
-                                    style: TextStyle(color: Colors.white70, fontSize: 12),
+                                    style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
                                   ),
                                 ],
                               ),
@@ -278,24 +259,24 @@ class _LyricsPageState extends State<LyricsPage> {
                                   children: [
                                     Icon(
                                       Icons.lyrics_outlined,
-                                      color: Colors.white.withValues(alpha: 0.52),
+                                      color: scheme.onSurfaceVariant.withValues(alpha: 0.58),
                                       size: 42,
                                     ),
                                     const SizedBox(height: 13),
-                                    const Text(
+                                    Text(
                                       'Lirik belum tersedia',
                                       style: TextStyle(
-                                        color: Colors.white,
+                                        color: scheme.onSurface,
                                         fontSize: 16,
                                         fontWeight: FontWeight.w800,
                                       ),
                                     ),
                                     const SizedBox(height: 6),
-                                    const Text(
+                                    Text(
                                       'Lirik akan muncul di sini saat tersedia untuk lagu ini.',
                                       textAlign: TextAlign.center,
                                       style: TextStyle(
-                                        color: Colors.white54,
+                                        color: scheme.onSurfaceVariant,
                                         fontSize: 12,
                                         height: 1.45,
                                       ),
@@ -308,7 +289,7 @@ class _LyricsPageState extends State<LyricsPage> {
 
                           return ListView.builder(
                             controller: _scrollController,
-                            padding: const EdgeInsets.fromLTRB(26, 38, 26, 110),
+                            padding: const EdgeInsets.fromLTRB(26, 30, 26, 104),
                             itemCount: lyrics.length,
                             itemBuilder: (context, index) {
                               final line = lyrics[index];
@@ -316,13 +297,13 @@ class _LyricsPageState extends State<LyricsPage> {
                               final hasCurrentLine = currentIndex >= 0;
                               final isPast = hasCurrentLine && index < currentIndex;
                               final color = isActive
-                                  ? Colors.white
+                                  ? scheme.primary
                                   : isPast
-                                      ? Colors.white.withValues(alpha: 0.24)
-                                      : Colors.white.withValues(alpha: 0.62);
+                                      ? scheme.onSurface.withValues(alpha: 0.28)
+                                      : scheme.onSurfaceVariant.withValues(alpha: 0.78);
                               return Padding(
                                 key: _lineKeys[index],
-                                padding: const EdgeInsets.symmetric(vertical: 9),
+                                padding: const EdgeInsets.symmetric(vertical: 11),
                                 child: InkWell(
                                   onTap: player.lyricsSynced
                                       ? () => widget.onSeek(line.time)
@@ -333,12 +314,12 @@ class _LyricsPageState extends State<LyricsPage> {
                                     curve: Curves.easeOutCubic,
                                     style: TextStyle(
                                       color: color,
-                                      fontSize: isActive ? 27 : 19,
-                                      height: 1.28,
+                                      fontSize: isActive ? 25 : 17,
+                                      height: 1.34,
                                       fontWeight: isActive
                                           ? FontWeight.w900
-                                          : FontWeight.w700,
-                                      letterSpacing: isActive ? -0.55 : -0.2,
+                                          : FontWeight.w600,
+                                      letterSpacing: isActive ? -0.4 : -0.12,
                                     ),
                                     child: Text(
                                       line.text,
@@ -370,8 +351,8 @@ class _LyricsPageState extends State<LyricsPage> {
                                 child: LinearProgressIndicator(
                                   minHeight: 3,
                                   value: progress,
-                                  backgroundColor: Colors.white.withValues(alpha: 0.15),
-                                  valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                                  backgroundColor: scheme.outlineVariant.withValues(alpha: 0.50),
+                                  valueColor: AlwaysStoppedAnimation<Color>(scheme.primary),
                                 ),
                               ),
                               const SizedBox(height: 7),
@@ -380,11 +361,11 @@ class _LyricsPageState extends State<LyricsPage> {
                                 children: [
                                   Text(
                                     _formatTime(state.position),
-                                    style: const TextStyle(color: Colors.white54, fontSize: 10),
+                                    style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10),
                                   ),
                                   Text(
                                     _formatTime(state.duration),
-                                    style: const TextStyle(color: Colors.white54, fontSize: 10),
+                                    style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10),
                                   ),
                                 ],
                               ),

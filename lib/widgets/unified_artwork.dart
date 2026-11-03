@@ -89,11 +89,7 @@ class _UnifiedArtworkState extends State<UnifiedArtwork> {
     final scheme = Theme.of(context).colorScheme;
     return DecoratedBox(
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [scheme.primary.withValues(alpha: 0.22), scheme.surfaceContainerHighest, scheme.secondary.withValues(alpha: 0.14)],
-        ),
+        color: scheme.surfaceContainerHighest,
       ),
       child: Center(
         child: Icon(Icons.music_note_rounded, size: widget.iconSize, color: scheme.primary.withValues(alpha: 0.88)),

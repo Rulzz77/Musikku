@@ -64,7 +64,7 @@ class _PlaylistNameDialogState extends State<_PlaylistNameDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26), side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.55))),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(17), side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.7))),
       title: Text(widget.title, style: const TextStyle(fontWeight: FontWeight.w900, letterSpacing: -0.35)),
       content: TextField(
         controller: _controller,
@@ -123,7 +123,7 @@ void showAddToPlaylistSheet(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 12, 12),
+                    padding: const EdgeInsets.fromLTRB(18, 0, 12, 10),
                     child: Row(
                       children: [
                         Expanded(
@@ -141,7 +141,8 @@ void showAddToPlaylistSheet(
                     ),
                   ),
                   ListTile(
-                    leading: const Icon(Icons.add, color: appGold),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    leading: Container(width: 36, height: 36, decoration: BoxDecoration(color: scheme.primaryContainer, borderRadius: BorderRadius.circular(10)), child: Icon(Icons.add_rounded, color: scheme.onPrimaryContainer)),
                     title: const Text('Playlist baru'),
                     onTap: () {
                       Navigator.pop(sheetContext);
@@ -154,7 +155,8 @@ void showAddToPlaylistSheet(
                       children: [
                         for (final playlist in playlists)
                           ListTile(
-                            leading: const Icon(Icons.queue_music),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            leading: Container(width: 36, height: 36, decoration: BoxDecoration(color: scheme.surfaceContainerHigh, borderRadius: BorderRadius.circular(10)), child: Icon(Icons.queue_music_rounded, color: scheme.onSurfaceVariant)),
                             title: Text(
                               playlist.name,
                               maxLines: 1,

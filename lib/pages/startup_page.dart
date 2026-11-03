@@ -19,14 +19,14 @@ class StartupPage extends StatefulWidget {
 class _StartupPageState extends State<StartupPage>
     with SingleTickerProviderStateMixin {
   bool _opened = false;
-  late final AnimationController _recordSpin;
+  late final AnimationController _loadingPulse;
 
   @override
   void initState() {
     super.initState();
-    _recordSpin = AnimationController(
+    _loadingPulse = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 9),
+      duration: const Duration(milliseconds: 1450),
     )..repeat();
     unawaited(_bootstrap());
   }
@@ -60,7 +60,7 @@ class _StartupPageState extends State<StartupPage>
 
   @override
   void dispose() {
-    _recordSpin.dispose();
+    _loadingPulse.dispose();
     super.dispose();
   }
 
@@ -72,209 +72,94 @@ class _StartupPageState extends State<StartupPage>
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       body: MusicBackdrop(
-        intensity: 1.45,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            Positioned(
-              top: 76,
-              right: -52,
-              child: IgnorePointer(
-                child: Container(
-                  width: 210,
-                  height: 210,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: scheme.primary.withValues(alpha: 0.08),
-                      width: 1.2,
+        intensity: 0.8,
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(26, 22, 26, 22),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 46,
+                      height: 46,
+                      decoration: BoxDecoration(
+                        color: scheme.primaryContainer,
+                        borderRadius: const BorderRadius.only(
+                          topLeft: Radius.circular(15),
+                          topRight: Radius.circular(15),
+                          bottomRight: Radius.circular(15),
+                          bottomLeft: Radius.circular(4),
+                        ),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: Image.asset(
+                        'assets/icon/app_icon.png',
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, _, _) => Icon(Icons.graphic_eq_rounded, color: scheme.onPrimaryContainer),
+                      ),
                     ),
-                  ),
-                ),
-              ),
-            ),
-            Positioned(
-              bottom: 42,
-              left: -72,
-              child: IgnorePointer(
-                child: Container(
-                  width: 230,
-                  height: 230,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: scheme.tertiary.withValues(alpha: 0.075),
-                      width: 1.2,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            Center(
-              child: TweenAnimationBuilder<double>(
-                tween: Tween(begin: 0.92, end: 1.0),
-                duration: const Duration(milliseconds: 650),
-                curve: Curves.easeOutCubic,
-                builder: (context, scale, child) => Opacity(
-                  opacity: scale.clamp(0.0, 1.0).toDouble(),
-                  child: Transform.scale(scale: scale, child: child),
-                ),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 360),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 30),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
+                    const SizedBox(width: 11),
+                    Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Center(
-                          child: SizedBox(
-                            width: 186,
-                            height: 186,
-                            child: Stack(
-                              alignment: Alignment.center,
-                              children: [
-                                RotationTransition(
-                                  turns: _recordSpin,
-                                  child: Container(
-                                    width: 182,
-                                    height: 182,
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      gradient: RadialGradient(
-                                        colors: [
-                                          scheme.surfaceContainerHighest,
-                                          scheme.surfaceContainerLow,
-                                          theme.scaffoldBackgroundColor,
-                                        ],
-                                        stops: const [0.0, 0.72, 1.0],
-                                      ),
-                                      border: Border.all(
-                                        color: scheme.primary.withValues(alpha: 0.24),
-                                        width: 1.5,
-                                      ),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: scheme.primary.withValues(alpha: 0.15),
-                                          blurRadius: 28,
-                                          spreadRadius: 1,
-                                        ),
-                                      ],
-                                    ),
-                                    child: Center(
-                                      child: Container(
-                                        width: 126,
-                                        height: 126,
-                                        decoration: BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          border: Border.all(
-                                            color: scheme.onSurface.withValues(alpha: 0.10),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                Container(
-                                  width: 104,
-                                  height: 104,
-                                  decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                      begin: Alignment.topLeft,
-                                      end: Alignment.bottomRight,
-                                      colors: [scheme.primary, scheme.tertiary],
-                                    ),
-                                    borderRadius: BorderRadius.circular(30),
-                                    border: Border.all(
-                                      color: scheme.surface.withValues(alpha: 0.55),
-                                      width: 3,
-                                    ),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: scheme.primary.withValues(alpha: 0.30),
-                                        blurRadius: 23,
-                                        offset: const Offset(0, 10),
-                                      ),
-                                    ],
-                                  ),
-                                  clipBehavior: Clip.antiAlias,
-                                  child: Image.asset(
-                                    'assets/icon/app_icon.png',
-                                    fit: BoxFit.cover,
-                                    filterQuality: FilterQuality.high,
-                                    errorBuilder: (_, _, _) => Icon(
-                                      Icons.graphic_eq_rounded,
-                                      size: 48,
-                                      color: scheme.onPrimary,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 27),
-                        Center(
-                          child: Text(
-                            appName,
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 42,
-                              height: 0.98,
-                              letterSpacing: -1.8,
-                              fontWeight: FontWeight.w900,
-                              color: scheme.onSurface,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        Center(
-                          child: Text(
-                            'MUSIK. SUASANA. MOMENMU.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: scheme.primary,
-                              fontSize: 10,
-                              letterSpacing: 1.65,
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 39),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(3),
-                                child: LinearProgressIndicator(
-                                  minHeight: 3,
-                                  backgroundColor: scheme.outlineVariant.withValues(alpha: 0.55),
-                                  valueColor: AlwaysStoppedAnimation<Color>(scheme.primary),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Icon(Icons.graphic_eq_rounded, size: 18, color: scheme.primary),
-                          ],
-                        ),
-                        const SizedBox(height: 15),
-                        Center(
-                          child: Text(
-                            'v$appVersion  ·  build $appBuildNumber',
-                            style: TextStyle(
-                              color: scheme.onSurfaceVariant.withValues(alpha: 0.78),
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
+                        Text('MUSIKKU', style: TextStyle(color: scheme.primary, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.8)),
+                        Text('PERSONAL SOUND SPACE', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 8, fontWeight: FontWeight.w700, letterSpacing: 1.1)),
                       ],
                     ),
+                  ],
+                ),
+                const Spacer(),
+                Text(
+                  'Dengar.\nRasakan.\nUlangi.',
+                  style: TextStyle(
+                    color: scheme.onSurface,
+                    fontSize: 48,
+                    height: 0.94,
+                    letterSpacing: -2.0,
+                    fontWeight: FontWeight.w900,
                   ),
                 ),
-              ),
+                const SizedBox(height: 16),
+                Container(width: 54, height: 5, decoration: BoxDecoration(color: scheme.primary, borderRadius: BorderRadius.circular(8))),
+                const SizedBox(height: 13),
+                Text(
+                  'Satu ruang untuk musik yang menemani setiap suasana.',
+                  style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13, height: 1.45),
+                ),
+                const SizedBox(height: 38),
+                AnimatedBuilder(
+                  animation: _loadingPulse,
+                  builder: (context, _) {
+                    final progress = 0.28 + (_loadingPulse.value * 0.62);
+                    return Row(
+                      children: [
+                        Expanded(
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(3),
+                            child: LinearProgressIndicator(
+                              minHeight: 4,
+                              value: progress,
+                              backgroundColor: scheme.outlineVariant.withValues(alpha: 0.55),
+                              valueColor: AlwaysStoppedAnimation<Color>(scheme.primary),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 13),
+                        Icon(Icons.graphic_eq_rounded, color: scheme.primary, size: 20),
+                      ],
+                    );
+                  },
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'v$appVersion  ·  build $appBuildNumber',
+                  style: TextStyle(color: scheme.onSurfaceVariant.withValues(alpha: 0.78), fontSize: 10, fontWeight: FontWeight.w700),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

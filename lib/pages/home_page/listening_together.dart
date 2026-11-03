@@ -149,7 +149,7 @@ extension _HomeListeningTogether on _HomePageState {
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                               decoration: BoxDecoration(
                                 color: scheme.surface.withValues(alpha: 0.78),
-                                borderRadius: BorderRadius.circular(20),
+                                borderRadius: BorderRadius.circular(12),
                               ),
                               child: Text('$count teman', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 11)),
                             ),
@@ -235,7 +235,7 @@ extension _HomeListeningTogether on _HomePageState {
                         labelText: 'Kode kamar teman',
                         hintText: '8 digit, mis. 58319427',
                         prefixIcon: const Icon(Icons.password_rounded),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                       ),
                       onSubmitted: (_) => unawaited(_joinListenTogetherRoom(codeController.text)),
                     ),

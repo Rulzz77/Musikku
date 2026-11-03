@@ -8,10 +8,10 @@ extension _YoutubeHubVideoComponents on _YoutubeHubState {
     final scheme = Theme.of(context).colorScheme;
     final isCurrent = widget.currentVideoId == video.videoId;
     return SizedBox(
-      width: 188,
+      width: 176,
       child: Material(
         color: scheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(16),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: () => unawaited(widget.onPlay(video)),
@@ -23,19 +23,54 @@ extension _YoutubeHubVideoComponents on _YoutubeHubState {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    UnifiedArtwork(track: video, fit: BoxFit.cover, iconSize: 42),
-                    const DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0x00000000), Color(0xC9000000)]))),
-                    Positioned(left: 10, right: 8, bottom: 10, child: Row(children: [Expanded(child: Text(MusicTitleFormatter.clean(video.title), maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, height: 1.15))), const SizedBox(width: 6), Icon(isCurrent ? Icons.graphic_eq_rounded : Icons.play_circle_fill_rounded, color: Colors.white, size: 29)])),
-                    Positioned(right: 4, top: 4, child: Material(color: Colors.black.withValues(alpha: 0.45), shape: const CircleBorder(), child: IconButton(tooltip: 'Opsi lagu', visualDensity: VisualDensity.compact, onPressed: widget.onShowVideoMenu == null ? null : () => widget.onShowVideoMenu!(video), icon: const Icon(Icons.more_vert_rounded, color: Colors.white, size: 19)))),
+                    UnifiedArtwork(track: video, fit: BoxFit.cover, iconSize: 40),
+                    Align(
+                      alignment: Alignment.bottomLeft,
+                      child: Container(
+                        margin: const EdgeInsets.all(10),
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(color: scheme.primary, borderRadius: BorderRadius.circular(10)),
+                        child: Icon(isCurrent ? Icons.graphic_eq_rounded : Icons.play_arrow_rounded, color: scheme.onPrimary, size: 19),
+                      ),
+                    ),
+                    Positioned(
+                      top: 7,
+                      right: 7,
+                      child: Material(
+                        color: scheme.surface.withValues(alpha: 0.88),
+                        shape: const CircleBorder(),
+                        child: IconButton(
+                          tooltip: 'Opsi lagu',
+                          visualDensity: VisualDensity.compact,
+                          onPressed: widget.onShowVideoMenu == null ? null : () => widget.onShowVideoMenu!(video),
+                          icon: Icon(Icons.more_horiz_rounded, color: scheme.onSurface, size: 19),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
-                child: Row(
+                padding: const EdgeInsets.fromLTRB(11, 10, 11, 9),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(child: Text(video.channelTitle.isEmpty ? 'Musik' : video.channelTitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11, fontWeight: FontWeight.w700))),
-                    IconButton(tooltip: 'Tambahkan ke antrean', visualDensity: VisualDensity.compact, onPressed: () { widget.onAddToQueue(video); ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ditambahkan ke antrean: ${video.title}'), duration: const Duration(seconds: 2))); }, icon: const Icon(Icons.queue_music_rounded, size: 20)),
+                    Text(MusicTitleFormatter.clean(video.title), maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurface, fontWeight: FontWeight.w800, fontSize: 12, height: 1.18)),
+                    const SizedBox(height: 5),
+                    Row(
+                      children: [
+                        Expanded(child: Text(video.channelTitle.isEmpty ? 'Musik' : video.channelTitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10, fontWeight: FontWeight.w600))),
+                        IconButton(
+                          tooltip: 'Tambahkan ke antrean',
+                          visualDensity: VisualDensity.compact,
+                          onPressed: () {
+                            widget.onAddToQueue(video);
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ditambahkan ke antrean: ${video.title}'), duration: const Duration(seconds: 2)));
+                          },
+                          icon: Icon(Icons.add_rounded, color: scheme.primary, size: 19),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -57,40 +92,28 @@ extension _YoutubeHubVideoComponents on _YoutubeHubState {
     };
     return SliverToBoxAdapter(
       child: Padding(
-        padding: EdgeInsets.fromLTRB(16, MediaQuery.paddingOf(context).top + 10, 14, 12),
+        padding: EdgeInsets.fromLTRB(19, MediaQuery.paddingOf(context).top + 14, 18, 12),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Container(
-              width: 43,
-              height: 43,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [scheme.primary, scheme.tertiary]),
-                borderRadius: BorderRadius.circular(14),
-                boxShadow: [BoxShadow(color: scheme.primary.withValues(alpha: 0.18), blurRadius: 13, offset: const Offset(0, 5))],
-              ),
-              child: Icon(icon, color: scheme.onPrimary, size: 22),
+              width: 45,
+              height: 45,
+              decoration: BoxDecoration(color: scheme.primary, borderRadius: const BorderRadius.only(topLeft: Radius.circular(15), topRight: Radius.circular(15), bottomRight: Radius.circular(15), bottomLeft: Radius.circular(5))),
+              child: Icon(icon, color: scheme.onPrimary, size: 23),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('MUSIKKU  /  LISTEN & DISCOVER', style: TextStyle(color: scheme.primary, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 1.25)),
+                  Text('MUSIKKU  /  YOUR DAILY SOUND', style: TextStyle(color: scheme.primary, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 1.05)),
                   const SizedBox(height: 3),
-                  Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: -0.7, height: 1.0)),
+                  Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: -0.9)),
                 ],
               ),
             ),
-            Material(
-              color: scheme.surfaceContainerHigh,
-              borderRadius: BorderRadius.circular(14),
-              child: IconButton(
-                tooltip: 'Cari',
-                visualDensity: VisualDensity.compact,
-                onPressed: _openSearch,
-                icon: const Icon(Icons.search_rounded),
-              ),
-            ),
+            Material(color: scheme.surfaceContainerHigh, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)), child: IconButton(tooltip: 'Cari', visualDensity: VisualDensity.compact, onPressed: _openSearch, icon: const Icon(Icons.search_rounded))),
           ],
         ),
       ),
@@ -101,40 +124,15 @@ extension _YoutubeHubVideoComponents on _YoutubeHubState {
     final scheme = Theme.of(context).colorScheme;
     return SliverToBoxAdapter(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(18, 22, 14, 10),
+        padding: const EdgeInsets.fromLTRB(19, 25, 16, 11),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Expanded(
-              child: Text(
-                title,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: -0.6,
-                  height: 1.08,
-                ),
-              ),
-            ),
+            Container(width: 4, height: 20, decoration: BoxDecoration(color: scheme.primary, borderRadius: BorderRadius.circular(5))),
+            const SizedBox(width: 9),
+            Expanded(child: Text(title, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: -0.55, height: 1.05))),
             if (action != null)
-              TextButton(
-                onPressed: onAction,
-                style: TextButton.styleFrom(
-                  visualDensity: VisualDensity.compact,
-                  foregroundColor: scheme.primary,
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
-                ),
-                child: Text(action, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900)),
-              )
-            else
-              Container(
-                width: 24,
-                height: 3,
-                decoration: BoxDecoration(
-                  color: scheme.primary,
-                  borderRadius: BorderRadius.circular(99),
-                ),
-              ),
+              TextButton(onPressed: onAction, style: TextButton.styleFrom(foregroundColor: scheme.primary, visualDensity: VisualDensity.compact, padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 4)), child: Text(action, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800))),
           ],
         ),
       ),
@@ -148,138 +146,60 @@ extension _YoutubeHubVideoComponents on _YoutubeHubState {
     final timeLabel = _watchTimeLabel(video);
     final channel = video.channelTitle.trim();
     final isCurrent = widget.currentVideoId == video.videoId;
-
     return TweenAnimationBuilder<double>(
       key: ValueKey<String>('flow-song-${video.videoId}'),
-      duration: const Duration(milliseconds: 240),
+      duration: const Duration(milliseconds: 220),
       curve: Curves.easeOutCubic,
       tween: Tween<double>(begin: 0, end: 1),
-      builder: (context, value, child) => Opacity(
-        opacity: value.clamp(0.0, 1.0).toDouble(),
-        child: Transform.translate(offset: Offset(0, 8 * (1 - value)), child: child),
-      ),
+      builder: (context, value, child) => Opacity(opacity: value.clamp(0.0, 1.0).toDouble(), child: Transform.translate(offset: Offset(0, 6 * (1 - value)), child: child)),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 17),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         child: Material(
-          color: Colors.transparent,
+          color: isCurrent ? scheme.primaryContainer.withValues(alpha: 0.42) : Colors.transparent,
+          borderRadius: BorderRadius.circular(15),
+          clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: () => unawaited(widget.onPlay(video)),
             onLongPress: widget.onShowVideoMenu == null ? null : () => widget.onShowVideoMenu!(video),
             child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 9),
-              child: Column(
+              padding: const EdgeInsets.all(8),
+              child: Row(
                 children: [
-                  Row(
-                    children: [
-                      SizedBox(
-                        width: 76,
-                        height: 76,
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: Stack(
-                            fit: StackFit.expand,
-                            children: [
-                              UnifiedArtwork(track: video, fit: BoxFit.cover, iconSize: 28),
-                              if (timeLabel.isNotEmpty)
-                                Positioned(
-                                  right: 4,
-                                  bottom: 4,
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: Colors.black.withValues(alpha: 0.76),
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: Text(timeLabel, style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w800)),
-                                  ),
-                                ),
-                              if (progress > 0)
-                                Align(
-                                  alignment: Alignment.bottomCenter,
-                                  child: LinearProgressIndicator(
-                                    value: progress,
-                                    minHeight: 2.5,
-                                    backgroundColor: Colors.white.withValues(alpha: 0.28),
-                                    valueColor: AlwaysStoppedAnimation<Color>(scheme.primary),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
+                  SizedBox(
+                    width: 66,
+                    height: 66,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(11),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          UnifiedArtwork(track: video, fit: BoxFit.cover, iconSize: 25),
+                          if (timeLabel.isNotEmpty)
+                            Positioned(right: 4, bottom: 4, child: Container(padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2), decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.76), borderRadius: BorderRadius.circular(4)), child: Text(timeLabel, style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w800)))),
+                          if (progress > 0)
+                            Align(alignment: Alignment.bottomCenter, child: LinearProgressIndicator(value: progress, minHeight: 2.5, backgroundColor: Colors.white.withValues(alpha: 0.28), valueColor: AlwaysStoppedAnimation<Color>(scheme.primary))),
+                        ],
                       ),
-                      const SizedBox(width: 13),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            if (isCurrent) ...[
-                              Text(
-                                'SEDANG DIPUTAR',
-                                style: TextStyle(
-                                  color: scheme.primary,
-                                  fontSize: 8,
-                                  fontWeight: FontWeight.w900,
-                                  letterSpacing: 0.9,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                            ],
-                            Text(
-                              MusicTitleFormatter.clean(video.title),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                fontSize: 13.5,
-                                fontWeight: FontWeight.w900,
-                                height: 1.18,
-                                letterSpacing: -0.25,
-                              ),
-                            ),
-                            const SizedBox(height: 5),
-                            Text(
-                              channel.isEmpty ? 'Musik' : channel,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: scheme.onSurfaceVariant,
-                                fontSize: 10.5,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const SizedBox(height: 3),
-                            Text(
-                              _metaLine(video),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: scheme.onSurfaceVariant.withValues(alpha: 0.82),
-                                fontSize: 9.5,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      if (video.channelId.isNotEmpty) ...[
-                        const SizedBox(width: 4),
-                        ChannelAvatar(
-                          channelId: video.channelId,
-                          videoId: video.videoId,
-                          name: channel,
-                          radius: 12,
-                          onTap: () => _handleControllerOpenChannel(video.channelId, channel, ''),
-                        ),
-                      ],
-                      IconButton(
-                        tooltip: 'Opsi lagu',
-                        visualDensity: VisualDensity.compact,
-                        onPressed: widget.onShowVideoMenu == null ? null : () => widget.onShowVideoMenu!(video),
-                        icon: const Icon(Icons.more_horiz_rounded, size: 21),
-                      ),
-                    ],
+                    ),
                   ),
-                  const SizedBox(height: 9),
-                  Divider(height: 1, color: scheme.outlineVariant.withValues(alpha: 0.52)),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        if (isCurrent) ...[Text('SEDANG DIPUTAR', style: TextStyle(color: scheme.primary, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 0.85)), const SizedBox(height: 3)],
+                        Text(MusicTitleFormatter.clean(video.title), maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurface, fontSize: 13, fontWeight: FontWeight.w800, height: 1.18, letterSpacing: -0.2)),
+                        const SizedBox(height: 4),
+                        Text(channel.isEmpty ? 'Musik' : channel, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10.5, fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 3),
+                        Text(_metaLine(video), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant.withValues(alpha: 0.82), fontSize: 9.3)),
+                      ],
+                    ),
+                  ),
+                  if (video.channelId.isNotEmpty)
+                    Padding(padding: const EdgeInsets.only(left: 5), child: ChannelAvatar(channelId: video.channelId, videoId: video.videoId, name: channel, radius: 11, onTap: () => _handleControllerOpenChannel(video.channelId, channel, ''))),
+                  IconButton(tooltip: 'Opsi lagu', visualDensity: VisualDensity.compact, onPressed: widget.onShowVideoMenu == null ? null : () => widget.onShowVideoMenu!(video), icon: Icon(Icons.more_vert_rounded, size: 20, color: scheme.onSurfaceVariant)),
                 ],
               ),
             ),
@@ -294,56 +214,38 @@ extension _YoutubeHubVideoComponents on _YoutubeHubState {
     final scheme = Theme.of(context).colorScheme;
     final isCurrent = widget.currentVideoId == video.videoId;
     return SizedBox(
-      width: 152,
+      width: 148,
       child: Material(
         color: scheme.surfaceContainerLow,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: isCurrent ? scheme.primary.withValues(alpha: 0.42) : scheme.outlineVariant.withValues(alpha: 0.26))),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15), side: BorderSide(color: isCurrent ? scheme.primary.withValues(alpha: 0.5) : scheme.outlineVariant.withValues(alpha: 0.55))),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: () => unawaited(widget.onPlay(video)),
-          child: Padding(
-            padding: const EdgeInsets.all(7),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(14),
-                  child: SizedBox(
-                    width: double.infinity,
-                    height: 138,
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        UnifiedArtwork(track: video, fit: BoxFit.cover, iconSize: 34),
-                        DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.transparent, Colors.black.withValues(alpha: 0.42)]))),
-                        Positioned(
-                          left: 7,
-                          top: 7,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-                            decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.50), borderRadius: BorderRadius.circular(999)),
-                            child: const Text('PUTAR LAGI', style: TextStyle(color: Colors.white, fontSize: 7, fontWeight: FontWeight.w900, letterSpacing: 0.65)),
-                          ),
-                        ),
-                        Align(
-                          alignment: Alignment.bottomRight,
-                          child: Container(
-                            margin: const EdgeInsets.all(7),
-                            padding: const EdgeInsets.all(6),
-                            decoration: BoxDecoration(color: isCurrent ? scheme.primary : Colors.white, shape: BoxShape.circle, boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.18), blurRadius: 8)]),
-                            child: Icon(isCurrent ? Icons.graphic_eq_rounded : Icons.play_arrow_rounded, color: isCurrent ? Colors.white : scheme.primary, size: 18),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    UnifiedArtwork(track: video, fit: BoxFit.cover, iconSize: 30),
+                    Positioned(left: 8, top: 8, child: Container(padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4), decoration: BoxDecoration(color: scheme.surface.withValues(alpha: 0.9), borderRadius: BorderRadius.circular(6)), child: Text('PILIHAN', style: TextStyle(color: scheme.onSurface, fontSize: 7, fontWeight: FontWeight.w900, letterSpacing: 0.6)))),
+                    Positioned(right: 8, bottom: 8, child: Container(padding: const EdgeInsets.all(7), decoration: BoxDecoration(color: scheme.primary, borderRadius: BorderRadius.circular(9)), child: Icon(isCurrent ? Icons.graphic_eq_rounded : Icons.play_arrow_rounded, color: scheme.onPrimary, size: 17))),
+                  ],
                 ),
-                const SizedBox(height: 7),
-                Text(MusicTitleFormatter.clean(video.title), maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurface, fontSize: 11, fontWeight: FontWeight.w800, height: 1.15, letterSpacing: -0.1)),
-                const SizedBox(height: 3),
-                Text(video.channelTitle.isEmpty ? 'Musik' : video.channelTitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 9.5, fontWeight: FontWeight.w600)),
-              ],
-            ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(9, 8, 9, 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(MusicTitleFormatter.clean(video.title), maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurface, fontSize: 10.5, fontWeight: FontWeight.w800, height: 1.16)),
+                    const SizedBox(height: 4),
+                    Text(video.channelTitle.isEmpty ? 'Musik' : video.channelTitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 9, fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
       ),

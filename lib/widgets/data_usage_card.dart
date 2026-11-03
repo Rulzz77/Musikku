@@ -67,16 +67,9 @@ class _DataUsageCardState extends State<DataUsageCard> {
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            scheme.surfaceContainerLow,
-            Color.lerp(scheme.surfaceContainerLow, scheme.primaryContainer, 0.22)!,
-          ],
-        ),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.62)),
+        color: scheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.72)),
         boxShadow: [
           BoxShadow(
             color: scheme.primary.withValues(alpha: 0.065),
@@ -108,12 +101,8 @@ class _DataUsageCardState extends State<DataUsageCard> {
                     width: 40,
                     height: 40,
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [scheme.primary, scheme.tertiary],
-                      ),
-                      borderRadius: BorderRadius.circular(13),
+                      color: scheme.primary,
+                      borderRadius: const BorderRadius.only(topLeft: Radius.circular(13), topRight: Radius.circular(13), bottomRight: Radius.circular(13), bottomLeft: Radius.circular(4)),
                     ),
                     child: Icon(
                       Icons.data_usage_rounded,

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
-/// Reusable editorial hero for secondary MusikKu pages.
+/// Editorial feature header used throughout MusikKu. The new system avoids
+/// copying a standard streaming-app card: titles sit directly on the canvas,
+/// with one small asymmetric identity mark and a restrained citrus accent.
 class FlowPageHero extends StatelessWidget {
   const FlowPageHero({
     super.key,
@@ -22,68 +24,88 @@ class FlowPageHero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 260),
-      curve: Curves.easeOutCubic,
-      width: double.infinity,
-      padding: EdgeInsets.fromLTRB(compact ? 14 : 18, compact ? 14 : 18, compact ? 12 : 16, compact ? 14 : 18),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            scheme.primaryContainer.withValues(alpha: dark ? 0.72 : 0.92),
-            scheme.surfaceContainerLow,
-          ],
-        ),
-        borderRadius: BorderRadius.circular(compact ? 18 : 23),
-        border: Border.all(color: scheme.primary.withValues(alpha: dark ? 0.22 : 0.16)),
-        boxShadow: [BoxShadow(color: scheme.primary.withValues(alpha: 0.06), blurRadius: 20, offset: const Offset(0, 8))],
-      ),
-      child: Row(
+    final titleSize = compact ? 22.0 : 30.0;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(2, compact ? 4 : 10, 2, compact ? 12 : 20),
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Row(
+            children: [
+              Container(
+                width: compact ? 29 : 34,
+                height: compact ? 29 : 34,
+                decoration: BoxDecoration(
+                  color: scheme.primaryContainer,
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(11),
+                    topRight: Radius.circular(11),
+                    bottomRight: Radius.circular(11),
+                    bottomLeft: Radius.circular(3),
+                  ),
+                ),
+                child: Icon(icon, size: compact ? 16 : 19, color: scheme.onPrimaryContainer),
+              ),
+              const SizedBox(width: 9),
+              Expanded(
+                child: Text(
+                  (eyebrow ?? 'MUSIKKU').toUpperCase(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: scheme.primary,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 1.8,
+                  ),
+                ),
+              ),
+              ?trailing,
+            ],
+          ),
+          SizedBox(height: compact ? 10 : 15),
+          Text(
+            title,
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: scheme.onSurface,
+              fontSize: titleSize,
+              height: 0.99,
+              fontWeight: FontWeight.w900,
+              letterSpacing: compact ? -0.8 : -1.25,
+            ),
+          ),
+          SizedBox(height: compact ? 6 : 9),
+          Text(
+            subtitle,
+            maxLines: compact ? 2 : 3,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: scheme.onSurfaceVariant,
+              fontSize: compact ? 11 : 12.5,
+              height: 1.42,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          SizedBox(height: compact ? 10 : 14),
           Container(
-            width: compact ? 42 : 52,
-            height: compact ? 42 : 52,
+            width: compact ? 40 : 58,
+            height: 3,
             decoration: BoxDecoration(
-              gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [scheme.primary, scheme.tertiary]),
-              borderRadius: BorderRadius.circular(compact ? 13 : 16),
-              boxShadow: [BoxShadow(color: scheme.primary.withValues(alpha: 0.20), blurRadius: 12, offset: const Offset(0, 5))],
-            ),
-            child: Icon(icon, size: compact ? 22 : 26, color: scheme.onPrimary),
-          ),
-          SizedBox(width: compact ? 11 : 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if ((eyebrow ?? '').isNotEmpty) ...[
-                  Text(eyebrow!.toUpperCase(), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.primary, fontSize: 9, letterSpacing: 1.35, fontWeight: FontWeight.w900)),
-                  const SizedBox(height: 5),
-                ],
-                Text(title, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: compact ? 17 : 22, height: 1.04, letterSpacing: -0.8, fontWeight: FontWeight.w900, color: scheme.onSurface)),
-                const SizedBox(height: 6),
-                Text(subtitle, maxLines: 3, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: compact ? 11 : 12, height: 1.38, color: scheme.onSurfaceVariant)),
-              ],
+              color: scheme.primary,
+              borderRadius: BorderRadius.circular(3),
             ),
           ),
-          if (trailing != null) ...[const SizedBox(width: 8), trailing!],
         ],
       ),
     );
   }
 }
 
+/// Section labels have a consistent editorial hierarchy across every screen.
 class FlowSectionHeader extends StatelessWidget {
-  const FlowSectionHeader({
-    super.key,
-    required this.icon,
-    required this.title,
-    this.trailing,
-  });
+  const FlowSectionHeader({super.key, required this.icon, required this.title, this.trailing});
 
   final IconData icon;
   final String title;
@@ -92,22 +114,41 @@ class FlowSectionHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Row(
-      children: [
-        Container(
-          width: 4,
-          height: 23,
-          decoration: BoxDecoration(color: scheme.primary, borderRadius: BorderRadius.circular(4)),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(
-            title,
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900, letterSpacing: -0.25),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Container(
+            width: 3,
+            height: 22,
+            decoration: BoxDecoration(
+              color: scheme.primary,
+              borderRadius: BorderRadius.circular(3),
+            ),
           ),
-        ),
-        ?trailing,
-      ],
+          const SizedBox(width: 10),
+          Icon(icon, color: scheme.primary, size: 17),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: scheme.onSurface,
+                fontSize: 16,
+                fontWeight: FontWeight.w900,
+                letterSpacing: -0.35,
+              ),
+            ),
+          ),
+          if (trailing != null) ...[
+            const SizedBox(width: 8),
+            trailing!,
+          ],
+        ],
+      ),
     );
   }
 }

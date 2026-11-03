@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 
@@ -42,22 +41,18 @@ class MiniMusicPlayer extends StatelessWidget {
         final artist = video.channelTitle.trim().isEmpty ? 'Artis tidak diketahui' : video.channelTitle.trim();
 
         return ClipRRect(
-          borderRadius: BorderRadius.circular(24),
-          child: BackdropFilter(
-            filter: ui.ImageFilter.blur(sigmaX: 22, sigmaY: 22),
-            child: Container(
+          borderRadius: BorderRadius.circular(13),
+          child: Container(
               decoration: BoxDecoration(
-                color: theme.brightness == Brightness.dark
-                    ? Colors.black.withValues(alpha: 0.36)
-                    : Colors.white.withValues(alpha: 0.48),
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: Colors.white.withValues(alpha: theme.brightness == Brightness.dark ? 0.20 : 0.64), width: 1),
+                color: scheme.surfaceContainerHigh,
+                borderRadius: BorderRadius.circular(13),
+                border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.78), width: 1),
                 boxShadow: [
-                  BoxShadow(color: Colors.black.withValues(alpha: theme.brightness == Brightness.dark ? 0.26 : 0.075), blurRadius: 25, offset: const Offset(0, 9)),
+                  BoxShadow(color: Colors.black.withValues(alpha: theme.brightness == Brightness.dark ? 0.16 : 0.055), blurRadius: 18, offset: const Offset(0, 7)),
                 ],
               ),
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(23),
+                borderRadius: BorderRadius.circular(15),
                 child: Stack(
               children: [
                 Material(
@@ -65,7 +60,7 @@ class MiniMusicPlayer extends StatelessWidget {
                   child: InkWell(
                     onTap: onOpen,
                     child: SizedBox(
-                      height: 72,
+                      height: 68,
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(9, 9, 7, 9),
                         child: Row(
@@ -76,10 +71,10 @@ class MiniMusicPlayer extends StatelessWidget {
                               transitionBuilder: (child, animation) => ScaleTransition(scale: animation, child: FadeTransition(opacity: animation, child: child)),
                               child: ClipRRect(
                                 key: ValueKey<String>('mini-cover-${video.videoId}'),
-                                borderRadius: BorderRadius.circular(11),
+                                borderRadius: BorderRadius.circular(9),
                                 child: SizedBox(
-                                  width: 51,
-                                  height: 51,
+                                  width: 48,
+                                  height: 48,
                                   child: Stack(
                                     fit: StackFit.expand,
                                     children: [
@@ -117,8 +112,8 @@ class MiniMusicPlayer extends StatelessWidget {
                             const SizedBox(width: 5),
                             AnimatedContainer(
                               duration: const Duration(milliseconds: 220),
-                              width: 43,
-                              height: 43,
+                              width: 40,
+                              height: 40,
                               decoration: BoxDecoration(
                                 color: scheme.primary,
                                 shape: BoxShape.circle,
@@ -175,7 +170,6 @@ class MiniMusicPlayer extends StatelessWidget {
               ],
                 ),
               ),
-            ),
           ),
         );
       },

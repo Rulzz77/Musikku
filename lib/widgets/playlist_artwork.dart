@@ -66,15 +66,7 @@ class PlaylistArtwork extends StatelessWidget {
       height: height,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              fallbackBackground ?? scheme.primaryContainer,
-              scheme.secondaryContainer,
-              scheme.surfaceContainerHighest,
-            ],
-          ),
+          color: fallbackBackground ?? scheme.primaryContainer,
         ),
         child: Center(
           child: Icon(

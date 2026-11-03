@@ -104,7 +104,8 @@ class _ChannelAvatarState extends State<ChannelAvatar> {
       padding: const EdgeInsets.all(1.5),
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        gradient: LinearGradient(colors: [scheme.primary.withValues(alpha: 0.9), scheme.secondary.withValues(alpha: 0.8)]),
+        color: scheme.primaryContainer,
+        border: Border.all(color: scheme.primary.withValues(alpha: 0.72), width: 1.2),
       ),
       child: ClipOval(child: avatar),
     );

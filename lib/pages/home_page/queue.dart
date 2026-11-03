@@ -496,9 +496,9 @@ extension _HomeQueueSheet on _HomePageState {
                               padding: const EdgeInsets.symmetric(vertical: 4),
                               child: Material(
                                 color: scheme.surfaceContainerLow,
-                                borderRadius: BorderRadius.circular(18),
+                                borderRadius: BorderRadius.circular(14),
                                 child: InkWell(
-                                  borderRadius: BorderRadius.circular(18),
+                                  borderRadius: BorderRadius.circular(14),
                                   onTap: () {
                                     _queueManager.remove(video.videoId);
                                     unawaited(_storage.saveQueue(_queueManager.items));
@@ -512,7 +512,7 @@ extension _HomeQueueSheet on _HomePageState {
                                     child: Row(
                                       children: [
                                         ClipRRect(
-                                          borderRadius: BorderRadius.circular(13),
+                                          borderRadius: BorderRadius.circular(10),
                                           child: SizedBox(
                                             width: 54,
                                             height: 54,

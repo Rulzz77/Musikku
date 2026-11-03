@@ -90,19 +90,14 @@ extension _YoutubeHubLibraryViews on _YoutubeHubState {
 
     Widget stat(String value, String label) {
       return Expanded(
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(12, 12, 8, 12),
-          decoration: BoxDecoration(
-            color: scheme.surface.withValues(alpha: 0.58),
-            borderRadius: BorderRadius.circular(15),
-            border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.32)),
-          ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 2),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(value, style: TextStyle(color: scheme.primary, fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: -0.7)),
-              const SizedBox(height: 3),
-              Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 9.5, fontWeight: FontWeight.w700)),
+              Text(value, style: TextStyle(color: scheme.primary, fontSize: 24, height: 1, fontWeight: FontWeight.w900, letterSpacing: -0.8)),
+              const SizedBox(height: 5),
+              Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 9, fontWeight: FontWeight.w800, letterSpacing: 0.8)),
             ],
           ),
         ),
@@ -112,59 +107,33 @@ extension _YoutubeHubLibraryViews on _YoutubeHubState {
     return <Widget>[
       SliverToBoxAdapter(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(15, 8, 15, 7),
-          child: Container(
-            padding: const EdgeInsets.fromLTRB(18, 17, 18, 17),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(27),
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  scheme.primaryContainer.withValues(alpha: 0.92),
-                  scheme.surfaceContainerLow,
-                  scheme.secondaryContainer.withValues(alpha: 0.56),
-                ],
+          padding: const EdgeInsets.fromLTRB(18, 13, 18, 2),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              FlowPageHero(
+                icon: Icons.library_music_rounded,
+                eyebrow: 'RUANG PRIBADI',
+                title: 'Semua yang\nkamu simpan.',
+                subtitle: 'Koleksi, lagu favorit, dan kebiasaan mendengarkanmu ada di satu tempat.',
+                trailing: IconButton(
+                  tooltip: 'Pembaruan aplikasi',
+                  onPressed: () => unawaited(AppUpdateSheet.show(context)),
+                  icon: const Icon(Icons.system_update_alt_rounded),
+                ),
               ),
-              border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.38)),
-              boxShadow: [BoxShadow(color: scheme.primary.withValues(alpha: 0.08), blurRadius: 24, offset: const Offset(0, 10))],
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: Stack(
-              children: [
-                Positioned(right: -38, top: -54, child: Icon(Icons.album_rounded, size: 190, color: scheme.onSurface.withValues(alpha: 0.045))),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+              Padding(
+                padding: const EdgeInsets.fromLTRB(2, 0, 2, 12),
+                child: Row(
                   children: [
-                    Row(
-                      children: [
-                        Expanded(child: Text('RUANG MUSIKMU', style: TextStyle(color: scheme.primary, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.5))),
-                        IconButton.filledTonal(
-                          tooltip: 'Pembaruan aplikasi',
-                          onPressed: () => unawaited(AppUpdateSheet.show(context)),
-                          style: IconButton.styleFrom(backgroundColor: scheme.surface.withValues(alpha: 0.62), foregroundColor: scheme.onSurface),
-                          icon: const Icon(Icons.system_update_alt_rounded, size: 19),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text('Musik yang\nselalu dekat.', style: TextStyle(color: scheme.onSurface, fontSize: 29, height: 1.0, fontWeight: FontWeight.w900, letterSpacing: -1.0)),
-                    const SizedBox(height: 7),
-                    Text('Tempat untuk menyimpan, merapikan, dan kembali ke lagu favoritmu.', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11.5, height: 1.4)),
-                    const SizedBox(height: 17),
-                    Row(
-                      children: [
-                        stat('${widget.customPlaylistCount}', 'PLAYLIST'),
-                        const SizedBox(width: 8),
-                        stat('${widget.favorites.length}', 'FAVORIT'),
-                        const SizedBox(width: 8),
-                        stat('${widget.recentlyPlayed.length}', 'RIWAYAT'),
-                      ],
-                    ),
+                    stat('${widget.customPlaylistCount}', 'PLAYLIST'),
+                    stat('${widget.favorites.length}', 'FAVORIT'),
+                    stat('${widget.recentlyPlayed.length}', 'RIWAYAT'),
                   ],
                 ),
-              ],
-            ),
+              ),
+              Divider(color: scheme.outlineVariant.withValues(alpha: 0.65), height: 1),
+            ],
           ),
         ),
       ),
@@ -187,7 +156,7 @@ extension _YoutubeHubLibraryViews on _YoutubeHubState {
               crossAxisCount: 2,
               crossAxisSpacing: 10,
               mainAxisSpacing: 10,
-              mainAxisExtent: 112,
+              mainAxisExtent: 116,
             ),
             children: [
               for (final tile in <({String title, String subtitle, IconData icon, VoidCallback action})>[
@@ -199,11 +168,11 @@ extension _YoutubeHubLibraryViews on _YoutubeHubState {
                 TweenAnimationBuilder<double>(
                   key: ValueKey<String>('library-shortcut-${tile.$1}'),
                   tween: Tween<double>(begin: 0, end: 1),
-                  duration: Duration(milliseconds: 280 + tile.$1 * 65),
+                  duration: Duration(milliseconds: 240 + tile.$1 * 55),
                   curve: Curves.easeOutCubic,
                   builder: (context, value, child) => Opacity(
                     opacity: value,
-                    child: Transform.translate(offset: Offset(0, 13 * (1 - value)), child: child),
+                    child: Transform.translate(offset: Offset(0, 10 * (1 - value)), child: child),
                   ),
                   child: _libraryQuickTile(
                     title: tile.$2.title,

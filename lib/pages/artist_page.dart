@@ -414,134 +414,60 @@ class _ArtistPageState extends State<ArtistPage> {
   Widget _header(ColorScheme scheme) {
     final imageUrl = _artistImageUrl;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 15),
+      padding: const EdgeInsets.fromLTRB(18, 12, 18, 18),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(25),
-            child: SizedBox(
-              width: double.infinity,
-              height: 218,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  if (imageUrl.isNotEmpty)
-                    Image.network(
-                      imageUrl,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, _, _) => _artistPlaceholder(scheme),
-                    )
-                  else
-                    _artistPlaceholder(scheme),
-                  DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Colors.black.withValues(alpha: 0.06),
-                          Colors.black.withValues(alpha: 0.20),
-                          Colors.black.withValues(alpha: 0.82),
-                        ],
-                        stops: const [0, 0.42, 1],
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    left: 19,
-                    right: 18,
-                    bottom: 18,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Row(
-                          children: [
-                            const Icon(
-                              Icons.graphic_eq_rounded,
-                              color: Colors.white,
-                              size: 15,
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              'ARTIS MUSIK',
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.92),
-                                fontSize: 10,
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: 1.7,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 5),
-                        Text(
-                          _artistTitle,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 32,
-                            height: 1.02,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: -1.0,
-                            shadows: [
-                              Shadow(color: Colors.black45, blurRadius: 12),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 5),
-                        Text(
-                          '${_songs.length} lagu resmi',
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.88),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 14),
           Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              SizedBox(
-                width: 58,
-                height: 56,
-                child: OutlinedButton(
-                  onPressed: _songs.isEmpty ? null : () => unawaited(_playArtist(shuffle: true)),
-                  style: OutlinedButton.styleFrom(
-                    shape: const CircleBorder(),
-                    padding: EdgeInsets.zero,
-                    side: BorderSide(
-                      color: scheme.outlineVariant.withValues(alpha: 0.85),
+              Container(
+                width: 118,
+                height: 118,
+                clipBehavior: Clip.antiAlias,
+                decoration: BoxDecoration(color: scheme.primaryContainer, borderRadius: BorderRadius.circular(18)),
+                child: imageUrl.isNotEmpty
+                    ? Image.network(imageUrl, fit: BoxFit.cover, errorBuilder: (_, _, _) => _artistPlaceholder(scheme))
+                    : _artistPlaceholder(scheme),
+              ),
+              const SizedBox(width: 15),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                      decoration: BoxDecoration(color: scheme.primaryContainer, borderRadius: BorderRadius.circular(6)),
+                      child: Text('ARTIST PROFILE', style: TextStyle(color: scheme.onPrimaryContainer, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 1.0)),
                     ),
-                    foregroundColor: scheme.onSurface,
-                  ),
-                  child: const Icon(Icons.shuffle_rounded, size: 22),
+                    const SizedBox(height: 9),
+                    Text(_artistTitle, maxLines: 3, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontSize: 25, height: 1.02, fontWeight: FontWeight.w900, letterSpacing: -0.85)),
+                    const SizedBox(height: 7),
+                    Text('${_songs.length} lagu dalam katalog', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11, fontWeight: FontWeight.w600)),
+                  ],
                 ),
               ),
-              const SizedBox(width: 12),
+            ],
+          ),
+          const SizedBox(height: 17),
+          Row(
+            children: [
               Expanded(
-                child: SizedBox(
-                  height: 56,
-                  child: FilledButton.icon(
-                    onPressed: _songs.isEmpty ? null : () => unawaited(_playArtist()),
-                    style: FilledButton.styleFrom(
-                      shape: const StadiumBorder(),
-                      textStyle: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    icon: const Icon(Icons.play_arrow_rounded, size: 22),
-                    label: const Text('Putar'),
-                  ),
+                child: FilledButton.icon(
+                  onPressed: _songs.isEmpty ? null : () => unawaited(_playArtist()),
+                  style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                  icon: const Icon(Icons.play_arrow_rounded, size: 21),
+                  label: const Text('Putar artis'),
+                ),
+              ),
+              const SizedBox(width: 9),
+              SizedBox(
+                width: 50,
+                height: 48,
+                child: OutlinedButton(
+                  onPressed: _songs.isEmpty ? null : () => unawaited(_playArtist(shuffle: true)),
+                  style: OutlinedButton.styleFrom(padding: EdgeInsets.zero, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), side: BorderSide(color: scheme.outlineVariant)),
+                  child: const Icon(Icons.shuffle_rounded, size: 19),
                 ),
               ),
             ],
@@ -553,22 +479,18 @@ class _ArtistPageState extends State<ArtistPage> {
 
   Widget _artistPlaceholder(ColorScheme scheme) => DecoratedBox(
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              scheme.primary,
-              scheme.tertiary,
-              scheme.secondary,
-            ],
-          ),
+          color: scheme.primaryContainer,
         ),
-        child: Center(
-          child: Icon(
-            Icons.graphic_eq_rounded,
-            size: 66,
-            color: Colors.white.withValues(alpha: 0.82),
-          ),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Positioned(
+              right: -28,
+              top: -42,
+              child: Icon(Icons.album_rounded, size: 220, color: scheme.primary.withValues(alpha: 0.12)),
+            ),
+            Icon(Icons.graphic_eq_rounded, size: 66, color: scheme.onPrimaryContainer.withValues(alpha: 0.78)),
+          ],
         ),
       );
 

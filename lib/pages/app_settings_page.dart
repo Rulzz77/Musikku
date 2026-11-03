@@ -358,24 +358,13 @@ class _SectionLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(2, 25, 2, 9),
+      padding: const EdgeInsets.fromLTRB(1, 25, 1, 9),
       child: Row(
         children: [
-          Container(
-            width: 29,
-            height: 29,
-            decoration: BoxDecoration(color: scheme.primary.withValues(alpha: 0.13), borderRadius: BorderRadius.circular(10)),
-            child: Icon(icon, size: 16, color: scheme.primary),
-          ),
+          Container(width: 4, height: 20, decoration: BoxDecoration(color: scheme.primary, borderRadius: BorderRadius.circular(4))),
           const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900, letterSpacing: -0.15),
-            ),
-          ),
+          Expanded(child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurface, fontSize: 14, fontWeight: FontWeight.w900, letterSpacing: -0.2))),
+          Icon(icon, size: 17, color: scheme.primary),
         ],
       ),
     );
@@ -392,14 +381,9 @@ class _Group extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return Container(
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [scheme.surfaceContainerLow, scheme.surfaceContainerLow.withValues(alpha: 0.90)],
-        ),
-        borderRadius: BorderRadius.circular(21),
-        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.56)),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: Theme.of(context).brightness == Brightness.dark ? 0.10 : 0.025), blurRadius: 18, offset: const Offset(0, 7))],
+        color: scheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.58)),
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(

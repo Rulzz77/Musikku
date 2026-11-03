@@ -55,7 +55,7 @@ void showVideoMenuSheet(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 3),
           child: Material(
             color: colors.surfaceContainerLow,
-            borderRadius: BorderRadius.circular(17),
+            borderRadius: BorderRadius.circular(14),
             clipBehavior: Clip.antiAlias,
             child: InkWell(
               onTap: onTap,
@@ -132,7 +132,7 @@ void showVideoMenuSheet(
                     child: Row(
                       children: [
                         ClipRRect(
-                          borderRadius: BorderRadius.circular(15),
+                          borderRadius: BorderRadius.circular(12),
                           child: UnifiedArtwork(
                             track: video,
                             width: 76,

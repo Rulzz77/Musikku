@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show ValueListenable;
@@ -513,7 +512,7 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
               left: 14,
               right: 14,
               bottom: MediaQuery.paddingOf(context).bottom + 8,
-              child: _PlaylistGlassDock(onSelect: _selectMainTab),
+              child: _PlaylistDock(onSelect: _selectMainTab),
             ),
           ],
         ),
@@ -540,8 +539,8 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
             padding: const EdgeInsets.fromLTRB(22, 28, 22, 28),
             decoration: BoxDecoration(
               color: scheme.surfaceContainerLow,
-              borderRadius: BorderRadius.circular(26),
-              border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.6)),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.72)),
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -550,8 +549,13 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
                   width: 76,
                   height: 76,
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(colors: [scheme.primary.withValues(alpha: 0.20), scheme.secondary.withValues(alpha: 0.12)]),
-                    borderRadius: BorderRadius.circular(24),
+                    color: scheme.primaryContainer,
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(22),
+                      topRight: Radius.circular(22),
+                      bottomRight: Radius.circular(22),
+                      bottomLeft: Radius.circular(6),
+                    ),
                   ),
                   child: Icon(Icons.library_music_rounded, size: 36, color: scheme.primary),
                 ),
@@ -628,8 +632,8 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
     return Material(
       color: scheme.surfaceContainerLow,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(17),
-        side: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.48)),
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.72)),
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -718,7 +722,7 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
                 child: Container(
                   clipBehavior: Clip.antiAlias,
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(10),
                     boxShadow: [
                       BoxShadow(
                         color: Colors.black.withValues(alpha: 0.18),
@@ -1004,66 +1008,43 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
 
 }
 
-class _PlaylistGlassDock extends StatelessWidget {
-  const _PlaylistGlassDock({required this.onSelect});
+class _PlaylistDock extends StatelessWidget {
+  const _PlaylistDock({required this.onSelect});
 
   final ValueChanged<int> onSelect;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-
+    final scheme = Theme.of(context).colorScheme;
     Widget destination(int index, String label, IconData icon, IconData activeIcon) {
       final selected = index == 3;
       return Expanded(
         child: InkWell(
           onTap: () => onSelect(index),
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(12),
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 2),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(selected ? activeIcon : icon, size: 21, color: selected ? scheme.onSurface : scheme.onSurfaceVariant),
+                Icon(selected ? activeIcon : icon, size: 20, color: selected ? scheme.primary : scheme.onSurfaceVariant),
                 const SizedBox(height: 3),
-                Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 9.5, fontWeight: selected ? FontWeight.w900 : FontWeight.w600, color: selected ? scheme.onSurface : scheme.onSurfaceVariant),
-                ),
+                Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 9, fontWeight: selected ? FontWeight.w900 : FontWeight.w600, color: selected ? scheme.primary : scheme.onSurfaceVariant)),
               ],
             ),
           ),
         ),
       );
     }
-
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(24),
-      child: BackdropFilter(
-        filter: ui.ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-        child: Container(
-          height: 66,
-          decoration: BoxDecoration(
-            color: theme.brightness == Brightness.dark
-                ? Colors.black.withValues(alpha: 0.34)
-                : Colors.white.withValues(alpha: 0.48),
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: Colors.white.withValues(alpha: theme.brightness == Brightness.dark ? 0.20 : 0.68)),
-            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: theme.brightness == Brightness.dark ? 0.25 : 0.07), blurRadius: 22, offset: const Offset(0, 8))],
-          ),
-          child: Row(
-            children: [
-              destination(0, 'Beranda', Icons.home_outlined, Icons.home_rounded),
-              destination(1, 'Jelajah', Icons.explore_outlined, Icons.explore_rounded),
-              destination(2, 'Radio', Icons.radio_outlined, Icons.radio_rounded),
-              destination(3, 'Koleksi', Icons.library_music_outlined, Icons.library_music_rounded),
-            ],
-          ),
-        ),
-      ),
+    return Container(
+      height: 60,
+      decoration: BoxDecoration(color: scheme.surfaceContainerLowest, borderRadius: BorderRadius.circular(15), border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.7))),
+      child: Row(children: [
+        destination(0, 'Beranda', Icons.home_outlined, Icons.home_rounded),
+        destination(1, 'Jelajah', Icons.explore_outlined, Icons.explore_rounded),
+        destination(2, 'Radio', Icons.radio_outlined, Icons.radio_rounded),
+        destination(3, 'Koleksi', Icons.library_music_outlined, Icons.library_music_rounded),
+      ]),
     );
   }
 }

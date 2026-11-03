@@ -225,7 +225,7 @@ extension _HomeAudioSettingsUi on _HomePageState {
                   padding: const EdgeInsets.fromLTRB(13, 14, 13, 12),
                   decoration: BoxDecoration(
                     color: scheme.surfaceContainerHighest.withValues(alpha: 0.48),
-                    borderRadius: BorderRadius.circular(23),
+                    borderRadius: BorderRadius.circular(15),
                     border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.55)),
                   ),
                   child: Column(
@@ -488,16 +488,9 @@ extension _HomeAudioSettingsUi on _HomePageState {
                   Container(
                     padding: const EdgeInsets.fromLTRB(18, 16, 18, 12),
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(22),
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          scheme.primaryContainer.withValues(alpha: 0.88),
-                          scheme.surfaceContainerHighest.withValues(alpha: 0.82),
-                        ],
-                      ),
-                      border: Border.all(color: scheme.primary.withValues(alpha: 0.22)),
+                      borderRadius: BorderRadius.circular(18),
+                      color: scheme.surfaceContainerLow,
+                      border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.72)),
                     ),
                     child: Row(
                       children: [

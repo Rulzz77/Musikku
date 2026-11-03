@@ -7,6 +7,7 @@ import '../models/youtube_search_result.dart';
 import '../services/local_media_service.dart';
 import '../widgets/unified_artwork.dart';
 import '../widgets/music_design.dart';
+import '../widgets/flow_components.dart';
 
 class LocalMusicPage extends StatefulWidget {
   const LocalMusicPage({
@@ -155,60 +156,16 @@ class _LocalMusicPageState extends State<LocalMusicPage> {
                         slivers: [
                           SliverToBoxAdapter(
                             child: Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 9, 16, 14),
-                              child: Container(
-                                padding: const EdgeInsets.fromLTRB(16, 16, 16, 15),
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                    colors: [scheme.primaryContainer.withValues(alpha: 0.82), scheme.surfaceContainerLow, scheme.tertiaryContainer.withValues(alpha: 0.24)],
-                                  ),
-                                  borderRadius: BorderRadius.circular(24),
-                                  border: Border.all(color: scheme.primary.withValues(alpha: 0.18)),
-                                  boxShadow: [BoxShadow(color: scheme.primary.withValues(alpha: 0.07), blurRadius: 22, offset: const Offset(0, 8))],
-                                ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Container(
-                                          width: 48,
-                                          height: 48,
-                                          decoration: BoxDecoration(gradient: LinearGradient(colors: [scheme.primary, scheme.tertiary]), borderRadius: BorderRadius.circular(16)),
-                                          child: Icon(Icons.phone_android_rounded, color: scheme.onPrimary, size: 22),
-                                        ),
-                                        const SizedBox(width: 11),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              Text('KOLEKSI PERANGKAT', style: TextStyle(color: scheme.primary, fontSize: 9, letterSpacing: 1.3, fontWeight: FontWeight.w900)),
-                                              const SizedBox(height: 3),
-                                              Text('${_songs.length} lagu tersedia', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: -0.6)),
-                                            ],
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 11),
-                                    Text('File audio tetap tersimpan di perangkatmu. MusikKu tidak mengunggahnya.', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11.5, height: 1.35)),
-                                    const SizedBox(height: 13),
-                                    Row(
-                                      children: [
-                                        _LibraryPill(icon: Icons.person_rounded, label: '${_songs.map((item) => item.artist.trim()).where((item) => item.isNotEmpty).toSet().length} artis'),
-                                        const SizedBox(width: 7),
-                                        const _LibraryPill(icon: Icons.lock_outline_rounded, label: 'Privat'),
-                                        const Spacer(),
-                                        IconButton.filled(
-                                          tooltip: 'Putar semua lagu lokal',
-                                          onPressed: playableSongs.isEmpty ? null : () => widget.onPlayFromList(playableSongs.first, playableSongs),
-                                          icon: const Icon(Icons.play_arrow_rounded),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
+                              padding: const EdgeInsets.fromLTRB(18, 15, 18, 9),
+                              child: FlowPageHero(
+                                icon: Icons.phone_android_rounded,
+                                eyebrow: 'ON THIS DEVICE',
+                                title: 'Musik lokal',
+                                subtitle: '${_songs.length} lagu dari perangkatmu · privat dan tetap tersimpan di sini.',
+                                trailing: IconButton.filledTonal(
+                                  tooltip: 'Putar semua lagu lokal',
+                                  onPressed: playableSongs.isEmpty ? null : () => widget.onPlayFromList(playableSongs.first, playableSongs),
+                                  icon: const Icon(Icons.play_arrow_rounded),
                                 ),
                               ),
                             ),
@@ -286,7 +243,7 @@ class _LocalMusicPageState extends State<LocalMusicPage> {
                                     padding: const EdgeInsets.only(bottom: 8),
                                     child: Material(
                                       color: scheme.surfaceContainerLow,
-                                      borderRadius: BorderRadius.circular(15),
+                                      borderRadius: BorderRadius.circular(13),
                                       child: InkWell(
                                         borderRadius: BorderRadius.circular(15),
                                         onTap: () => unawaited(widget.onPlayFromList(video, playableSongs)),
@@ -339,29 +296,6 @@ class _LocalMusicPageState extends State<LocalMusicPage> {
 }
 
 
-class _LibraryPill extends StatelessWidget {
-  const _LibraryPill({required this.icon, required this.label});
-  final IconData icon;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      decoration: BoxDecoration(
-        color: scheme.surface.withValues(alpha: 0.70),
-        borderRadius: BorderRadius.circular(99),
-        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.6)),
-      ),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(icon, size: 14, color: scheme.primary),
-        const SizedBox(width: 6),
-        Text(label, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: scheme.onSurfaceVariant)),
-      ]),
-    );
-  }
-}
 
 class _LocalMessage extends StatelessWidget {
   const _LocalMessage({required this.icon, required this.title, required this.message, required this.actionLabel, required this.onAction});

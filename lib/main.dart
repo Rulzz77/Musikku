@@ -97,7 +97,7 @@ class MusikKuApp extends StatelessWidget {
     final surface = pink ? const Color(0xFFFFFBFC) : (isDark ? (amoled ? Colors.black : appPanel) : appLightPanel);
 
     final base = ColorScheme.fromSeed(
-      seedColor: pink ? const Color(0xFFE879A6) : const Color(0xFF38BFD0),
+      seedColor: pink ? const Color(0xFFE879A6) : const Color(0xFFB6D65D),
       brightness: brightness,
       surface: surface,
     );
@@ -129,29 +129,29 @@ class MusikKuApp extends StatelessWidget {
             error: const Color(0xFFD94A5C),
           )
         : base.copyWith(
-            // MusikKu identity: midnight blue, electric cyan and warm coral.
-            primary: isDark ? const Color(0xFF65E3F0) : const Color(0xFF087F91),
-            onPrimary: isDark ? const Color(0xFF04151D) : Colors.white,
-            primaryContainer: isDark ? const Color(0xFF123A48) : const Color(0xFFD8F4F6),
-            onPrimaryContainer: isDark ? const Color(0xFFC6F8FC) : const Color(0xFF064B57),
-            secondary: isDark ? const Color(0xFFFF8A78) : const Color(0xFFD65C4C),
-            onSecondary: isDark ? const Color(0xFF28100F) : Colors.white,
-            secondaryContainer: isDark ? const Color(0xFF492522) : const Color(0xFFFFE2DC),
-            onSecondaryContainer: isDark ? const Color(0xFFFFD8D0) : const Color(0xFF713127),
-            tertiary: isDark ? const Color(0xFFFFD078) : const Color(0xFFB77A16),
-            tertiaryContainer: isDark ? const Color(0xFF46351B) : const Color(0xFFFFEEC8),
+            // MusikKu identity: warm paper, deep forest and citrus.
+            primary: isDark ? const Color(0xFFD8F17A) : const Color(0xFF657F2F),
+            onPrimary: isDark ? const Color(0xFF172012) : Colors.white,
+            primaryContainer: isDark ? const Color(0xFF354526) : const Color(0xFFE5EDC8),
+            onPrimaryContainer: isDark ? const Color(0xFFE4F5B7) : const Color(0xFF35451D),
+            secondary: isDark ? const Color(0xFFFF9676) : const Color(0xFFB75B42),
+            onSecondary: isDark ? const Color(0xFF2B130D) : Colors.white,
+            secondaryContainer: isDark ? const Color(0xFF4B2B22) : const Color(0xFFF8DED4),
+            onSecondaryContainer: isDark ? const Color(0xFFFFD9CA) : const Color(0xFF6D3021),
+            tertiary: isDark ? const Color(0xFFFFC978) : const Color(0xFF9A6B23),
+            tertiaryContainer: isDark ? const Color(0xFF46391E) : const Color(0xFFF4E6C8),
             onTertiary: isDark ? const Color(0xFF211607) : Colors.white,
             onTertiaryContainer: isDark ? const Color(0xFFFFE9BC) : const Color(0xFF62400D),
             surface: surface,
-            surfaceContainerLowest: isDark ? const Color(0xFF080E18) : Colors.white,
-            surfaceContainerLow: isDark ? const Color(0xFF121E2E) : const Color(0xFFFAFCFE),
-            surfaceContainer: isDark ? const Color(0xFF18263A) : const Color(0xFFEAF0F5),
-            surfaceContainerHigh: isDark ? const Color(0xFF203149) : const Color(0xFFE0E9F0),
-            surfaceContainerHighest: isDark ? const Color(0xFF2A3C55) : const Color(0xFFD3E0E9),
-            onSurface: isDark ? const Color(0xFFF0F6FB) : const Color(0xFF142438),
-            onSurfaceVariant: isDark ? const Color(0xFF9FB0C2) : const Color(0xFF5D7083),
-            outline: isDark ? const Color(0xFF40536B) : const Color(0xFFB8C7D4),
-            outlineVariant: isDark ? const Color(0xFF293A50) : const Color(0xFFDCE5EC),
+            surfaceContainerLowest: isDark ? const Color(0xFF111A15) : const Color(0xFFFFFEFA),
+            surfaceContainerLow: isDark ? const Color(0xFF1C2A22) : const Color(0xFFF9F7EF),
+            surfaceContainer: isDark ? const Color(0xFF223329) : const Color(0xFFECEBDD),
+            surfaceContainerHigh: isDark ? const Color(0xFF2A3B30) : const Color(0xFFE3E5D5),
+            surfaceContainerHighest: isDark ? const Color(0xFF35493A) : const Color(0xFFD8DEC7),
+            onSurface: isDark ? const Color(0xFFF1F1E8) : const Color(0xFF202B23),
+            onSurfaceVariant: isDark ? const Color(0xFFB0BCAF) : const Color(0xFF687469),
+            outline: isDark ? const Color(0xFF526858) : const Color(0xFFB8C1AD),
+            outlineVariant: isDark ? const Color(0xFF35483A) : const Color(0xFFDDE1D2),
             error: const Color(0xFFE45B66),
           );
 
@@ -173,29 +173,30 @@ class MusikKuApp extends StatelessWidget {
       scaffoldBackgroundColor: background,
       colorScheme: scheme,
       textTheme: baseTextTheme.apply(
+        fontFamily: 'Roboto',
         bodyColor: scheme.onSurface,
         displayColor: scheme.onSurface,
       ).copyWith(
         displayLarge: baseTextTheme.displayLarge?.copyWith(
-          fontWeight: FontWeight.w900,
-          letterSpacing: -1.3,
+          fontWeight: FontWeight.w800,
+          letterSpacing: -1.15,
           height: 1.02,
         ),
         displayMedium: baseTextTheme.displayMedium?.copyWith(
-          fontWeight: FontWeight.w900,
-          letterSpacing: -0.9,
+          fontWeight: FontWeight.w800,
+          letterSpacing: -0.75,
         ),
         headlineLarge: baseTextTheme.headlineLarge?.copyWith(
-          fontWeight: FontWeight.w900,
-          letterSpacing: -0.7,
+          fontWeight: FontWeight.w800,
+          letterSpacing: -0.55,
         ),
         headlineMedium: baseTextTheme.headlineMedium?.copyWith(
-          fontWeight: FontWeight.w800,
-          letterSpacing: -0.45,
+          fontWeight: FontWeight.w700,
+          letterSpacing: -0.35,
         ),
         titleLarge: baseTextTheme.titleLarge?.copyWith(
-          fontWeight: FontWeight.w800,
-          letterSpacing: -0.35,
+          fontWeight: FontWeight.w700,
+          letterSpacing: -0.25,
         ),
         titleMedium: baseTextTheme.titleMedium?.copyWith(
           fontWeight: FontWeight.w700,
@@ -226,7 +227,7 @@ class MusikKuApp extends StatelessWidget {
         color: surface,
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(22),
+          borderRadius: BorderRadius.circular(18),
           side: BorderSide(
             color: scheme.outlineVariant.withValues(alpha: isDark ? 0.40 : 0.78),
           ),
@@ -235,7 +236,7 @@ class MusikKuApp extends StatelessWidget {
       dialogTheme: DialogThemeData(
         backgroundColor: surface,
         surfaceTintColor: Colors.transparent,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
         titleTextStyle: TextStyle(
           color: scheme.onSurface,
           fontSize: 21,
@@ -252,9 +253,43 @@ class MusikKuApp extends StatelessWidget {
         style: OutlinedButton.styleFrom(
           foregroundColor: scheme.onSurface,
           side: BorderSide(color: scheme.outlineVariant),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
         ),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          foregroundColor: scheme.onPrimary,
+          backgroundColor: scheme.primary,
+          minimumSize: const Size(0, 46),
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, letterSpacing: 0.05),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: scheme.primary,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11)),
+          textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+        ),
+      ),
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith<Color?>((states) =>
+            states.contains(WidgetState.selected) ? scheme.onPrimaryContainer : scheme.outline),
+        trackColor: WidgetStateProperty.resolveWith<Color?>((states) =>
+            states.contains(WidgetState.selected) ? scheme.primaryContainer : scheme.surfaceContainerHighest),
+        trackOutlineColor: WidgetStateProperty.all(scheme.outlineVariant),
+      ),
+      checkboxTheme: CheckboxThemeData(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
+        side: BorderSide(color: scheme.outline),
+        fillColor: WidgetStateProperty.resolveWith<Color?>((states) =>
+            states.contains(WidgetState.selected) ? scheme.primary : null),
+      ),
+      radioTheme: RadioThemeData(
+        fillColor: WidgetStateProperty.resolveWith<Color?>((states) =>
+            states.contains(WidgetState.selected) ? scheme.primary : scheme.onSurfaceVariant),
       ),
       floatingActionButtonTheme: FloatingActionButtonThemeData(
         backgroundColor: scheme.primary,
@@ -264,11 +299,19 @@ class MusikKuApp extends StatelessWidget {
       ),
       tooltipTheme: TooltipThemeData(
         decoration: BoxDecoration(
-          color: isDark ? appPanelElevated : const Color(0xFF30272E),
+          color: isDark ? appPanelElevated : appInk,
           borderRadius: BorderRadius.circular(10),
         ),
         textStyle: const TextStyle(color: Colors.white, fontSize: 12),
         waitDuration: const Duration(milliseconds: 500),
+      ),
+      tabBarTheme: TabBarThemeData(
+        labelColor: scheme.primary,
+        unselectedLabelColor: scheme.onSurfaceVariant,
+        labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900),
+        unselectedLabelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+        indicatorColor: scheme.primary,
+        dividerColor: scheme.outlineVariant.withValues(alpha: 0.55),
       ),
       chipTheme: ChipThemeData(
         backgroundColor: scheme.surfaceContainerLow,
@@ -290,15 +333,15 @@ class MusikKuApp extends StatelessWidget {
         prefixIconColor: scheme.onSurfaceVariant,
         suffixIconColor: scheme.onSurfaceVariant,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.55)),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: scheme.primary.withValues(alpha: 0.75), width: 1.2),
         ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
@@ -335,9 +378,9 @@ class MusikKuApp extends StatelessWidget {
       ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
-        backgroundColor: isDark ? appPanelElevated : const Color(0xFF222733),
+        backgroundColor: isDark ? appPanelElevated : appInk,
         contentTextStyle: const TextStyle(color: Colors.white),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
       progressIndicatorTheme: ProgressIndicatorThemeData(
         color: scheme.primary,
@@ -348,7 +391,7 @@ class MusikKuApp extends StatelessWidget {
         surfaceTintColor: Colors.transparent,
         modalBackgroundColor: surface,
         shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
         ),
         clipBehavior: Clip.antiAlias,
         showDragHandle: true,
@@ -357,7 +400,7 @@ class MusikKuApp extends StatelessWidget {
         color: surface,
         surfaceTintColor: Colors.transparent,
         textStyle: TextStyle(color: scheme.onSurface, fontWeight: FontWeight.w600),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
       sliderTheme: SliderThemeData(
         trackHeight: 4,
@@ -368,30 +411,19 @@ class MusikKuApp extends StatelessWidget {
         thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
         overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
       ),
-      textButtonTheme: TextButtonThemeData(
-        style: TextButton.styleFrom(
-          foregroundColor: scheme.primary,
+      iconButtonTheme: IconButtonThemeData(
+        style: IconButton.styleFrom(
+          foregroundColor: scheme.onSurface,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
-      ),
-      filledButtonTheme: FilledButtonThemeData(
-        style: FilledButton.styleFrom(
-          foregroundColor: scheme.onPrimary,
-          backgroundColor: scheme.primary,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        ),
-      ),
-      iconButtonTheme: IconButtonThemeData(
-        style: IconButton.styleFrom(foregroundColor: scheme.onSurface),
       ),
       listTileTheme: ListTileThemeData(
         iconColor: scheme.onSurfaceVariant,
         textColor: scheme.onSurface,
         subtitleTextStyle: TextStyle(color: scheme.onSurfaceVariant, height: 1.3),
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        minVerticalPadding: 8,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        minVerticalPadding: 7,
       ),
     );
   }

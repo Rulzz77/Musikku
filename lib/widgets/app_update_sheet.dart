@@ -325,16 +325,8 @@ class _AppUpdatePanelState extends State<AppUpdatePanel> with WidgetsBindingObse
       borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
       child: DecoratedBox(
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              colors.surface.withValues(alpha: 0.98),
-              colors.surfaceContainerLow.withValues(alpha: 0.98),
-              colors.surface.withValues(alpha: 0.98),
-            ],
-          ),
-          border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.19))),
+          color: colors.surface,
+          border: Border(top: BorderSide(color: colors.outlineVariant)),
         ),
         child: ConstrainedBox(
           constraints: BoxConstraints(
@@ -403,8 +395,8 @@ class _AppUpdatePanelState extends State<AppUpdatePanel> with WidgetsBindingObse
             height: 50,
             width: 50,
             decoration: BoxDecoration(
-              gradient: LinearGradient(colors: [colors.primary, colors.secondary]),
-              borderRadius: BorderRadius.circular(16),
+              color: colors.primary,
+              borderRadius: const BorderRadius.only(topLeft: Radius.circular(16), topRight: Radius.circular(16), bottomRight: Radius.circular(16), bottomLeft: Radius.circular(4)),
             ),
             child: Icon(Icons.system_update_alt_rounded, color: colors.onPrimary, size: 26),
           ),

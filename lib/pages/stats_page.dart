@@ -247,57 +247,41 @@ class _StatsHero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(19, 18, 19, 18),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [scheme.primaryContainer.withValues(alpha: 0.76), scheme.surfaceContainerLow, scheme.tertiaryContainer.withValues(alpha: 0.26)],
-          stops: const [0, 0.62, 1],
-        ),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: scheme.primary.withValues(alpha: 0.20)),
-        boxShadow: [BoxShadow(color: scheme.primary.withValues(alpha: 0.075), blurRadius: 24, offset: const Offset(0, 10))],
-      ),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(2, 4, 2, 2),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(color: scheme.primary, borderRadius: BorderRadius.circular(11)),
-                child: Icon(Icons.insights_rounded, color: scheme.onPrimary, size: 21),
-              ),
-              const SizedBox(width: 10),
+              Icon(Icons.insights_rounded, color: scheme.primary, size: 18),
+              const SizedBox(width: 8),
               Text(
-                'PERJALANAN MUSIKMU',
-                style: TextStyle(color: scheme.primary, fontSize: 9, letterSpacing: 1.35, fontWeight: FontWeight.w900),
+                'RINGKASAN PERJALANAN MUSIK',
+                style: TextStyle(color: scheme.primary, fontSize: 9, letterSpacing: 1.5, fontWeight: FontWeight.w900),
               ),
             ],
           ),
-          const SizedBox(height: 15),
+          const SizedBox(height: 13),
           Text(
             formatMinutes(totalSeconds),
-            style: TextStyle(fontSize: 32, height: 1, letterSpacing: -1.25, fontWeight: FontWeight.w900, color: scheme.onSurface),
+            style: TextStyle(fontSize: 38, height: 0.98, letterSpacing: -1.5, fontWeight: FontWeight.w900, color: scheme.onSurface),
           ),
-          const SizedBox(height: 5),
+          const SizedBox(height: 6),
           Text('total waktu mendengarkan', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12)),
-          const SizedBox(height: 14),
-          Container(height: 1, color: scheme.outlineVariant.withValues(alpha: 0.7)),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 18,
-            runSpacing: 8,
+          const SizedBox(height: 17),
+          Row(
             children: [
-              _SummaryDatum(label: 'Lagu diputar', value: '$totalPlays'),
-              if (topArtist != null)
-                _SummaryDatum(label: 'Artis teratas', value: '$topArtist · ${formatMinutes(topArtistMinutes)}'),
+              Expanded(child: _SummaryDatum(label: 'Lagu diputar', value: '$totalPlays')),
+              if (topArtist != null) ...[
+                Container(width: 1, height: 30, color: scheme.outlineVariant),
+                const SizedBox(width: 14),
+                Expanded(child: _SummaryDatum(label: 'Artis teratas', value: '$topArtist · ${formatMinutes(topArtistMinutes)}')),
+              ],
             ],
           ),
+          const SizedBox(height: 16),
+          Divider(color: scheme.outlineVariant.withValues(alpha: 0.7), height: 1),
         ],
       ),
     );

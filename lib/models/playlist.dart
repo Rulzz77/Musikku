@@ -6,11 +6,15 @@ class Playlist {
     required this.id,
     required this.name,
     List<YoutubeSearchResult>? songs,
+    this.artworkPath,
   }) : songs = songs ?? <YoutubeSearchResult>[];
 
   final String id;
   String name;
   final List<YoutubeSearchResult> songs;
+
+  /// Local cover selected by the user; independent from song order.
+  String? artworkPath;
 
   bool contains(String videoId) =>
       songs.any((song) => song.videoId == videoId);
@@ -35,6 +39,7 @@ class Playlist {
       'id': id,
       'name': name,
       'songs': songs.map((song) => song.toJson()).toList(),
+      'artworkPath': artworkPath,
     };
   }
 
@@ -62,6 +67,7 @@ class Playlist {
       id: json['id']?.toString() ?? '',
       name: json['name']?.toString() ?? 'Playlist',
       songs: songs,
+      artworkPath: json['artworkPath']?.toString(),
     );
   }
 }

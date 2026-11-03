@@ -10,7 +10,6 @@ import '../models/player_ui_state.dart';
 import '../models/youtube_search_result.dart';
 import '../services/music_title_formatter.dart';
 import 'album_artwork_image.dart';
-import 'lyrics_panel.dart';
 
 /// Full-screen MusikKu player. Native playback ownership and every callback
 /// stay in HomePage; this widget is a visual-only replacement for the player.
@@ -33,6 +32,7 @@ class MusicPlayerPage extends StatefulWidget {
     required this.volumePercent,
     required this.onVolumeChanged,
     required this.onAddToPlaylist,
+    required this.onOpenLyrics,
     required this.onOpenQueue,
     required this.onOpenSleepTimer,
     required this.onOpenListeningRoom,
@@ -58,6 +58,7 @@ class MusicPlayerPage extends StatefulWidget {
   final int volumePercent;
   final Future<void> Function(int percent, bool persist) onVolumeChanged;
   final VoidCallback onAddToPlaylist;
+  final VoidCallback onOpenLyrics;
   final VoidCallback onOpenQueue;
   final VoidCallback onOpenSleepTimer;
   final VoidCallback onOpenListeningRoom;
@@ -233,29 +234,28 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
       builder: (context, constraints) {
         final width = constraints.maxWidth;
         final height = constraints.maxHeight;
-        final coverSize = math.min(width * 0.86, height * 0.36)
-            .clamp(145.0, 330.0)
+        final coverSize = math.min(width * 0.82, height * 0.29)
+            .clamp(140.0, 292.0)
             .toDouble();
 
         return Padding(
-          padding: const EdgeInsets.fromLTRB(22, 5, 22, 8),
+          padding: const EdgeInsets.fromLTRB(22, 0, 22, 8),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.start,
             children: [
-              const SizedBox(height: 4),
+              // Lower the artwork block slightly for a more relaxed player composition.
+              SizedBox(height: (height * 0.055).clamp(25.0, 42.0).toDouble()),
               if (widget.platformPlayer != null)
                 SizedBox(
                   width: math.min(width * 0.96, 440),
-                  height: math.min(math.min(width * 0.96, 440) * 9 / 16, height * 0.36),
+                  height: math.min(math.min(width * 0.96, 440) * 9 / 16, height * 0.32),
                   child: widget.platformPlayer!,
                 )
               else
                 _buildAlbumCover(coverSize),
-              const SizedBox(height: 17),
+              const SizedBox(height: 19),
               _buildTrackInfo(busy),
-              const SizedBox(height: 7),
-              _buildCurrentLyricText(),
-              const SizedBox(height: 7),
+              const SizedBox(height: 15),
               _buildSeekBar(
                 context: context,
                 duration: duration,
@@ -368,60 +368,6 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildCurrentLyricText() {
-    return ValueListenableBuilder<PlayerUiState>(
-      valueListenable: widget.playerUiState,
-      builder: (context, playerState, _) {
-        final lyrics = playerState.lyrics;
-        if (playerState.video?.videoId != widget.video.videoId || !playerState.lyricsSynced || lyrics.isEmpty) {
-          return const SizedBox.shrink();
-        }
-        return ValueListenableBuilder<NativeYoutubeState>(
-          valueListenable: widget.nativeState,
-          builder: (context, state, _) {
-            if (state.videoId != widget.video.videoId) return const SizedBox.shrink();
-            var low = 0;
-            var high = lyrics.length - 1;
-            var lineIndex = -1;
-            while (low <= high) {
-              final mid = (low + high) >> 1;
-              if (lyrics[mid].time <= state.position) {
-                lineIndex = mid;
-                low = mid + 1;
-              } else {
-                high = mid - 1;
-              }
-            }
-            if (lineIndex < 0) return const SizedBox.shrink();
-            final lyric = lyrics[lineIndex].text.trim();
-            if (lyric.isEmpty) return const SizedBox.shrink();
-            return AnimatedSwitcher(
-              duration: const Duration(milliseconds: 240),
-              transitionBuilder: (child, animation) => FadeTransition(
-                opacity: animation,
-                child: SlideTransition(
-                  position: Tween<Offset>(begin: const Offset(0, 0.18), end: Offset.zero).animate(animation),
-                  child: child,
-                ),
-              ),
-              child: Padding(
-                key: ValueKey<String>('lyric-$lineIndex-$lyric'),
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                child: Text(
-                  lyric,
-                  maxLines: 2,
-                  textAlign: TextAlign.center,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: _cyan, fontSize: 14, fontWeight: FontWeight.w700, height: 1.25),
-                ),
-              ),
-            );
-          },
-        );
-      },
     );
   }
 
@@ -629,7 +575,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
     return Row(
       children: [
         Expanded(child: _bottomAction(icon: widget.inPlaylist ? Icons.check_circle_rounded : Icons.playlist_add_rounded, label: 'Playlist', selected: widget.inPlaylist, onPressed: widget.onAddToPlaylist)),
-        Expanded(child: _bottomAction(icon: Icons.lyrics_rounded, label: 'Lirik', onPressed: _openLyrics)),
+        Expanded(child: _bottomAction(icon: Icons.lyrics_rounded, label: 'Lirik', onPressed: widget.onOpenLyrics)),
         Expanded(
           child: ValueListenableBuilder<bool>(
             valueListenable: widget.sleepActive,
@@ -668,32 +614,4 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
     );
   }
 
-  void _openLyrics() {
-    showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      backgroundColor: const Color(0xFF111214),
-      elevation: 0,
-      useSafeArea: true,
-      isScrollControlled: true,
-      constraints: const BoxConstraints(maxWidth: 640),
-      builder: (sheetContext) => FractionallySizedBox(
-        heightFactor: 0.82,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 4, 12, 10),
-          child: ValueListenableBuilder<PlayerUiState>(
-            valueListenable: widget.playerUiState,
-            builder: (context, ui, _) => LyricsPanel(
-              lyrics: ui.video?.videoId == widget.video.videoId ? ui.lyrics : const [],
-              loading: ui.video?.videoId == widget.video.videoId && ui.lyricsLoading,
-              synced: ui.video?.videoId == widget.video.videoId && ui.lyricsSynced,
-              nativeState: widget.nativeState,
-              onSeek: widget.onSeek,
-              expandToAvailableHeight: true,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }

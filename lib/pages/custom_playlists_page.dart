@@ -1,8 +1,11 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show ValueListenable;
+import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../models/playlist.dart';
 import '../models/player_ui_state.dart';
@@ -10,6 +13,7 @@ import '../models/native_youtube_state.dart';
 import '../models/youtube_search_result.dart';
 import '../widgets/playlist_widgets.dart' show showPlaylistNameDialog;
 import '../widgets/unified_artwork.dart';
+import '../widgets/playlist_artwork.dart';
 import '../widgets/flow_components.dart';
 import '../widgets/music_design.dart';
 import '../widgets/mini_music_player.dart';
@@ -55,7 +59,9 @@ class CustomPlaylistsPage extends StatefulWidget {
 }
 
 class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
+  final ImagePicker _imagePicker = ImagePicker();
   String? _selectedPlaylistId;
+  bool _changingArtwork = false;
 
   Playlist? get _selectedPlaylist {
     final id = _selectedPlaylistId;
@@ -90,6 +96,74 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
     widget.onChanged();
   }
 
+  Future<void> _changePlaylistArtwork(Playlist playlist) async {
+    if (_changingArtwork) return;
+    setState(() => _changingArtwork = true);
+    try {
+      final picked = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 90,
+        maxWidth: 1600,
+        maxHeight: 1600,
+      );
+      if (picked == null || !mounted) return;
+
+      final documents = await getApplicationDocumentsDirectory();
+      final coverDirectory = Directory('${documents.path}/musikku_playlist_covers');
+      await coverDirectory.create(recursive: true);
+      final safeId = playlist.id.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
+      final pickedName = picked.name;
+      final extension = pickedName.contains('.')
+          ? '.${pickedName.split('.').last.toLowerCase()}'
+          : '.jpg';
+      final destination = File(
+        '${coverDirectory.path}/${safeId}_${DateTime.now().millisecondsSinceEpoch}$extension',
+      );
+      await File(picked.path).copy(destination.path);
+      if (!mounted) return;
+
+      final oldPath = playlist.artworkPath;
+      setState(() => playlist.artworkPath = destination.path);
+      widget.onChanged();
+      _deleteManagedArtwork(oldPath);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Foto cover playlist berhasil diganti.')),
+      );
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Foto cover belum bisa disimpan: $error')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _changingArtwork = false);
+    }
+  }
+
+  Future<void> _removePlaylistArtwork(Playlist playlist) async {
+    final oldPath = playlist.artworkPath;
+    if (oldPath == null || oldPath.isEmpty) return;
+    setState(() => playlist.artworkPath = null);
+    widget.onChanged();
+    _deleteManagedArtwork(oldPath);
+  }
+
+  void _deleteManagedArtwork(String? path) {
+    if (path == null || path.isEmpty) return;
+    unawaited(() async {
+      try {
+        final documents = await getApplicationDocumentsDirectory();
+        final managedDirectory = '${documents.path}/musikku_playlist_covers/';
+        if (path.startsWith(managedDirectory)) {
+          final file = File(path);
+          if (await file.exists()) await file.delete();
+        }
+      } catch (_) {
+        // A stale cover file must never block a playlist edit.
+      }
+    }());
+  }
+
   Future<void> _renamePlaylist(Playlist playlist) async {
     final name = await showPlaylistNameDialog(
       context,
@@ -121,11 +195,13 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
       ),
     );
     if (confirm != true || !mounted) return;
+    final oldArtworkPath = playlist.artworkPath;
     setState(() {
       widget.playlists.removeWhere((item) => item.id == playlist.id);
       if (_selectedPlaylistId == playlist.id) _selectedPlaylistId = null;
     });
     widget.onChanged();
+    _deleteManagedArtwork(oldArtworkPath);
   }
 
   Future<void> _removeSong(Playlist playlist, YoutubeSearchResult song) async {
@@ -378,12 +454,18 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
           if (playlist != null)
             PopupMenuButton<String>(
               onSelected: (value) {
+                if (value == 'cover') unawaited(_changePlaylistArtwork(playlist));
+                if (value == 'reset_cover') unawaited(_removePlaylistArtwork(playlist));
                 if (value == 'rename') unawaited(_renamePlaylist(playlist));
                 if (value == 'delete') unawaited(_deletePlaylist(playlist));
               },
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 'rename', child: Text('Ubah nama')),
-                PopupMenuItem(value: 'delete', child: Text('Hapus playlist')),
+              itemBuilder: (_) => [
+                const PopupMenuItem(value: 'cover', child: Text('Ganti foto cover')),
+                if (playlist.artworkPath != null && playlist.artworkPath!.isNotEmpty)
+                  const PopupMenuItem(value: 'reset_cover', child: Text('Pakai cover lagu pertama')),
+                const PopupMenuDivider(),
+                const PopupMenuItem(value: 'rename', child: Text('Ubah nama')),
+                const PopupMenuItem(value: 'delete', child: Text('Hapus playlist')),
               ],
             ),
         ],
@@ -543,8 +625,6 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
   }
 
   Widget _playlistPoster(Playlist playlist, ColorScheme scheme) {
-    final track = playlist.songs.isEmpty ? null : playlist.songs.first;
-    final coverUrl = track?.coverUrl ?? '';
     return Material(
       color: scheme.surfaceContainerLow,
       shape: RoundedRectangleBorder(
@@ -561,15 +641,11 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  if (coverUrl.isNotEmpty)
-                    Image.network(
-                      coverUrl,
-                      fit: BoxFit.cover,
-                      cacheWidth: 420,
-                      errorBuilder: (_, _, _) => _playlistCoverFallback(scheme),
-                    )
-                  else
-                    _playlistCoverFallback(scheme),
+                  PlaylistArtwork(
+                    playlist: playlist,
+                    fit: BoxFit.cover,
+                    iconSize: 42,
+                  ),
                   DecoratedBox(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
@@ -628,71 +704,99 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
     );
   }
 
-  Widget _playlistCoverFallback(ColorScheme scheme) => DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [scheme.primaryContainer, scheme.secondaryContainer, scheme.surfaceContainerHighest],
-          ),
-        ),
-        child: Center(child: Icon(Icons.queue_music_rounded, color: scheme.onPrimaryContainer, size: 44)),
-      );
 
   Widget _playlistDetailArtwork(Playlist playlist, ColorScheme scheme) {
-    final firstTrack = playlist.songs.isEmpty ? null : playlist.songs.first;
-    final accent = scheme.primaryContainer;
-    return Container(
-      margin: const EdgeInsets.fromLTRB(18, 12, 18, 4),
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: accent,
-        borderRadius: BorderRadius.circular(22),
-        boxShadow: [
-          BoxShadow(
-            color: scheme.primary.withValues(alpha: 0.12),
-            blurRadius: 24,
-            offset: const Offset(0, 9),
-          ),
-        ],
-      ),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(22, 14, 22, 2),
       child: Column(
         children: [
-          SizedBox(
-            height: 174,
-            width: double.infinity,
-            child: firstTrack == null
-                ? DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [scheme.secondaryContainer, scheme.primaryContainer, scheme.surfaceContainerHigh],
+          Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 360),
+              child: AspectRatio(
+                aspectRatio: 1,
+                child: Container(
+                  clipBehavior: Clip.antiAlias,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(14),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.18),
+                        blurRadius: 28,
+                        offset: const Offset(0, 14),
                       ),
-                    ),
-                    child: Center(child: Icon(Icons.queue_music_rounded, size: 58, color: scheme.onPrimaryContainer.withValues(alpha: 0.78))),
-                  )
-                : UnifiedArtwork(track: firstTrack, width: double.infinity, height: 174, fit: BoxFit.cover),
+                    ],
+                  ),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      PlaylistArtwork(
+                        playlist: playlist,
+                        fit: BoxFit.cover,
+                        iconSize: 68,
+                      ),
+                      Positioned(
+                        right: 12,
+                        bottom: 12,
+                        child: Material(
+                          color: Colors.black.withValues(alpha: 0.58),
+                          shape: const CircleBorder(),
+                          child: InkWell(
+                            customBorder: const CircleBorder(),
+                            onTap: _changingArtwork
+                                ? null
+                                : () => unawaited(_changePlaylistArtwork(playlist)),
+                            child: SizedBox(
+                              width: 44,
+                              height: 44,
+                              child: _changingArtwork
+                                  ? const Padding(
+                                      padding: EdgeInsets.all(12),
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : const Icon(
+                                      Icons.edit_rounded,
+                                      color: Colors.white,
+                                      size: 21,
+                                    ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
           ),
-          SizedBox(
-            width: double.infinity,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 10, 14, 13),
-              child: Column(
-                children: [
-                  Text(
-                    playlist.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: scheme.onPrimaryContainer, fontSize: 25, fontWeight: FontWeight.w900, letterSpacing: -0.8),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    'MusikKu  ·  Playlist  ·  ${playlist.songs.length} lagu',
-                    style: TextStyle(color: scheme.onPrimaryContainer.withValues(alpha: 0.72), fontSize: 11.5, fontWeight: FontWeight.w600),
-                  ),
-                ],
+          const SizedBox(height: 17),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              playlist.name,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: scheme.onSurface,
+                fontSize: 27,
+                height: 1.05,
+                fontWeight: FontWeight.w900,
+                letterSpacing: -1,
+              ),
+            ),
+          ),
+          const SizedBox(height: 5),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Playlist pribadi  ·  ${playlist.songs.length} lagu',
+              style: TextStyle(
+                color: scheme.onSurfaceVariant,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),
@@ -805,7 +909,7 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
                   ),
                 )
               : ReorderableListView.builder(
-                  padding: const EdgeInsets.fromLTRB(13, 0, 13, 184),
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 184),
                   itemCount: playlist.songs.length,
                   onReorderItem: (oldIndex, newIndex) => _reorderSongs(playlist, oldIndex, newIndex),
                   itemBuilder: (context, index) {
@@ -820,21 +924,21 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
                           child: InkWell(
                             onTap: () => unawaited(_playSongAndReturn(playlist, song)),
                             child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 7),
                               decoration: BoxDecoration(
                                 border: Border(bottom: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.42))),
                               ),
                               child: Row(
                                 children: [
                                   ClipRRect(
-                                    borderRadius: BorderRadius.circular(9),
+                                    borderRadius: BorderRadius.circular(8),
                                     child: SizedBox(
-                                      width: 54,
-                                      height: 54,
+                                      width: 52,
+                                      height: 52,
                                       child: Stack(
                                         fit: StackFit.expand,
                                         children: [
-                                          UnifiedArtwork(track: song, width: 54, height: 54, fit: BoxFit.cover),
+                                          UnifiedArtwork(track: song, width: 52, height: 52, fit: BoxFit.cover),
                                           if (isCurrent)
                                             ColoredBox(
                                               color: Colors.black.withValues(alpha: 0.34),

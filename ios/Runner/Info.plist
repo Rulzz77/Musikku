@@ -24,6 +24,8 @@
 	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>MusikKu membutuhkan akses ke galeri untuk memilih foto cover playlist milikmu.</string>
 	<key>NSAppleMusicUsageDescription</key>
 	<string>MusikKu membutuhkan akses ke Pustaka Musik untuk menampilkan dan memutar lagu yang tersedia di perangkat ini.</string>
 	<key>UIBackgroundModes</key>

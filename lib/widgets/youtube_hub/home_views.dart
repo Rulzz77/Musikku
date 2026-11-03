@@ -178,6 +178,8 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
         icon: Icons.auto_awesome_rounded,
         onTap: () => _playFrequentMix(frequentMix),
       ),
+      if (widget.onOpenCurrentLyrics != null)
+        (title: 'Lirik', subtitle: 'Lagu yang diputar', icon: Icons.lyrics_rounded, onTap: widget.onOpenCurrentLyrics!),
       (title: 'Radio', subtitle: 'Lagu serupa', icon: Icons.radio_rounded, onTap: _startRadioFromCollection),
       (title: 'Musik lokal', subtitle: 'File perangkat', icon: Icons.library_music_rounded, onTap: _openLocalMusic),
       (title: 'Riwayat', subtitle: '${widget.recentlyPlayed.length} lagu', icon: Icons.history_rounded, onTap: _openRecentHistory),
@@ -326,7 +328,7 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
             fit: StackFit.expand,
             children: [
               if (first != null)
-                UnifiedArtwork(track: first, fit: BoxFit.cover, iconSize: 30)
+                PlaylistArtwork(playlist: playlist, fit: BoxFit.cover, iconSize: 30)
               else
                 ColoredBox(
                   color: scheme.surfaceContainerHighest,
@@ -623,9 +625,9 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
     List<({String title, String subtitle, IconData icon, VoidCallback onTap})> actions,
   ) {
     return SizedBox(
-      height: 94,
+      height: 72,
       child: ListView.separated(
-        padding: const EdgeInsets.fromLTRB(16, 6, 16, 8),
+        padding: const EdgeInsets.fromLTRB(16, 2, 16, 6),
         scrollDirection: Axis.horizontal,
         itemCount: actions.length,
         separatorBuilder: (_, _) => const SizedBox(width: 9),
@@ -652,30 +654,30 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
     return Tooltip(
       message: subtitle,
       child: SizedBox(
-        width: 94,
+        width: 74,
         child: Material(
-          color: scheme.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(19),
+          color: scheme.surfaceContainerLow.withValues(alpha: 0.72),
+          borderRadius: BorderRadius.circular(16),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: onTap,
-            borderRadius: BorderRadius.circular(19),
+            borderRadius: BorderRadius.circular(16),
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(10, 9, 8, 8),
+              padding: const EdgeInsets.fromLTRB(8, 7, 7, 7),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Container(
-                    width: 34,
-                    height: 34,
+                    width: 29,
+                    height: 29,
                     decoration: BoxDecoration(
                       gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [accent, Color.lerp(accent, Colors.black, 0.22)!]),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Icon(icon, size: 19, color: Colors.white),
+                    child: Icon(icon, size: 16, color: Colors.white),
                   ),
-                  Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurface, fontSize: 10, fontWeight: FontWeight.w900)),
+                  Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurface, fontSize: 9.5, fontWeight: FontWeight.w900)),
                 ],
               ),
             ),
@@ -691,121 +693,112 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
     final topInset = MediaQuery.paddingOf(context).top;
     final hour = DateTime.now().hour;
     final greeting = hour < 11
-        ? 'SELAMAT PAGI'
+        ? 'Selamat pagi'
         : hour < 15
-            ? 'SELAMAT SIANG'
+            ? 'Selamat siang'
             : hour < 18
-                ? 'SELAMAT SORE'
-                : 'SELAMAT MALAM';
+                ? 'Selamat sore'
+                : 'Selamat malam';
 
     return Padding(
-      padding: EdgeInsets.fromLTRB(15, topInset + 8, 15, 13),
-      child: TweenAnimationBuilder<double>(
-        tween: Tween<double>(begin: 0.94, end: 1),
-        duration: const Duration(milliseconds: 540),
-        curve: Curves.easeOutCubic,
-        builder: (context, value, child) => Opacity(
-          opacity: ((value - 0.94) / 0.06).clamp(0.0, 1.0).toDouble(),
-          child: Transform.scale(scale: value, alignment: Alignment.topCenter, child: child),
-        ),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(28),
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Color(0xFF17465B), Color(0xFF102C43), Color(0xFF19243A)],
-            ),
-            boxShadow: [
-              BoxShadow(color: scheme.primary.withValues(alpha: 0.13), blurRadius: 28, offset: const Offset(0, 13)),
-              const BoxShadow(color: Colors.black26, blurRadius: 18, offset: Offset(0, 8)),
-            ],
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: Stack(
+      padding: EdgeInsets.fromLTRB(18, topInset + 10, 18, 15),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              Positioned(
-                right: -48,
-                top: -63,
-                child: Container(
-                  width: 220,
-                  height: 220,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white.withValues(alpha: 0.055), width: 24),
-                  ),
+              Container(
+                width: 34,
+                height: 34,
+                padding: const EdgeInsets.all(3),
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(11),
                 ),
+                child: Image.asset('assets/icon/app_icon.png', fit: BoxFit.cover),
               ),
-              Positioned(
-                right: 14,
-                bottom: 58,
-                child: Icon(Icons.graphic_eq_rounded, size: 92, color: const Color(0xFF67E5F2).withValues(alpha: 0.10)),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(19, 17, 19, 17),
+              const SizedBox(width: 10),
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Container(
-                          width: 29,
-                          height: 29,
-                          decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.13), borderRadius: BorderRadius.circular(9)),
-                          padding: const EdgeInsets.all(3),
-                          child: Image.asset('assets/icon/app_icon.png', fit: BoxFit.cover),
-                        ),
-                        const SizedBox(width: 9),
-                        const Text('MUSIKKU  •  SOUND IN MOTION', style: TextStyle(color: Color(0xFF8DECF4), fontSize: 8.5, fontWeight: FontWeight.w900, letterSpacing: 1.2)),
-                        const Spacer(),
-                        Text(greeting, style: TextStyle(color: Colors.white.withValues(alpha: 0.68), fontSize: 8, fontWeight: FontWeight.w800, letterSpacing: 0.8)),
-                      ],
-                    ),
-                    const SizedBox(height: 19),
-                    const Text(
-                      'Dunia punya\nbanyak irama.',
-                      style: TextStyle(color: Colors.white, fontSize: 31, height: 0.99, fontWeight: FontWeight.w900, letterSpacing: -1.25),
-                    ),
-                    const SizedBox(height: 7),
                     Text(
-                      'Cari yang cocok dengan suasana hatimu hari ini.',
-                      maxLines: 2,
-                      style: TextStyle(color: Colors.white.withValues(alpha: 0.72), fontSize: 11.5, height: 1.35, fontWeight: FontWeight.w500),
+                      greeting,
+                      style: TextStyle(
+                        color: scheme.onSurfaceVariant,
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                    const SizedBox(height: 17),
-                    Material(
-                      color: const Color(0xFFF5FAFC),
-                      borderRadius: BorderRadius.circular(15),
-                      child: InkWell(
-                        onTap: _openSearch,
-                        borderRadius: BorderRadius.circular(15),
-                        child: SizedBox(
-                          height: 49,
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 13),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.search_rounded, color: Color(0xFF087F91), size: 22),
-                                const SizedBox(width: 10),
-                                const Expanded(child: Text('Cari lagu, artis, atau mood...', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Color(0xFF5D7083), fontSize: 12, fontWeight: FontWeight.w600))),
-                                Container(
-                                  width: 31,
-                                  height: 31,
-                                  decoration: BoxDecoration(color: const Color(0xFFD8F4F6), borderRadius: BorderRadius.circular(10)),
-                                  child: const Icon(Icons.arrow_forward_rounded, color: Color(0xFF087F91), size: 17),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
+                    Text(
+                      'MusikKu',
+                      style: TextStyle(
+                        color: scheme.onSurface,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: -0.5,
                       ),
                     ),
                   ],
                 ),
               ),
+              IconButton(
+                tooltip: 'Cari musik',
+                onPressed: _openSearch,
+                style: IconButton.styleFrom(
+                  backgroundColor: scheme.surfaceContainerLow,
+                  foregroundColor: scheme.onSurface,
+                ),
+                icon: const Icon(Icons.search_rounded, size: 22),
+              ),
             ],
           ),
-        ),
+          const SizedBox(height: 17),
+          Text(
+            'Mau dengar apa hari ini?',
+            style: TextStyle(
+              color: scheme.onSurface,
+              fontSize: 25,
+              height: 1.08,
+              fontWeight: FontWeight.w900,
+              letterSpacing: -0.9,
+            ),
+          ),
+          const SizedBox(height: 5),
+          Text(
+            'Temukan lagu yang pas dengan suasana hatimu.',
+            style: TextStyle(
+              color: scheme.onSurfaceVariant,
+              fontSize: 12,
+              height: 1.35,
+            ),
+          ),
+          const SizedBox(height: 13),
+          Material(
+            color: scheme.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(15),
+            child: InkWell(
+              onTap: _openSearch,
+              borderRadius: BorderRadius.circular(15),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
+                child: Row(
+                  children: [
+                    Icon(Icons.search_rounded, color: scheme.onSurfaceVariant, size: 20),
+                    const SizedBox(width: 9),
+                    Expanded(
+                      child: Text(
+                        'Cari lagu, artis, atau album',
+                        style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12.5),
+                      ),
+                    ),
+                    Icon(Icons.arrow_forward_rounded, color: scheme.primary, size: 19),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -836,9 +829,9 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
     final fg = hasTrack ? Colors.white : scheme.onPrimaryContainer;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 9, 16, 17),
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
       child: SizedBox(
-        height: 218,
+        height: 174,
         child: ClipRRect(
           borderRadius: BorderRadius.circular(24),
           child: Material(

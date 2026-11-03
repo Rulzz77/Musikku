@@ -93,6 +93,30 @@ extension _HomeNavigation on _HomePageState {
     }
   }
 
+  void _openCurrentLyricsPage() {
+    final video = _currentVideo;
+    if (video == null) {
+      _toast('Putar lagu terlebih dahulu untuk membuka lirik.');
+      return;
+    }
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => LyricsPage(
+          video: video,
+          playerUiState: _playerUiState,
+          nativeState: _nativeStateNotifier,
+          onSeek: (position) => _routeListenTogetherAction(
+            'seek',
+            () => _youtubeController.seekTo(
+              seconds: position.inMilliseconds / 1000.0,
+            ),
+            position: position,
+          ),
+        ),
+      ),
+    );
+  }
+
   void _handleYoutubeWatchBack() {
     if (!mounted) return;
     unawaited(_closeYoutubeWatch());

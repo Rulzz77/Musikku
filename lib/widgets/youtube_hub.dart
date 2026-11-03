@@ -24,6 +24,7 @@ import 'app_update_sheet.dart';
 import 'channel_avatar.dart';
 import 'live_badge.dart';
 import 'unified_artwork.dart';
+import 'playlist_artwork.dart';
 import 'flow_components.dart';
 import 'music_design.dart';
 
@@ -84,6 +85,7 @@ class YoutubeHub extends StatefulWidget {
   final ValueChanged<YoutubeSearchResult>? onShowVideoMenu;
   final ValueChanged<String>? onSearchQueryChanged;
   final VoidCallback? onOpenListeningRoom;
+  final VoidCallback? onOpenCurrentLyrics;
   final VoidCallback? onOpenAudioSettings;
   final AppSettingsController settings;
 
@@ -109,6 +111,7 @@ class YoutubeHub extends StatefulWidget {
     this.onShowVideoMenu,
     this.onSearchQueryChanged,
     this.onOpenListeningRoom,
+    this.onOpenCurrentLyrics,
     this.onOpenAudioSettings,
     required this.settings,
   });

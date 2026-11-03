@@ -46,6 +46,7 @@ extension _HomeUiLayout on _HomePageState {
                       _lastSearchQuery = query.trim();
                     },
                     onOpenListeningRoom: _showListenTogetherSheet,
+                    onOpenCurrentLyrics: current == null ? null : _openCurrentLyricsPage,
                     onOpenAudioSettings: _showAudioSettingsSheet,
                     settings: widget.settings,
                   ),
@@ -102,6 +103,7 @@ extension _HomeUiLayout on _HomePageState {
                           onVolumeChanged: (percent, persist) =>
                               _setPlayerVolume(percent, persist: persist),
                           onAddToPlaylist: () => _showAddToPlaylist(watch ?? current!),
+                          onOpenLyrics: _openCurrentLyricsPage,
                           onOpenQueue: _showQueueSheet,
                           onOpenSleepTimer: _showSleepTimerSheet,
                           onOpenListeningRoom: _showListenTogetherSheet,

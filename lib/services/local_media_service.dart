@@ -49,6 +49,17 @@ class LocalMediaService {
     return value == true;
   }
 
+  Future<bool> shouldOpenSettings() async {
+    final value = await _channel.invokeMethod<dynamic>(
+      'shouldOpenLocalMusicSettings',
+    );
+    return value == true;
+  }
+
+  Future<void> openSettings() async {
+    await _channel.invokeMethod<void>('openLocalMusicSettings');
+  }
+
   Future<List<LocalSong>> requestAndScan() async {
     final granted = await requestPermission();
     if (!granted) {

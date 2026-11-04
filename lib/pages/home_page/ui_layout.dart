@@ -44,6 +44,7 @@ extension _HomeUiLayout on _HomePageState {
                     onNext: () => _routeListenTogetherAction('next', () => _next()),
                     onPrevious: () => _routeListenTogetherAction('previous', _previous),
                     isPlaying: _nativeState.isEffectivelyPlaying,
+                    nativeState: _nativeStateNotifier,
                     onStartRadio: _startRadioFromVideo,
                     onPlayFromList: _playFromCustomList,
                     onAddToQueue: _addToQueue,

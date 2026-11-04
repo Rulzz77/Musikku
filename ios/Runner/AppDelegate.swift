@@ -78,6 +78,14 @@ private final class MusikKuIOSBridge: NSObject, FlutterPlugin, FlutterStreamHand
       result(MPMediaLibrary.authorizationStatus() == .authorized)
     case "requestLocalMusicPermission":
       requestMediaPermission(result: result)
+    case "shouldOpenLocalMusicSettings":
+      let status = MPMediaLibrary.authorizationStatus()
+      result(status == .denied || status == .restricted)
+    case "openLocalMusicSettings":
+      if let url = URL(string: UIApplication.openSettingsURLString) {
+        UIApplication.shared.open(url, options: [:], completionHandler: nil)
+      }
+      result(nil)
     case "scanLocalMusic":
       guard MPMediaLibrary.authorizationStatus() == .authorized else {
         result(FlutterError(code: "MEDIA_PERMISSION_DENIED", message: "Akses Pustaka Musik belum diizinkan.", details: nil))

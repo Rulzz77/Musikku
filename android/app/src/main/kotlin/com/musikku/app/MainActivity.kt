@@ -36,6 +36,7 @@ import io.flutter.plugin.platform.PlatformViewFactory
 
 import java.io.File
 import java.util.Locale
+import java.util.concurrent.Executors
 
 import androidx.work.WorkManager
 import androidx.core.content.FileProvider
@@ -130,6 +131,9 @@ class MainActivity : AudioServiceActivity() {
     private var backupJsonWaiting: String = ""
     private var pendingFileRequestCode: Int = 0
     private var pendingLocalPermissionResult: MethodChannel.Result? = null
+    // MediaStore scans and embedded-art extraction can be slow on large libraries.
+    // Keep them off Android's UI thread to avoid dropped frames and ANRs.
+    private val localMediaExecutor = Executors.newFixedThreadPool(2)
 
     companion object {
 
@@ -1490,6 +1494,10 @@ class MainActivity : AudioServiceActivity() {
                 }
 
                 "requestLocalMusicPermission" -> {
+                    getSharedPreferences("musikku_local_media", Context.MODE_PRIVATE)
+                        .edit()
+                        .putBoolean("permission_requested", true)
+                        .apply()
                     if (hasLocalMusicPermission()) {
                         result.success(true)
                         return@setMethodCallHandler
@@ -1505,18 +1513,62 @@ class MainActivity : AudioServiceActivity() {
                     requestPermissions(arrayOf(permission), REQUEST_LOCAL_AUDIO_PERMISSION)
                 }
 
+                "shouldOpenLocalMusicSettings" -> {
+                    val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        Manifest.permission.READ_MEDIA_AUDIO
+                    } else {
+                        Manifest.permission.READ_EXTERNAL_STORAGE
+                    }
+                    val requestedBefore = getSharedPreferences(
+                        "musikku_local_media",
+                        Context.MODE_PRIVATE,
+                    ).getBoolean("permission_requested", false)
+                    val shouldShowRationale = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
+                        shouldShowRequestPermissionRationale(permission)
+                    result.success(
+                        requestedBefore && !hasLocalMusicPermission() && !shouldShowRationale,
+                    )
+                }
+
+                "openLocalMusicSettings" -> {
+                    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                        data = Uri.fromParts("package", packageName, null)
+                    }
+                    startActivity(intent)
+                    result.success(null)
+                }
+
                 "scanLocalMusic" -> {
                     if (!hasLocalMusicPermission()) {
                         result.success(emptyList<Map<String, Any?>>())
                         return@setMethodCallHandler
                     }
 
-                    result.success(scanLocalMusic())
+                    localMediaExecutor.execute {
+                        try {
+                            val songs = scanLocalMusic()
+                            runOnUiThread { result.success(songs) }
+                        } catch (error: Exception) {
+                            MusikKuLogger.w(TAG, "LOCAL MUSIC SCAN FAILED", error)
+                            runOnUiThread {
+                                result.error(
+                                    "LOCAL_SCAN_FAILED",
+                                    error.message ?: "Musik di perangkat gagal dipindai.",
+                                    null,
+                                )
+                            }
+                        }
+                    }
                 }
 
                 "getLocalArtwork" -> {
                     val mediaId = call.argument<String>("mediaId")?.trim().orEmpty()
-                    result.success(getLocalArtwork(mediaId))
+                    localMediaExecutor.execute {
+                        val artwork = runCatching { getLocalArtwork(mediaId) }
+                            .onFailure { MusikKuLogger.d(TAG, "LOCAL ARTWORK ERROR: ${it.message}") }
+                            .getOrNull()
+                        runOnUiThread { result.success(artwork) }
+                    }
                 }
 
                 else -> result.notImplemented()

@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 
 import '../app_info.dart';
 import '../models/listening_stat.dart';
+import '../models/native_youtube_state.dart';
 import '../models/playlist.dart';
 import '../models/youtube_search_result.dart';
 import '../pages/app_settings_page.dart';
@@ -85,6 +87,7 @@ class YoutubeHub extends StatefulWidget {
   final Future<void> Function()? onNext;
   final Future<void> Function()? onPrevious;
   final bool isPlaying;
+  final ValueListenable<NativeYoutubeState>? nativeState;
   final Future<void> Function(YoutubeSearchResult video)? onStartRadio;
   final Future<void> Function(YoutubeSearchResult video, List<YoutubeSearchResult> list) onPlayFromList;
   final ValueChanged<YoutubeSearchResult> onAddToQueue;
@@ -117,6 +120,7 @@ class YoutubeHub extends StatefulWidget {
     this.onNext,
     this.onPrevious,
     this.isPlaying = false,
+    this.nativeState,
     this.onStartRadio,
     required this.onPlayFromList,
     required this.onAddToQueue,

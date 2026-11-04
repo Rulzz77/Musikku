@@ -1,8 +1,10 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 
 import '../models/local_song.dart';
+import '../models/native_youtube_state.dart';
 import '../models/playlist.dart';
 import '../models/youtube_search_result.dart';
 import '../services/local_media_service.dart';
@@ -17,12 +19,17 @@ class LocalMusicPage extends StatefulWidget {
     required this.onAddToQueue,
     this.playlists = const <Playlist>[],
     this.onPlaylistsChanged,
+    this.nativeState,
+    this.onPlayPause,
   });
 
   final Future<void> Function(YoutubeSearchResult video, List<YoutubeSearchResult> list) onPlayFromList;
   final ValueChanged<YoutubeSearchResult> onAddToQueue;
   final List<Playlist> playlists;
   final VoidCallback? onPlaylistsChanged;
+  /// Live player state keeps the active local track highlighted on this route.
+  final ValueListenable<NativeYoutubeState>? nativeState;
+  final Future<void> Function()? onPlayPause;
 
   @override
   State<LocalMusicPage> createState() => _LocalMusicPageState();
@@ -30,24 +37,28 @@ class LocalMusicPage extends StatefulWidget {
 
 enum _LocalSort { title, artist, duration, recentlyAdded }
 
-class _LocalMusicPageState extends State<LocalMusicPage> {
+class _LocalMusicPageState extends State<LocalMusicPage> with WidgetsBindingObserver {
   final LocalMediaService _service = LocalMediaService();
   final TextEditingController _search = TextEditingController();
   List<LocalSong> _songs = const [];
   bool _loading = true;
   bool _permissionNeeded = false;
+  bool _permissionSettingsRequired = false;
+  bool _returningFromPermissionSettings = false;
   String? _error;
   _LocalSort _sort = _LocalSort.title;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _search.addListener(_refresh);
     unawaited(_load());
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _search.removeListener(_refresh);
     _search.dispose();
     super.dispose();
@@ -55,6 +66,19 @@ class _LocalMusicPageState extends State<LocalMusicPage> {
 
   void _refresh() {
     if (mounted) setState(() {});
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _returningFromPermissionSettings) {
+      _returningFromPermissionSettings = false;
+      unawaited(_load());
+    }
+  }
+
+  Future<void> _openPermissionSettings() async {
+    _returningFromPermissionSettings = true;
+    await _service.openSettings();
   }
 
   Future<void> _load({bool requestPermission = false}) async {
@@ -74,9 +98,11 @@ class _LocalMusicPageState extends State<LocalMusicPage> {
         granted = await _service.hasPermission();
         songs = granted ? await _service.scanSongs() : const <LocalSong>[];
       }
+      final settingsRequired = granted ? false : await _service.shouldOpenSettings();
       if (!mounted) return;
       setState(() {
         _permissionNeeded = !granted;
+        _permissionSettingsRequired = settingsRequired;
         _songs = songs;
         _loading = false;
       });
@@ -157,7 +183,7 @@ class _LocalMusicPageState extends State<LocalMusicPage> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('SIMPAN OFFLINE', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.4)),
+                            Text('TAMBAH LAGU', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.4)),
                             SizedBox(height: 4),
                             Text('Tambahkan ke playlist', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
                           ],
@@ -210,7 +236,7 @@ class _LocalMusicPageState extends State<LocalMusicPage> {
     if (selectedId == '__create__') {
       final name = await showPlaylistNameDialog(
         context,
-        title: 'Playlist offline baru',
+        title: 'Playlist baru',
         confirmLabel: 'Buat',
       );
       if (!mounted || name == null) return;
@@ -238,19 +264,41 @@ class _LocalMusicPageState extends State<LocalMusicPage> {
     widget.onPlaylistsChanged?.call();
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('"${video.title}" ditambahkan ke "${addedTo.name}" · tersedia offline')),
+      SnackBar(content: Text('"${video.title}" ditambahkan ke "${addedTo.name}"')),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final listenable = widget.nativeState;
+    if (listenable == null) {
+      return _buildContent(context, const NativeYoutubeState());
+    }
+    return ValueListenableBuilder<NativeYoutubeState>(
+      valueListenable: listenable,
+      builder: (context, playbackState, _) =>
+          _buildContent(context, playbackState),
+    );
+  }
+
+  Widget _buildContent(BuildContext context, NativeYoutubeState playbackState) {
     final scheme = Theme.of(context).colorScheme;
     final songs = _visibleSongs;
     final playableSongs = songs.map((song) => song.toPlayable()).toList(growable: false);
+    LocalSong? activeLocalSong;
+    if (playbackState.videoId.startsWith('local:')) {
+      for (final song in _songs) {
+        if (song.toPlayable().videoId == playbackState.videoId) {
+          activeLocalSong = song;
+          break;
+        }
+      }
+    }
+    final isActivePlaying = playbackState.isEffectivelyPlaying;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Musik Lokal'),
+        title: const Text('Musik di perangkat'),
         actions: [
           IconButton(
             tooltip: 'Pindai ulang',
@@ -273,9 +321,15 @@ class _LocalMusicPageState extends State<LocalMusicPage> {
                   ? _LocalMessage(
                       icon: Icons.library_music_outlined,
                       title: 'Izinkan akses musik',
-                      message: 'MusikKu perlu izin audio untuk menampilkan lagu yang tersimpan di perangkat. File tidak diunggah ke mana pun.',
-                      actionLabel: 'Izinkan akses',
-                      onAction: () => unawaited(_load(requestPermission: true)),
+                      message: _permissionSettingsRequired
+                          ? 'Izin musik pernah ditolak. Aktifkan akses Musik dan audio di Pengaturan aplikasi agar lagu di HP bisa ditampilkan.'
+                          : 'MusikKu perlu izin untuk menampilkan lagu yang tersimpan di perangkat. File tetap berada di HP dan tidak diunggah.',
+                      actionLabel: _permissionSettingsRequired ? 'Buka pengaturan' : 'Izinkan akses',
+                      onAction: () => unawaited(
+                        _permissionSettingsRequired
+                            ? _openPermissionSettings()
+                            : _load(requestPermission: true),
+                      ),
                     )
                   : RefreshIndicator(
                       onRefresh: _load,
@@ -299,9 +353,8 @@ class _LocalMusicPageState extends State<LocalMusicPage> {
                                       children: [
                                         Icon(Icons.phone_android_rounded, color: scheme.onPrimaryContainer, size: 17),
                                         const SizedBox(width: 7),
-                                        Text('OFFLINE LIBRARY', style: TextStyle(color: scheme.onPrimaryContainer.withValues(alpha: 0.78), fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.4)),
+                                        Text('KOLEKSI DI PERANGKAT', style: TextStyle(color: scheme.onPrimaryContainer.withValues(alpha: 0.78), fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.4)),
                                         const Spacer(),
-                                        IconButton.filledTonal(tooltip: 'Pindai ulang perangkat', onPressed: _loading ? null : () => unawaited(_load()), icon: const Icon(Icons.refresh_rounded, size: 19)),
                                       ],
                                     ),
                                     const SizedBox(height: 8),
@@ -339,6 +392,42 @@ class _LocalMusicPageState extends State<LocalMusicPage> {
                               ),
                             ),
                           ),
+                          if (activeLocalSong != null)
+                            SliverToBoxAdapter(
+                              child: Padding(
+                                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                                child: Material(
+                                  color: scheme.primaryContainer.withValues(alpha: 0.58),
+                                  borderRadius: BorderRadius.circular(16),
+                                  child: ListTile(
+                                    dense: true,
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 13, vertical: 3),
+                                    leading: Icon(
+                                      isActivePlaying ? Icons.equalizer_rounded : Icons.pause_circle_outline_rounded,
+                                      color: scheme.primary,
+                                      size: 25,
+                                    ),
+                                    title: Text(
+                                      isActivePlaying ? 'Sedang diputar' : playbackState.isEnded ? 'Lagu selesai' : 'Lagu dijeda',
+                                      style: TextStyle(color: scheme.primary, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 0.6),
+                                    ),
+                                    subtitle: Text(
+                                      '${activeLocalSong.title} · ${activeLocalSong.artist.isEmpty ? 'Artis tidak diketahui' : activeLocalSong.artist}',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+                                    ),
+                                    trailing: widget.onPlayPause == null
+                                        ? null
+                                        : IconButton.filledTonal(
+                                            tooltip: isActivePlaying ? 'Jeda lagu' : 'Lanjutkan lagu',
+                                            onPressed: () => unawaited(widget.onPlayPause!.call()),
+                                            icon: Icon(isActivePlaying ? Icons.pause_rounded : Icons.play_arrow_rounded),
+                                          ),
+                                  ),
+                                ),
+                              ),
+                            ),
                           SliverToBoxAdapter(
                             child: Padding(
                               padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -393,9 +482,9 @@ class _LocalMusicPageState extends State<LocalMusicPage> {
                                     children: [
                                       Icon(Icons.music_off_rounded, size: 48, color: scheme.onSurfaceVariant),
                                       const SizedBox(height: 10),
-                                      const Text('Lagu tidak ditemukan', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
+                                      Text(_songs.isEmpty ? 'Belum ada musik di perangkat' : 'Lagu tidak ditemukan', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
                                       const SizedBox(height: 4),
-                                      Text(_search.text.isEmpty ? 'Tambahkan file audio ke perangkat lalu pindai ulang.' : 'Coba kata kunci lain.', style: TextStyle(color: scheme.onSurfaceVariant), textAlign: TextAlign.center),
+                                      Text(_songs.isEmpty ? 'Simpan file audio di HP, lalu tarik layar ke bawah atau tekan Pindai ulang.' : 'Coba kata kunci lain.', style: TextStyle(color: scheme.onSurfaceVariant), textAlign: TextAlign.center),
                                     ],
                                   ),
                                 ),
@@ -409,26 +498,76 @@ class _LocalMusicPageState extends State<LocalMusicPage> {
                                 itemBuilder: (context, index) {
                                   final song = songs[index];
                                   final video = song.toPlayable();
+                                  final isCurrent = playbackState.videoId == video.videoId;
                                   return Padding(
                                     padding: const EdgeInsets.only(bottom: 8),
-                                    child: Material(
-                                      color: scheme.surfaceContainerLow,
-                                      borderRadius: BorderRadius.circular(13),
-                                      child: InkWell(
-                                        borderRadius: BorderRadius.circular(15),
-                                        onTap: () => unawaited(widget.onPlayFromList(video, playableSongs)),
+                                    child: AnimatedContainer(
+                                      duration: const Duration(milliseconds: 180),
+                                      decoration: BoxDecoration(
+                                        color: isCurrent
+                                            ? scheme.primaryContainer.withValues(alpha: 0.48)
+                                            : scheme.surfaceContainerLow,
+                                        borderRadius: BorderRadius.circular(14),
+                                        border: Border.all(
+                                          color: isCurrent ? scheme.primary.withValues(alpha: 0.55) : Colors.transparent,
+                                          width: 1,
+                                        ),
+                                      ),
+                                      child: Material(
+                                        color: Colors.transparent,
+                                        borderRadius: BorderRadius.circular(13),
+                                        child: InkWell(
+                                        borderRadius: BorderRadius.circular(13),
+                                        onTap: () {
+                                          if (isCurrent && widget.onPlayPause != null) {
+                                            unawaited(widget.onPlayPause!.call());
+                                          } else {
+                                            unawaited(widget.onPlayFromList(video, playableSongs));
+                                          }
+                                        },
                                         child: Padding(
                                           padding: const EdgeInsets.fromLTRB(10, 9, 5, 9),
                                           child: Row(
                                             children: [
                                               SizedBox(
                                                 width: 24,
-                                                child: Text('${index + 1}', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant, fontWeight: FontWeight.w800)),
+                                                child: isCurrent
+                                                    ? Icon(
+                                                        isActivePlaying ? Icons.equalizer_rounded : Icons.pause_circle_outline_rounded,
+                                                        size: 19,
+                                                        color: scheme.primary,
+                                                      )
+                                                    : Text('${index + 1}', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant, fontWeight: FontWeight.w800)),
                                               ),
                                               const SizedBox(width: 8),
                                               ClipRRect(
                                                 borderRadius: BorderRadius.circular(13),
-                                                child: UnifiedArtwork(track: video, width: 56, height: 56, cacheWidth: 168, borderRadius: BorderRadius.circular(13)),
+                                                child: Stack(
+                                                  alignment: Alignment.center,
+                                                  children: [
+                                                    UnifiedArtwork(
+                                                      track: video,
+                                                      width: 56,
+                                                      height: 56,
+                                                      cacheWidth: 168,
+                                                    ),
+                                                    if (isCurrent)
+                                                      Positioned.fill(
+                                                        child: DecoratedBox(
+                                                          decoration: BoxDecoration(
+                                                            color: scheme.primary.withValues(alpha: 0.48),
+                                                          ),
+                                                          child: Icon(
+                                                            isActivePlaying
+                                                                ? Icons.equalizer_rounded
+                                                                : Icons.pause_rounded,
+                                                            color: Colors.white,
+                                                            size: 25,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                  ],
+                                                ),
                                               ),
                                               const SizedBox(width: 12),
                                               Expanded(
@@ -436,9 +575,16 @@ class _LocalMusicPageState extends State<LocalMusicPage> {
                                                   crossAxisAlignment: CrossAxisAlignment.start,
                                                   mainAxisSize: MainAxisSize.min,
                                                   children: [
-                                                    Text(song.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13)),
+                                                    Text(song.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13, color: isCurrent ? scheme.primary : null)),
                                                     const SizedBox(height: 4),
-                                                    Text([song.artist.isEmpty ? 'Artis tidak diketahui' : song.artist, if (song.album.isNotEmpty) song.album].join(' · '), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11.5)),
+                                                    Text(
+                                                      isCurrent
+                                                          ? '${playbackState.isEnded ? 'SELESAI' : isActivePlaying ? 'SEDANG DIPUTAR' : 'DIJEDA'} · ${song.artist.isEmpty ? 'Artis tidak diketahui' : song.artist}'
+                                                          : [song.artist.isEmpty ? 'Artis tidak diketahui' : song.artist, if (song.album.isNotEmpty) song.album].join(' · '),
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
+                                                      style: TextStyle(color: isCurrent ? scheme.primary : scheme.onSurfaceVariant, fontSize: 11.5, fontWeight: isCurrent ? FontWeight.w800 : FontWeight.normal),
+                                                    ),
                                                     const SizedBox(height: 5),
                                                     Text(_songMeta(song), style: TextStyle(color: scheme.primary, fontSize: 10, fontWeight: FontWeight.w800)),
                                                   ],
@@ -458,9 +604,9 @@ class _LocalMusicPageState extends State<LocalMusicPage> {
                                                     value: 'playlist',
                                                     child: Row(
                                                       children: [
-                                                        Icon(Icons.offline_pin_rounded),
+                                                        Icon(Icons.playlist_add_rounded),
                                                         SizedBox(width: 12),
-                                                        Text('Tambah ke playlist offline'),
+                                                        Text('Tambah ke playlist'),
                                                       ],
                                                     ),
                                                   ),
@@ -480,6 +626,7 @@ class _LocalMusicPageState extends State<LocalMusicPage> {
                                           ),
                                         ),
                                       ),
+                                    ),
                                     ),
                                   );
                                 },

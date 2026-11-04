@@ -239,6 +239,8 @@ extension _YoutubeHubLibraryViews on _YoutubeHubState {
       builder: (_) => LocalMusicPage(
         onPlayFromList: widget.onPlayFromList,
         onAddToQueue: widget.onAddToQueue,
+        nativeState: widget.nativeState,
+        onPlayPause: widget.onPlayPause,
         playlists: widget.customPlaylists,
         onPlaylistsChanged: () {
           widget.onCustomPlaylistsChanged?.call();

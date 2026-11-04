@@ -98,7 +98,7 @@ class MusikKuPcmAudioProcessor : BaseAudioProcessor() {
         }
     }
 
-    override fun onFlush(streamMetadata: AudioProcessor.StreamMetadata) {
+    override fun onFlush() {
         smoothedGain = 1.0
     }
 

@@ -695,7 +695,7 @@ class PlaybackService : MediaBrowserServiceCompat() {
             ): AudioSink {
                 return DefaultAudioSink.Builder(context)
                     .setEnableFloatOutput(false)
-                    .setEnableAudioOutputPlaybackParameters(enableAudioOutputPlaybackParameters)
+                    .setEnableAudioTrackPlaybackParams(enableAudioOutputPlaybackParameters)
                     .setAudioProcessors(arrayOf(pcmAudioProcessor))
                     .build()
             }

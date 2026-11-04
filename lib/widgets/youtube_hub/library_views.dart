@@ -233,7 +233,17 @@ extension _YoutubeHubLibraryViews on _YoutubeHubState {
 
 
   void _openLocalMusic() {
-    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => LocalMusicPage(onPlayFromList: widget.onPlayFromList, onAddToQueue: widget.onAddToQueue)));
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => LocalMusicPage(
+        onPlayFromList: widget.onPlayFromList,
+        onAddToQueue: widget.onAddToQueue,
+        playlists: widget.customPlaylists,
+        onPlaylistsChanged: () {
+          widget.onCustomPlaylistsChanged?.call();
+          if (mounted) setState(() {});
+        },
+      ),
+    ));
   }
 
   void _openMusicStudio() {

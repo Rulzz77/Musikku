@@ -21,20 +21,9 @@ extension _HomePlaylists on _HomePageState {
             ..._searchResults,
             ..._activeList,
           ],
-          onChanged: () {
-            _savePlaylists();
-            final activeId = _activePlaylistId;
-            if (activeId != null) {
-              for (final playlist in _playlists) {
-                if (playlist.id == activeId) {
-                  _refreshActivePlaylist(playlist);
-                  break;
-                }
-              }
-            }
-            if (mounted) setState(() {});
-          },
+          onChanged: _handleCustomPlaylistsChanged,
           onPlayPlaylist: _playCustomPlaylist,
+          onPlayOfflinePlaylist: _playOfflineCustomPlaylist,
           onPlaySong: _playCustomPlaylistSong,
           onShufflePlaylist: _playShuffledCustomPlaylist,
           currentVideo: _currentVideo,
@@ -56,15 +45,61 @@ extension _HomePlaylists on _HomePageState {
     await _playCustomPlaylistSong(playlist, playlist.songs.first);
   }
 
+  /// Putar salinan offline dari lagu online yang sudah diunduh.
+  /// Gunakan ID lokal stabil untuk sinkronisasi state Media3. Entri online
+  /// asli tetap disimpan di playlist, lengkap dengan path file unduhannya.
+  YoutubeSearchResult _asDownloadedLocalTrack(YoutubeSearchResult song) {
+    return song.copyWith(
+      videoId: 'local:offline_${song.videoId}',
+      sourceType: 'local',
+      mediaUri: Uri.file(song.offlinePath).toString(),
+      localMediaId: 'offline_${song.videoId}',
+    );
+  }
+
+  YoutubeSearchResult _asPlayablePlaylistTrack(YoutubeSearchResult song) {
+    if (song.isLocal) return song;
+    if (song.isOfflineDownloaded && File(song.offlinePath).existsSync()) {
+      return _asDownloadedLocalTrack(song);
+    }
+    return song;
+  }
+
+  Future<void> _playOfflineCustomPlaylist(Playlist playlist) async {
+    final offlineSongs = playlist.songs
+        .where((song) => song.isLocal ||
+            (song.isOfflineDownloaded && File(song.offlinePath).existsSync()))
+        .map((song) => song.isLocal ? song : _asDownloadedLocalTrack(song))
+        .toList(growable: false);
+    if (offlineSongs.isEmpty) {
+      _toast('Belum ada lagu yang selesai diunduh di playlist ini');
+      return;
+    }
+
+    _activeList = PlaybackSourcePolicy.explicitPlaylistItems(offlineSongs);
+    _activeSource = _ListSource.playlist;
+    _activePlaylistId = playlist.id;
+    _activePlaylistOfflineOnly = true;
+    final firstSong = offlineSongs.first;
+    if (_playerUiState.value.isShuffle) {
+      _prepareShufflePool(excludeCurrent: true, sourceVideo: firstSong);
+    }
+    await _openYoutubeVideo(firstSong, preserveListContext: true);
+  }
+
   Future<void> _playShuffledCustomPlaylist(Playlist playlist) async {
     if (playlist.songs.isEmpty) {
       _toast('Playlist ini masih kosong');
       return;
     }
-    final shuffledSongs = List<YoutubeSearchResult>.from(playlist.songs)..shuffle();
+    final shuffledSongs = playlist.songs
+        .map(_asPlayablePlaylistTrack)
+        .toList(growable: true)
+      ..shuffle();
     _activeList = PlaybackSourcePolicy.explicitPlaylistItems(shuffledSongs);
     _activeSource = _ListSource.playlist;
     _activePlaylistId = playlist.id;
+    _activePlaylistOfflineOnly = false;
     final firstSong = shuffledSongs.first;
     if (_playerUiState.value.isShuffle) {
       _prepareShufflePool(excludeCurrent: true, sourceVideo: firstSong);
@@ -80,15 +115,20 @@ extension _HomePlaylists on _HomePageState {
         !playlist.songs.any((song) => song.videoId == video.videoId)) {
       return;
     }
-    // A user's playlist is the playback contract. Keep every valid item in
-    // order, including local tracks alongside YouTube tracks.
-    _activeList = PlaybackSourcePolicy.explicitPlaylistItems(playlist.songs);
+    // A user's playlist is the playback contract. Prefer a saved local copy
+    // for entries already downloaded; keep the online source for the rest.
+    final playableSongs = playlist.songs
+        .map(_asPlayablePlaylistTrack)
+        .toList(growable: false);
+    final selectedSong = _asPlayablePlaylistTrack(video);
+    _activeList = PlaybackSourcePolicy.explicitPlaylistItems(playableSongs);
     _activeSource = _ListSource.playlist;
     _activePlaylistId = playlist.id;
+    _activePlaylistOfflineOnly = false;
     if (_playerUiState.value.isShuffle) {
-      _prepareShufflePool(excludeCurrent: true, sourceVideo: video);
+      _prepareShufflePool(excludeCurrent: true, sourceVideo: selectedSong);
     }
-    await _openYoutubeVideo(video, preserveListContext: true);
+    await _openYoutubeVideo(selectedSong, preserveListContext: true);
   }
 
   /// Buat playlist baru. Kalau [thenAdd] diisi, lagu itu langsung dimasukkan.
@@ -181,7 +221,13 @@ extension _HomePlaylists on _HomePageState {
     // Keep the playlist exactly as edited. PlaybackSourcePolicy.sameSourceAs
     // inserts the current track if absent, which is useful for a new context
     // but wrong when a user removes that track from the active playlist.
-    final songsForCurrentSource = playlist.songs.where((song) {
+    final sourceSongs = _activePlaylistOfflineOnly
+        ? playlist.songs
+            .where((song) => song.isLocal ||
+                (song.isOfflineDownloaded && File(song.offlinePath).existsSync()))
+            .map((song) => song.isLocal ? song : _asDownloadedLocalTrack(song))
+        : playlist.songs.map(_asPlayablePlaylistTrack);
+    final songsForCurrentSource = sourceSongs.where((song) {
       // Do not silently remove local or remote entries from a custom playlist.
       // The explicit playlist remains fixed even when its sources are mixed.
       final id = song.videoId.trim();

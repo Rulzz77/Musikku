@@ -3,20 +3,26 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../models/local_song.dart';
+import '../models/playlist.dart';
 import '../models/youtube_search_result.dart';
 import '../services/local_media_service.dart';
 import '../widgets/unified_artwork.dart';
 import '../widgets/music_design.dart';
+import '../widgets/playlist_widgets.dart' show showPlaylistNameDialog;
 
 class LocalMusicPage extends StatefulWidget {
   const LocalMusicPage({
     super.key,
     required this.onPlayFromList,
     required this.onAddToQueue,
+    this.playlists = const <Playlist>[],
+    this.onPlaylistsChanged,
   });
 
   final Future<void> Function(YoutubeSearchResult video, List<YoutubeSearchResult> list) onPlayFromList;
   final ValueChanged<YoutubeSearchResult> onAddToQueue;
+  final List<Playlist> playlists;
+  final VoidCallback? onPlaylistsChanged;
 
   @override
   State<LocalMusicPage> createState() => _LocalMusicPageState();
@@ -128,6 +134,112 @@ class _LocalMusicPageState extends State<LocalMusicPage> {
       return 'Durasi ${_duration(song.durationMs)}';
     }
     return 'Audio lokal · ${_duration(song.durationMs)}';
+  }
+
+  Future<void> _addLocalSongToPlaylist(LocalSong localSong) async {
+    final video = localSong.toPlayable();
+    final selectedId = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      useSafeArea: true,
+      builder: (sheetContext) {
+        final scheme = Theme.of(sheetContext).colorScheme;
+        return SafeArea(
+          child: SizedBox(
+            height: MediaQuery.sizeOf(sheetContext).height * 0.62,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+                  child: Row(
+                    children: [
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('SIMPAN OFFLINE', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.4)),
+                            SizedBox(height: 4),
+                            Text('Tambahkan ke playlist', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+                          ],
+                        ),
+                      ),
+                      IconButton(onPressed: () => Navigator.pop(sheetContext), icon: const Icon(Icons.close_rounded)),
+                    ],
+                  ),
+                ),
+                ListTile(
+                  leading: Icon(Icons.add_circle_outline_rounded, color: scheme.primary),
+                  title: const Text('Buat playlist baru', style: TextStyle(fontWeight: FontWeight.w800)),
+                  subtitle: const Text('Playlist baru langsung berisi lagu ini'),
+                  onTap: () => Navigator.pop(sheetContext, '__create__'),
+                ),
+                const Divider(height: 1),
+                Expanded(
+                  child: widget.playlists.isEmpty
+                      ? Center(
+                          child: Text('Belum ada playlist lain.', style: TextStyle(color: scheme.onSurfaceVariant)),
+                        )
+                      : ListView.builder(
+                          itemCount: widget.playlists.length,
+                          itemBuilder: (context, index) {
+                            final playlist = widget.playlists[index];
+                            final contains = playlist.contains(video.videoId);
+                            return ListTile(
+                              leading: Icon(
+                                contains ? Icons.check_circle_rounded : Icons.queue_music_rounded,
+                                color: contains ? scheme.primary : scheme.onSurfaceVariant,
+                              ),
+                              title: Text(playlist.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                              subtitle: Text('${playlist.songs.length} lagu · ${playlist.offlineSongCount} offline'),
+                              trailing: contains ? const Icon(Icons.check_rounded) : const Icon(Icons.add_rounded),
+                              enabled: !contains,
+                              onTap: contains ? null : () => Navigator.pop(sheetContext, playlist.id),
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    if (!mounted || selectedId == null) return;
+
+    Playlist? target;
+    if (selectedId == '__create__') {
+      final name = await showPlaylistNameDialog(
+        context,
+        title: 'Playlist offline baru',
+        confirmLabel: 'Buat',
+      );
+      if (!mounted || name == null) return;
+      final created = Playlist(
+        id: DateTime.now().microsecondsSinceEpoch.toString(),
+        name: name,
+        songs: <YoutubeSearchResult>[video],
+      );
+      target = created;
+      widget.playlists.insert(0, created);
+    } else {
+      for (final playlist in widget.playlists) {
+        if (playlist.id == selectedId) {
+          target = playlist;
+          break;
+        }
+      }
+      if (target == null) return;
+      if (!target.contains(video.videoId)) {
+        target.songs.add(video);
+      }
+    }
+
+    final addedTo = target;
+    widget.onPlaylistsChanged?.call();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('"${video.title}" ditambahkan ke "${addedTo.name}" · tersedia offline')),
+    );
   }
 
   @override
@@ -332,10 +444,37 @@ class _LocalMusicPageState extends State<LocalMusicPage> {
                                                   ],
                                                 ),
                                               ),
-                                              IconButton(
-                                                tooltip: 'Tambahkan ke antrean',
-                                                onPressed: () => widget.onAddToQueue(video),
-                                                icon: const Icon(Icons.playlist_add_rounded),
+                                              PopupMenuButton<String>(
+                                                tooltip: 'Opsi lagu lokal',
+                                                onSelected: (action) {
+                                                  if (action == 'playlist') {
+                                                    unawaited(_addLocalSongToPlaylist(song));
+                                                  } else if (action == 'queue') {
+                                                    widget.onAddToQueue(video);
+                                                  }
+                                                },
+                                                itemBuilder: (context) => const [
+                                                  PopupMenuItem(
+                                                    value: 'playlist',
+                                                    child: Row(
+                                                      children: [
+                                                        Icon(Icons.offline_pin_rounded),
+                                                        SizedBox(width: 12),
+                                                        Text('Tambah ke playlist offline'),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                  PopupMenuItem(
+                                                    value: 'queue',
+                                                    child: Row(
+                                                      children: [
+                                                        Icon(Icons.queue_music_rounded),
+                                                        SizedBox(width: 12),
+                                                        Text('Tambah ke antrean'),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                ],
                                               ),
                                             ],
                                           ),

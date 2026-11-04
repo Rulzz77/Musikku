@@ -264,6 +264,9 @@ class _HomePageState extends State<HomePage>
   /// Playlist yang sedang menjadi sumber putar (untuk sinkron saat diedit).
   String? _activePlaylistId;
 
+  /// Saat true, sesi playlist hanya memutar file lokal yang tersedia offline.
+  bool _activePlaylistOfflineOnly = false;
+
   bool _isLoading = false;
 
   String _errorMessage = '';
@@ -733,6 +736,23 @@ class _HomePageState extends State<HomePage>
     _sleepActive.dispose();
 
     super.dispose();
+  }
+
+  /// Persist custom-playlist edits and refresh the currently active playlist.
+  /// This is a real State member so callbacks from layout extensions do not
+  /// call the protected setState API from an extension scope.
+  void _handleCustomPlaylistsChanged() {
+    unawaited(_storage.savePlaylists(_playlists));
+    final activeId = _activePlaylistId;
+    if (activeId != null) {
+      for (final playlist in _playlists) {
+        if (playlist.id == activeId) {
+          _refreshActivePlaylist(playlist);
+          break;
+        }
+      }
+    }
+    if (mounted) setState(() {});
   }
 
   @override

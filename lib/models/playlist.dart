@@ -25,6 +25,12 @@ class Playlist {
   bool contains(String videoId) =>
       songs.any((song) => song.videoId == videoId);
 
+  /// Number of online playlist entries that have a saved offline copy.
+  int get offlineSongCount =>
+      songs.where((song) => song.isLocal || song.isOfflineDownloaded).length;
+
+  bool get isFullyOffline => songs.isNotEmpty && offlineSongCount == songs.length;
+
   /// Moves a song from [oldIndex] to its final destination [newIndex].
   ///
   /// This matches ReorderableListView.onReorderItem, which already adjusts

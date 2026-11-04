@@ -37,6 +37,7 @@ extension _HomeUiLayout on _HomePageState {
                     onOpenCustomPlaylists: _openCustomPlaylistsPage,
                     customPlaylists: _playlists,
                     onPlayCustomPlaylist: _playCustomPlaylist,
+                    onCustomPlaylistsChanged: _handleCustomPlaylistsChanged,
                     currentVideoId: current?.videoId,
                     currentVideo: current,
                     onPlayPause: () => _routeListenTogetherAction('play_pause', _togglePlayPause),

@@ -10,6 +10,7 @@ import '../models/playlist.dart';
 import '../models/player_ui_state.dart';
 import '../models/native_youtube_state.dart';
 import '../models/youtube_search_result.dart';
+import '../services/offline_download_service.dart';
 import '../widgets/playlist_widgets.dart' show showPlaylistNameDialog;
 import '../widgets/unified_artwork.dart';
 import '../widgets/playlist_artwork.dart';
@@ -28,6 +29,7 @@ class CustomPlaylistsPage extends StatefulWidget {
     this.availableSongs = const [],
     required this.onChanged,
     required this.onPlayPlaylist,
+    this.onPlayOfflinePlaylist,
     required this.onPlaySong,
     this.onShufflePlaylist,
     this.currentVideo,
@@ -43,6 +45,7 @@ class CustomPlaylistsPage extends StatefulWidget {
   final List<YoutubeSearchResult> availableSongs;
   final VoidCallback onChanged;
   final Future<void> Function(Playlist playlist) onPlayPlaylist;
+  final Future<void> Function(Playlist playlist)? onPlayOfflinePlaylist;
   final Future<void> Function(Playlist playlist, YoutubeSearchResult song)
       onPlaySong;
   final Future<void> Function(Playlist playlist)? onShufflePlaylist;
@@ -64,6 +67,249 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
   bool _songSelectionMode = false;
   final Set<String> _selectedSongIds = <String>{};
   _PlaylistSortMode _sortMode = _PlaylistSortMode.recent;
+  final OfflineDownloadService _downloads = OfflineDownloadService.instance;
+
+  @override
+  void initState() {
+    super.initState();
+    _downloads.addListener(_handleDownloadChanges);
+    unawaited(_initializeDownloads());
+  }
+
+  @override
+  void dispose() {
+    _downloads.removeListener(_handleDownloadChanges);
+    super.dispose();
+  }
+
+  Future<void> _initializeDownloads() async {
+    try {
+      await _downloads.initialize();
+      _handleDownloadChanges();
+    } catch (error) {
+      debugPrint('OFFLINE DOWNLOAD INIT ERROR: $error');
+    }
+  }
+
+  void _handleDownloadChanges() {
+    if (!mounted) return;
+    var playlistChanged = false;
+    for (final playlist in widget.playlists) {
+      for (var index = 0; index < playlist.songs.length; index++) {
+        final song = playlist.songs[index];
+        final entry = _downloads.itemFor(song.videoId);
+        final completedPath = entry?.status == OfflineDownloadStatus.completed
+            ? entry!.filePath
+            : '';
+        if (song.offlinePath != completedPath) {
+          playlist.songs[index] = song.copyWith(offlinePath: completedPath);
+          playlistChanged = true;
+        }
+      }
+    }
+    if (playlistChanged) {
+      widget.onChanged();
+      setState(() {});
+    }
+  }
+
+  Future<void> _downloadSong(YoutubeSearchResult song) async {
+    try {
+      await _downloads.enqueue(song);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('"${song.title}" masuk antrean download')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Tidak bisa mengunduh lagu: $error')),
+      );
+    }
+  }
+
+  Future<void> _downloadPlaylist(Playlist playlist) async {
+    final pending = playlist.songs
+        .where((song) => !song.isOfflineDownloaded && !song.isLocal)
+        .toList(growable: false);
+    if (pending.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Semua lagu playlist sudah tersedia offline.')),
+      );
+      return;
+    }
+    try {
+      await _downloads.enqueueAll(pending);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${pending.length} lagu masuk antrean download.')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Antrean download gagal: $error')),
+      );
+    }
+  }
+
+  Future<void> _showDownloadManager() async {
+    await _downloads.initialize();
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (sheetContext) => AnimatedBuilder(
+        animation: _downloads,
+        builder: (context, _) {
+          final items = _downloads.items;
+          final scheme = Theme.of(context).colorScheme;
+          return SizedBox(
+            height: MediaQuery.sizeOf(context).height * 0.72,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 2, 16, 10),
+                  child: Row(
+                    children: [
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('DOWNLOAD MANAGER', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.4)),
+                            SizedBox(height: 4),
+                            Text('Unduhan offline', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900)),
+                          ],
+                        ),
+                      ),
+                      Text(_formatBytes(_downloads.totalDownloadedBytes), style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11, fontWeight: FontWeight.w700)),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: !Platform.isAndroid
+                              ? null
+                              : _downloads.isPaused
+                                  ? () => unawaited(_downloads.resumeAll())
+                                  : () => unawaited(_downloads.pauseAll()),
+                          icon: Icon(_downloads.isPaused ? Icons.play_arrow_rounded : Icons.pause_rounded),
+                          label: Text(_downloads.isPaused ? 'Lanjutkan' : 'Jeda semua'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        tooltip: 'Tutup',
+                        onPressed: () => Navigator.pop(sheetContext),
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 18),
+                Expanded(
+                  child: items.isEmpty
+                      ? Center(child: Text('Belum ada unduhan.', style: TextStyle(color: scheme.onSurfaceVariant)))
+                      : ListView.separated(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+                          itemCount: items.length,
+                          separatorBuilder: (_, _) => const SizedBox(height: 8),
+                          itemBuilder: (context, index) {
+                            final item = items[index];
+                            final completed = item.status == OfflineDownloadStatus.completed;
+                            final active = item.status == OfflineDownloadStatus.downloading;
+                            final failed = item.status == OfflineDownloadStatus.failed;
+                            return Container(
+                              padding: const EdgeInsets.all(11),
+                              decoration: BoxDecoration(
+                                color: scheme.surfaceContainerLow,
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      ClipRRect(
+                                        borderRadius: BorderRadius.circular(8),
+                                        child: SizedBox(width: 42, height: 42, child: UnifiedArtwork(track: item.song, width: 42, height: 42)),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(item.song.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
+                                            const SizedBox(height: 3),
+                                            Text(
+                                              completed ? 'Selesai · ${_formatBytes(item.downloadedBytes)}' : failed ? 'Gagal · ${item.errorMessage}' : active ? 'Mengunduh · ${_formatBytes(item.downloadedBytes)}${item.totalBytes > 0 ? ' / ${_formatBytes(item.totalBytes)}' : ''}' : item.status == OfflineDownloadStatus.queued ? 'Menunggu antrean' : 'Dijeda · ${_formatBytes(item.downloadedBytes)}',
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: TextStyle(fontSize: 10, color: scheme.onSurfaceVariant),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      if ((failed || item.status == OfflineDownloadStatus.paused) &&
+                                          !_downloads.isActiveDownload(item.song.videoId))
+                                        IconButton(
+                                          tooltip: 'Coba lagi',
+                                          onPressed: () => unawaited(_downloads.retry(item.song.videoId)),
+                                          icon: const Icon(Icons.refresh_rounded),
+                                        ),
+                                      if (completed || failed ||
+                                          item.status == OfflineDownloadStatus.queued ||
+                                          (item.status == OfflineDownloadStatus.paused &&
+                                              !_downloads.isActiveDownload(item.song.videoId)))
+                                        IconButton(
+                                          tooltip: 'Hapus dari manager',
+                                          onPressed: () async {
+                                            try {
+                                              await _downloads.delete(item.song.videoId);
+                                            } catch (error) {
+                                              if (mounted) {
+                                                ScaffoldMessenger.of(this.context).showSnackBar(SnackBar(content: Text('$error')));
+                                              }
+                                            }
+                                          },
+                                          icon: const Icon(Icons.delete_outline_rounded),
+                                        ),
+                                      if (active) const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2)),
+                                    ],
+                                  ),
+                                  if (!completed)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 8),
+                                      child: LinearProgressIndicator(
+                                        value: item.totalBytes > 0 ? item.progress : null,
+                                        minHeight: 4,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  String _formatBytes(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
 
   Playlist? get _selectedPlaylist {
     final id = _selectedPlaylistId;
@@ -499,6 +745,24 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
     }
   }
 
+  Future<void> _playOfflinePlaylistAndReturn(Playlist playlist) async {
+    final action = widget.onPlayOfflinePlaylist;
+    if (action == null || playlist.offlineSongCount == 0) return;
+    try {
+      final playback = action(playlist);
+      if (mounted && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+      await playback;
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Lagu lokal belum bisa diputar. Periksa file dan izin musik perangkat.')),
+        );
+      }
+    }
+  }
+
   Future<void> _shufflePlaylistAndReturn(Playlist playlist) async {
     final action = widget.onShufflePlaylist;
     if (action == null || playlist.songs.isEmpty) return;
@@ -551,6 +815,19 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
               ),
         title: Text(playlist?.name ?? 'Playlist MusikKu'),
         actions: [
+          IconButton(
+            tooltip: 'Download manager',
+            onPressed: () => unawaited(_showDownloadManager()),
+            icon: const Icon(Icons.downloading_rounded),
+          ),
+          if (playlist != null && playlist.songs.isNotEmpty)
+            IconButton(
+              tooltip: 'Download semua lagu',
+              onPressed: !Platform.isAndroid
+                  ? null
+                  : () => unawaited(_downloadPlaylist(playlist)),
+              icon: const Icon(Icons.download_for_offline_rounded),
+            ),
           if (playlist != null && playlist.songs.isNotEmpty)
             IconButton(
               tooltip: 'Putar semua',
@@ -765,7 +1042,14 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
                     children: [
                       Text(playlist.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurface, fontSize: 14, height: 1.12, fontWeight: FontWeight.w900, letterSpacing: -0.25)),
                       const SizedBox(height: 6),
-                      Text(playlist.songs.isEmpty ? 'Belum ada lagu' : '${playlist.songs.length} lagu · ${playlist.folderName}', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10.5, fontWeight: FontWeight.w600)),
+                      Text(
+                        playlist.songs.isEmpty
+                            ? 'Belum ada lagu'
+                            : '${playlist.songs.length} lagu · ${playlist.offlineSongCount} tersedia offline · ${playlist.folderName}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10.5, fontWeight: FontWeight.w600),
+                      ),
                       if (playlist.description.trim().isNotEmpty) ...[const SizedBox(height: 3), Text(playlist.description, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 9.5))],
                       const SizedBox(height: 8),
                       Row(
@@ -846,7 +1130,12 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
                   const SizedBox(height: 7),
                   Text(playlist.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurface, fontSize: 21, height: 1.05, fontWeight: FontWeight.w900, letterSpacing: -0.65)),
                   const SizedBox(height: 7),
-                  Text('${playlist.songs.length} lagu · ${playlist.folderName}', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10.5, fontWeight: FontWeight.w600)),
+                  Text(
+                    '${playlist.songs.length} lagu · ${playlist.offlineSongCount} tersedia offline · ${playlist.folderName}',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10.5, fontWeight: FontWeight.w600),
+                  ),
                   if (playlist.description.trim().isNotEmpty) ...[const SizedBox(height: 4), Text(playlist.description, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10))],
                   const SizedBox(height: 9),
                   Row(
@@ -925,11 +1214,95 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
     );
   }
 
+  Widget _downloadSongButton(YoutubeSearchResult song, ColorScheme scheme) {
+    return AnimatedBuilder(
+      animation: _downloads,
+      builder: (context, _) {
+        final item = _downloads.itemFor(song.videoId);
+        if (song.isOfflineDownloaded ||
+            item?.status == OfflineDownloadStatus.completed) {
+          return IconButton(
+            tooltip: 'Tersedia offline',
+            onPressed: () => unawaited(_showDownloadManager()),
+            icon: Icon(Icons.offline_pin_rounded, color: scheme.primary, size: 21),
+          );
+        }
+        if (item?.status == OfflineDownloadStatus.downloading) {
+          return SizedBox(
+            width: 42,
+            height: 42,
+            child: Center(
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  value: item!.totalBytes > 0 ? item.progress : null,
+                ),
+              ),
+            ),
+          );
+        }
+        if (item?.status == OfflineDownloadStatus.queued) {
+          return IconButton(
+            tooltip: 'Menunggu antrean download',
+            onPressed: () => unawaited(_showDownloadManager()),
+            icon: Icon(Icons.more_time_rounded, color: scheme.onSurfaceVariant, size: 20),
+          );
+        }
+        final isPaused = item?.status == OfflineDownloadStatus.paused;
+        final isFailed = item?.status == OfflineDownloadStatus.failed;
+        return IconButton(
+          tooltip: isPaused || isFailed
+              ? 'Lanjutkan download'
+              : 'Download untuk offline',
+          onPressed: !Platform.isAndroid || song.isLocal
+              ? null
+              : isPaused && _downloads.isActiveDownload(song.videoId)
+                  ? () => unawaited(_downloads.resumeAll())
+                  : () => unawaited(_downloadSong(song)),
+          icon: Icon(
+            isPaused || isFailed
+                ? Icons.refresh_rounded
+                : Icons.download_for_offline_outlined,
+            color: scheme.onSurfaceVariant,
+            size: 21,
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildPlaylistSongs(Playlist playlist, ColorScheme scheme) {
     return Column(
       children: [
         _playlistDetailArtwork(playlist, scheme),
         _playlistActionRow(playlist, scheme),
+        if (playlist.offlineSongCount > 0)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+            child: OutlinedButton.icon(
+              onPressed: widget.onPlayOfflinePlaylist == null
+                  ? null
+                  : () => unawaited(_playOfflinePlaylistAndReturn(playlist)),
+              icon: const Icon(Icons.offline_pin_rounded, size: 18),
+              label: Text('Putar offline · ${playlist.offlineSongCount} lagu'),
+            ),
+          ),
+        if (playlist.songs.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(22, 0, 22, 10),
+            child: Text(
+              playlist.offlineSongCount == 0
+                  ? 'Lagu playlist belum diunduh. Tekan ikon download pada lagu atau Download semua untuk menyiapkan pemutaran offline.'
+                  : 'Mode offline memutar ${playlist.offlineSongCount} lagu lokal/unduhan yang tersedia. Lagu lain akan dilewati.',
+              style: TextStyle(
+                color: scheme.onSurfaceVariant,
+                fontSize: 10,
+                height: 1.35,
+              ),
+            ),
+          ),
         Padding(
           padding: const EdgeInsets.fromLTRB(23, 2, 20, 8),
           child: Row(
@@ -978,7 +1351,9 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
                       key: ValueKey<String>('${playlist.id}:${song.videoId}'),
                       valueListenable: widget.playerUiState,
                       builder: (context, playerState, _) {
-                        final isCurrent = playerState.video?.videoId == song.videoId;
+                        final current = playerState.video;
+                        final isCurrent = current?.videoId == song.videoId ||
+                            current?.localMediaId == 'offline_${song.videoId}';
                         return Material(
                           color: isCurrent ? scheme.primaryContainer.withValues(alpha: 0.22) : Colors.transparent,
                           child: InkWell(
@@ -1041,6 +1416,7 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
                                       padding: const EdgeInsets.only(right: 2),
                                       child: Icon(Icons.volume_up_rounded, color: scheme.primary, size: 18),
                                     ),
+                                  _downloadSongButton(song, scheme),
                                   PopupMenuButton<String>(
                                     tooltip: 'Opsi lagu',
                                     onSelected: (value) {

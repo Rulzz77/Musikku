@@ -26,6 +26,10 @@ class YoutubeSearchResult {
   final String album;
   final String localMediaId;
 
+  /// App-private file path for an explicitly downloaded offline copy.
+  /// The original YouTube videoId remains unchanged for playlist identity.
+  final String offlinePath;
+
   /// Status siaran langsung: '' (video biasa), 'live' (sedang live),
   /// 'upcoming' (dijadwalkan), 'recording' (rekaman live yang sudah selesai).
   final String liveStatus;
@@ -50,6 +54,8 @@ class YoutubeSearchResult {
 
   bool get isLocal =>
       sourceType == 'local' || videoId.startsWith('local:');
+
+  bool get isOfflineDownloaded => offlinePath.trim().isNotEmpty;
 
   /// URL cover YouTube. Lagu lokal menggunakan artwork native melalui
   /// UnifiedArtwork widget dan tidak mengandalkan Image.network.
@@ -85,6 +91,7 @@ class YoutubeSearchResult {
     this.durationSeconds,
     this.album = '',
     this.localMediaId = '',
+    this.offlinePath = '',
     this.liveStatus = '',
     this.concurrentViewers,
     this.liveStartTime,
@@ -106,6 +113,7 @@ class YoutubeSearchResult {
     double? durationSeconds,
     String? album,
     String? localMediaId,
+    String? offlinePath,
     String? liveStatus,
     int? concurrentViewers,
     DateTime? liveStartTime,
@@ -126,6 +134,7 @@ class YoutubeSearchResult {
       durationSeconds: durationSeconds ?? this.durationSeconds,
       album: album ?? this.album,
       localMediaId: localMediaId ?? this.localMediaId,
+      offlinePath: offlinePath ?? this.offlinePath,
       liveStatus: liveStatus ?? this.liveStatus,
       concurrentViewers: concurrentViewers ?? this.concurrentViewers,
       liveStartTime: liveStartTime ?? this.liveStartTime,
@@ -149,6 +158,7 @@ class YoutubeSearchResult {
       'durationSeconds': durationSeconds,
       'album': album,
       'localMediaId': localMediaId,
+      'offlinePath': offlinePath,
       'liveStatus': liveStatus,
       'concurrentViewers': concurrentViewers,
       'liveStartTime': liveStartTime?.toIso8601String(),
@@ -181,6 +191,7 @@ class YoutubeSearchResult {
           (source == 'local' && videoId.startsWith('local:')
               ? videoId.substring('local:'.length)
               : ''),
+      offlinePath: json['offlinePath']?.toString() ?? '',
       liveStatus: json['liveStatus']?.toString() ?? '',
       concurrentViewers: json['concurrentViewers'] is num
           ? (json['concurrentViewers'] as num).toInt()

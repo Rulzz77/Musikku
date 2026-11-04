@@ -554,13 +554,13 @@ class _MusicStudioPageState extends State<MusicStudioPage> with WidgetsBindingOb
     final scheme = Theme.of(context).colorScheme;
     return Column(children: [
       if (widget.currentVideo != null)
-        _toolTile(context, Icons.directions_car_filled_rounded, 'Car Mode', 'Kontrol besar di aplikasi; sesi media native tersedia untuk Android Auto', () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => _CarModePage(video: widget.currentVideo!, isPlaying: widget.isPlaying, onPlayPause: widget.onPlayPause, onNext: widget.onNext, onPrevious: widget.onPrevious, onLyrics: widget.onOpenLyrics)))),
+        _toolTile(context, Icons.directions_car_filled_rounded, 'Car Mode', 'Kontrol besar di aplikasi; Android Auto dapat menjelajahi koleksi musik lokal', () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => _CarModePage(video: widget.currentVideo!, isPlaying: widget.isPlaying, onPlayPause: widget.onPlayPause, onNext: widget.onNext, onPrevious: widget.onPrevious, onLyrics: widget.onOpenLyrics)))),
       _toolTile(context, Icons.lyrics_rounded, 'Lirik lanjutan', 'Buka halaman lirik lagu yang sedang diputar', widget.onOpenLyrics),
       _toolTile(context, Icons.headphones_rounded, 'Listening Together', 'Buat atau gabung ruang dengar', widget.onOpenListeningRoom),
       _toolTile(context, Icons.speaker_group_rounded, 'Perangkat audio', 'Pilih output untuk lagu lokal dan audio native', widget.onOpenAudioSettings),
       _toolTile(context, Icons.graphic_eq_rounded, 'PCM Visualizer', 'Visualisasi sampel audio langsung dari Media3', () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const PcmVisualizerPage()))),
       const SizedBox(height: 8),
-      Text('PCM Visualizer dan penyeimbang level hanya memproses audio lokal atau stream native Media3, bukan fallback iframe YouTube. Android Auto memakai sesi media MusikKu, tetapi daftar jelajah saat ini baru menampilkan lagu aktif. True Gapless belum diaktifkan karena antrean masih dikelola Flutter.', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10, height: 1.45)),
+      Text('PCM Visualizer dan penyeimbang volume memproses audio lokal atau stream native Media3, bukan fallback iframe. Android Auto kini dapat menjelajahi lagu, artis, album, dan lagu yang baru ditambahkan dari penyimpanan perangkat. True Gapless berlaku untuk rangkaian lagu lokal native saat Shuffle/Repeat, Crossfade, antrean manual, dan Stop After Track tidak menghalangi.', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10, height: 1.45)),
     ]);
   }
 

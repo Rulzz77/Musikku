@@ -155,14 +155,18 @@ class QueueManager {
   }) {
     final scored = _queue
         .where((item) => matches(item.video))
-        .map((item) => (item: item, score: score(item.video)))
+        .map((item) {
+          final candidateScore = score(item.video);
+          return (
+            item: item,
+            score: candidateScore.isFinite ? candidateScore : -1000000.0,
+          );
+        })
         .toList()
       ..sort((a, b) => b.score.compareTo(a.score));
 
-    if (scored.isEmpty) return null;
-    final topCount = scored.length < 5 ? scored.length : 5;
-    final candidates = scored.take(topCount).toList();
-    final selected = candidates[_random.nextInt(candidates.length)].item;
+    final selected = _weightedTopPick(scored);
+    if (selected == null) return null;
     _queue.removeWhere((item) => item.id == selected.id);
     return selected;
   }
@@ -173,15 +177,44 @@ class QueueManager {
     }
 
     final scored = _queue
-        .map((item) => (item: item, score: score(item.video)))
+        .map((item) {
+          final candidateScore = score(item.video);
+          return (
+            item: item,
+            score: candidateScore.isFinite ? candidateScore : -1000000.0,
+          );
+        })
         .toList()
       ..sort((a, b) => b.score.compareTo(a.score));
 
-    final topCount = scored.length < 5 ? scored.length : 5;
-    final candidates = scored.take(topCount).toList();
-    final selected = candidates[_random.nextInt(candidates.length)].item;
+    final selected = _weightedTopPick(scored);
+    if (selected == null) return null;
     _queue.removeWhere((item) => item.id == selected.id);
     return selected;
+  }
+
+  /// Picks from the best eight candidates using score-weighted probability.
+  /// The best result is favoured without making the queue deterministic.
+  QueueItem? _weightedTopPick(
+    List<({QueueItem item, double score})> scored,
+  ) {
+    if (scored.isEmpty) return null;
+    final shortlist = scored.take(8).toList(growable: false);
+    final bestScore = shortlist.first.score;
+    final weights = shortlist
+        .map((entry) => exp(
+              ((entry.score - bestScore) / 7.0).clamp(-6.0, 0.0).toDouble(),
+            ))
+        .toList(growable: false);
+    final totalWeight = weights.fold<double>(0.0, (sum, item) => sum + item);
+    if (totalWeight <= 0 || !totalWeight.isFinite) return shortlist.first.item;
+
+    var roll = _random.nextDouble() * totalWeight;
+    for (var index = 0; index < shortlist.length; index++) {
+      roll -= weights[index];
+      if (roll <= 0) return shortlist[index].item;
+    }
+    return shortlist.last.item;
   }
 
   QueueItem? takeRandom() {

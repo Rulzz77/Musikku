@@ -440,8 +440,8 @@ class AppSettingsPage extends StatelessWidget {
                 valueListenable: settings.loudnessNormalization,
                 builder: (context, value, _) => SwitchListTile(
                   secondary: const Icon(Icons.equalizer_rounded),
-                  title: const Text('Penyeimbang level volume (Beta)', style: TextStyle(fontWeight: FontWeight.w700)),
-                  subtitle: const Text('Mengatur level RMS audio pada player native Media3. Bukan standar LUFS dan tidak berlaku untuk fallback iframe YouTube.'),
+                  title: const Text('Penyeimbang volume adaptif (Beta)', style: TextStyle(fontWeight: FontWeight.w700)),
+                  subtitle: const Text('Meratakan RMS dan menjaga headroom pada audio native Media3. Bukan standar LUFS/ReplayGain; fallback iframe YouTube tidak terpengaruh.'),
                   value: value,
                   onChanged: (next) => unawaited(settings.setLoudnessNormalization(next)),
                 ),

@@ -49,6 +49,12 @@ extension _HomeQueue on _HomePageState {
     final allowMixedPlaylistSources =
         _activeSource == _ListSource.playlist && _activePlaylistId != null;
     _shufflePool = _activeList.where((video) {
+      // A user-authored playlist is an explicit selection; dislike should not
+      // silently remove one of its tracks from that fixed playback list.
+      if (_activeSource != _ListSource.playlist &&
+          _dislikedIds.contains(video.videoId)) {
+        return false;
+      }
       if (!allowMixedPlaylistSources &&
           localSource != null &&
           video.isLocal != localSource) {
@@ -96,7 +102,7 @@ extension _HomeQueue on _HomePageState {
     if (_playerUiState.value.isSmartShuffle) {
       return _queueManager.takeSmartMatching(
         matches: matchesSource,
-        score: (video) => _smartShuffleScore(
+        score: (video) => _safeQueueScore(
           video,
           currentArtist: current.channelTitle,
         ),
@@ -108,13 +114,17 @@ extension _HomeQueue on _HomePageState {
   double _smartShuffleScore(
     YoutubeSearchResult video, {
     String? currentArtist,
+    String? targetStyle,
+    String? targetLanguage,
+    YoutubeSearchResult? referenceVideo,
   }) {
     final stat = _listeningStatsById[video.videoId];
     // Artis dibaca dari judul + channel (bukan nama channel saja).
     final artistKey = MusicStyleMatcher.artistKeyFor(video);
-    final activeVideo = currentArtist == null ? null : _currentVideo;
-    final activeArtistKey =
-        activeVideo == null ? '' : MusicStyleMatcher.artistKeyFor(activeVideo);
+    final activeVideo = referenceVideo ?? _currentVideo;
+    final activeArtistKey = activeVideo == null
+        ? (currentArtist ?? '')
+        : MusicStyleMatcher.artistKeyFor(activeVideo);
     var artistPlayCount = 0;
     var artistSkipCount = 0;
     var artistHasLikedTrack = false;
@@ -134,6 +144,20 @@ extension _HomeQueue on _HomePageState {
       }
     }
 
+    final effectiveTargetStyle = targetStyle ??
+        _shuffleMusicStyle ??
+        (activeVideo == null ? null : MusicStyleMatcher.styleFromVideo(activeVideo));
+    final effectiveTargetLanguage = targetLanguage ??
+        _shuffleMusicLanguage ??
+        (activeVideo == null ? null : MusicStyleMatcher.languageFromVideo(activeVideo));
+    final musicalSimilarity = activeVideo == null
+        ? 0.0
+        : MusicStyleMatcher.radioSimilarityScore(
+            video: video,
+            targetStyle: effectiveTargetStyle,
+            targetLanguage: effectiveTargetLanguage,
+          );
+
     return SmartQueueScorer.score(
           video: video,
           stat: stat,
@@ -144,8 +168,71 @@ extension _HomeQueue on _HomePageState {
           artistPlayCount: artistPlayCount,
           artistSkipCount: artistSkipCount,
           artistHasLikedTrack: artistHasLikedTrack,
+          musicalSimilarity: musicalSimilarity,
+          currentVideo: activeVideo,
+          recentArtistKeys: _radio.recentSelectionArtistKeys,
         ) +
-        _random.nextDouble() * 2.5;
+        _random.nextDouble() * 1.25;
+  }
+
+  double _safeQueueScore(
+    YoutubeSearchResult video, {
+    String? currentArtist,
+    String? targetStyle,
+    String? targetLanguage,
+    YoutubeSearchResult? referenceVideo,
+  }) {
+    final value = _smartShuffleScore(
+      video,
+      currentArtist: currentArtist,
+      targetStyle: targetStyle,
+      targetLanguage: targetLanguage,
+      referenceVideo: referenceVideo,
+    );
+    return value.isFinite ? value : -1000000.0;
+  }
+
+  /// Pilih kandidat rekomendasi dari shortlist berbobot. Dipakai juga oleh
+  /// fallback cache agar auto-next tidak berubah menjadi pemilihan acak murni.
+  YoutubeSearchResult? _pickSmartWeightedCandidate(
+    List<YoutubeSearchResult> candidates, {
+    YoutubeSearchResult? currentVideo,
+    String? targetStyle,
+    String? targetLanguage,
+  }) {
+    if (candidates.isEmpty) return null;
+    final current = currentVideo ?? _currentVideo;
+    final scored = candidates
+        .map((video) => (
+              video: video,
+              score: _safeQueueScore(
+                video,
+                currentArtist: current?.channelTitle,
+                targetStyle: targetStyle,
+                targetLanguage: targetLanguage,
+                referenceVideo: current,
+              ),
+            ))
+        .toList()
+      ..sort((a, b) => b.score.compareTo(a.score));
+
+    final shortlist = scored.take(8).toList(growable: false);
+    if (shortlist.isEmpty) return null;
+    final bestScore = shortlist.first.score;
+    final weights = shortlist
+        .map((item) => exp(
+              ((item.score - bestScore) / 7.0).clamp(-6.0, 0.0).toDouble(),
+            ))
+        .toList(growable: false);
+    final totalWeight = weights.fold<double>(0.0, (sum, weight) => sum + weight);
+    if (totalWeight <= 0 || !totalWeight.isFinite) return shortlist.first.video;
+
+    var roll = _random.nextDouble() * totalWeight;
+    for (var index = 0; index < shortlist.length; index++) {
+      roll -= weights[index];
+      if (roll <= 0) return shortlist[index].video;
+    }
+    return shortlist.last.video;
   }
 
   YoutubeSearchResult? _takeShuffleVideo() {
@@ -153,6 +240,10 @@ extension _HomeQueue on _HomePageState {
     final language = _shuffleMusicLanguage;
     final current = _currentVideo;
     _shufflePool.removeWhere((video) {
+      if (_activeSource != _ListSource.playlist &&
+          _dislikedIds.contains(video.videoId)) {
+        return true;
+      }
       // Explicit custom playlists may intentionally mix local and YouTube
       // tracks. Other Shuffle sessions stay source-pure.
       final allowMixedPlaylistSources =
@@ -211,17 +302,32 @@ extension _HomeQueue on _HomePageState {
         .map(
           (video) => (
             video: video,
-            score: _smartShuffleScore(video, currentArtist: currentArtist),
+            score: _safeQueueScore(video, currentArtist: currentArtist),
           ),
         )
         .toList()
       ..sort((a, b) => b.score.compareTo(a.score));
 
-    // Ambil dari beberapa kandidat teratas supaya tetap terasa acak, tetapi
-    // tidak kehilangan preferensi user.
-    final topCount = scored.length < 6 ? scored.length : 6;
-    final top = scored.take(topCount).map((item) => item.video).toList();
-    final selected = top[_random.nextInt(top.length)];
+    // Weighted draw dari delapan skor terbaik: kandidat paling relevan
+    // lebih sering terpilih, tetapi hasil tidak terkunci pada satu lagu.
+    final topCount = scored.length < 8 ? scored.length : 8;
+    final top = scored.take(topCount).toList(growable: false);
+    final bestScore = top.first.score;
+    final weights = top
+        .map((item) => exp(
+              ((item.score - bestScore) / 7.0).clamp(-6.0, 0.0).toDouble(),
+            ))
+        .toList(growable: false);
+    final totalWeight = weights.fold<double>(0.0, (sum, weight) => sum + weight);
+    var roll = _random.nextDouble() * totalWeight;
+    var selected = top.last.video;
+    for (var index = 0; index < top.length; index++) {
+      roll -= weights[index];
+      if (roll <= 0) {
+        selected = top[index].video;
+        break;
+      }
+    }
     _shufflePool.removeWhere((video) => video.videoId == selected.videoId);
     return selected;
   }

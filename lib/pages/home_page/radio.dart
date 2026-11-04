@@ -162,7 +162,8 @@ extension _HomeRadio on _HomePageState {
           YoutubeSearchService.isLikelyShortForm(video) ||
           YoutubeSearchService.isLikelyNonMusicVideo(video) ||
           video.isLive ||
-          video.isUpcoming) {
+          video.isUpcoming ||
+          !YoutubeSearchService.isMusicCandidate(video)) {
         continue;
       }
 
@@ -196,10 +197,16 @@ extension _HomeRadio on _HomePageState {
               targetLanguage: targetLanguage,
               allowCrossLanguage: true,
             );
-      final next = _pickNonShort(
-        _radio.preferArtistVariety(ranked.toList(growable: false)),
-        random: true,
-      );
+      final varied = _radio.preferArtistVariety(ranked.toList(growable: false));
+      final next = _playerUiState.value.isShuffle &&
+              !_playerUiState.value.isSmartShuffle
+          ? _pickNonShort(varied, random: true)
+          : _pickSmartWeightedCandidate(
+              varied,
+              currentVideo: current,
+              targetStyle: targetStyle,
+              targetLanguage: targetLanguage,
+            );
       if (next != null) {
         await _playVideo(next);
         return;
@@ -223,49 +230,26 @@ extension _HomeRadio on _HomePageState {
   }
 
   /// Ambil kandidat dari pool radio yang bukan Shorts, memakai metadata lokal.
-  /// Bonus selera untuk Radio: artis yang sering didengar, disukai, atau
-  /// sering dicari mendapat bobot lebih; artis yang sering di-skip dikurangi.
-  /// Level artis (dibaca dari judul + channel, sama dengan batas variasi),
-  /// bukan nama channel dan bukan lagu, karena lagu yang sudah diputar memang
-  /// disaring anti-ulang. Artis yang tidak terbaca tidak mendapat bonus. Rentang dibatasi (-10..+10) supaya genre tetap dominan dan
-  /// batas variasi artis tetap berlaku.
+  /// Riwayat pencarian memberi sinyal ringan bahwa artis pernah dicari.
+  /// Statistik play/skip/like sudah dihitung oleh SmartQueueScorer, jadi tidak
+  /// digandakan di sini agar satu artis tidak mendominasi rekomendasi.
   Future<double Function(YoutubeSearchResult)> _buildRadioTasteBonus() async {
-    final plays = <String, int>{};
-    final skips = <String, int>{};
-    final liked = <String>{};
-    for (final entry in _listeningStatsById.entries) {
-      final key = MusicStyleMatcher.artistKeyFromParts(
-        title: entry.value.title,
-        channelTitle: entry.value.artist,
-      );
-      if (key.isEmpty) continue;
-      plays[key] = (plays[key] ?? 0) + entry.value.playCount;
-      skips[key] = (skips[key] ?? 0) + entry.value.skipCount;
-      if (_likedIds.contains(entry.key)) liked.add(key);
-    }
-
     var queries = <String>[];
     try {
       queries = (await _storage.loadHistory())
           .take(30)
-          .map((q) => ' ${SmartQueueScorer.normalizeArtist(q)} ')
-          .where((q) => q.trim().isNotEmpty)
+          .map((query) => ' ${SmartQueueScorer.normalizeArtist(query)} ')
+          .where((query) => query.trim().isNotEmpty)
           .toList(growable: false);
     } catch (_) {}
 
     return (YoutubeSearchResult video) {
-      final key = MusicStyleMatcher.artistKeyFor(video);
-      if (key.isEmpty) return 0.0;
-      var bonus = 0.0;
-      bonus += ((plays[key] ?? 0).clamp(0, 20)) / 20.0 * 6.0;
-      if (liked.contains(key)) bonus += 3.0;
-      bonus -= ((skips[key] ?? 0).clamp(0, 6)) * 1.5;
-      final queryKey = SmartQueueScorer.normalizeArtist(key);
-      if (queryKey.length >= 3 &&
-          queries.any((q) => q.contains(' $queryKey '))) {
-        bonus += 3.0;
-      }
-      return bonus.clamp(-10.0, 10.0).toDouble();
+      final artistKey = MusicStyleMatcher.artistKeyFor(video);
+      final normalizedArtist = SmartQueueScorer.normalizeArtist(artistKey);
+      if (normalizedArtist.length < 3) return 0.0;
+      final searchedRecently =
+          queries.any((query) => query.contains(' $normalizedArtist '));
+      return searchedRecently ? 3.0 : 0.0;
     };
   }
 
@@ -273,16 +257,19 @@ extension _HomeRadio on _HomePageState {
     double Function(YoutubeSearchResult)? tasteBonus,
   }) {
     for (var i = 0; i < 50; i++) {
-      final candidate = _playerUiState.value.isSmartShuffle
-          ? _radio.takeSmart(
-              score: (video) => _smartShuffleScore(
-                video,
-                currentArtist: _currentVideo?.channelTitle,
-              ),
-            )
-          : _radio.take(
-              random: _playerUiState.value.isShuffle,
-              tasteBonus: tasteBonus,
+      final isPlainShuffle = _playerUiState.value.isShuffle &&
+          !_playerUiState.value.isSmartShuffle;
+      final candidate = isPlainShuffle
+          ? _radio.take(random: true)
+          : _radio.takeSmart(
+              score: (video) {
+                final base = _safeQueueScore(
+                  video,
+                  currentArtist: _currentVideo?.channelTitle,
+                );
+                final bonus = tasteBonus?.call(video) ?? 0.0;
+                return base + (bonus.isFinite ? bonus : 0.0);
+              },
             );
 
       if (candidate == null) {
@@ -291,7 +278,8 @@ extension _HomeRadio on _HomePageState {
 
       // Filter metadata lokal saja. isShortVideo(videoId) adalah API lama
       // yang sekarang selalu false dan tidak memberi sinyal tambahan.
-      if (YoutubeSearchService.isLikelyShortForm(candidate) ||
+      if (!YoutubeSearchService.isMusicCandidate(candidate) ||
+          YoutubeSearchService.isLikelyShortForm(candidate) ||
           YoutubeSearchService.isLikelyNonMusicVideo(candidate)) {
         continue;
       }
@@ -325,11 +313,17 @@ extension _HomeRadio on _HomePageState {
           seen.add(video.videoId) &&
           !_dislikedIds.contains(video.videoId) &&
           !ChannelBlockFilter.isBlocked(video, _blockedChannelKeys) &&
+          YoutubeSearchService.isMusicCandidate(video) &&
           !video.isLive &&
           !video.isUpcoming;
     }).toList(growable: false);
     if (pool.isEmpty) return null;
-    return _pickNonShort(_radio.preferArtistVariety(pool), random: true);
+    final varied = _radio.preferArtistVariety(pool);
+    if (_playerUiState.value.isShuffle &&
+        !_playerUiState.value.isSmartShuffle) {
+      return _pickNonShort(varied, random: true);
+    }
+    return _pickSmartWeightedCandidate(varied, currentVideo: _currentVideo);
   }
 
   /// Kandidat radio/cached fallback tidak boleh berupa lagu sekarang atau
@@ -365,7 +359,8 @@ extension _HomeRadio on _HomePageState {
     }
 
     for (final video in list) {
-      if (YoutubeSearchService.isLikelyShortForm(video) ||
+      if (!YoutubeSearchService.isMusicCandidate(video) ||
+          YoutubeSearchService.isLikelyShortForm(video) ||
           YoutubeSearchService.isLikelyNonMusicVideo(video) ||
           _wasPlayedInRecentPlaybackHistory(video)) {
         continue;
@@ -434,6 +429,7 @@ extension _HomeRadio on _HomePageState {
         if (ChannelBlockFilter.isBlocked(video, _blockedChannelKeys)) return false;
         if (YoutubeSearchService.isLikelyShortForm(video)) return false;
         if (YoutubeSearchService.isLikelyNonMusicVideo(video)) return false;
+        if (!YoutubeSearchService.isMusicCandidate(video)) return false;
         if (video.isLive || video.isUpcoming) return false;
         // Cached non-radio lists may only backfill a known related genre;
         // an old unclassified search result must not hijack song-specific Radio.
@@ -467,29 +463,18 @@ extension _HomeRadio on _HomePageState {
           targetLanguage: targetLanguage,
           allowCrossLanguage: !_radio.locksLanguage,
         );
-        var selectionPool = styleCandidates;
-        if (_playerUiState.value.isSmartShuffle) {
-          selectionPool = List<YoutubeSearchResult>.from(styleCandidates)
-            ..sort((a, b) => _smartShuffleScore(
-                  b,
-                  currentArtist: _currentVideo?.channelTitle,
-                ).compareTo(
-                  _smartShuffleScore(
-                    a,
-                    currentArtist: _currentVideo?.channelTitle,
-                  ),
-                ));
-          // Smart Shuffle remains smart, but still randomizes among a small
-          // high-score pool rather than always selecting the same first item.
-          if (selectionPool.length > 8) {
-            selectionPool = selectionPool.take(8).toList(growable: false);
-          }
-        }
-
-        next = _pickNonShort(
-          _radio.preferArtistVariety(selectionPool),
-          random: true,
-        );
+        // Weighted recommendation picker ranks this whole compatible pool
+        // once, then samples from its best eight candidates.
+        final variedPool = _radio.preferArtistVariety(styleCandidates);
+        next = _playerUiState.value.isShuffle &&
+                !_playerUiState.value.isSmartShuffle
+            ? _pickNonShort(variedPool, random: true)
+            : _pickSmartWeightedCandidate(
+                variedPool,
+                currentVideo: _currentVideo,
+                targetStyle: targetStyle,
+                targetLanguage: targetLanguage,
+              );
       }
     }
 
@@ -521,6 +506,7 @@ extension _HomeRadio on _HomePageState {
             !ChannelBlockFilter.isBlocked(video, _blockedChannelKeys) &&
             !YoutubeSearchService.isLikelyShortForm(video) &&
             !YoutubeSearchService.isLikelyNonMusicVideo(video) &&
+            YoutubeSearchService.isMusicCandidate(video) &&
             !video.isLive &&
             !video.isUpcoming &&
             targetStyle != null &&
@@ -546,12 +532,18 @@ extension _HomeRadio on _HomePageState {
           targetLanguage: targetLanguage,
           allowCrossLanguage: !_radio.locksLanguage,
         );
-        next = _pickNonShort(
-          _radio.preferArtistVariety(
-            preferred.isNotEmpty ? preferred : verifiedLocal,
-          ),
-          random: true,
+        final variedLocal = _radio.preferArtistVariety(
+          preferred.isNotEmpty ? preferred : verifiedLocal,
         );
+        next = _playerUiState.value.isShuffle &&
+                !_playerUiState.value.isSmartShuffle
+            ? _pickNonShort(variedLocal, random: true)
+            : _pickSmartWeightedCandidate(
+                variedLocal,
+                currentVideo: _currentVideo,
+                targetStyle: targetStyle,
+                targetLanguage: targetLanguage,
+              );
       }
     }
 

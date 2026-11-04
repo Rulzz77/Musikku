@@ -1,12 +1,15 @@
 package com.musikku.app
 
 import android.app.Notification
+import android.database.ContentObserver
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.content.BroadcastReceiver
+import android.content.ContentUris
+import android.provider.MediaStore
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -24,8 +27,10 @@ import android.os.SystemClock
 import android.view.KeyEvent
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.concurrent.Executors
 
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import androidx.media.app.NotificationCompat.MediaStyle
 import androidx.media.MediaBrowserServiceCompat
 import android.support.v4.media.MediaBrowserCompat
@@ -58,6 +63,13 @@ class PlaybackService : MediaBrowserServiceCompat() {
         private const val CHANNEL_ID = "musikku_playback"
         private const val CHANNEL_NAME = "MusikKu Playback"
         private const val NOTIFICATION_ID = 1001
+        private const val BROWSE_ROOT_ID = "musikku_root"
+        private const val BROWSE_SONGS_ID = "local_songs"
+        private const val BROWSE_RECENT_ID = "local_recent"
+        private const val BROWSE_ARTISTS_ID = "local_artists"
+        private const val BROWSE_ALBUMS_ID = "local_albums"
+        private const val MEDIA_ID_SEPARATOR = "|"
+        private const val ANDROID_AUTO_PREFETCH_REMAINING = 8
 
         var eventSink: io.flutter.plugin.common.EventChannel.EventSink? = null
         private var activeInstance: PlaybackService? = null
@@ -150,6 +162,10 @@ class PlaybackService : MediaBrowserServiceCompat() {
             mediaUri: String = "",
             streamHeaders: Map<String, String> = emptyMap(),
             gaplessQueue: List<Map<String, String>> = emptyList(),
+            fromAndroidAuto: Boolean = false,
+            androidAutoBrowseParentId: String = "",
+            androidAutoBrowseSearchQuery: String = "",
+            androidAutoNextBrowsePosition: Int = -1,
         ) {
             val intent = Intent(context, PlaybackService::class.java).apply {
                 putExtra("videoId", videoId)
@@ -161,6 +177,10 @@ class PlaybackService : MediaBrowserServiceCompat() {
                 putExtra("durationSeconds", durationSeconds.coerceAtLeast(0.0))
                 putExtra("sourceType", sourceType)
                 putExtra("mediaUri", mediaUri)
+                putExtra("androidAutoBrowseQueue", fromAndroidAuto)
+                putExtra("androidAutoBrowseParentId", androidAutoBrowseParentId)
+                putExtra("androidAutoBrowseSearchQuery", androidAutoBrowseSearchQuery)
+                putExtra("androidAutoNextBrowsePosition", androidAutoNextBrowsePosition)
                 putExtra("streamHeaders", Bundle().apply {
                     streamHeaders.forEach { (key, value) -> putString(key, value) }
                 })
@@ -484,6 +504,12 @@ class PlaybackService : MediaBrowserServiceCompat() {
 
     private var currentVideoId = ""
     private var currentSourceType = "youtube"
+    private var androidAutoBrowseQueue = false
+    private var androidAutoBrowseParentId = ""
+    private var androidAutoBrowseSearchQuery = ""
+    private var androidAutoNextBrowsePosition = -1
+    private var androidAutoBrowseQueueLoading = false
+    private var androidAutoBrowseGeneration = 0L
     private var currentMediaUri = ""
     private var currentLocalMediaId = ""
     private var currentStreamHeaders: Map<String, String> = emptyMap()
@@ -541,6 +567,19 @@ class PlaybackService : MediaBrowserServiceCompat() {
         }
     }
 
+    private val androidAutoBrowseExecutor = Executors.newSingleThreadExecutor()
+    private val androidAutoMainHandler = Handler(Looper.getMainLooper())
+    private val audioLibraryObserver = object : ContentObserver(androidAutoMainHandler) {
+        override fun onChange(selfChange: Boolean, uri: Uri?) {
+            notifyChildrenChanged(BROWSE_ROOT_ID)
+            notifyChildrenChanged(BROWSE_SONGS_ID)
+            notifyChildrenChanged(BROWSE_RECENT_ID)
+            notifyChildrenChanged(BROWSE_ARTISTS_ID)
+            notifyChildrenChanged(BROWSE_ALBUMS_ID)
+        }
+    }
+    private var audioLibraryObserverRegistered = false
+
     private var notificationTitle = ""
     private var notificationArtist = ""
     private var notificationPlaying = false
@@ -548,34 +587,495 @@ class PlaybackService : MediaBrowserServiceCompat() {
     private var lastWidgetUpdateAtMs = 0L
     private var lastWidgetStateKey = ""
 
+    private fun registerAudioLibraryObserver() {
+        if (audioLibraryObserverRegistered) return
+        runCatching {
+            contentResolver.registerContentObserver(
+                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                true,
+                audioLibraryObserver,
+            )
+            audioLibraryObserverRegistered = true
+        }.onFailure { MusikKuLogger.w(TAG, "MediaStore observer registration failed", it) }
+    }
+
+    private fun unregisterAudioLibraryObserver() {
+        if (!audioLibraryObserverRegistered) return
+        runCatching { contentResolver.unregisterContentObserver(audioLibraryObserver) }
+        audioLibraryObserverRegistered = false
+    }
+
+    private data class BrowseAudioTrack(
+        val id: Long,
+        val title: String,
+        val artist: String,
+        val album: String,
+        val durationMs: Long,
+        val albumId: Long,
+    ) {
+        val mediaUri: Uri get() = ContentUris.withAppendedId(
+            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+            id,
+        )
+
+        val artworkUri: Uri get() = ContentUris.withAppendedId(
+            Uri.parse("content://media/external/audio/albumart"),
+            albumId,
+        )
+    }
+
+    private fun hasAudioLibraryPermission(): Boolean {
+        val permission = if (Build.VERSION.SDK_INT >= 33) {
+            android.Manifest.permission.READ_MEDIA_AUDIO
+        } else {
+            android.Manifest.permission.READ_EXTERNAL_STORAGE
+        }
+        return ContextCompat.checkSelfPermission(this, permission) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    }
+
     override fun onGetRoot(
         clientPackageName: String,
         clientUid: Int,
-        rootHints: android.os.Bundle?
+        rootHints: Bundle?,
     ): BrowserRoot? {
-        return BrowserRoot("musikku_root", null)
+        return BrowserRoot(BROWSE_ROOT_ID, null)
     }
 
     override fun onLoadChildren(
         parentId: String,
-        result: Result<List<MediaBrowserCompat.MediaItem>>
+        result: Result<List<MediaBrowserCompat.MediaItem>>,
     ) {
-        val items = mutableListOf<MediaBrowserCompat.MediaItem>()
-        if (parentId == "musikku_root" && currentVideoId.isNotBlank()) {
-            val description = MediaDescriptionCompat.Builder()
-                .setMediaId(currentVideoId)
-                .setTitle(currentTitle)
-                .setSubtitle(currentArtist)
-                .setIconUri(
-                    currentThumbnailUrl.takeIf { it.isNotBlank() }?.let(Uri::parse)
+        onLoadChildren(parentId, result, Bundle.EMPTY)
+    }
+
+    override fun onLoadChildren(
+        parentId: String,
+        result: Result<List<MediaBrowserCompat.MediaItem>>,
+        options: Bundle,
+    ) {
+        // MediaStore queries must not block the Android Auto browser's UI thread.
+        // Support the standard MediaBrowser page options so large libraries are
+        // browsable without returning an unbounded list in one binder response.
+        val page = options.getInt(MediaBrowserCompat.EXTRA_PAGE, 0).coerceAtLeast(0)
+        val pageSize = options.getInt(MediaBrowserCompat.EXTRA_PAGE_SIZE, 50).coerceIn(1, 100)
+        result.detach()
+        androidAutoBrowseExecutor.execute {
+            val items = runCatching { loadBrowseChildren(parentId, page, pageSize) }
+                .onFailure { MusikKuLogger.w(TAG, "Android Auto browse failed for $parentId", it) }
+                .getOrDefault(emptyList())
+            androidAutoMainHandler.post {
+                runCatching { result.sendResult(items) }
+                    .onFailure { MusikKuLogger.w(TAG, "Android Auto result delivery failed for $parentId", it) }
+            }
+        }
+    }
+
+    private fun browseOffset(page: Int, pageSize: Int): Int =
+        (page.toLong().coerceAtLeast(0L) * pageSize.coerceIn(1, 100).toLong())
+            .coerceAtMost(Int.MAX_VALUE.toLong())
+            .toInt()
+
+    private fun loadBrowseChildren(
+        parentId: String,
+        page: Int,
+        pageSize: Int,
+    ): List<MediaBrowserCompat.MediaItem> {
+        if (parentId == BROWSE_ROOT_ID) {
+            val items = mutableListOf<MediaBrowserCompat.MediaItem>()
+            if (currentVideoId.isNotBlank()) {
+                items += playableBrowseItem(
+                    mediaId = "now_playing",
+                    title = "Sedang diputar",
+                    artist = currentTitle,
+                    album = currentArtist,
+                    durationMs = currentDurationMs,
+                    artworkUri = currentThumbnailUrl.takeIf { it.startsWith("https://") }?.let(Uri::parse),
                 )
-                .build()
-            items += MediaBrowserCompat.MediaItem(
-                description,
-                MediaBrowserCompat.MediaItem.FLAG_PLAYABLE,
+            }
+            val librarySubtitle = if (hasAudioLibraryPermission()) {
+                "Koleksi audio perangkat"
+            } else {
+                "Buka MusikKu dan izinkan akses musik"
+            }
+            items += browsableItem(BROWSE_SONGS_ID, "Semua lagu", librarySubtitle)
+            items += browsableItem(
+                BROWSE_RECENT_ID,
+                "Baru ditambahkan",
+                if (hasAudioLibraryPermission()) "Lagu yang terakhir masuk ke perangkat" else librarySubtitle,
+            )
+            items += browsableItem(BROWSE_ARTISTS_ID, "Artis", librarySubtitle)
+            items += browsableItem(BROWSE_ALBUMS_ID, "Album", librarySubtitle)
+            return items
+        }
+
+        if (!hasAudioLibraryPermission()) return emptyList()
+
+        return when {
+            parentId == BROWSE_SONGS_ID -> {
+                val offset = browseOffset(page, pageSize)
+                queryBrowseTracks(parentId, limit = pageSize, offset = offset)
+                    .mapIndexed { index, track -> trackBrowseItem(track, parentId, offset + index) }
+            }
+            parentId == BROWSE_RECENT_ID -> {
+                val offset = browseOffset(page, pageSize)
+                queryBrowseTracks(parentId, limit = pageSize, offset = offset, recentFirst = true)
+                    .mapIndexed { index, track -> trackBrowseItem(track, parentId, offset + index) }
+            }
+            parentId == BROWSE_ARTISTS_ID -> queryArtists(page, pageSize)
+            parentId == BROWSE_ALBUMS_ID -> queryAlbums(page, pageSize)
+            parentId.startsWith("artist:") || parentId.startsWith("album:") -> {
+                val offset = browseOffset(page, pageSize)
+                queryBrowseTracks(parentId, limit = pageSize, offset = offset)
+                    .mapIndexed { index, track -> trackBrowseItem(track, parentId, offset + index) }
+            }
+            else -> emptyList()
+        }
+    }
+
+    private fun browsableItem(id: String, title: String, subtitle: String): MediaBrowserCompat.MediaItem {
+        val description = MediaDescriptionCompat.Builder()
+            .setMediaId(id)
+            .setTitle(title)
+            .setSubtitle(subtitle)
+            .build()
+        return MediaBrowserCompat.MediaItem(description, MediaBrowserCompat.MediaItem.FLAG_BROWSABLE)
+    }
+
+    private fun playableBrowseItem(
+        mediaId: String,
+        title: String,
+        artist: String,
+        album: String,
+        durationMs: Long,
+        artworkUri: Uri?,
+    ): MediaBrowserCompat.MediaItem {
+        val description = MediaDescriptionCompat.Builder()
+            .setMediaId(mediaId)
+            .setTitle(title.ifBlank { "Tanpa judul" })
+            .setSubtitle(artist)
+            .setDescription(album)
+            .setIconUri(artworkUri)
+            .setExtras(Bundle().apply {
+                putLong(MediaMetadataCompat.METADATA_KEY_DURATION, durationMs.coerceAtLeast(0L))
+            })
+            .build()
+        return MediaBrowserCompat.MediaItem(description, MediaBrowserCompat.MediaItem.FLAG_PLAYABLE)
+    }
+
+    private fun trackBrowseItem(
+        track: BrowseAudioTrack,
+        parentId: String,
+        positionInParent: Int,
+    ): MediaBrowserCompat.MediaItem {
+        return playableBrowseItem(
+            mediaId = "track$MEDIA_ID_SEPARATOR$parentId$MEDIA_ID_SEPARATOR$positionInParent$MEDIA_ID_SEPARATOR${track.id}",
+            title = track.title,
+            artist = track.artist,
+            album = track.album,
+            durationMs = track.durationMs,
+            artworkUri = track.artworkUri,
+        )
+    }
+
+    // Each item remembers its browsed parent so Play from Android Auto
+    // rebuilds the same song order (all songs, recently added, artist, album).
+
+    private fun queryBrowseTracks(
+        parentId: String,
+        limit: Int,
+        offset: Int = 0,
+        recentFirst: Boolean = false,
+        searchQuery: String? = null,
+    ): List<BrowseAudioTrack> {
+        val resolver = contentResolver
+        val collection = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+        val projection = arrayOf(
+            MediaStore.Audio.Media._ID,
+            MediaStore.Audio.Media.TITLE,
+            MediaStore.Audio.Media.ARTIST,
+            MediaStore.Audio.Media.ALBUM,
+            MediaStore.Audio.Media.DURATION,
+            MediaStore.Audio.Media.ALBUM_ID,
+        )
+        val clauses = mutableListOf("${MediaStore.Audio.Media.IS_MUSIC} != 0")
+        val args = mutableListOf<String>()
+        when {
+            parentId.startsWith("artist:") -> {
+                clauses += "${MediaStore.Audio.Media.ARTIST_ID} = ?"
+                args += parentId.substringAfter(':')
+            }
+            parentId.startsWith("album:") -> {
+                clauses += "${MediaStore.Audio.Media.ALBUM_ID} = ?"
+                args += parentId.substringAfter(':')
+            }
+        }
+        if (!searchQuery.isNullOrBlank()) {
+            clauses += "(${MediaStore.Audio.Media.TITLE} LIKE ? ESCAPE '\\' OR ${MediaStore.Audio.Media.ARTIST} LIKE ? ESCAPE '\\')"
+            val escaped = searchQuery.trim().replace("%", "\\%").replace("_", "\\_")
+            args += "%$escaped%"
+            args += "%$escaped%"
+        }
+        val order = if (recentFirst || parentId == BROWSE_RECENT_ID) {
+            "${MediaStore.Audio.Media.DATE_ADDED} DESC, ${MediaStore.Audio.Media.TITLE} COLLATE NOCASE ASC, ${MediaStore.Audio.Media._ID} ASC"
+        } else {
+            "${MediaStore.Audio.Media.TITLE} COLLATE NOCASE ASC, ${MediaStore.Audio.Media._ID} ASC"
+        }
+        val cursor = resolver.query(
+            collection,
+            projection,
+            clauses.joinToString(" AND "),
+            args.toTypedArray(),
+            "$order LIMIT ${limit.coerceIn(1, 100)} OFFSET ${offset.coerceAtLeast(0)}",
+        ) ?: return emptyList()
+        cursor.use { c ->
+            val idIndex = c.getColumnIndex(MediaStore.Audio.Media._ID)
+            val titleIndex = c.getColumnIndex(MediaStore.Audio.Media.TITLE)
+            val artistIndex = c.getColumnIndex(MediaStore.Audio.Media.ARTIST)
+            val albumIndex = c.getColumnIndex(MediaStore.Audio.Media.ALBUM)
+            val durationIndex = c.getColumnIndex(MediaStore.Audio.Media.DURATION)
+            val albumIdIndex = c.getColumnIndex(MediaStore.Audio.Media.ALBUM_ID)
+            val tracks = ArrayList<BrowseAudioTrack>(c.count.coerceAtMost(limit))
+            while (c.moveToNext()) {
+                val id = c.getLong(idIndex)
+                val title = c.getString(titleIndex)?.trim().orEmpty().ifBlank { "Tanpa judul" }
+                tracks += BrowseAudioTrack(
+                    id = id,
+                    title = title,
+                    artist = c.getString(artistIndex)?.trim().orEmpty().ifBlank { "Artis tidak diketahui" },
+                    album = c.getString(albumIndex)?.trim().orEmpty(),
+                    durationMs = c.getLong(durationIndex).coerceAtLeast(0L),
+                    albumId = c.getLong(albumIdIndex),
+                )
+            }
+            return tracks
+        }
+    }
+
+    private fun queryArtists(page: Int, pageSize: Int): List<MediaBrowserCompat.MediaItem> {
+        val projection = arrayOf(
+            MediaStore.Audio.Artists._ID,
+            MediaStore.Audio.Artists.ARTIST,
+            MediaStore.Audio.Artists.NUMBER_OF_TRACKS,
+        )
+        val cursor = contentResolver.query(
+            MediaStore.Audio.Artists.EXTERNAL_CONTENT_URI,
+            projection,
+            "${MediaStore.Audio.Artists.NUMBER_OF_TRACKS} > 0",
+            null,
+            "${MediaStore.Audio.Artists.ARTIST} COLLATE NOCASE ASC, ${MediaStore.Audio.Artists._ID} ASC LIMIT ${pageSize.coerceIn(1, 100)} OFFSET ${browseOffset(page, pageSize)}",
+        ) ?: return emptyList()
+        cursor.use { c ->
+            val idIndex = c.getColumnIndex(MediaStore.Audio.Artists._ID)
+            val nameIndex = c.getColumnIndex(MediaStore.Audio.Artists.ARTIST)
+            val countIndex = c.getColumnIndex(MediaStore.Audio.Artists.NUMBER_OF_TRACKS)
+            val items = mutableListOf<MediaBrowserCompat.MediaItem>()
+            while (c.moveToNext()) {
+                val id = c.getLong(idIndex)
+                val title = c.getString(nameIndex)?.trim().orEmpty().ifBlank { "Artis tidak diketahui" }
+                val count = c.getInt(countIndex)
+                items += browsableItem("artist:$id", title, "$count lagu")
+            }
+            return items
+        }
+    }
+
+    private fun queryAlbums(page: Int, pageSize: Int): List<MediaBrowserCompat.MediaItem> {
+        val projection = arrayOf(
+            MediaStore.Audio.Albums._ID,
+            MediaStore.Audio.Albums.ALBUM,
+            MediaStore.Audio.Albums.ARTIST,
+            MediaStore.Audio.Albums.NUMBER_OF_SONGS,
+        )
+        val cursor = contentResolver.query(
+            MediaStore.Audio.Albums.EXTERNAL_CONTENT_URI,
+            projection,
+            "${MediaStore.Audio.Albums.NUMBER_OF_SONGS} > 0",
+            null,
+            "${MediaStore.Audio.Albums.ALBUM} COLLATE NOCASE ASC, ${MediaStore.Audio.Albums._ID} ASC LIMIT ${pageSize.coerceIn(1, 100)} OFFSET ${browseOffset(page, pageSize)}",
+        ) ?: return emptyList()
+        cursor.use { c ->
+            val idIndex = c.getColumnIndex(MediaStore.Audio.Albums._ID)
+            val albumIndex = c.getColumnIndex(MediaStore.Audio.Albums.ALBUM)
+            val artistIndex = c.getColumnIndex(MediaStore.Audio.Albums.ARTIST)
+            val countIndex = c.getColumnIndex(MediaStore.Audio.Albums.NUMBER_OF_SONGS)
+            val items = mutableListOf<MediaBrowserCompat.MediaItem>()
+            while (c.moveToNext()) {
+                val id = c.getLong(idIndex)
+                val title = c.getString(albumIndex)?.trim().orEmpty().ifBlank { "Album tanpa judul" }
+                val artist = c.getString(artistIndex)?.trim().orEmpty()
+                val count = c.getInt(countIndex)
+                items += browsableItem("album:$id", title, listOf(artist, "$count lagu").filter { it.isNotBlank() }.joinToString(" · "))
+            }
+            return items
+        }
+    }
+
+    private fun playFromBrowseMediaId(mediaId: String) {
+        if (mediaId == "now_playing") {
+            if (isAudioPlayerSource()) playAudio() else if (!currentPlaying) sendCommandToFlutter("notificationPlayPause")
+            return
+        }
+        val parts = mediaId.split(MEDIA_ID_SEPARATOR, limit = 4)
+        if (parts.size != 4 || parts[0] != "track") return
+        val parentId = parts[1]
+        val selectedPosition = parts[2].toIntOrNull()?.takeIf { it >= 0 } ?: return
+        val selectedId = parts[3].toLongOrNull() ?: return
+        if (!hasAudioLibraryPermission()) return
+        val tracks = queryBrowseTracks(
+            parentId,
+            limit = 62,
+            offset = selectedPosition,
+            recentFirst = parentId == BROWSE_RECENT_ID,
+        )
+        val selected = tracks.firstOrNull()?.takeIf { it.id == selectedId } ?: return
+        val successors = tracks.drop(1).take(60).map { track ->
+            mapOf(
+                "videoId" to "local:${track.id}",
+                "title" to track.title,
+                "artist" to track.artist,
+                "mediaUri" to track.mediaUri.toString(),
             )
         }
-        result.sendResult(items)
+        start(
+            context = this,
+            videoId = "local:${selected.id}",
+            title = selected.title,
+            artist = selected.artist,
+            thumbnailUrl = selected.artworkUri.toString(),
+            playing = true,
+            positionSeconds = 0.0,
+            durationSeconds = selected.durationMs / 1000.0,
+            sourceType = "local",
+            mediaUri = selected.mediaUri.toString(),
+            gaplessQueue = successors,
+            fromAndroidAuto = true,
+            androidAutoBrowseParentId = parentId,
+            androidAutoNextBrowsePosition = if (tracks.size > 61) selectedPosition + 61 else -1,
+        )
+    }
+
+    private fun playFromBrowseSearch(query: String?) {
+        if (!hasAudioLibraryPermission()) return
+        val safeQuery = query?.trim().orEmpty()
+        val tracks = queryBrowseTracks(BROWSE_SONGS_ID, limit = 62, searchQuery = safeQuery)
+        if (tracks.isEmpty()) return
+        val selected = tracks.first()
+        val successors = tracks.drop(1).take(60).map { track ->
+            mapOf(
+                "videoId" to "local:${track.id}",
+                "title" to track.title,
+                "artist" to track.artist,
+                "mediaUri" to track.mediaUri.toString(),
+            )
+        }
+        start(
+            context = this,
+            videoId = "local:${selected.id}",
+            title = selected.title,
+            artist = selected.artist,
+            thumbnailUrl = selected.artworkUri.toString(),
+            playing = true,
+            positionSeconds = 0.0,
+            durationSeconds = selected.durationMs / 1000.0,
+            sourceType = "local",
+            mediaUri = selected.mediaUri.toString(),
+            gaplessQueue = successors,
+            fromAndroidAuto = true,
+            androidAutoBrowseParentId = BROWSE_SONGS_ID,
+            androidAutoBrowseSearchQuery = safeQuery,
+            androidAutoNextBrowsePosition = if (tracks.size > 61) 61 else -1,
+        )
+    }
+
+    /**
+     * Use the native playlist when it is authoritative (Android Auto browse or
+     * the app's already-preloaded local gapless queue). Otherwise delegate to
+     * Flutter so manual queue, Radio, Shuffle and online-source rules remain
+     * the single source of truth.
+     */
+    private fun maybeAppendAndroidAutoBrowseQueue(player: ExoPlayer) {
+        if (!androidAutoBrowseQueue || currentSourceType != "local" ||
+            androidAutoBrowseParentId.isBlank() || androidAutoNextBrowsePosition < 0 ||
+            androidAutoBrowseQueueLoading) {
+            return
+        }
+        val remaining = player.mediaItemCount - player.currentMediaItemIndex - 1
+        if (remaining > ANDROID_AUTO_PREFETCH_REMAINING) return
+
+        val generation = androidAutoBrowseGeneration
+        val parentId = androidAutoBrowseParentId
+        val searchQuery = androidAutoBrowseSearchQuery
+        val offset = androidAutoNextBrowsePosition
+        val recentFirst = parentId == BROWSE_RECENT_ID
+        androidAutoBrowseQueueLoading = true
+        androidAutoBrowseExecutor.execute {
+            val nextTracks = runCatching {
+                queryBrowseTracks(
+                    parentId,
+                    limit = 61,
+                    offset = offset,
+                    recentFirst = recentFirst,
+                    searchQuery = searchQuery.takeIf { it.isNotBlank() },
+                )
+            }.onFailure {
+                MusikKuLogger.w(TAG, "Android Auto queue prefetch failed at $offset", it)
+            }.getOrDefault(emptyList())
+
+            androidAutoMainHandler.post {
+                if (generation != androidAutoBrowseGeneration || player !== localPlayer ||
+                    !androidAutoBrowseQueue || currentSourceType != "local") {
+                    return@post
+                }
+                val appendTracks = nextTracks.take(60)
+                if (appendTracks.isNotEmpty()) {
+                    val mediaItems = appendTracks.map { track ->
+                        createLocalMediaItem(
+                            "local:${track.id}",
+                            track.title,
+                            track.artist,
+                            track.mediaUri.toString(),
+                        )
+                    }
+                    player.addMediaItems(player.mediaItemCount, mediaItems)
+                    nativeGaplessQueueIds = nativeGaplessQueueIds + appendTracks.map { "local:${it.id}" }
+                    androidAutoNextBrowsePosition = if (nextTracks.size > 60) offset + 60 else -1
+                } else {
+                    androidAutoNextBrowsePosition = -1
+                }
+                androidAutoBrowseQueueLoading = false
+            }
+        }
+    }
+
+    private fun skipToNextPlayback() {
+        val player = localPlayer
+        if (currentSourceType == "local" && androidAutoBrowseQueue) {
+            if (player?.hasNextMediaItem() == true) player.seekToNextMediaItem()
+            return
+        }
+        // The app's local gapless queue is authoritative only while a native
+        // successor is still loaded. At its end, let Flutter resolve the next
+        // item so a mixed playlist can continue with its online track.
+        if (currentSourceType == "local" && nativeGaplessQueueIds.isNotEmpty() &&
+            player?.hasNextMediaItem() == true) {
+            player.seekToNextMediaItem()
+            return
+        }
+        sendCommandToFlutter("notificationNext")
+    }
+
+    private fun skipToPreviousPlayback() {
+        val player = localPlayer
+        if (currentSourceType == "local" && androidAutoBrowseQueue) {
+            if (player != null) {
+                if (player.currentPosition > 3_000L) player.seekTo(0L)
+                else if (player.hasPreviousMediaItem()) player.seekToPreviousMediaItem()
+            }
+            return
+        }
+        // Previous is kept in Flutter for normal app playback because the
+        // native gapless playlist contains future tracks, not the full history.
+        sendCommandToFlutter("notificationPrevious")
     }
 
     override fun onCreate() {
@@ -635,6 +1135,14 @@ class PlaybackService : MediaBrowserServiceCompat() {
                     return true
                 }
 
+                override fun onPlayFromMediaId(mediaId: String?, extras: Bundle?) {
+                    if (!mediaId.isNullOrBlank()) playFromBrowseMediaId(mediaId)
+                }
+
+                override fun onPlayFromSearch(query: String?, extras: Bundle?) {
+                    playFromBrowseSearch(query)
+                }
+
                 // Tombol headset / earbuds: play hanya bila sedang pause,
                 // pause hanya bila sedang play, supaya tidak salah toggle.
                 override fun onPlay() {
@@ -657,11 +1165,15 @@ class PlaybackService : MediaBrowserServiceCompat() {
                 }
 
                 override fun onSkipToNext() {
-                    sendCommandToFlutter("notificationNext")
+                    skipToNextPlayback()
                 }
 
                 override fun onSkipToPrevious() {
-                    sendCommandToFlutter("notificationPrevious")
+                    skipToPreviousPlayback()
+                }
+
+                override fun onSeekTo(pos: Long) {
+                    if (isAudioPlayerSource()) seekAudio(pos / 1000.0)
                 }
 
                 override fun onStop() {
@@ -677,6 +1189,7 @@ class PlaybackService : MediaBrowserServiceCompat() {
         ensureLocalPlayer()
         registerNoisyReceiver()
         registerAudioDeviceCallback()
+        registerAudioLibraryObserver()
     }
 
 
@@ -758,6 +1271,7 @@ class PlaybackService : MediaBrowserServiceCompat() {
                         if (player.isPlaying) "playing" else "buffering",
                         trackTransition = true,
                     )
+                    maybeAppendAndroidAutoBrowseQueue(player)
                     if (foregroundStarted) {
                         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
                         manager.notify(NOTIFICATION_ID, createNotification())
@@ -1214,12 +1728,12 @@ class PlaybackService : MediaBrowserServiceCompat() {
             }
 
             ACTION_NEXT -> {
-                sendCommandToFlutter("notificationNext")
+                skipToNextPlayback()
                 return START_NOT_STICKY
             }
 
             ACTION_PREVIOUS -> {
-                sendCommandToFlutter("notificationPrevious")
+                skipToPreviousPlayback()
                 return START_NOT_STICKY
             }
 
@@ -1244,6 +1758,18 @@ class PlaybackService : MediaBrowserServiceCompat() {
         currentSourceType = intent?.getStringExtra("sourceType")?.trim().orEmpty().ifBlank {
             if (currentVideoId.startsWith("local:")) "local" else "youtube"
         }
+        androidAutoBrowseQueue = intent?.getBooleanExtra("androidAutoBrowseQueue", false) ?: false
+        androidAutoBrowseGeneration += 1L
+        androidAutoBrowseParentId = if (androidAutoBrowseQueue) {
+            intent?.getStringExtra("androidAutoBrowseParentId")?.trim().orEmpty()
+        } else ""
+        androidAutoBrowseSearchQuery = if (androidAutoBrowseQueue) {
+            intent?.getStringExtra("androidAutoBrowseSearchQuery")?.trim().orEmpty()
+        } else ""
+        androidAutoNextBrowsePosition = if (androidAutoBrowseQueue) {
+            intent?.getIntExtra("androidAutoNextBrowsePosition", -1) ?: -1
+        } else -1
+        androidAutoBrowseQueueLoading = false
         currentMediaUri = intent?.getStringExtra("mediaUri")?.trim().orEmpty()
         currentStreamHeaders = intent?.getBundleExtra("streamHeaders")?.let { bundle ->
             bundle.keySet().mapNotNull { key ->
@@ -1395,7 +1921,9 @@ class PlaybackService : MediaBrowserServiceCompat() {
                 PlaybackStateCompat.ACTION_SKIP_TO_NEXT or
                 PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or
                 PlaybackStateCompat.ACTION_STOP or
-                PlaybackStateCompat.ACTION_SEEK_TO
+                PlaybackStateCompat.ACTION_SEEK_TO or
+                PlaybackStateCompat.ACTION_PLAY_FROM_MEDIA_ID or
+                PlaybackStateCompat.ACTION_PLAY_FROM_SEARCH
 
         val playbackState =
             if (currentPlaying) {
@@ -1715,6 +2243,8 @@ class PlaybackService : MediaBrowserServiceCompat() {
 
 
     override fun onDestroy() {
+        unregisterAudioLibraryObserver()
+        androidAutoBrowseExecutor.shutdownNow()
         cancelPendingHeadsetClick()
         mediaButtonHandler.removeCallbacksAndMessages(null)
         snapshotHandler.removeCallbacks(snapshotRunnable)

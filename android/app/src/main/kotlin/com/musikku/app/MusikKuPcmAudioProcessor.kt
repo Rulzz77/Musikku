@@ -54,21 +54,32 @@ class MusikKuPcmAudioProcessor : BaseAudioProcessor() {
         val input = inputBuffer.duplicate().order(ByteOrder.nativeOrder())
         val sampleCount = byteCount / 2
         var squareSum = 0.0
+        var peak = 0.0
         for (index in 0 until sampleCount) {
-            val sample = input.short.toInt()
-            val normalized = sample / 32768.0
+            val normalized = input.short.toInt() / 32768.0
             squareSum += normalized * normalized
+            peak = max(peak, abs(normalized))
         }
         val rms = sqrt(squareSum / sampleCount.coerceAtLeast(1))
 
+        val peakSafeGain = if (normalizationEnabled && peak > 0.0001) {
+            0.92 / peak
+        } else {
+            Double.POSITIVE_INFINITY
+        }
         val gain = if (normalizationEnabled) {
-            // Smooth gain changes to avoid audible pumping. Loud sections are
-            // attenuated quickly; quieter sections recover more gradually.
-            val target = 0.115
-            val desired = (target / max(rms, 0.035)).coerceIn(0.72, 1.65)
-            val amount = if (desired < smoothedGain) 0.24 else 0.035
+            // This is a real-time adaptive RMS leveler, not an EBU R128 LUFS
+            // analyser. Use both average energy and peak headroom so quiet
+            // material can be raised without creating clipped transients.
+            val targetRms = 0.115
+            val rmsGain = targetRms / max(rms, 0.025)
+            val desired = min(rmsGain, peakSafeGain).coerceIn(0.08, 1.55)
+
+            // Fast attenuation and slower recovery reduce pumping between
+            // short loud/quiet passages. A little smoothing persists per track.
+            val amount = if (desired < smoothedGain) 0.22 else 0.025
             smoothedGain += (desired - smoothedGain) * amount
-            smoothedGain
+            min(smoothedGain.coerceIn(0.08, 1.55), peakSafeGain)
         } else {
             smoothedGain = 1.0
             1.0

@@ -100,18 +100,6 @@ class RadioService {
   /// (termasuk pilihan manual dan lagu awal Radio), satu artis maksimal
   /// [_maxPerArtistInWindow] kali, dan tidak boleh muncul dalam
   /// [_artistNoRepeatGap] lagu terakhir.
-  // Populer per artis: Radio hanya memilih lagu yang lolos salah satu dari:
-  // (1) jumlah penonton di [_popularKeepFraction] teratas lagu artis itu,
-  // (2) kecepatan penonton (penonton per hari) di [_popularKeepFraction]
-  // teratas, supaya lagu baru yang sedang naik tetap masuk, atau
-  // (3) rilis dalam [_popularFreshDays] hari terakhir (terlalu awal dinilai).
-  // Pembanding diambil dari lagu artis itu yang diketahui Radio (pool +
-  // cadangan + yang sudah diputar). 1.0 = fitur dimatikan. Baru berlaku bila ada
-  // minimal [_popularMinSample] lagu artis itu dengan data penonton.
-  static const double _popularKeepFraction = 0.5;
-  static const int _popularMinSample = 6;
-  static const int _popularFreshDays = 14;
-
   // Artis yang sama paling banyak 1x dalam 8 lagu terakhir, dan tidak boleh
   // kembali dalam 4 lagu berikutnya. Ubah angka ini untuk menyetel variasi.
   static const int _artistWindow = 8;
@@ -130,6 +118,15 @@ class RadioService {
   bool get isPoolEmpty => _pool.isEmpty;
 
   int get poolLength => _pool.length;
+
+  /// Artis yang baru benar-benar diputar, termasuk pilihan manual dan Radio.
+  /// Daftar ini memberi konteks anti-pengulangan pada Smart Queue, bukan hanya
+  /// artis yang sebelumnya dipilih oleh Radio.
+  List<String> get recentSelectionArtistKeys => List<String>.unmodifiable(
+        _recentPlayedArtists
+            .map((entry) => entry.artist)
+            .where((artist) => artist.isNotEmpty),
+      );
 
   /// Mulai (atau lanjutkan) radio dengan kata kunci [seed].
   void start(
@@ -278,93 +275,6 @@ class RadioService {
     return _matchesSeedArtist(video) ? _seedArtistKey : '';
   }
 
-  /// Penonton per hari sejak rilis (minimal dihitung 14 hari supaya lagu yang
-  /// baru sehari tidak terlihat meledak). Null bila data tidak lengkap.
-  static double? _viewVelocity(YoutubeSearchResult video, DateTime now) {
-    final views = video.viewCount ?? 0;
-    final publishedAt = video.publishedAt ?? video.approxPublishedAt;
-    if (views <= 0 || publishedAt == null) return null;
-    final days = now.difference(publishedAt).inDays;
-    return views / (days < 14 ? 14 : days);
-  }
-
-  /// Utamakan lagu populer atau sedang naik dari tiap artis. Tidak pernah
-  /// mengosongkan pilihan: kalau tidak ada yang lolos, [candidates] dikembalikan
-  /// apa adanya.
-  List<YoutubeSearchResult> _preferPopular(
-    List<YoutubeSearchResult> candidates,
-  ) {
-    if (_popularKeepFraction >= 1.0 || candidates.isEmpty) return candidates;
-
-    final now = DateTime.now();
-    final viewsByArtist = <String, List<int>>{};
-    final velocityByArtist = <String, List<double>>{};
-    final seen = <String>{};
-    void collect(YoutubeSearchResult video) {
-      if (!seen.add(video.videoId)) return;
-      final artist = _artistOf(video);
-      final views = video.viewCount ?? 0;
-      if (artist.isEmpty || views <= 0) return;
-      (viewsByArtist[artist] ??= <int>[]).add(views);
-      final velocity = _viewVelocity(video, now);
-      if (velocity != null) {
-        (velocityByArtist[artist] ??= <double>[]).add(velocity);
-      }
-    }
-
-    for (final video in _pool) {
-      collect(video);
-    }
-    for (final video in _reserve) {
-      collect(video);
-    }
-    for (final video in _playedVideos) {
-      collect(video);
-    }
-    for (final video in candidates) {
-      collect(video);
-    }
-
-    int cutIndex(int length) => (length * (1 - _popularKeepFraction))
-        .floor()
-        .clamp(0, length - 1)
-        .toInt();
-
-    final viewThresholds = <String, int>{};
-    viewsByArtist.forEach((artist, views) {
-      if (views.length < _popularMinSample) return;
-      views.sort();
-      viewThresholds[artist] = views[cutIndex(views.length)];
-    });
-    if (viewThresholds.isEmpty) return candidates;
-
-    final velocityThresholds = <String, double>{};
-    velocityByArtist.forEach((artist, velocities) {
-      if (velocities.length < _popularMinSample) return;
-      velocities.sort();
-      velocityThresholds[artist] = velocities[cutIndex(velocities.length)];
-    });
-
-    final popular = candidates.where((video) {
-      final viewThreshold = viewThresholds[_artistOf(video)];
-      if (viewThreshold == null) return true;
-      final views = video.viewCount ?? 0;
-      if (views <= 0 || views >= viewThreshold) return true;
-
-      final publishedAt = video.publishedAt ?? video.approxPublishedAt;
-      if (publishedAt != null &&
-          now.difference(publishedAt).inDays <= _popularFreshDays) {
-        return true;
-      }
-      final velocityThreshold = velocityThresholds[_artistOf(video)];
-      final velocity = _viewVelocity(video, now);
-      return velocityThreshold != null &&
-          velocity != null &&
-          velocity >= velocityThreshold;
-    }).toList(growable: false);
-    return popular.isEmpty ? candidates : popular;
-  }
-
   int _artistPlaysInWindow(String artist) =>
       _recentPlayedArtists.where((entry) => entry.artist == artist).length;
 
@@ -418,6 +328,7 @@ class RadioService {
         _recentlySelected(video) ||
         _blockedIds().contains(video.videoId) ||
         ChannelBlockFilter.isBlocked(video, _blockedChannelKeys()) ||
+        !YoutubeSearchService.isMusicCandidate(video) ||
         !MusicStyleMatcher.isCompatible(
           video: video,
           targetStyle: targetStyle,
@@ -442,40 +353,42 @@ class RadioService {
         .where((video) => !_recentlySelected(video))
         .toList(growable: false);
     if (candidatesPool.isEmpty) return null;
-    final sourcePool = preferArtistVariety(_preferPopular(candidatesPool));
+    final sourcePool = preferArtistVariety(candidatesPool);
     final scored = sourcePool
         .map((video) {
-          final key = trackKeyFor(video);
-          final artist = _artistOf(video);
-          var value = score(video);
-          if (key.isNotEmpty && _recentSelectionTrackKeys.contains(key)) {
-            value -= 80.0;
-          }
-          if (artist.isNotEmpty && _recentSelectionArtists.contains(artist)) {
-            value -= 24.0;
-          }
-          if (artist.isNotEmpty &&
-              _recentSelectionArtists.isNotEmpty &&
-              artist == _recentSelectionArtists.last) {
-            value -= 36.0;
-          }
-          value += MusicStyleMatcher.radioSimilarityScore(
-                video: video,
-                targetStyle: targetStyle,
-                targetLanguage: targetLanguage,
-              ) * 0.35;
-          value += _random.nextDouble() * 3.5;
+          // Artist cooldown is part of SmartQueueScorer now, so avoid applying
+          // the same repetition penalty twice here. Ignore invalid scores so
+          // malformed history data cannot poison weighted selection.
+          final rawScore = score(video);
+          final value = (rawScore.isFinite ? rawScore : -1000000.0) +
+              _random.nextDouble() * 1.25;
           return (video: video, score: value);
         })
         .toList()
       ..sort((a, b) => b.score.compareTo(a.score));
 
-    final topCount = scored.length < 20 ? scored.length : 20;
-    final candidates = scored.take(topCount).map((item) => item.video).toList();
-    if (candidates.isEmpty) return null;
+    final topCount = scored.length < 8 ? scored.length : 8;
+    final shortlist = scored.take(topCount).toList(growable: false);
+    if (shortlist.isEmpty) return null;
 
-    // Random di antara kandidat yang belum dipilih dan dengan variasi artis.
-    final selected = candidates[_random.nextInt(candidates.length)];
+    // Weighted draw: kandidat dengan skor paling cocok lebih mungkin dipilih,
+    // tetapi kandidat teratas lain tetap punya peluang agar antrean variatif.
+    final bestScore = shortlist.first.score;
+    final weights = shortlist
+        .map((item) => math.exp(
+              ((item.score - bestScore) / 7.0).clamp(-6.0, 0.0).toDouble(),
+            ))
+        .toList(growable: false);
+    final totalWeight = weights.fold<double>(0.0, (sum, item) => sum + item);
+    var roll = _random.nextDouble() * totalWeight;
+    var selected = shortlist.last.video;
+    for (var index = 0; index < shortlist.length; index++) {
+      roll -= weights[index];
+      if (roll <= 0) {
+        selected = shortlist[index].video;
+        break;
+      }
+    }
     _removeTrackFamilyFromPool(selected);
     _rememberSelection(selected);
     return selected;
@@ -497,6 +410,7 @@ class RadioService {
         _recentlySelected(video) ||
         _blockedIds().contains(video.videoId) ||
         ChannelBlockFilter.isBlocked(video, _blockedChannelKeys()) ||
+        !YoutubeSearchService.isMusicCandidate(video) ||
         !MusicStyleMatcher.isCompatible(
           video: video,
           targetStyle: targetStyle,
@@ -518,7 +432,7 @@ class RadioService {
     // sebelumnya. Kalau kandidat terlalu sedikit, longgarkan aturan artis.
     final fresh = candidates.where((video) => !_recentlySelected(video)).toList();
     // Batas variasi artis berbasis jendela (lihat preferArtistVariety).
-    final source = preferArtistVariety(_preferPopular(fresh));
+    final source = preferArtistVariety(fresh);
     if (source.isEmpty) return null;
 
     final selected = random
@@ -570,6 +484,7 @@ class RadioService {
       score += recentlyHeard ? 0.0 : (tasteBonus?.call(video) ?? 0.0);
       // Jitter kecil membuat urutan kandidat dengan nilai serupa ikut berubah.
       score += _random.nextDouble() * 6.0;
+      if (!score.isFinite) score = -1000000.0;
       return (video: video, score: score);
     }).toList();
 
@@ -1123,6 +1038,7 @@ class RadioService {
           _playedIds.contains(video.videoId) ||
           _blockedIds().contains(video.videoId) ||
           ChannelBlockFilter.isBlocked(video, _blockedChannelKeys()) ||
+          !YoutubeSearchService.isMusicCandidate(video) ||
           YoutubeSearchService.isLikelyShortForm(video) ||
           YoutubeSearchService.isLikelyNonMusicVideo(video)) {
         return false;

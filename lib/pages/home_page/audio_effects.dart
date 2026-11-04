@@ -97,6 +97,122 @@ extension _HomeAudioEffects on _HomePageState {
 }
 
 extension _HomeAudioSettingsUi on _HomePageState {
+  void _showAudioOutputPicker() {
+    var snapshotFuture = NativePlaybackDiagnostics.getAudioOutputs();
+    int? selectedId;
+    bool saving = false;
+    String? feedback;
+
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      useSafeArea: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
+      ),
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) => FutureBuilder<AudioOutputSnapshot>(
+          future: snapshotFuture,
+          builder: (context, snapshot) {
+            final scheme = Theme.of(context).colorScheme;
+            final data = snapshot.data;
+            if (data != null && selectedId == null) {
+              selectedId = data.preferredDeviceId;
+            }
+
+            Future<void> choose(int id) async {
+              if (saving) return;
+              setSheetState(() {
+                saving = true;
+                feedback = null;
+              });
+              final result = await NativePlaybackDiagnostics.setPreferredAudioOutput(id);
+              if (!context.mounted) return;
+              setSheetState(() {
+                saving = false;
+                if (result['saved'] == true) {
+                  selectedId = id;
+                  feedback = result['message']?.toString() ?? 'Pilihan output disimpan.';
+                } else {
+                  feedback = result['message']?.toString() ?? 'Gagal menyimpan output audio.';
+                }
+                snapshotFuture = NativePlaybackDiagnostics.getAudioOutputs();
+              });
+            }
+
+            Widget deviceTile({required int id, required String title, required String subtitle, required IconData icon}) {
+              final selected = selectedId == id;
+              return ListTile(
+                enabled: !saving,
+                leading: CircleAvatar(
+                  backgroundColor: selected ? scheme.primaryContainer : scheme.surfaceContainerHighest,
+                  child: Icon(icon, color: selected ? scheme.primary : scheme.onSurfaceVariant),
+                ),
+                title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
+                subtitle: Text(subtitle, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11)),
+                trailing: selected
+                    ? Icon(Icons.check_circle_rounded, color: scheme.primary)
+                    : const Icon(Icons.radio_button_unchecked_rounded),
+                onTap: () => choose(id),
+              );
+            }
+
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 22),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Perangkat audio', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900)),
+                  const SizedBox(height: 5),
+                  Text(
+                    'Pilih rute untuk pemutar native Media3. Fallback video YouTube tetap mengikuti rute audio Android.',
+                    style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11, height: 1.4),
+                  ),
+                  const SizedBox(height: 12),
+                  if (snapshot.connectionState == ConnectionState.waiting && data == null)
+                    const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator()))
+                  else if (data == null || !data.supported)
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Text(data?.error ?? 'Pemilihan output audio memerlukan Android 6.0 atau lebih baru.', style: TextStyle(color: scheme.onSurfaceVariant)),
+                    )
+                  else ...[
+                    deviceTile(id: -1, title: 'Otomatis / Default Android', subtitle: 'Biarkan Android menentukan perangkat keluaran', icon: Icons.auto_awesome_rounded),
+                    if (data.devices.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        child: Text('Belum ada perangkat output tambahan yang terdeteksi.', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11)),
+                      ),
+                    for (final device in data.devices)
+                      deviceTile(
+                        id: device.id,
+                        title: device.displayName,
+                        subtitle: device.type,
+                        icon: device.type.toLowerCase().contains('bluetooth') ? Icons.bluetooth_audio_rounded : device.type.toLowerCase().contains('usb') ? Icons.usb_rounded : Icons.speaker_rounded,
+                      ),
+                    if (data.nativePlayerActive)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(14, 6, 14, 0),
+                        child: Text('Pemutar Media3 aktif. Perubahan rute diterapkan ke lagu yang sedang diputar.', style: TextStyle(color: scheme.primary, fontSize: 10)),
+                      ),
+                  ],
+                  if (saving) const LinearProgressIndicator(),
+                  if (feedback != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 10, left: 12, right: 12),
+                      child: Text(feedback!, style: TextStyle(color: scheme.primary, fontSize: 11, height: 1.4)),
+                    ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
   Future<void> _applyEqualizerPreset(String preset) async {
     _equalizerPreset = preset;
     var applied = false;
@@ -194,6 +310,19 @@ extension _HomeAudioSettingsUi on _HomePageState {
                       const SizedBox(height: 4),
                       Text('Atur karakter audio, volume, dan perpindahan lagu tanpa mengubah antrean.', style: TextStyle(color: scheme.onPrimary.withValues(alpha: 0.82), fontSize: 11.5, height: 1.35)),
                     ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Material(
+                  color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(16),
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 13, vertical: 2),
+                    leading: Icon(Icons.speaker_group_rounded, color: scheme.primary),
+                    title: const Text('Perangkat audio', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
+                    subtitle: const Text('Pilih speaker, headset, Bluetooth, atau output default', style: TextStyle(fontSize: 10)),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: _showAudioOutputPicker,
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -395,6 +524,9 @@ extension _HomeAudioSettingsUi on _HomePageState {
                   onChangeEnd: (value) async {
                     final seconds = value.round().clamp(0, 6).toInt();
                     _crossfadeSeconds = seconds;
+                    if (seconds > 0) {
+                      unawaited(_youtubeController.clearNativeGaplessQueue());
+                    }
                     await _storage.saveCrossfadeSeconds(seconds);
                     if (mounted) setState(() {});
                     setSheetState(() => crossfadePreview = seconds);
@@ -487,6 +619,7 @@ extension _HomeAudioSettingsUi on _HomePageState {
               _sleepTimer?.cancel();
               _sleepTimer = null;
               _stopAfterCurrent = true;
+              unawaited(_youtubeController.clearNativeGaplessQueue());
               _sleepActive.value = true;
               Navigator.of(sheetContext).pop();
               _toast('Musik akan berhenti setelah lagu ini selesai.');

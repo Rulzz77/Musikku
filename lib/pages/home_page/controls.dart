@@ -40,6 +40,7 @@ extension _HomeControls on _HomePageState {
     );
 
     if (next) {
+      unawaited(_youtubeController.clearNativeGaplessQueue());
       _prepareShufflePool(excludeCurrent: true);
     } else {
       _shufflePool = [];
@@ -59,6 +60,9 @@ extension _HomeControls on _HomePageState {
       isSmartShuffle: next,
     );
 
+    if (next) {
+      unawaited(_youtubeController.clearNativeGaplessQueue());
+    }
     if (shuffle) {
       _prepareShufflePool(excludeCurrent: true);
     }
@@ -77,6 +81,7 @@ extension _HomeControls on _HomePageState {
     };
 
     _playerUiState.value = _playerUiState.value.copyWith(loopMode: next);
+    unawaited(_youtubeController.clearNativeGaplessQueue());
     unawaited(_persistPlaybackModes());
 
     final label = switch (next) {

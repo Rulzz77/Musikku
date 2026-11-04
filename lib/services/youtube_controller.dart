@@ -186,6 +186,7 @@ class NativeYoutubeController {
       bufferedAhead: raw.bufferedAhead,
       networkRxBytes: raw.networkRxBytes,
       networkType: raw.networkType,
+      trackTransition: raw.trackTransition,
       requestedPlaying: _intent,
     );
 
@@ -209,6 +210,12 @@ class NativeYoutubeController {
 
     final rawState = (event['state'] ?? event['event'] ?? '').toString();
     final state = _parseState(rawState);
+    final eventVideoId = event['videoId']?.toString() ?? '';
+    if (event['trackTransition'] == true && eventVideoId.isNotEmpty) {
+      // Media3 has already advanced its native playlist; subsequent Play/
+      // Pause/seek commands must target the newly active local media ID.
+      _activeVideoId = eventVideoId;
+    }
 
     final position = (event['position'] as num?)?.toDouble() ?? 0.0;
     final duration = (event['duration'] as num?)?.toDouble() ?? 0.0;
@@ -223,13 +230,14 @@ class NativeYoutubeController {
       playbackState: state,
       position: Duration(milliseconds: (position * 1000).round()),
       duration: Duration(milliseconds: (duration * 1000).round()),
-      videoId: event['videoId']?.toString() ?? '',
+      videoId: eventVideoId,
       bufferedFraction: (event['bufferedFraction'] as num?)?.toDouble() ?? 0.0,
       bufferedAhead: Duration(
         milliseconds: ((((event['bufferedAheadSeconds'] as num?)?.toDouble() ?? 0.0).clamp(0.0, 86400.0)) * 1000).round(),
       ),
       networkRxBytes: (event['networkRxBytes'] as num?)?.toInt() ?? 0,
       networkType: event['networkType']?.toString() ?? 'unknown',
+      trackTransition: event['trackTransition'] == true,
     ));
   }
 
@@ -485,6 +493,7 @@ class NativeYoutubeController {
     required String mediaUri,
     double startSeconds = 0.0,
     double durationSeconds = 0.0,
+    List<Map<String, String>> gaplessQueue = const <Map<String, String>>[],
   }) async {
     _youtubeAudioLoadGeneration++; // invalidate a pending YouTube resolver
     if (Platform.isIOS && _iosYoutubeSource) {
@@ -504,8 +513,19 @@ class NativeYoutubeController {
         'mediaUri': mediaUri,
         'startSeconds': startSeconds,
         'durationSeconds': durationSeconds,
+        'gaplessQueue': gaplessQueue,
       },
     );
+  }
+
+  /// Remove only future native playlist entries; keep the current track running.
+  Future<void> clearNativeGaplessQueue() async {
+    if (!Platform.isAndroid) return;
+    try {
+      await _methods.invokeMethod<void>('clearNativeGaplessQueue');
+    } catch (_) {
+      // Older native builds can safely continue with Flutter auto-next.
+    }
   }
 
   // ========================================================

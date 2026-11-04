@@ -15,6 +15,26 @@ const Duration _pausedPositionSaveMinGap = Duration(seconds: 1);
 
 /// Sinkronisasi state native, progres, statistik, snapshot, dan notifikasi media.
 extension _HomeStateSync on _HomePageState {
+  Future<void> _publishFloatingLyricsLine(NativeYoutubeState state) async {
+    if (!FloatingLyricsBridge.enabled) return;
+    final video = _currentVideo;
+    if (video == null) return;
+    final lyrics = _playerUiState.value.lyrics;
+    LyricLine? activeLine;
+    for (final line in lyrics) {
+      if (line.time <= state.position) {
+        activeLine = line;
+      } else {
+        break;
+      }
+    }
+    final text = activeLine?.text ??
+        (_playerUiState.value.lyricsSynced
+            ? 'Lirik akan muncul saat lagu dimulai'
+            : 'Lirik belum tersinkron untuk ${video.title}');
+    await FloatingLyricsBridge.updateLine(text);
+  }
+
   Future<void> _saveCurrentPlaybackSnapshot({
     bool queryNativePosition = false,
   }) {
@@ -82,6 +102,63 @@ extension _HomeStateSync on _HomePageState {
     );
   }
 
+  void _applyNativeGaplessTrackTransition(
+    YoutubeSearchResult video,
+    NativeYoutubeState state,
+  ) {
+    final previous = _currentVideo;
+    if (previous == null || previous.videoId == video.videoId) return;
+
+    if (previous.videoId.isNotEmpty) {
+      _playHistory.add(previous);
+      if (_playHistory.length > 50) _playHistory.removeAt(0);
+    }
+
+    _radio.markPlayed(video);
+    _crossfadeFadingVideoId = '';
+    _historyTrackId = video.videoId;
+    _historyListenedSeconds = 0.0;
+    _historyRecordedForTrack = false;
+    _pendingSavedPosition = 0.0;
+    _lastGoodPositionSeconds = 0.0;
+    _lastGoodPositionVideoId = video.videoId;
+    _lastPositionSaveAt = DateTime.fromMillisecondsSinceEpoch(0);
+
+    if (mounted) {
+      setState(() {
+        _currentVideo = video;
+        if (_youtubeWatchVideo != null) _youtubeWatchVideo = video;
+      });
+    }
+
+    _playerUiState.value = _playerUiState.value.copyWith(
+      video: video,
+      isFavorite: _isFavorite(video.videoId),
+      isLiked: _likedIds.contains(video.videoId),
+      isDisliked: _dislikedIds.contains(video.videoId),
+      lyrics: const <LyricLine>[],
+      lyricsLoading: true,
+      lyricsSynced: false,
+    );
+    unawaited(_loadLyrics(video));
+
+    // Restore per-track EQ without touching the native playlist or playback
+    // position. The transition itself is owned by Media3.
+    unawaited(() async {
+      try {
+        final preset = await _storage.loadEqualizerPresetForTrack(video.videoId);
+        if (!mounted || _currentVideo?.videoId != video.videoId) return;
+        _equalizerPreset = preset;
+        await _youtubeController.setEqualizerPreset(preset);
+        if (mounted) setState(() {});
+      } catch (error) {
+        debugPrint('GAPLESS TRACK EQ RESTORE ERROR: $error');
+      }
+    }());
+
+    // _onYoutubeState publishes this event after the model is updated.
+  }
+
   void _onYoutubeState(NativeYoutubeState state) {
     if (!mounted) {
       return;
@@ -90,12 +167,25 @@ extension _HomeStateSync on _HomePageState {
     // Event dari lagu lama (masih terkirim sesaat setelah pindah lagu)
     // diabaikan, supaya posisi lagu lama tidak tersimpan / tampil sebagai
     // posisi lagu baru.
-    final activeId = _currentVideo?.videoId ?? '';
+    var activeId = _currentVideo?.videoId ?? '';
 
     if (state.videoId.isNotEmpty &&
         activeId.isNotEmpty &&
         state.videoId != activeId) {
-      return;
+      if (state.trackTransition && state.videoId.startsWith('local:')) {
+        YoutubeSearchResult? nextLocalTrack;
+        for (final candidate in _activeList) {
+          if (candidate.videoId == state.videoId && candidate.isLocal) {
+            nextLocalTrack = candidate;
+            break;
+          }
+        }
+        if (nextLocalTrack == null) return;
+        _applyNativeGaplessTrackTransition(nextLocalTrack, state);
+        activeId = nextLocalTrack.videoId;
+      } else {
+        return;
+      }
     }
 
     // Sebelum user menekan Play, player native belum memuat lagu hasil
@@ -111,6 +201,7 @@ extension _HomeStateSync on _HomePageState {
 
     final previousNativeState = _nativeStateNotifier.value;
     _nativeStateNotifier.value = state;
+    unawaited(_publishFloatingLyricsLine(state));
 
     // Broadcast pause intent immediately and confirmed native state changes
     // as soon as they arrive. The periodic timer is only a recovery path; it

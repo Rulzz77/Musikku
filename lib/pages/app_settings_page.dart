@@ -11,6 +11,7 @@ import '../services/storage_service.dart';
 import 'music_studio_page.dart';
 import 'app_health_page.dart';
 import '../services/app_settings.dart';
+import '../services/floating_lyrics_bridge.dart';
 import '../widgets/app_update_sheet.dart';
 import '../widgets/data_usage_card.dart';
 import '../widgets/music_design.dart';
@@ -420,6 +421,35 @@ class AppSettingsPage extends StatelessWidget {
                   onTap: onOpenAudioSettings,
                 ),
               ValueListenableBuilder<bool>(
+                valueListenable: settings.bluetoothAutoResume,
+                builder: (context, value, _) => SwitchListTile(
+                  secondary: const Icon(Icons.bluetooth_connected_rounded),
+                  title: const Text(
+                    'Lanjutkan otomatis via Bluetooth',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  subtitle: const Text(
+                    'Lanjutkan lagu ketika headset Bluetooth tersambung kembali setelah terputus saat musik diputar. Khusus Android.',
+                  ),
+                  value: value,
+                  onChanged: (next) =>
+                      unawaited(settings.setBluetoothAutoResume(next)),
+                ),
+              ),
+              ValueListenableBuilder<bool>(
+                valueListenable: settings.loudnessNormalization,
+                builder: (context, value, _) => SwitchListTile(
+                  secondary: const Icon(Icons.equalizer_rounded),
+                  title: const Text('Penyeimbang level volume (Beta)', style: TextStyle(fontWeight: FontWeight.w700)),
+                  subtitle: const Text('Mengatur level RMS audio pada player native Media3. Bukan standar LUFS dan tidak berlaku untuk fallback iframe YouTube.'),
+                  value: value,
+                  onChanged: (next) => unawaited(settings.setLoudnessNormalization(next)),
+                ),
+              ),
+              const _InsetDivider(),
+              const _FloatingLyricsSettingsTile(),
+              const _InsetDivider(),
+              ValueListenableBuilder<bool>(
                 valueListenable: settings.cropVideoBranding,
                 builder: (context, value, _) => SwitchListTile(
                   secondary: const Icon(Icons.crop_rounded),
@@ -625,5 +655,60 @@ class _InsetDivider extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Divider(height: 1, indent: 16, endIndent: 16);
+  }
+}
+
+class _FloatingLyricsSettingsTile extends StatefulWidget {
+  const _FloatingLyricsSettingsTile();
+
+  @override
+  State<_FloatingLyricsSettingsTile> createState() => _FloatingLyricsSettingsTileState();
+}
+
+class _FloatingLyricsSettingsTileState extends State<_FloatingLyricsSettingsTile> {
+  bool _enabled = false;
+  bool _loading = true;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    await FloatingLyricsBridge.initialize();
+    if (!mounted) return;
+    setState(() {
+      _enabled = FloatingLyricsBridge.enabled;
+      _loading = false;
+    });
+  }
+
+  Future<void> _setEnabled(bool next) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    final ok = await FloatingLyricsBridge.setEnabled(next);
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      if (ok) _enabled = next;
+    });
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Izinkan MusikKu tampil di atas aplikasi lain, lalu aktifkan sakelar ini lagi.')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SwitchListTile(
+      secondary: const Icon(Icons.lyrics_rounded),
+      title: const Text('Floating Lyrics', style: TextStyle(fontWeight: FontWeight.w700)),
+      subtitle: const Text('Tampilkan baris lirik tersinkron di atas aplikasi lain. Membutuhkan izin overlay Android.'),
+      value: _enabled,
+      onChanged: _loading || _busy || !Platform.isAndroid ? null : _setEnabled,
+    );
   }
 }

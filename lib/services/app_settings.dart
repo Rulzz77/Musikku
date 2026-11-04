@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'native_audio_features.dart';
+
 enum AppThemeChoice { system, dark, amoled, light, pink }
 
 enum DataSaverMode { off, saver, superSaver }
@@ -41,6 +43,8 @@ class AppSettingsController {
   static const _bufferAlertSecondsKey = 'buffer_alert_seconds_v1';
   static const _hidePauseOverlayKey = 'hide_pause_overlay_v1';
   static const _cropBrandingKey = 'crop_video_branding_v1';
+  static const _bluetoothAutoResumeKey = 'bluetooth_auto_resume_v1';
+  static const _loudnessNormalizationKey = 'audio_loudness_normalization_v1';
   static const _autoUpdateEnabledKey = 'app_auto_update_enabled_v1';
   static const _autoInstallUpdatesKey = 'app_auto_install_updates_v1';
   static const _backgroundDownloadUpdatesKey = 'app_background_download_updates_v1';
@@ -58,6 +62,12 @@ class AppSettingsController {
 
   /// Zoom video sedikit supaya judul/watermark di tepi ikut terpotong.
   final ValueNotifier<bool> cropVideoBranding = ValueNotifier(false);
+
+  /// Resume playback when a Bluetooth audio output reconnects after disconnecting.
+  final ValueNotifier<bool> bluetoothAutoResume = ValueNotifier(false);
+
+  /// PCM-based adaptive leveler for native Media3 audio playback.
+  final ValueNotifier<bool> loudnessNormalization = ValueNotifier(false);
 
   /// Check GitHub Releases when the app opens. Defaults to true to preserve
   /// the previous launch-check behavior while allowing the user to opt out.
@@ -93,6 +103,11 @@ class AppSettingsController {
       bufferAlertSeconds.value = (prefs.getInt(_bufferAlertSecondsKey) ?? 8).clamp(3, 30).toInt();
       hidePauseOverlay.value = prefs.getBool(_hidePauseOverlayKey) ?? true;
       cropVideoBranding.value = prefs.getBool(_cropBrandingKey) ?? false;
+      bluetoothAutoResume.value = prefs.getBool(_bluetoothAutoResumeKey) ?? false;
+      loudnessNormalization.value = prefs.getBool(_loudnessNormalizationKey) ?? false;
+      if (loudnessNormalization.value) {
+        await NativeAudioFeatures.setLoudnessNormalization(true);
+      }
       autoUpdateEnabled.value = prefs.getBool(_autoUpdateEnabledKey) ?? true;
       autoInstallUpdates.value = prefs.getBool(_autoInstallUpdatesKey) ?? false;
       backgroundDownloadUpdates.value =
@@ -150,6 +165,19 @@ class AppSettingsController {
     cropVideoBranding.value = value;
     final prefs = await _prefsFuture;
     await prefs.setBool(_cropBrandingKey, value);
+  }
+
+  Future<void> setBluetoothAutoResume(bool value) async {
+    bluetoothAutoResume.value = value;
+    final prefs = await _prefsFuture;
+    await prefs.setBool(_bluetoothAutoResumeKey, value);
+  }
+
+  Future<void> setLoudnessNormalization(bool value) async {
+    loudnessNormalization.value = value;
+    final prefs = await _prefsFuture;
+    await prefs.setBool(_loudnessNormalizationKey, value);
+    await NativeAudioFeatures.setLoudnessNormalization(value);
   }
 
   Future<void> setAutoUpdateEnabled(bool value) async {

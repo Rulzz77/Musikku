@@ -217,6 +217,77 @@ class MainActivity : AudioServiceActivity() {
             flutterEngine
         )
 
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "musikku/floating_lyrics",
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "canDrawOverlays" -> result.success(
+                    Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this),
+                )
+                "requestOverlayPermission" -> {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+                        startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+                    }
+                    result.success(null)
+                }
+                "setEnabled" -> {
+                    val enabled = call.argument<Boolean>("enabled") ?: false
+                    if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+                        result.error("OVERLAY_PERMISSION", "Izin tampil di atas aplikasi belum diberikan.", null)
+                    } else if (enabled) {
+                        startService(Intent(this, FloatingLyricsService::class.java))
+                        result.success(true)
+                    } else {
+                        stopService(Intent(this, FloatingLyricsService::class.java))
+                        result.success(false)
+                    }
+                }
+                "updateText" -> {
+                    val text = call.argument<String>("text").orEmpty()
+                    FloatingLyricsService.updateTextStatic(text)
+                    result.success(null)
+                }
+                else -> result.notImplemented()
+            }
+        }
+
+        EventChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "musikku/audio_visualizer/events",
+        ).setStreamHandler(object : EventChannel.StreamHandler {
+            override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+                MusikKuAudioVisualizationEvents.eventSink = events
+            }
+            override fun onCancel(arguments: Any?) {
+                MusikKuAudioVisualizationEvents.eventSink = null
+            }
+        })
+
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "musikku/audio_features",
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "setVisualizerEnabled" -> {
+                    val enabled = call.argument<Boolean>("enabled") ?: false
+                    MusikKuAudioVisualizationEvents.enabled = enabled
+                    result.success(
+                        mapOf(
+                            "enabled" to enabled,
+                            "nativeSourceActive" to PlaybackService.isAudioPlayerActiveStatic(),
+                        ),
+                    )
+                }
+                "setLoudnessNormalization" -> {
+                    val enabled = call.argument<Boolean>("enabled") ?: false
+                    PlaybackService.setLoudnessNormalizationStatic(this, enabled)
+                    result.success(true)
+                }
+                else -> result.notImplemented()
+            }
+        }
+
         // Register search/audio stream resolver on the channel used by Dart.
         // Without this, resolveAudio returns MissingPluginException and every
         // online track falls back to the embedded video player.
@@ -394,6 +465,10 @@ class MainActivity : AudioServiceActivity() {
                 // ==================================================
                 // LOAD VIDEO
                 // ==================================================
+
+                "clearNativeGaplessQueue" -> {
+                    result.success(PlaybackService.clearNativeGaplessQueueStatic())
+                }
 
                 "setPlayerUiVisible" -> {
                     val visible = call.argument<Boolean>("visible") ?: true
@@ -857,6 +932,25 @@ class MainActivity : AudioServiceActivity() {
                     val uri = call.argument<String>("mediaUri")?.trim().orEmpty()
                     val startSeconds = call.argument<Double>("startSeconds") ?: 0.0
                     val durationSeconds = call.argument<Double>("durationSeconds") ?: 0.0
+                    val requestedGaplessQueue = call.argument<List<Map<String, Any?>>>("gaplessQueue")
+                        .orEmpty()
+                    val gaplessQueue = requestedGaplessQueue.mapNotNull { item ->
+                        val nextId = item["videoId"]?.toString()?.trim().orEmpty()
+                        val nextUri = item["mediaUri"]?.toString()?.trim().orEmpty()
+                        val parsed = runCatching { Uri.parse(nextUri) }.getOrNull()
+                        if (!nextId.startsWith("local:") ||
+                            (parsed?.scheme != "content" && parsed?.scheme != "file") ||
+                            nextId == "local:$mediaId") {
+                            null
+                        } else {
+                            mapOf(
+                                "videoId" to nextId,
+                                "title" to item["title"]?.toString().orEmpty().take(256),
+                                "artist" to item["artist"]?.toString().orEmpty().take(128),
+                                "mediaUri" to nextUri.take(4096),
+                            )
+                        }
+                    }.distinctBy { it["videoId"] }.take(60)
 
                     if (mediaId.isEmpty() || uri.isEmpty()) {
                         result.error("INVALID_LOCAL_MEDIA", "Data lagu lokal tidak lengkap", null)
@@ -876,6 +970,7 @@ class MainActivity : AudioServiceActivity() {
                         durationSeconds = durationSeconds,
                         sourceType = "local",
                         mediaUri = uri,
+                        gaplessQueue = gaplessQueue,
                     )
                     result.success(null)
                 }
@@ -1025,10 +1120,34 @@ class MainActivity : AudioServiceActivity() {
                                 "productName" to device.productName?.toString().orEmpty(),
                             )
                         }
-                        result.success(mapOf("supported" to true, "devices" to outputs))
+                        val preferredId = getSharedPreferences(
+                            "musikku_playback_settings", Context.MODE_PRIVATE,
+                        ).getInt("preferredAudioOutputId", -1).takeIf { savedId ->
+                            savedId < 0 || outputs.any { device -> (device["id"] as? Int) == savedId }
+                        } ?: -1
+                        result.success(
+                            mapOf(
+                                "supported" to true,
+                                "devices" to outputs,
+                                "preferredDeviceId" to preferredId,
+                                "nativePlayerActive" to PlaybackService.isAudioPlayerActiveStatic(),
+                            ),
+                        )
                     } else {
-                        result.success(mapOf("supported" to false, "devices" to emptyList<Map<String, Any>>()))
+                        result.success(
+                            mapOf(
+                                "supported" to false,
+                                "devices" to emptyList<Map<String, Any>>(),
+                                "preferredDeviceId" to -1,
+                                "nativePlayerActive" to false,
+                            ),
+                        )
                     }
+                }
+
+                "setPreferredAudioOutput" -> {
+                    val deviceId = call.argument<Int>("deviceId") ?: -1
+                    result.success(PlaybackService.setPreferredAudioOutputStatic(this, deviceId))
                 }
 
                 "getHealthEvents" -> {
@@ -1352,6 +1471,7 @@ class MainActivity : AudioServiceActivity() {
                 }
             }
         }
+
 
 
         // ========================================================

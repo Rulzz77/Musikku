@@ -36,6 +36,49 @@ extension _HomePlayback on _HomePageState {
       lyricsLoading: false,
       lyricsSynced: result?.synced ?? false,
     );
+    unawaited(_publishFloatingLyricsLine(_nativeState));
+  }
+
+  /// Prepare adjacent local items in Media3 so its decoder can transition
+  /// without the stop -> resolve -> prepare gap used by Flutter auto-next.
+  /// This is intentionally disabled for shuffle/repeat/manual queue/crossfade
+  /// and stops before the first online item in a mixed playlist.
+  List<Map<String, String>> _buildNativeGaplessQueueFor(
+    YoutubeSearchResult video,
+  ) {
+    if (!Platform.isAndroid ||
+        !video.isLocal ||
+        !_isFixedPlaybackList ||
+        _playerUiState.value.isShuffle ||
+        _playerUiState.value.loopMode != LoopModeCustom.off ||
+        _queueManager.isNotEmpty ||
+        _crossfadeSeconds > 0 ||
+        _stopAfterCurrent) {
+      return const <Map<String, String>>[];
+    }
+
+    final currentIndex = _activeList.indexWhere(
+      (item) => item.videoId == video.videoId,
+    );
+    if (currentIndex < 0 || currentIndex >= _activeList.length - 1) {
+      return const <Map<String, String>>[];
+    }
+
+    final result = <Map<String, String>>[];
+    for (final candidate in _activeList.skip(currentIndex + 1)) {
+      // Never preload past an online track. Flutter remains responsible for
+      // resolving it and will resume its normal queue/Radio policy there.
+      if (!candidate.isLocal || candidate.mediaUri.trim().isEmpty) break;
+      if (!candidate.videoId.startsWith('local:')) break;
+      result.add(<String, String>{
+        'videoId': candidate.videoId,
+        'title': candidate.title,
+        'artist': candidate.channelTitle,
+        'mediaUri': candidate.mediaUri,
+      });
+      if (result.length >= 60) break;
+    }
+    return result;
   }
 
   /// Putar [video] dari [list]. Kalau sumber playlist berubah
@@ -224,6 +267,7 @@ extension _HomePlayback on _HomePageState {
             await _youtubeController.pauseVideo();
           } catch (_) {}
         }
+        final nativeGaplessQueue = _buildNativeGaplessQueueFor(video);
         await _youtubeController.loadLocalTrack(
           mediaId: video.localMediaId.isNotEmpty
               ? video.localMediaId
@@ -233,6 +277,7 @@ extension _HomePlayback on _HomePageState {
           mediaUri: video.mediaUri,
           startSeconds: hasRestorePosition ? safeRestorePosition : 0.0,
           durationSeconds: safeRestoreDuration,
+          gaplessQueue: nativeGaplessQueue,
         );
       } else {
         try {

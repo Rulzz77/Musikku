@@ -40,11 +40,15 @@ class AudioOutputSnapshot {
     required this.supported,
     required this.devices,
     this.error,
+    this.preferredDeviceId = -1,
+    this.nativePlayerActive = false,
   });
 
   final bool supported;
   final List<AudioOutputDevice> devices;
   final String? error;
+  final int preferredDeviceId;
+  final bool nativePlayerActive;
 }
 
 /// Access to native-only playback diagnostics. These calls are local to the
@@ -72,7 +76,13 @@ class NativePlaybackDiagnostics {
               .map(AudioOutputDevice.fromMap)
               .toList(growable: false)
           : const <AudioOutputDevice>[];
-      return AudioOutputSnapshot(supported: supported, devices: devices);
+      final rawPreferredId = raw['preferredDeviceId'];
+      return AudioOutputSnapshot(
+        supported: supported,
+        devices: devices,
+        preferredDeviceId: rawPreferredId is num ? rawPreferredId.toInt() : -1,
+        nativePlayerActive: raw['nativePlayerActive'] == true,
+      );
     } on PlatformException catch (error) {
       return AudioOutputSnapshot(
         supported: false,
@@ -85,6 +95,18 @@ class NativePlaybackDiagnostics {
         devices: const <AudioOutputDevice>[],
         error: error.toString(),
       );
+    }
+  }
+
+  static Future<Map<String, dynamic>> setPreferredAudioOutput(int deviceId) async {
+    try {
+      final raw = await _channel.invokeMapMethod<String, dynamic>(
+        'setPreferredAudioOutput',
+        <String, dynamic>{'deviceId': deviceId},
+      );
+      return raw ?? const <String, dynamic>{'saved': false, 'message': 'Tidak ada respons dari Android.'};
+    } catch (error) {
+      return <String, dynamic>{'saved': false, 'message': error.toString()};
     }
   }
 

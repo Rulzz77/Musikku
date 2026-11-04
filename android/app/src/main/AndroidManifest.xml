@@ -27,6 +27,12 @@
     <uses-permission
         android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 
+    <!-- Floating Lyrics uses Android's special "Display over other apps" access. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
+    <!-- Optional automotive capability; the app remains installable on phones. -->
+    <uses-feature android:name="android.hardware.type.automotive" android:required="false" />
+
     <!-- ===================================================== -->
     <!-- FOREGROUND SERVICE -->
     <!-- ===================================================== -->
@@ -71,7 +77,8 @@
         android:allowBackup="false"
         android:usesCleartextTraffic="false"
         android:networkSecurityConfig="@xml/network_security_config"
-        android:supportsRtl="true">
+        android:supportsRtl="true"
+        android:appCategory="audio">
 
         <!-- ================================================= -->
         <!-- MAIN FLUTTER ACTIVITY -->
@@ -135,9 +142,38 @@
         <service
             android:name=".PlaybackService"
             android:enabled="true"
-            android:exported="false"
+            android:exported="true"
+            android:permission="android.permission.BIND_MEDIA_BROWSER_SERVICE"
             android:foregroundServiceType="mediaPlayback"
-            android:stopWithTask="false" />
+            android:stopWithTask="false">
+            <intent-filter>
+                <action android:name="android.media.browse.MediaBrowserService" />
+            </intent-filter>
+        </service>
+
+        <service
+            android:name=".FloatingLyricsService"
+            android:enabled="true"
+            android:exported="false" />
+
+        <receiver
+            android:name=".MusikKuHomeWidgetProvider"
+            android:label="MusikKu Player"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/musikku_player_widget_info" />
+        </receiver>
+
+        <meta-data
+            android:name="com.google.android.gms.car.application"
+            android:resource="@xml/automotive_app_desc" />
+        <meta-data
+            android:name="com.android.automotive"
+            android:resource="@xml/automotive_app_desc" />
 
 
 

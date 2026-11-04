@@ -19,6 +19,9 @@ class NativeYoutubeState {
   final int networkRxBytes;
   final String networkType;
 
+  /// True only when Media3 advanced to the next preloaded native playlist item.
+  final bool trackTransition;
+
   /// UI intent sementara dari tombol Play/Pause. Null berarti gunakan state native mentah.
   final bool? requestedPlaying;
 
@@ -37,6 +40,7 @@ class NativeYoutubeState {
     this.bufferedAhead = Duration.zero,
     this.networkRxBytes = 0,
     this.networkType = 'unknown',
+    this.trackTransition = false,
     this.requestedPlaying,
   });
 

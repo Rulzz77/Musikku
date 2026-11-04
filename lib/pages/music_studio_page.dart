@@ -9,6 +9,7 @@ import '../models/youtube_search_result.dart';
 import '../services/app_settings.dart';
 import '../services/storage_service.dart';
 import '../widgets/unified_artwork.dart';
+import 'pcm_visualizer_page.dart';
 
 /// Personal feature center: real, locally persisted tools built on existing
 /// listening history. It deliberately does not introduce an account/login.
@@ -553,12 +554,13 @@ class _MusicStudioPageState extends State<MusicStudioPage> with WidgetsBindingOb
     final scheme = Theme.of(context).colorScheme;
     return Column(children: [
       if (widget.currentVideo != null)
-        _toolTile(context, Icons.directions_car_filled_rounded, 'Car Mode', 'Kontrol besar untuk penggunaan saat berkendara', () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => _CarModePage(video: widget.currentVideo!, isPlaying: widget.isPlaying, onPlayPause: widget.onPlayPause, onNext: widget.onNext, onPrevious: widget.onPrevious, onLyrics: widget.onOpenLyrics)))),
+        _toolTile(context, Icons.directions_car_filled_rounded, 'Car Mode', 'Kontrol besar di aplikasi; sesi media native tersedia untuk Android Auto', () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => _CarModePage(video: widget.currentVideo!, isPlaying: widget.isPlaying, onPlayPause: widget.onPlayPause, onNext: widget.onNext, onPrevious: widget.onPrevious, onLyrics: widget.onOpenLyrics)))),
       _toolTile(context, Icons.lyrics_rounded, 'Lirik lanjutan', 'Buka halaman lirik lagu yang sedang diputar', widget.onOpenLyrics),
       _toolTile(context, Icons.headphones_rounded, 'Listening Together', 'Buat atau gabung ruang dengar', widget.onOpenListeningRoom),
-      _toolTile(context, Icons.speaker_group_rounded, 'Perangkat audio', 'Lihat perangkat output yang terdeteksi', widget.onOpenAudioSettings),
+      _toolTile(context, Icons.speaker_group_rounded, 'Perangkat audio', 'Pilih output untuk lagu lokal dan audio native', widget.onOpenAudioSettings),
+      _toolTile(context, Icons.graphic_eq_rounded, 'PCM Visualizer', 'Visualisasi sampel audio langsung dari Media3', () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const PcmVisualizerPage()))),
       const SizedBox(height: 8),
-      Text('Visualisasi audio real-time, gapless sejati, dan loudness normalization membutuhkan akses stream audio mentah. Player YouTube berbasis iframe tidak menyediakan PCM untuk diproses aplikasi.', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10, height: 1.45)),
+      Text('PCM Visualizer dan penyeimbang level hanya memproses audio lokal atau stream native Media3, bukan fallback iframe YouTube. Android Auto memakai sesi media MusikKu, tetapi daftar jelajah saat ini baru menampilkan lagu aktif. True Gapless belum diaktifkan karena antrean masih dikelola Flutter.', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10, height: 1.45)),
     ]);
   }
 

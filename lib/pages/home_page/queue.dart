@@ -231,6 +231,7 @@ extension _HomeQueue on _HomePageState {
 
     if (added) {
       unawaited(_storage.saveQueue(_queueManager.items));
+      unawaited(_youtubeController.clearNativeGaplessQueue());
     }
 
     if (!mounted) {
@@ -249,6 +250,7 @@ extension _HomeQueue on _HomePageState {
   void _playNext(YoutubeSearchResult video) {
     _queueManager.addNext(video);
     unawaited(_storage.saveQueue(_queueManager.items));
+    unawaited(_youtubeController.clearNativeGaplessQueue());
 
     if (!mounted) {
       return;
@@ -400,6 +402,7 @@ extension _HomeQueueSheet on _HomePageState {
                     for (var i = 0; i < previousItems.length; i++) {
                       _queueManager.restoreAtIndex(previousItems[i], i);
                     }
+                    unawaited(_youtubeController.clearNativeGaplessQueue());
                     unawaited(_storage.saveQueue(_queueManager.items));
                     if (mounted) setState(() {});
                     if (sheetContext.mounted) setSheetState(() {});
@@ -428,6 +431,7 @@ extension _HomeQueueSheet on _HomePageState {
                       removal.index,
                     );
                     if (!restored) return;
+                    unawaited(_youtubeController.clearNativeGaplessQueue());
                     unawaited(_storage.saveQueue(_queueManager.items));
                     if (mounted) setState(() {});
                     if (sheetContext.mounted) setSheetState(() {});

@@ -18,6 +18,8 @@ import '../models/queue_item.dart';
 import '../models/youtube_search_result.dart';
 import '../services/lyrics_service.dart';
 import '../services/listening_playback_tracker.dart';
+import '../services/floating_lyrics_bridge.dart';
+import '../services/native_playback_diagnostics.dart';
 import '../services/listening_together_service.dart';
 import '../services/music_style_matcher.dart';
 import '../services/original_track_resolver.dart';
@@ -556,6 +558,7 @@ class _HomePageState extends State<HomePage>
   void initState() {
     super.initState();
 
+    unawaited(FloatingLyricsBridge.initialize());
     WidgetsBinding.instance.addObserver(this);
 
 
@@ -743,6 +746,8 @@ class _HomePageState extends State<HomePage>
   /// call the protected setState API from an extension scope.
   void _handleCustomPlaylistsChanged() {
     unawaited(_storage.savePlaylists(_playlists));
+    // Playlist edits invalidate any successors already preloaded by Media3.
+    unawaited(_youtubeController.clearNativeGaplessQueue());
     final activeId = _activePlaylistId;
     if (activeId != null) {
       for (final playlist in _playlists) {

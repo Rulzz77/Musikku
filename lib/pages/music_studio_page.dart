@@ -6,7 +6,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/listening_stat.dart';
 import '../models/youtube_search_result.dart';
-import '../services/app_settings.dart';
 import '../services/storage_service.dart';
 import '../widgets/unified_artwork.dart';
 import 'pcm_visualizer_page.dart';
@@ -17,7 +16,6 @@ class MusicStudioPage extends StatefulWidget {
   const MusicStudioPage({
     super.key,
     required this.storage,
-    required this.settings,
     this.recentlyPlayed = const <YoutubeSearchResult>[],
     this.currentVideo,
     this.onPlayFromList,
@@ -25,13 +23,10 @@ class MusicStudioPage extends StatefulWidget {
     this.onNext,
     this.onPrevious,
     this.onOpenLyrics,
-    this.onOpenListeningRoom,
-    this.onOpenAudioSettings,
     this.isPlaying = false,
   });
 
   final StorageService storage;
-  final AppSettingsController settings;
   final List<YoutubeSearchResult> recentlyPlayed;
   final YoutubeSearchResult? currentVideo;
   final Future<void> Function(
@@ -42,8 +37,6 @@ class MusicStudioPage extends StatefulWidget {
   final Future<void> Function()? onNext;
   final Future<void> Function()? onPrevious;
   final VoidCallback? onOpenLyrics;
-  final VoidCallback? onOpenListeningRoom;
-  final VoidCallback? onOpenAudioSettings;
   final bool isPlaying;
 
   @override
@@ -304,25 +297,22 @@ class _MusicStudioPageState extends State<MusicStudioPage> with WidgetsBindingOb
             children: [
               _hero(context, totalSeconds, activeRecently, data.stats.length),
               const SizedBox(height: 18),
-              _sectionTitle(context, 'MUSIK PERSONAL', 'Kenali pola mendengarkanmu'),
+              _sectionTitle(context, 'KEBIASAAN MUSIK', 'Lihat artis dan lagu yang paling sering kamu dengarkan'),
               _dnaPanel(context, topArtists, topTracks, totalSeconds, data.stats.length, data.favoriteArtists),
               const SizedBox(height: 18),
-              _sectionTitle(context, 'MUSIKKU FLOW', 'Mix mood dari riwayatmu, tanpa pencarian acak'),
+              _sectionTitle(context, 'MIX SESUAI SUASANA', 'Buat pilihan lagu dari suasana dan riwayatmu'),
               _flowPanel(context, flow, data),
               const SizedBox(height: 18),
-              _sectionTitle(context, 'THEMES STUDIO', 'Atur suasana visual MusikKu'),
-              _themeStudioPanel(context),
-              const SizedBox(height: 18),
-              _sectionTitle(context, 'MEMORIES', 'Potongan perjalanan musikmu'),
+              _sectionTitle(context, 'KENANGAN MUSIK', 'Ringkasan perjalanan musik yang pernah kamu dengarkan'),
               _memoriesPanel(context, activeRecently, data.recent, topTracks, data.hiddenFlowTrackIds),
               const SizedBox(height: 18),
-              _sectionTitle(context, 'RADIO DIARY · MANUAL', 'Simpan snapshot riwayat lagu untuk diputar ulang'),
+              _sectionTitle(context, 'CATATAN RADIO', 'Simpan daftar lagu dari riwayat untuk diputar ulang'),
               _diaryPanel(context, data),
               const SizedBox(height: 18),
-              _sectionTitle(context, 'FOCUS MODE', 'Timer fokus mengikuti waktu saat aplikasi kembali aktif'),
+              _sectionTitle(context, 'TIMER FOKUS', 'Atur waktu fokus sambil mendengarkan musik'),
               _focusPanel(context),
               const SizedBox(height: 18),
-              _sectionTitle(context, 'QUICK TOOLS', 'Kontrol yang sering dipakai'),
+              _sectionTitle(context, 'ALAT TAMBAHAN', 'Mode mobil dan visualizer audio'),
               _quickTools(context),
             ],
           );
@@ -444,45 +434,6 @@ class _MusicStudioPageState extends State<MusicStudioPage> with WidgetsBindingOb
   }
 
 
-  Widget _themeStudioPanel(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    const descriptions = <AppThemeChoice, (String, Color, Color)>{
-      AppThemeChoice.system: ('Ikuti perangkat', Color(0xFF607080), Color(0xFFE8EDF0)),
-      AppThemeChoice.dark: ('Midnight Slate', Color(0xFF0D1422), Color(0xFF91D9CF)),
-      AppThemeChoice.amoled: ('AMOLED', Colors.black, Color(0xFFB8B8EE)),
-      AppThemeChoice.light: ('Warm Paper', Color(0xFFF3F0E6), Color(0xFF657F2F)),
-      AppThemeChoice.pink: ('Pink Pastel', Color(0xFFFFE2EC), Color(0xFFCE5C8B)),
-    };
-    return _panel(context, ValueListenableBuilder<AppThemeChoice>(
-      valueListenable: widget.settings.theme,
-      builder: (context, selected, _) => Wrap(
-        spacing: 9,
-        runSpacing: 9,
-        children: [
-          for (final entry in descriptions.entries)
-            InkWell(
-              borderRadius: BorderRadius.circular(14),
-              onTap: () => unawaited(widget.settings.setTheme(entry.key)),
-              child: Container(
-                width: 104,
-                padding: const EdgeInsets.all(9),
-                decoration: BoxDecoration(
-                  color: entry.value.$2,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: selected == entry.key ? scheme.primary : scheme.outlineVariant, width: selected == entry.key ? 2 : 1),
-                ),
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Row(children: [Container(width: 12, height: 12, decoration: BoxDecoration(color: entry.value.$3, shape: BoxShape.circle)), const Spacer(), if (selected == entry.key) Icon(Icons.check_circle_rounded, size: 15, color: entry.value.$3)]),
-                  const SizedBox(height: 13),
-                  Text(entry.value.$1, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: entry.key == AppThemeChoice.dark || entry.key == AppThemeChoice.amoled ? Colors.white : const Color(0xFF18221F), fontSize: 9, fontWeight: FontWeight.w900)),
-                ]),
-              ),
-            ),
-        ],
-      ),
-    ));
-  }
-
   Widget _memoriesPanel(BuildContext context, int activeRecently, List<YoutubeSearchResult> recent, List<ListeningStat> topTracks, Set<String> hiddenFlowTrackIds) {
     final scheme = Theme.of(context).colorScheme;
     final top = topTracks.isEmpty ? null : topTracks.first;
@@ -554,13 +505,36 @@ class _MusicStudioPageState extends State<MusicStudioPage> with WidgetsBindingOb
     final scheme = Theme.of(context).colorScheme;
     return Column(children: [
       if (widget.currentVideo != null)
-        _toolTile(context, Icons.directions_car_filled_rounded, 'Car Mode', 'Kontrol besar di aplikasi; Android Auto dapat menjelajahi koleksi musik lokal', () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => _CarModePage(video: widget.currentVideo!, isPlaying: widget.isPlaying, onPlayPause: widget.onPlayPause, onNext: widget.onNext, onPrevious: widget.onPrevious, onLyrics: widget.onOpenLyrics)))),
-      _toolTile(context, Icons.lyrics_rounded, 'Lirik lanjutan', 'Buka halaman lirik lagu yang sedang diputar', widget.onOpenLyrics),
-      _toolTile(context, Icons.headphones_rounded, 'Listening Together', 'Buat atau gabung ruang dengar', widget.onOpenListeningRoom),
-      _toolTile(context, Icons.speaker_group_rounded, 'Perangkat audio', 'Pilih output untuk lagu lokal dan audio native', widget.onOpenAudioSettings),
-      _toolTile(context, Icons.graphic_eq_rounded, 'PCM Visualizer', 'Visualisasi sampel audio langsung dari Media3', () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const PcmVisualizerPage()))),
+        _toolTile(
+          context,
+          Icons.directions_car_filled_rounded,
+          'Mode mobil',
+          'Tombol pemutar lebih besar saat berkendara',
+          () => Navigator.of(context).push(MaterialPageRoute<void>(
+            builder: (_) => _CarModePage(
+              video: widget.currentVideo!,
+              isPlaying: widget.isPlaying,
+              onPlayPause: widget.onPlayPause,
+              onNext: widget.onNext,
+              onPrevious: widget.onPrevious,
+              onLyrics: widget.onOpenLyrics,
+            ),
+          )),
+        ),
+      _toolTile(
+        context,
+        Icons.graphic_eq_rounded,
+        'Visualizer audio',
+        'Lihat gerakan suara untuk lagu lokal dan audio native',
+        () => Navigator.of(context).push(MaterialPageRoute<void>(
+          builder: (_) => const PcmVisualizerPage(),
+        )),
+      ),
       const SizedBox(height: 8),
-      Text('PCM Visualizer dan penyeimbang volume memproses audio lokal atau stream native Media3, bukan fallback iframe. Android Auto kini dapat menjelajahi lagu, artis, album, dan lagu yang baru ditambahkan dari penyimpanan perangkat. True Gapless berlaku untuk rangkaian lagu lokal native saat Shuffle/Repeat, Crossfade, antrean manual, dan Stop After Track tidak menghalangi.', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10, height: 1.45)),
+      Text(
+        'Beberapa alat audio bekerja pada lagu lokal atau audio native Media3. Jika lagu diputar melalui pemutar YouTube, alat tersebut mungkin tidak tersedia.',
+        style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10.5, height: 1.45),
+      ),
     ]);
   }
 

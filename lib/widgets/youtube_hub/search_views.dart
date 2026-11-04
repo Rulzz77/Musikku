@@ -705,39 +705,18 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
   }
 
   Widget _chipRow() {
-    const labels = [
-      'Musik',
-      'Lagu populer',
-      'Lagu terbaru',
-      'Jawa',
-      'Pop Indonesia',
-      'Dangdut',
-      'Dangdut/Koplo',
-      'DJ/Remix',
-      'K-Pop',
-    ];
-    const genreQueries = <int, String>{
-      3: 'lagu Jawa Indonesia',
-      4: 'lagu Pop Indonesia',
-      5: 'lagu dangdut Indonesia official music video',
-      6: 'lagu dangdut koplo Indonesia official music video',
-      7: 'DJ Remix Indonesia',
-      8: 'K-Pop songs',
-    };
+    const labels = ['Semua', 'Populer', 'Terbaru'];
     final scheme = Theme.of(context).colorScheme;
     return SliverToBoxAdapter(
       child: SizedBox(
-        height: 48,
+        height: 46,
         child: ListView.separated(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           scrollDirection: Axis.horizontal,
           itemCount: labels.length,
           separatorBuilder: (_, _) => const SizedBox(width: 8),
           itemBuilder: (context, index) {
-            final genreQuery = genreQueries[index];
-            final selected = genreQuery != null
-                ? _query.toLowerCase() == genreQuery.toLowerCase()
-                : _query.isEmpty && _activeChip == index;
+            final selected = _query.isEmpty && _activeChip == index;
             return ChoiceChip(
               label: Text(labels[index]),
               selected: selected,
@@ -750,29 +729,15 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
                 borderRadius: BorderRadius.circular(999),
               ),
               labelStyle: TextStyle(
-                color: selected
-                    ? scheme.onPrimary
-                    : scheme.onSurfaceVariant,
+                color: selected ? scheme.onPrimary : scheme.onSurfaceVariant,
                 fontSize: 12.5,
                 fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-                letterSpacing: 0.02,
               ),
               onSelected: (_) {
                 if (index == 0) {
                   _clearSearch();
-                  return;
-                }
-                if (index == 1 || index == 2) {
+                } else {
                   unawaited(_selectChip(index));
-                  return;
-                }
-                if (genreQuery != null) {
-                  setState(() {
-                    _activeChip = -1;
-                    _searchMode = 'music';
-                  });
-                  _searchController.text = genreQuery;
-                  unawaited(_search());
                 }
               },
             );

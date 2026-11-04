@@ -6,9 +6,7 @@ import 'package:flutter/services.dart' hide appBuildNumber;
 import 'package:path_provider/path_provider.dart';
 
 import '../app_info.dart';
-import '../models/youtube_search_result.dart';
 import '../services/storage_service.dart';
-import 'music_studio_page.dart';
 import 'app_health_page.dart';
 import '../services/app_settings.dart';
 import '../services/floating_lyrics_bridge.dart';
@@ -111,28 +109,10 @@ class AppSettingsPage extends StatelessWidget {
     super.key,
     required this.settings,
     this.onOpenAudioSettings,
-    this.recentlyPlayed = const <YoutubeSearchResult>[],
-    this.currentVideo,
-    this.onPlayFromList,
-    this.onPlayPause,
-    this.onNext,
-    this.onPrevious,
-    this.onOpenLyrics,
-    this.onOpenListeningRoom,
-    this.isPlaying = false,
   });
 
   final AppSettingsController settings;
   final VoidCallback? onOpenAudioSettings;
-  final List<YoutubeSearchResult> recentlyPlayed;
-  final YoutubeSearchResult? currentVideo;
-  final Future<void> Function(YoutubeSearchResult, List<YoutubeSearchResult>)? onPlayFromList;
-  final Future<void> Function()? onPlayPause;
-  final Future<void> Function()? onNext;
-  final Future<void> Function()? onPrevious;
-  final VoidCallback? onOpenLyrics;
-  final VoidCallback? onOpenListeningRoom;
-  final bool isPlaying;
 
   String _themeLabel(AppThemeChoice choice) => switch (choice) {
         AppThemeChoice.system => 'Ikuti perangkat',
@@ -155,48 +135,12 @@ class AppSettingsPage extends StatelessWidget {
         children: [
           const FlowPageHero(
             icon: Icons.tune_rounded,
-            eyebrow: 'PERSONAL STUDIO',
-            title: 'Kendali MusikKu',
-            subtitle: 'Atur tampilan, jaringan, suara, dan cara aplikasi bekerja sesuai kebiasaan mendengarkanmu.',
+            eyebrow: 'PENGATURAN APLIKASI',
+            title: 'Atur MusikKu.',
+            subtitle: 'Atur tampilan, penggunaan data, dan cara pemutar musik bekerja.',
             trailing: Icon(Icons.auto_awesome_rounded),
           ),
           const SizedBox(height: 12),
-          Material(
-            color: scheme.primaryContainer.withValues(alpha: 0.48),
-            borderRadius: BorderRadius.circular(18),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(18),
-              onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-                builder: (_) => MusicStudioPage(
-                  storage: StorageService(),
-                  settings: settings,
-                  recentlyPlayed: recentlyPlayed,
-                  currentVideo: currentVideo,
-                  onPlayFromList: onPlayFromList,
-                  onPlayPause: onPlayPause,
-                  onNext: onNext,
-                  onPrevious: onPrevious,
-                  onOpenLyrics: onOpenLyrics,
-                  onOpenListeningRoom: onOpenListeningRoom,
-                  onOpenAudioSettings: onOpenAudioSettings,
-                  isPlaying: isPlaying,
-                ),
-              )),
-              child: Padding(
-                padding: const EdgeInsets.all(15),
-                child: Row(children: [
-                  Icon(Icons.auto_awesome_rounded, color: scheme.primary, size: 25),
-                  const SizedBox(width: 12),
-                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text('Buka MusikKu Studio', style: TextStyle(color: scheme.onSurface, fontWeight: FontWeight.w900, fontSize: 13)),
-                    const SizedBox(height: 3),
-                    Text('Music DNA, Flow, Memories, Radio Diary, Focus, dan Car Mode', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10.5)),
-                  ])),
-                  Icon(Icons.arrow_forward_rounded, color: scheme.primary),
-                ]),
-              ),
-            ),
-          ),
           // ---------------------------------------------------------------
           // TAMPILAN
           // ---------------------------------------------------------------

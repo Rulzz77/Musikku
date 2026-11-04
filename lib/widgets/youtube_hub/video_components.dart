@@ -113,7 +113,27 @@ extension _YoutubeHubVideoComponents on _YoutubeHubState {
                 ],
               ),
             ),
-            Material(color: scheme.surfaceContainerHigh, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)), child: IconButton(tooltip: 'Cari', visualDensity: VisualDensity.compact, onPressed: _openSearch, icon: const Icon(Icons.search_rounded))),
+            Material(
+              color: scheme.surfaceContainerHigh,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              child: IconButton(
+                tooltip: 'Cari musik',
+                visualDensity: VisualDensity.compact,
+                onPressed: _openSearch,
+                icon: const Icon(Icons.search_rounded),
+              ),
+            ),
+            const SizedBox(width: 7),
+            Material(
+              color: scheme.surfaceContainerHigh,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              child: IconButton(
+                tooltip: 'Pengaturan',
+                visualDensity: VisualDensity.compact,
+                onPressed: _showAppSettings,
+                icon: const Icon(Icons.settings_outlined),
+              ),
+            ),
           ],
         ),
       ),

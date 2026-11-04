@@ -115,7 +115,7 @@ extension _YoutubeHubLibraryViews on _YoutubeHubState {
                 icon: Icons.library_music_rounded,
                 eyebrow: 'RUANG PRIBADI',
                 title: 'Koleksi musikmu.',
-                subtitle: 'Playlist, favorit, riwayat, dan musik lokal dalam satu ruang.',
+                subtitle: 'Playlist, favorit, riwayat, dan lagu di HP.',
                 trailing: IconButton(
                   tooltip: 'Pembaruan aplikasi',
                   onPressed: () => unawaited(AppUpdateSheet.show(context)),
@@ -137,14 +137,13 @@ extension _YoutubeHubLibraryViews on _YoutubeHubState {
           ),
         ),
       ),
-      SliverToBoxAdapter(child: _librarySectionLabel('Playlist & mix')),
+      SliverToBoxAdapter(child: _librarySectionLabel('Playlist')),
       SliverToBoxAdapter(
         child: _libraryGroup([
-          _libraryCard('Playlist MusikKu', '${widget.customPlaylistCount} playlist buatan sendiri · bisa diurutkan dan diedit', Icons.queue_music_rounded, widget.onOpenCustomPlaylists ?? () {}),
-          _libraryCard('Playlist pintar', 'Mix dari lagu yang sering diputar, favorit, dan riwayat', Icons.auto_awesome_rounded, _showSmartPlaylistPicker),
+          _libraryCard('Playlist saya', '${widget.customPlaylistCount} playlist · buat, susun, dan putar lagu', Icons.queue_music_rounded, widget.onOpenCustomPlaylists ?? () {}),
         ]),
       ),
-      SliverToBoxAdapter(child: _librarySectionLabel('Koleksi cepat')),
+      SliverToBoxAdapter(child: _librarySectionLabel('Lagu & aktivitas')),
       SliverToBoxAdapter(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -160,11 +159,10 @@ extension _YoutubeHubLibraryViews on _YoutubeHubState {
             ),
             children: [
               for (final tile in <({String title, String subtitle, IconData icon, VoidCallback action})>[
+                (title: 'Favorit', subtitle: '${widget.favorites.length} lagu disimpan', icon: Icons.favorite_rounded, action: _openFavoritesList),
                 (title: 'Riwayat dengar', subtitle: '${widget.recentlyPlayed.length} lagu terakhir', icon: Icons.history_rounded, action: _openRecentHistory),
-                (title: 'Favorit MusikKu', subtitle: '${widget.favorites.length} lagu tersimpan', icon: Icons.favorite_rounded, action: _openFavoritesList),
-                (title: 'Musik lokal', subtitle: 'File di perangkat', icon: Icons.library_music_rounded, action: _openLocalMusic),
-                (title: 'Radio otomatis', subtitle: 'Putar lagu serupa', icon: Icons.radio_rounded, action: _startRadioFromCollection),
-                (title: 'MusikKu Studio', subtitle: 'Flow, DNA, Focus & Car Mode', icon: Icons.auto_awesome_rounded, action: _openMusicStudio),
+                (title: 'Musik di perangkat', subtitle: 'Lagu yang ada di HP-mu', icon: Icons.library_music_rounded, action: _openLocalMusic),
+                (title: 'Statistik', subtitle: 'Waktu dan kebiasaan mendengar', icon: Icons.insights_outlined, action: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => StatsPage(storage: _storage)))),
               ].indexed)
                 TweenAnimationBuilder<double>(
                   key: ValueKey<String>('library-shortcut-${tile.$1}'),
@@ -186,11 +184,15 @@ extension _YoutubeHubLibraryViews on _YoutubeHubState {
           ),
         ),
       ),
-      SliverToBoxAdapter(child: _librarySectionLabel('Pengaturan & aktivitas')),
+      SliverToBoxAdapter(child: _librarySectionLabel('Fitur tambahan')),
       SliverToBoxAdapter(
         child: _libraryGroup([
-          _libraryCard('Statistik mendengarkan', 'Ringkasan waktu dengar, lagu, dan kebiasaan musik', Icons.insights_outlined, () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => StatsPage(storage: _storage)))),
-          _libraryCard('Pengaturan MusikKu', 'Tema, penggunaan data, dan preferensi pemutaran', Icons.tune_rounded, _showAppSettings),
+          _libraryCard(
+            'MusikKu Studio',
+            'Kenali selera musik, buat mix sesuai suasana, dan gunakan timer fokus.',
+            Icons.auto_awesome_rounded,
+            _openMusicStudio,
+          ),
         ]),
       ),
       const SliverToBoxAdapter(child: SizedBox(height: 18)),
@@ -249,7 +251,6 @@ extension _YoutubeHubLibraryViews on _YoutubeHubState {
   void _openMusicStudio() {
     Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => MusicStudioPage(
       storage: _storage,
-      settings: widget.settings,
       recentlyPlayed: widget.recentlyPlayed,
       currentVideo: widget.currentVideo,
       onPlayFromList: widget.onPlayFromList,
@@ -257,35 +258,17 @@ extension _YoutubeHubLibraryViews on _YoutubeHubState {
       onNext: widget.onNext,
       onPrevious: widget.onPrevious,
       onOpenLyrics: widget.onOpenCurrentLyrics,
-      onOpenListeningRoom: widget.onOpenListeningRoom,
-      onOpenAudioSettings: widget.onOpenAudioSettings,
       isPlaying: widget.isPlaying,
     )));
   }
 
   void _showAppSettings() {
-    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AppSettingsPage(
-      settings: widget.settings,
-      onOpenAudioSettings: widget.onOpenAudioSettings,
-      recentlyPlayed: widget.recentlyPlayed,
-      currentVideo: widget.currentVideo,
-      onPlayFromList: widget.onPlayFromList,
-      onPlayPause: widget.onPlayPause,
-      onNext: widget.onNext,
-      onPrevious: widget.onPrevious,
-      onOpenLyrics: widget.onOpenCurrentLyrics,
-      onOpenListeningRoom: widget.onOpenListeningRoom,
-      isPlaying: widget.isPlaying,
-    )));
-  }
-
-  void _startRadioFromCollection() {
-    final seed = widget.recentlyPlayed.isNotEmpty ? widget.recentlyPlayed.first : widget.favorites.isNotEmpty ? widget.favorites.first : _trending.isNotEmpty ? _trending.first : null;
-    if (seed != null && widget.onStartRadio != null) {
-      unawaited(widget.onStartRadio!(seed));
-      return;
-    }
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Belum ada lagu untuk memulai radio. Putar lagu dulu ya.')));
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => AppSettingsPage(
+        settings: widget.settings,
+        onOpenAudioSettings: widget.onOpenAudioSettings,
+      ),
+    ));
   }
 
   void _showSongList(String title, List<YoutubeSearchResult> songs) {

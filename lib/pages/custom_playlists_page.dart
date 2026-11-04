@@ -11,6 +11,7 @@ import '../models/player_ui_state.dart';
 import '../models/native_youtube_state.dart';
 import '../models/youtube_search_result.dart';
 import '../services/offline_download_service.dart';
+import '../services/audio_download_estimator.dart';
 import '../widgets/playlist_widgets.dart' show showPlaylistNameDialog;
 import '../widgets/unified_artwork.dart';
 import '../widgets/playlist_artwork.dart';
@@ -25,6 +26,7 @@ class CustomPlaylistsPage extends StatefulWidget {
   const CustomPlaylistsPage({
     super.key,
     required this.playlists,
+    this.initialPlaylistId,
     required this.playerUiState,
     this.availableSongs = const [],
     required this.onChanged,
@@ -41,6 +43,7 @@ class CustomPlaylistsPage extends StatefulWidget {
   });
 
   final List<Playlist> playlists;
+  final String? initialPlaylistId;
   final ValueListenable<PlayerUiState> playerUiState;
   final List<YoutubeSearchResult> availableSongs;
   final VoidCallback onChanged;
@@ -72,6 +75,7 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
   @override
   void initState() {
     super.initState();
+    _selectedPlaylistId = widget.initialPlaylistId;
     _downloads.addListener(_handleDownloadChanges);
     unawaited(_initializeDownloads());
   }
@@ -129,20 +133,226 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
   }
 
   Future<void> _downloadPlaylist(Playlist playlist) async {
-    final pending = playlist.songs
-        .where((song) => !song.isOfflineDownloaded && !song.isLocal)
-        .toList(growable: false);
+    if (!Platform.isAndroid) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Download playlist saat ini hanya tersedia di Android.')),
+      );
+      return;
+    }
+
+    await _downloads.initialize();
+    if (!mounted) return;
+
+    // Deduplicate by video ID so the estimate and queue count match the
+    // downloader's identity key and duplicate playlist rows are not counted.
+    final uniqueSongs = <String, YoutubeSearchResult>{};
+    for (final song in playlist.songs) {
+      if (song.videoId.isNotEmpty) {
+        uniqueSongs.putIfAbsent(song.videoId, () => song);
+      }
+    }
+
+    final pending = <YoutubeSearchResult>[];
+    for (final song in uniqueSongs.values) {
+      if (song.isLocal) continue;
+      if (song.isOfflineDownloaded && await File(song.offlinePath).exists()) {
+        continue;
+      }
+      final existing = _downloads.itemFor(song.videoId);
+      if (existing != null &&
+          existing.status == OfflineDownloadStatus.completed &&
+          existing.filePath.isNotEmpty &&
+          await File(existing.filePath).exists()) {
+        continue;
+      }
+      pending.add(song);
+    }
+
+    // File.exists() above is asynchronous; the page may have been disposed
+    // while the playlist was being checked. Guard every later BuildContext use.
+    if (!mounted) return;
+
     if (pending.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Semua lagu playlist sudah tersedia offline.')),
       );
       return;
     }
+
+    final knownFileSizes = <String, int>{};
+    for (final song in pending) {
+      final totalBytes = _downloads.itemFor(song.videoId)?.totalBytes ?? 0;
+      if (totalBytes > 0) knownFileSizes[song.videoId] = totalBytes;
+    }
+    final estimate = AudioDownloadEstimate.fromSongs(
+      pending,
+      knownFileSizes: knownFileSizes,
+    );
+    final alreadyQueued = pending.where((song) {
+      final status = _downloads.itemFor(song.videoId)?.status;
+      return status == OfflineDownloadStatus.queued ||
+          status == OfflineDownloadStatus.downloading;
+    }).length;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        final scheme = Theme.of(dialogContext).colorScheme;
+        return AlertDialog(
+          title: const Text('Download seluruh playlist?'),
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${pending.length} lagu belum tersedia offline.',
+                    style: TextStyle(color: scheme.onSurfaceVariant),
+                  ),
+                  const SizedBox(height: 14),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: scheme.primaryContainer.withValues(alpha: 0.45),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'PERKIRAAN UKURAN',
+                          style: TextStyle(
+                            color: scheme.onSurfaceVariant,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 1.1,
+                          ),
+                        ),
+                        const SizedBox(height: 5),
+                        Text(
+                          estimate.hasEstimate
+                              ? _formatMegabytes(estimate.estimatedBytes)
+                              : 'Belum diketahui',
+                          style: TextStyle(
+                            color: scheme.onSurface,
+                            fontSize: 27,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        if (estimate.hasEstimate) ...[
+                          const SizedBox(height: 3),
+                          Text(
+                            'Rentang kasar ${_formatMegabytes(estimate.minimumBytes)}–${_formatMegabytes(estimate.maximumBytes)}',
+                            style: TextStyle(
+                              color: scheme.onSurfaceVariant,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  _downloadEstimateRow(
+                    'Lagu yang akan disiapkan',
+                    '${pending.length} lagu',
+                    scheme,
+                  ),
+                  if (alreadyQueued > 0)
+                    _downloadEstimateRow(
+                      'Sudah ada di antrean',
+                      '$alreadyQueued lagu',
+                      scheme,
+                    ),
+                  if (estimate.knownFileSizeTracks > 0)
+                    _downloadEstimateRow(
+                      'Ukuran file sudah terdeteksi',
+                      '${estimate.knownFileSizeTracks} lagu',
+                      scheme,
+                    ),
+                  if (estimate.knownDurationTracks > 0)
+                    _downloadEstimateRow(
+                      'Dihitung dari durasi',
+                      '${estimate.knownDurationTracks} lagu',
+                      scheme,
+                    ),
+                  if (estimate.unknownDurationTracks > 0) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      '${estimate.unknownDurationTracks} lagu belum memiliki ukuran atau data durasi, jadi belum masuk ke estimasi MB.',
+                      style: TextStyle(
+                        color: scheme.error,
+                        fontSize: 11,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 10),
+                  Text(
+                    'Ukuran yang sudah diketahui mengikuti data antrean. Lagu lain dihitung memakai asumsi audio 128 kbps (rentang 96–192 kbps), jadi total tetap perkiraan. Ukuran akhir mengikuti format dan bitrate sumber. Lagu lokal dan yang sudah tersedia offline tidak dihitung.',
+                    style: TextStyle(
+                      color: scheme.onSurfaceVariant,
+                      fontSize: 10.5,
+                      height: 1.4,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Gunakan fitur unduhan hanya untuk audio yang memang memiliki izin pengunduhan dan pemutaran offline.',
+                    style: TextStyle(
+                      color: scheme.onSurfaceVariant,
+                      fontSize: 10.5,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Batal'),
+            ),
+            FilledButton.icon(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              icon: const Icon(Icons.download_rounded, size: 18),
+              label: const Text('Mulai download'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (!mounted || confirmed != true) return;
     try {
-      await _downloads.enqueueAll(pending);
+      final result = await _downloads.enqueueAll(pending);
       if (!mounted) return;
+      final summary = <String>[];
+      if (result.added > 0) {
+        summary.add('${result.added} lagu masuk antrean');
+      }
+      if (result.alreadyQueued > 0) {
+        summary.add('${result.alreadyQueued} sudah di antrean');
+      }
+      if (result.alreadyDownloaded > 0) {
+        summary.add('${result.alreadyDownloaded} sudah offline');
+      }
+      if (result.failed > 0) {
+        summary.add('${result.failed} gagal ditambahkan');
+      }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${pending.length} lagu masuk antrean download.')),
+        SnackBar(
+          content: Text(
+            summary.isEmpty
+                ? 'Tidak ada lagu baru untuk diunduh.'
+                : summary.join(' · '),
+          ),
+        ),
       );
     } catch (error) {
       if (!mounted) return;
@@ -151,6 +361,37 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
       );
     }
   }
+
+  Widget _downloadEstimateRow(
+    String label,
+    String value,
+    ColorScheme scheme,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              color: scheme.onSurface,
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatMegabytes(int bytes) =>
+      '${(bytes / 1000000).toStringAsFixed(1)} MB';
 
   Future<void> _showDownloadManager() async {
     await _downloads.initialize();

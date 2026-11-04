@@ -13,6 +13,20 @@ import '../models/youtube_search_result.dart';
 
 enum OfflineDownloadStatus { queued, downloading, paused, completed, failed }
 
+class OfflineEnqueueResult {
+  const OfflineEnqueueResult({
+    required this.added,
+    required this.alreadyQueued,
+    required this.alreadyDownloaded,
+    required this.failed,
+  });
+
+  final int added;
+  final int alreadyQueued;
+  final int alreadyDownloaded;
+  final int failed;
+}
+
 class OfflineDownloadEntry {
   const OfflineDownloadEntry({
     required this.song,
@@ -229,15 +243,47 @@ class OfflineDownloadService extends ChangeNotifier {
     unawaited(_pumpQueue());
   }
 
-  Future<void> enqueueAll(Iterable<YoutubeSearchResult> songs) async {
+  Future<OfflineEnqueueResult> enqueueAll(
+    Iterable<YoutubeSearchResult> songs,
+  ) async {
     await initialize();
+    var added = 0;
+    var alreadyQueued = 0;
+    var alreadyDownloaded = 0;
+    var failed = 0;
+    final seen = <String>{};
+
     for (final song in songs) {
+      if (!seen.add(song.videoId)) continue;
+      final existing = _items[song.videoId];
+      if (existing?.status == OfflineDownloadStatus.queued ||
+          existing?.status == OfflineDownloadStatus.downloading) {
+        alreadyQueued++;
+        continue;
+      }
+      if (existing != null &&
+          existing.status == OfflineDownloadStatus.completed &&
+          existing.filePath.isNotEmpty &&
+          await File(existing.filePath).exists()) {
+        alreadyDownloaded++;
+        continue;
+      }
+
       try {
         await enqueue(song);
+        added++;
       } catch (error) {
+        failed++;
         debugPrint('OFFLINE QUEUE ADD FAILED (${song.videoId}): $error');
       }
     }
+
+    return OfflineEnqueueResult(
+      added: added,
+      alreadyQueued: alreadyQueued,
+      alreadyDownloaded: alreadyDownloaded,
+      failed: failed,
+    );
   }
 
   Future<void> pauseAll() async {

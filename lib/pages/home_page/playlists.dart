@@ -9,11 +9,12 @@ extension _HomePlaylists on _HomePageState {
     unawaited(_storage.savePlaylists(_playlists));
   }
 
-  void _openCustomPlaylistsPage() {
+  void _openCustomPlaylistsPage({String? initialPlaylistId}) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => CustomPlaylistsPage(
           playlists: _playlists,
+          initialPlaylistId: initialPlaylistId,
           playerUiState: _playerUiState,
           availableSongs: <YoutubeSearchResult>[
             ..._favorites,
@@ -35,6 +36,11 @@ extension _HomePlaylists on _HomePageState {
         ),
       ),
     );
+  }
+
+  void _openCustomPlaylistDetail(Playlist playlist) {
+    if (!_playlists.any((item) => item.id == playlist.id)) return;
+    _openCustomPlaylistsPage(initialPlaylistId: playlist.id);
   }
 
   Future<void> _playCustomPlaylist(Playlist playlist) async {

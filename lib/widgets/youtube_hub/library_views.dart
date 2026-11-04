@@ -290,10 +290,27 @@ extension _YoutubeHubLibraryViews on _YoutubeHubState {
               child: MusicGlassPanel(
                 radius: 21,
                 padding: const EdgeInsets.all(15),
-                child: MusicSheetHeading(
-                  icon: Icons.queue_music_rounded,
-                  title: title,
-                  subtitle: '${musicSongs.length} lagu musik siap dipilih.',
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    MusicSheetHeading(
+                      icon: Icons.queue_music_rounded,
+                      title: title,
+                      subtitle: '${musicSongs.length} lagu musik · pilih lagu untuk mulai mendengarkan.',
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          unawaited(widget.onPlayFromList(musicSongs.first, musicSongs));
+                        },
+                        icon: const Icon(Icons.play_arrow_rounded),
+                        label: const Text('Putar semua'),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             );

@@ -77,9 +77,9 @@ class YoutubeHub extends StatefulWidget {
   final List<ListeningStat> listeningStats;
   final int customPlaylistCount;
   final VoidCallback? onOpenCustomPlaylists;
+  final ValueChanged<Playlist>? onOpenCustomPlaylist;
   /// Playlist buatan pengguna, ditampilkan di beranda.
   final List<Playlist> customPlaylists;
-  final Future<void> Function(Playlist playlist)? onPlayCustomPlaylist;
   final VoidCallback? onCustomPlaylistsChanged;
   final String? currentVideoId;
   final YoutubeSearchResult? currentVideo;
@@ -111,8 +111,8 @@ class YoutubeHub extends StatefulWidget {
     this.listeningStats = const [],
     this.customPlaylistCount = 0,
     this.onOpenCustomPlaylists,
+    this.onOpenCustomPlaylist,
     this.customPlaylists = const [],
-    this.onPlayCustomPlaylist,
     this.onCustomPlaylistsChanged,
     this.currentVideoId,
     this.currentVideo,

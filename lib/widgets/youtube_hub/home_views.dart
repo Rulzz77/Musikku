@@ -4,6 +4,13 @@ part of '../youtube_hub.dart';
 // ignore_for_file: invalid_use_of_protected_member
 
 extension _YoutubeHubHomeViews on _YoutubeHubState {
+  double _homePlaylistCardWidth() {
+    final width = MediaQuery.sizeOf(context).width;
+    if (width >= 900) return 204;
+    if (width >= 600) return 190;
+    return (width * 0.52).clamp(158.0, 184.0).toDouble();
+  }
+
   /// Beranda musik: lagu populer kategori Music di Indonesia.
   /// Trending memakai API key, jadi TIDAK perlu login.
   Future<void> _loadHome({bool force = false}) async {
@@ -197,7 +204,7 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
         _sectionHeader('Playlist pintar', action: 'Lihat semua', onAction: _showSmartPlaylistPicker),
         SliverToBoxAdapter(
           child: SizedBox(
-            height: 118,
+            height: 148,
             child: ListView.separated(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
               scrollDirection: Axis.horizontal,
@@ -262,7 +269,7 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
       ),
       SliverToBoxAdapter(
         child: SizedBox(
-          height: 118,
+          height: 148,
           child: ListView.separated(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
             scrollDirection: Axis.horizontal,
@@ -280,7 +287,7 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
   Widget _createPlaylistCard(VoidCallback onTap) {
     final scheme = Theme.of(context).colorScheme;
     return SizedBox(
-      width: 190,
+      width: _homePlaylistCardWidth(),
       child: Material(
         color: scheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(19),
@@ -311,19 +318,21 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
   Widget _customPlaylistCard(Playlist playlist) {
     final scheme = Theme.of(context).colorScheme;
     final first = playlist.songs.isEmpty ? null : playlist.songs.first;
-    final play = widget.onPlayCustomPlaylist;
-    final open = widget.onOpenCustomPlaylists;
-    final canPlay = first != null && play != null;
+    final openDetail = widget.onOpenCustomPlaylist;
+    final openLibrary = widget.onOpenCustomPlaylists;
     return SizedBox(
-      width: 190,
+      width: _homePlaylistCardWidth(),
       child: Material(
         color: scheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(19),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
-          // Playlist kosong / tanpa handler putar: buka halaman playlist.
-          onTap: canPlay ? () => unawaited(play(playlist)) : open,
-          onLongPress: open,
+          // Ketuk kartu hanya membuka detail playlist. Pemutaran harus menjadi
+          // aksi eksplisit dari halaman detail atau saat pengguna memilih lagu.
+          onTap: openDetail != null
+              ? () => openDetail(playlist)
+              : openLibrary,
+          onLongPress: openLibrary,
           child: Stack(
             fit: StackFit.expand,
             children: [
@@ -380,16 +389,15 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
                         ],
                       ),
                     ),
-                    if (canPlay)
-                      Container(
-                        width: 34,
-                        height: 34,
-                        decoration: BoxDecoration(
-                          color: scheme.primary,
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(Icons.play_arrow_rounded, color: scheme.onPrimary, size: 22),
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: scheme.surface.withValues(alpha: 0.88),
+                        shape: BoxShape.circle,
                       ),
+                      child: Icon(Icons.chevron_right_rounded, color: scheme.onSurface, size: 22),
+                    ),
                   ],
                 ),
               ),
@@ -413,11 +421,6 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
       listeningStats: widget.listeningStats,
       catalog: catalog,
     );
-  }
-
-  void _playSmartPlaylist(SmartPlaylist playlist) {
-    if (playlist.songs.isEmpty) return;
-    unawaited(widget.onPlayFromList(playlist.songs.first, playlist.songs));
   }
 
   void _showSmartPlaylistPicker() {
@@ -465,12 +468,8 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
                   ),
                   title: Text(playlist.title),
                   subtitle: Text('${playlist.songs.length} lagu · ${playlist.subtitle}'),
-                  trailing: const Icon(Icons.play_arrow_rounded),
+                  trailing: const Icon(Icons.chevron_right_rounded),
                   onTap: () {
-                    Navigator.pop(sheetContext);
-                    _playSmartPlaylist(playlist);
-                  },
-                  onLongPress: () {
                     Navigator.pop(sheetContext);
                     _showSongList(playlist.title, playlist.songs);
                   },
@@ -495,14 +494,13 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
     final scheme = Theme.of(context).colorScheme;
     final first = playlist.songs.first;
     return SizedBox(
-      width: 190,
+      width: _homePlaylistCardWidth(),
       child: Material(
         color: scheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(19),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
-          onTap: () => _playSmartPlaylist(playlist),
-          onLongPress: () => _showSongList(playlist.title, playlist.songs),
+          onTap: () => _showSongList(playlist.title, playlist.songs),
           child: Stack(
             fit: StackFit.expand,
             children: [
@@ -555,10 +553,10 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
                       width: 34,
                       height: 34,
                       decoration: BoxDecoration(
-                        color: scheme.primary,
+                        color: scheme.surface.withValues(alpha: 0.88),
                         shape: BoxShape.circle,
                       ),
-                      child: Icon(Icons.play_arrow_rounded, color: scheme.onPrimary, size: 22),
+                      child: Icon(Icons.chevron_right_rounded, color: scheme.onSurface, size: 22),
                     ),
                   ],
                 ),

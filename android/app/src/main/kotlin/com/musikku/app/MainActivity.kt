@@ -312,7 +312,7 @@ class MainActivity : AudioServiceActivity() {
                 }
                 "setSpeakerSoundstage" -> {
                     val enabled = call.argument<Boolean>("enabled") ?: false
-                    val strength = call.argument<Number>("strength")?.toInt() ?: 70
+                    val strength = call.argument<Number>("strength")?.toInt() ?: 85
                     try {
                         result.success(
                             PlaybackService.setSpeakerSoundstageStatic(this, enabled, strength),
@@ -320,6 +320,14 @@ class MainActivity : AudioServiceActivity() {
                     } catch (error: Exception) {
                         MusikKuLogger.e(TAG, "Menerapkan MusikKu Soundstage gagal", error)
                         result.error("SOUNDSTAGE_APPLY_FAILED", error.message, null)
+                    }
+                }
+                "getSpeakerSoundstageStatus" -> {
+                    try {
+                        result.success(PlaybackService.getSpeakerSoundstageStatusStatic())
+                    } catch (error: Exception) {
+                        MusikKuLogger.e(TAG, "Membaca status MusikKu Soundstage gagal", error)
+                        result.error("SOUNDSTAGE_STATUS_FAILED", error.message, null)
                     }
                 }
                 else -> result.notImplemented()

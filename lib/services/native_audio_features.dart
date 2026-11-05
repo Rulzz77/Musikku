@@ -78,11 +78,32 @@ class NativeAudioFeatures {
     }
   }
 
+  /// Returns live PCM diagnostics from Media3. Unlike the toggle result,
+  /// this confirms whether buffers have actually passed through the DSP.
+  static Future<Map<String, dynamic>> getSpeakerSoundstageStatus() async {
+    try {
+      final raw = await _methods.invokeMapMethod<String, dynamic>(
+        'getSpeakerSoundstageStatus',
+      );
+      return raw ?? const <String, dynamic>{'serviceAttached': false};
+    } on PlatformException catch (error) {
+      return <String, dynamic>{
+        'serviceAttached': false,
+        'error': error.message ?? error.code,
+      };
+    } catch (error) {
+      return <String, dynamic>{
+        'serviceAttached': false,
+        'error': error.toString(),
+      };
+    }
+  }
+
   /// Enables the mono-safe psychoacoustic DSP in MusikKu's Media3 PCM chain.
   /// This is an original MusikKu effect, not Dolby Atmos or Dolby decoding.
   static Future<Map<String, dynamic>> setSpeakerSoundstage({
     required bool enabled,
-    int strength = 70,
+    int strength = 85,
   }) async {
     try {
       final result = await _methods.invokeMapMethod<String, dynamic>(

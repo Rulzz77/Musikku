@@ -2,6 +2,7 @@ package com.musikku.app
 
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import androidx.media3.common.C
 import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.audio.BaseAudioProcessor
@@ -38,7 +39,7 @@ object MusikKuAudioVisualizationEvents {
 }
 
 /**
- * PCM16 processor for Media3.
+ * PCM processor for Media3.
  *
  * The leveler uses a per-channel K-weighting approximation (high shelf + RLB
  * high-pass), a 400 ms smoothed energy window, gain attack/release smoothing,
@@ -56,11 +57,46 @@ class MusikKuPcmAudioProcessor : BaseAudioProcessor() {
      * gentle peak control. It is not Dolby decoding or multichannel surround.
      */
     @Volatile var soundStageEnabled: Boolean = false
-    @Volatile var soundStageStrength: Int = 70
+    @Volatile var soundStageStrength: Int = 85
     @Volatile private var resetGainPending = true
+
+    // Live diagnostics: the UI can now distinguish a saved toggle from PCM
+    // samples that actually passed through this processor.
+    @Volatile private var pcmConfigured = false
+    @Volatile private var configuredFormat = "Belum ada format PCM dari Media3"
+    @Volatile private var unsupportedFormatReason = "Menunggu Media3 menyiapkan audio"
+    @Volatile private var pcmBuffersProcessed = 0L
+    @Volatile private var soundStageBuffersProcessed = 0L
+    @Volatile private var lastPcmAtMs = 0L
+    @Volatile private var lastInputPeak = 0.0
+    @Volatile private var lastOutputPeak = 0.0
+    @Volatile private var lastEffectDeltaRms = 0.0
+
+    fun diagnostics(): Map<String, Any?> = mapOf(
+        "pcmConfigured" to pcmConfigured,
+        "configuredFormat" to configuredFormat,
+        "unsupportedFormatReason" to unsupportedFormatReason,
+        "pcmBuffersProcessed" to pcmBuffersProcessed,
+        "soundStageBuffersProcessed" to soundStageBuffersProcessed,
+        "lastPcmAtMs" to lastPcmAtMs,
+        "pcmAgeMs" to if (lastPcmAtMs > 0L) {
+            (SystemClock.elapsedRealtime() - lastPcmAtMs).coerceAtLeast(0L)
+        } else {
+            -1L
+        },
+        "pcmFlowing" to (lastPcmAtMs > 0L &&
+            SystemClock.elapsedRealtime() - lastPcmAtMs in 0L..1500L),
+        "lastInputPeak" to lastInputPeak,
+        "lastOutputPeak" to lastOutputPeak,
+        "lastEffectDeltaRms" to lastEffectDeltaRms,
+        "enabled" to soundStageEnabled,
+        "strength" to soundStageStrength,
+    )
 
     private var sampleRateHz = 48000
     private var channelCount = 2
+    private var inputEncoding = C.ENCODING_PCM_16BIT
+    private var bytesPerSample = 2
     private var shelfFilters = emptyArray<Biquad>()
     private var highPassFilters = emptyArray<Biquad>()
     private var soundStageStates = emptyArray<SoundStageChannelState>()
@@ -70,13 +106,23 @@ class MusikKuPcmAudioProcessor : BaseAudioProcessor() {
     /** Per-channel state; no allocation is performed inside the audio loop. */
     private class SoundStageChannelState(sampleRate: Int) {
         private val safeRate = sampleRate.coerceAtLeast(8000).toDouble()
-        private val bassAlpha = 1.0 - exp(-2.0 * PI * 145.0 / safeRate)
-        private val dcAlpha = 1.0 - exp(-2.0 * PI * 24.0 / safeRate)
-        private val detailAlpha = 1.0 - exp(-2.0 * PI * 3600.0 / safeRate)
+        // Three deliberately audible bands for small mono speakers:
+        // 85-180 Hz adds body, 900-4.5 kHz moves vocals forward, and >6.5 kHz
+        // adds a restrained amount of articulation. The bass harmonics path
+        // synthesizes upper harmonics rather than trying to boost inaudible sub-bass.
+        private val bassAlpha = 1.0 - exp(-2.0 * PI * 180.0 / safeRate)
+        private val bassSubAlpha = 1.0 - exp(-2.0 * PI * 85.0 / safeRate)
+        private val dcAlpha = 1.0 - exp(-2.0 * PI * 30.0 / safeRate)
+        private val presenceLowAlpha = 1.0 - exp(-2.0 * PI * 900.0 / safeRate)
+        private val presenceHighAlpha = 1.0 - exp(-2.0 * PI * 4500.0 / safeRate)
+        private val detailAlpha = 1.0 - exp(-2.0 * PI * 6500.0 / safeRate)
         private val attackAlpha = 1.0 - exp(-1.0 / (safeRate * 0.004))
         private val releaseAlpha = 1.0 - exp(-1.0 / (safeRate * 0.110))
         private var bassLow = 0.0
+        private var bassSubLow = 0.0
         private var rectifiedDc = 0.0
+        private var presenceLow = 0.0
+        private var presenceHigh = 0.0
         private var detailLow = 0.0
         private var peakEnvelope = 0.0
         private var compressorGain = 1.0
@@ -88,23 +134,36 @@ class MusikKuPcmAudioProcessor : BaseAudioProcessor() {
             // remove its DC component. The remaining low-level even harmonic
             // helps tiny speakers suggest bass without boosting inaudible sub-bass.
             bassLow += bassAlpha * (input - bassLow)
+            bassSubLow += bassSubAlpha * (input - bassSubLow)
+            val bassBody = bassLow - bassSubLow
             val rectified = abs(bassLow)
             rectifiedDc += dcAlpha * (rectified - rectifiedDc)
             val bassHarmonic = rectified - rectifiedDc
 
-            // Presence/detail lift is deliberately subtle; it avoids a large
-            // high-shelf boost that would make small phone speakers harsh.
+            // A true band-pass style vocal/presence lift (roughly 900 Hz to
+            // 4.5 kHz), rather than boosting every frequency above 1.9 kHz.
+            presenceLow += presenceLowAlpha * (input - presenceLow)
+            presenceHigh += presenceHighAlpha * (input - presenceHigh)
+            val presence = presenceHigh - presenceLow
             detailLow += detailAlpha * (input - detailLow)
             val detail = input - detailLow
 
-            var output = input + bassHarmonic * (0.19 * amount) + detail * (0.045 * amount)
+            // Stronger but still headroom-managed profile. At 70% this now
+            // gives a clear mid-bass body and vocal presence lift on compact
+            // mono speakers instead of the nearly inaudible previous profile.
+            var output = input +
+                bassBody * (0.36 * amount) +
+                bassHarmonic * (1.25 * amount) +
+                presence * (0.28 * amount) +
+                detail * (0.12 * amount)
 
-            // Gentle peak leveling with a slower release reduces harsh jumps.
+            // More useful peak control for compact speakers, without the
+            // aggressive pumping of a hard compressor.
             val level = abs(output)
             val envelopeCoefficient = if (level > peakEnvelope) attackAlpha else releaseAlpha
             peakEnvelope += (level - peakEnvelope) * envelopeCoefficient
-            val threshold = 0.56
-            val ratio = 1.45
+            val threshold = 0.48
+            val ratio = 1.75
             val targetGain = if (peakEnvelope > threshold) {
                 (threshold + (peakEnvelope - threshold) / ratio) / peakEnvelope.coerceAtLeast(1e-6)
             } else {
@@ -117,8 +176,8 @@ class MusikKuPcmAudioProcessor : BaseAudioProcessor() {
             // Smooth saturation above the normal operating range; this avoids
             // a hard digital edge while retaining headroom for the Android sink.
             val magnitude = abs(output)
-            if (magnitude > 0.88) {
-                val limited = 0.88 + 0.12 * tanh((magnitude - 0.88) / 0.12)
+            if (magnitude > 0.90) {
+                val limited = 0.90 + 0.10 * tanh((magnitude - 0.90) / 0.10)
                 output = if (output < 0.0) -limited else limited
             }
             return output
@@ -126,7 +185,10 @@ class MusikKuPcmAudioProcessor : BaseAudioProcessor() {
 
         fun clear() {
             bassLow = 0.0
+            bassSubLow = 0.0
             rectifiedDc = 0.0
+            presenceLow = 0.0
+            presenceHigh = 0.0
             detailLow = 0.0
             peakEnvelope = 0.0
             compressorGain = 1.0
@@ -210,22 +272,39 @@ class MusikKuPcmAudioProcessor : BaseAudioProcessor() {
     }
 
     override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
-        if (inputAudioFormat.encoding != C.ENCODING_PCM_16BIT) {
+        val encodingName = when (inputAudioFormat.encoding) {
+            C.ENCODING_PCM_16BIT -> "PCM16"
+            C.ENCODING_PCM_FLOAT -> "PCM Float32"
+            else -> "encoding ${inputAudioFormat.encoding}"
+        }
+        configuredFormat = "${inputAudioFormat.sampleRate} Hz · ${inputAudioFormat.channelCount} kanal · $encodingName"
+        if (inputAudioFormat.encoding != C.ENCODING_PCM_16BIT &&
+            inputAudioFormat.encoding != C.ENCODING_PCM_FLOAT) {
+            pcmConfigured = false
+            unsupportedFormatReason = "Format audio Media3 belum didukung: ${inputAudioFormat.encoding}."
             shelfFilters = emptyArray()
             highPassFilters = emptyArray()
+            soundStageStates = emptyArray()
             return AudioProcessor.AudioFormat.NOT_SET
         }
         sampleRateHz = inputAudioFormat.sampleRate.coerceAtLeast(8000)
         // Preserve the decoder's exact PCM channel count for the Media3 sink;
         // do not downmix or clamp channels inside this processor.
         if (inputAudioFormat.channelCount !in 1..24) {
+            pcmConfigured = false
+            unsupportedFormatReason = "Jumlah kanal PCM tidak didukung: ${inputAudioFormat.channelCount}."
             shelfFilters = emptyArray()
             highPassFilters = emptyArray()
+            soundStageStates = emptyArray()
             return AudioProcessor.AudioFormat.NOT_SET
         }
         channelCount = inputAudioFormat.channelCount
+        inputEncoding = inputAudioFormat.encoding
+        bytesPerSample = if (inputEncoding == C.ENCODING_PCM_FLOAT) 4 else 2
         rebuildFilters()
         soundStageStates = Array(channelCount) { SoundStageChannelState(sampleRateHz) }
+        pcmConfigured = true
+        unsupportedFormatReason = ""
         return inputAudioFormat
     }
 
@@ -243,7 +322,7 @@ class MusikKuPcmAudioProcessor : BaseAudioProcessor() {
 
     override fun queueInput(inputBuffer: ByteBuffer) {
         val byteCount = inputBuffer.remaining()
-        if (byteCount < 2) return
+        if (byteCount < bytesPerSample || byteCount % bytesPerSample != 0) return
         if (resetGainPending) {
             smoothedGain = 1.0
             smoothedWeightedEnergy = 0.012
@@ -252,14 +331,17 @@ class MusikKuPcmAudioProcessor : BaseAudioProcessor() {
         }
 
         val analysisInput = inputBuffer.duplicate().order(ByteOrder.nativeOrder())
-        val sampleCount = byteCount / 2
+        val sampleCount = byteCount / bytesPerSample
         val frameCount = (sampleCount / channelCount).coerceAtLeast(1)
         var weightedSquareSum = 0.0
         var peak = 0.0
 
         for (index in 0 until sampleCount) {
-            val raw = analysisInput.short.toInt()
-            val value = raw / 32768.0
+            val value = if (inputEncoding == C.ENCODING_PCM_FLOAT) {
+                analysisInput.float.toDouble().coerceIn(-1.0, 1.0)
+            } else {
+                analysisInput.short.toInt() / 32768.0
+            }
             peak = max(peak, abs(value))
             val channel = index % channelCount
             val shelf = shelfFilters.getOrNull(channel)
@@ -307,27 +389,54 @@ class MusikKuPcmAudioProcessor : BaseAudioProcessor() {
         val outputInput = inputBuffer.duplicate().order(ByteOrder.nativeOrder())
         val output = replaceOutputBuffer(byteCount).order(ByteOrder.nativeOrder())
         val applySoundStage = soundStageEnabled
-        val soundAmount = soundStageStrength.coerceIn(0, 100) / 100.0
+        // A perceptual curve makes the middle of the slider useful; a linear
+        // 70% setting previously produced only a barely measurable change.
+        val linearStrength = soundStageStrength.coerceIn(0, 100) / 100.0
+        val soundAmount = linearStrength.pow(0.75).coerceIn(0.0, 1.0)
+        var effectDeltaSquareSum = 0.0
+        var outputPeak = 0.0
         for (index in 0 until sampleCount) {
-            val raw = outputInput.short.toInt()
+            val inputSample = if (inputEncoding == C.ENCODING_PCM_FLOAT) {
+                outputInput.float.toDouble().coerceIn(-1.0, 1.0)
+            } else {
+                outputInput.short.toInt() / 32768.0
+            }
             val bucket = min(barsCount - 1, index / bucketSize)
-            val magnitude = abs(raw / 32768.0)
+            val magnitude = abs(inputSample)
             if (magnitude * 100.0 > bars[bucket]) {
                 bars[bucket] = (magnitude * 100.0).toInt().coerceIn(0, 100)
             }
 
-            var sample = (raw / 32768.0) * gain
+            val drySample = inputSample * gain
+            var sample = drySample
             if (applySoundStage && soundAmount > 0.0) {
                 val channel = index % channelCount
                 sample = soundStageStates.getOrNull(channel)?.process(sample, soundAmount) ?: sample
+                val delta = sample - drySample
+                effectDeltaSquareSum += delta * delta
             }
-            val processed = (sample * 32768.0).toInt()
-                .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
-            output.putShort(processed.toShort())
+            outputPeak = max(outputPeak, abs(sample))
+            if (inputEncoding == C.ENCODING_PCM_FLOAT) {
+                output.putFloat(sample.toFloat().coerceIn(-1f, 1f))
+            } else {
+                val processed = (sample * 32768.0).toInt()
+                    .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
+                output.putShort(processed.toShort())
+            }
         }
-        if (byteCount % 2 != 0) output.put(outputInput.get())
         inputBuffer.position(inputBuffer.limit())
         output.flip()
+
+        pcmBuffersProcessed += 1L
+        if (applySoundStage && soundAmount > 0.0) {
+            soundStageBuffersProcessed += 1L
+            lastEffectDeltaRms = sqrt(effectDeltaSquareSum / sampleCount.coerceAtLeast(1))
+        } else {
+            lastEffectDeltaRms = 0.0
+        }
+        lastInputPeak = peak
+        lastOutputPeak = outputPeak
+        lastPcmAtMs = SystemClock.elapsedRealtime()
 
         if (MusikKuAudioVisualizationEvents.enabled) {
             MusikKuAudioVisualizationEvents.publish(bars.toList(), weightedRms)
@@ -343,5 +452,10 @@ class MusikKuPcmAudioProcessor : BaseAudioProcessor() {
         shelfFilters = emptyArray()
         highPassFilters = emptyArray()
         soundStageStates = emptyArray()
+        inputEncoding = C.ENCODING_PCM_16BIT
+        bytesPerSample = 2
+        pcmConfigured = false
+        configuredFormat = "Belum ada format PCM dari Media3"
+        unsupportedFormatReason = "Menunggu Media3 menyiapkan audio"
     }
 }

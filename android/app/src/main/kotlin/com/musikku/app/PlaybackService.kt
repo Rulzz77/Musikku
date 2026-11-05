@@ -95,7 +95,7 @@ class PlaybackService : MediaBrowserServiceCompat() {
             val service = activeInstance
             val applied = service?.applyPreferredAudioOutput(deviceId) == true
             val nativeActive = service?.isAudioPlayerSource() == true
-            return mapOf(
+            return mapOf<String, Any?>(
                 "saved" to true,
                 "applied" to applied,
                 "nativePlayerActive" to nativeActive,
@@ -140,10 +140,14 @@ class PlaybackService : MediaBrowserServiceCompat() {
                 processor.soundStageEnabled = enabled
                 if (enabled) processor.resetForNewTrack()
             }
-            val media3Active = service?.isAudioPlayerActive() == true
+            val media3Active = service?.localPlayer?.isPlaying == true
+            val pcmDiagnostics = service?.pcmAudioProcessor?.diagnostics().orEmpty()
             MusikKuLogger.d(
                 TAG,
-                "Soundstage enabled=$enabled strength=$safeStrength media3Active=$media3Active source=${service?.currentSourceType ?: "idle"}",
+                "Soundstage enabled=$enabled strength=$safeStrength media3Playing=$media3Active " +
+                    "pcmConfigured=${pcmDiagnostics["pcmConfigured"]} " +
+                    "pcmBuffers=${pcmDiagnostics["pcmBuffersProcessed"]} " +
+                    "source=${service?.currentSourceType ?: "idle"}",
             )
             return mapOf(
                 "saved" to true,
@@ -152,12 +156,35 @@ class PlaybackService : MediaBrowserServiceCompat() {
                 "processorReady" to (service != null),
                 "media3Active" to media3Active,
                 "sourceType" to (service?.currentSourceType ?: "idle"),
+                "playerIsPlaying" to media3Active,
+                "playerReady" to (service?.localPlayer != null),
                 "message" to if (media3Active) {
-                    "Soundstage diterapkan ke audio PCM Media3 yang sedang aktif."
+                    "Media3 sedang memutar audio; status pemrosesan PCM tersedia untuk diperiksa."
                 } else {
-                    "Profil disimpan dan akan diterapkan saat pemutar native Media3 memutar lagu."
+                    "Profil disimpan. Putar audio melalui Media3 untuk mulai memproses PCM."
                 },
-            )
+            ) + pcmDiagnostics
+        }
+
+        fun getSpeakerSoundstageStatusStatic(): Map<String, Any?> {
+            val service = activeInstance
+                ?: return mapOf(
+                    "serviceAttached" to false,
+                    "sourceType" to "idle",
+                    "playerIsPlaying" to false,
+                    "pcmConfigured" to false,
+                    "pcmBuffersProcessed" to 0L,
+                    "soundStageBuffersProcessed" to 0L,
+                    "configuredFormat" to "Belum ada layanan Media3",
+                    "unsupportedFormatReason" to "PlaybackService belum aktif",
+                )
+            val status = service.pcmAudioProcessor.diagnostics().toMutableMap()
+            status["serviceAttached"] = true
+            status["sourceType"] = service.currentSourceType
+            status["playerReady"] = service.localPlayer != null
+            status["playerIsPlaying"] = service.localPlayer?.isPlaying == true
+            status["currentVideoId"] = service.currentVideoId
+            return status
         }
 
         fun isLocalActiveStatic(): Boolean = activeInstance?.isLocalActive() == true
@@ -1688,7 +1715,7 @@ class PlaybackService : MediaBrowserServiceCompat() {
             "flutter.speaker_soundstage_enabled_v1", false,
         )
         pcmAudioProcessor.soundStageStrength = audioPreferences.getInt(
-            "flutter.speaker_soundstage_strength_v1", 70,
+            "flutter.speaker_soundstage_strength_v1", 85,
         ).coerceIn(0, 100)
         val renderersFactory = object : DefaultRenderersFactory(this) {
             @OptIn(UnstableApi::class)

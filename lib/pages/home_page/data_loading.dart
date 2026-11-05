@@ -58,7 +58,7 @@ extension _HomeDataLoading on _HomePageState {
           .clamp(0, 100)
           .toInt();
       final savedSpeakerMode = prefs.getBool(_speakerEnhancerPrefKey);
-      _speakerEnhancerStrength = (prefs.getInt(_speakerSoundstageStrengthPrefKey) ?? 70)
+      _speakerEnhancerStrength = (prefs.getInt(_speakerSoundstageStrengthPrefKey) ?? 85)
           .clamp(0, 100)
           .toInt();
       // Migrate Speaker Clarity saved by the earlier experimental toggle.

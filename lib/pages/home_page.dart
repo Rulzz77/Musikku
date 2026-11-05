@@ -384,7 +384,7 @@ class _HomePageState extends State<HomePage>
 
   // MusikKu Soundstage is a global Media3 PCM DSP mode, separate from per-track EQ.
   bool _speakerEnhancerEnabled = false;
-  int _speakerEnhancerStrength = 70;
+  int _speakerEnhancerStrength = 85;
 
   String _crossfadeFadingVideoId = '';
 

@@ -345,6 +345,7 @@ extension _HomeAudioSettingsUi on _HomePageState {
     var dolbyCapabilitiesFuture = Platform.isAndroid
         ? NativeAudioFeatures.getDolbyAtmosCapabilities()
         : Future<Map<String, dynamic>>.value(const <String, dynamic>{});
+    var soundstageStatusFuture = NativeAudioFeatures.getSpeakerSoundstageStatus();
 
     showModalBottomSheet<void>(
       context: context,
@@ -466,7 +467,11 @@ extension _HomeAudioSettingsUi on _HomePageState {
                             value: _speakerEnhancerEnabled,
                             onChanged: (enabled) async {
                               await _setSpeakerEnhancerEnabled(enabled);
-                              if (context.mounted) setSheetState(() {});
+                              if (context.mounted) {
+                                setSheetState(() {
+                                  soundstageStatusFuture = NativeAudioFeatures.getSpeakerSoundstageStatus();
+                                });
+                              }
                             },
                           ),
                         ],
@@ -488,12 +493,105 @@ extension _HomeAudioSettingsUi on _HomePageState {
                         onChanged: (value) => setSheetState(() => _speakerEnhancerStrength = value.round()),
                         onChangeEnd: (value) async {
                           await _setSpeakerEnhancerStrength(value.round());
-                          if (context.mounted) setSheetState(() {});
+                          if (context.mounted) {
+                            setSheetState(() {
+                              soundstageStatusFuture = NativeAudioFeatures.getSpeakerSoundstageStatus();
+                            });
+                          }
                         },
                       ),
                       Text(
-                        'Pemrosesan PCM native: harmonik bass + detail + peak control. Bukan Dolby Atmos atau surround fisik; fallback iframe/WebView tidak diproses.',
+                        'Untuk speaker mono, mulai dari 85–90%. DSP memperkuat body bass dan presence vokal. Bukan Dolby Atmos atau surround fisik.',
                         style: TextStyle(fontSize: 9.5, height: 1.35, color: scheme.onSurfaceVariant.withValues(alpha: 0.9)),
+                      ),
+                      const SizedBox(height: 10),
+                      FutureBuilder<Map<String, dynamic>>(
+                        future: soundstageStatusFuture,
+                        builder: (context, snapshot) {
+                          final status = snapshot.data ?? const <String, dynamic>{};
+                          final configured = status['pcmConfigured'] == true;
+                          final serviceAttached = status['serviceAttached'] == true;
+                          final enabled = _speakerEnhancerEnabled &&
+                              (status['enabled'] == true || !serviceAttached);
+                          final playing = status['playerIsPlaying'] == true;
+                          final pcmBuffers = (status['pcmBuffersProcessed'] as num?)?.toInt() ?? 0;
+                          final dspBuffers = (status['soundStageBuffersProcessed'] as num?)?.toInt() ?? 0;
+                          final delta = (status['lastEffectDeltaRms'] as num?)?.toDouble() ?? 0.0;
+                          final pcmAgeMs = (status['pcmAgeMs'] as num?)?.toInt() ?? -1;
+                          final pcmFlowing = status['pcmFlowing'] == true ||
+                              (pcmAgeMs >= 0 && pcmAgeMs <= 1500);
+                          final format = status['configuredFormat']?.toString() ?? 'Format belum tersedia';
+                          final source = status['sourceType']?.toString() ?? 'idle';
+                          final reason = status['unsupportedFormatReason']?.toString() ?? '';
+                          final actuallyProcessing = enabled && playing && configured &&
+                              pcmFlowing && pcmBuffers > 0 && dspBuffers > 0 && delta > 0.000001;
+                          final title = actuallyProcessing
+                              ? 'DSP benar-benar mengubah sampel audio'
+                              : !enabled
+                                  ? 'Soundstage sedang OFF'
+                                  : !serviceAttached
+                                      ? 'Layanan audio belum aktif'
+                                      : !playing
+                                      ? 'Putar lagu untuk menguji DSP'
+                                      : !configured
+                                          ? 'PCM belum masuk ke DSP'
+                                          : !pcmFlowing
+                                          ? 'PCM tidak sedang mengalir. Pastikan lagu diputar melalui audio native Media3.'
+                                          : 'PCM masuk, tetapi perubahan sampel belum terdeteksi. Naikkan intensitas ke 85–90% atau cek sumber audio.';
+                          final detail = actuallyProcessing
+                              ? '$format · $dspBuffers blok PCM diproses · perubahan RMS ${delta.toStringAsFixed(5)} · aliran aktif'
+                              : source != 'local' && source != 'youtube_audio'
+                                  ? 'Sumber $source bukan jalur Media3. Soundstage tidak menerima audio ini.'
+                                  : reason.isNotEmpty
+                                      ? reason
+                                      : 'PCM: $pcmBuffers blok · sumber: $source. Putar lagu dari awal lalu periksa kembali.';
+                          return Container(
+                            padding: const EdgeInsets.all(11),
+                            decoration: BoxDecoration(
+                              color: (actuallyProcessing ? Colors.green : scheme.surfaceContainerHighest)
+                                  .withValues(alpha: actuallyProcessing ? 0.10 : 0.65),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: actuallyProcessing
+                                    ? Colors.green.withValues(alpha: 0.35)
+                                    : scheme.outlineVariant.withValues(alpha: 0.55),
+                              ),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Icon(
+                                  actuallyProcessing ? Icons.check_circle_rounded : Icons.info_outline_rounded,
+                                  size: 18,
+                                  color: actuallyProcessing ? Colors.green : scheme.onSurfaceVariant,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(title, style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w900)),
+                                      const SizedBox(height: 3),
+                                      Text(detail, style: TextStyle(fontSize: 9.5, height: 1.35, color: scheme.onSurfaceVariant)),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton.icon(
+                          onPressed: () {
+                            setSheetState(() {
+                              soundstageStatusFuture = NativeAudioFeatures.getSpeakerSoundstageStatus();
+                            });
+                          },
+                          icon: const Icon(Icons.refresh_rounded, size: 16),
+                          label: const Text('Periksa jalur audio'),
+                        ),
                       ),
                     ],
                   ),

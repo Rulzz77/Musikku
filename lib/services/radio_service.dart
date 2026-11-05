@@ -33,7 +33,7 @@ class RadioService {
 
   String _seed = '';
   String? _preferredLanguage;
-  bool _lockLanguage = false;
+  bool _lockLanguage = true;
   final List<YoutubeSearchResult> _pool = [];
   // Kandidat layak yang tertahan batas per-artis. Dipakai lebih dulu sebelum
   // memanggil API lagi, supaya satu halaman hasil (hingga 50 video) tidak
@@ -41,7 +41,7 @@ class RadioService {
   final List<YoutubeSearchResult> _reserve = [];
   static const int _maxReserve = 150;
   DateTime? _lastNetworkFetchAt;
-  // Seed cadangan (artis sejenis / terpopuler) dipakai bergantian dengan seed
+  // Seed cadangan (artis sejenis / lagu serupa) dipakai bergantian dengan seed
   // utama di setiap isi ulang. Setiap query punya token halamannya sendiri.
   List<String> _alternateSeeds = const <String>[];
   final Map<String, String?> _pageTokens = <String, String?>{};
@@ -112,7 +112,8 @@ class RadioService {
 
   String get seed => _seed;
 
-  /// Explicit-language searches stay in that language. Track Radio can cross.
+  /// Ordinary track Radio stays in its detected language. Sad/ballad tracks
+  /// may opt into a related cross-language pool through the caller's policy.
   bool get locksLanguage => _lockLanguage;
 
   bool get isPoolEmpty => _pool.isEmpty;
@@ -132,7 +133,7 @@ class RadioService {
   void start(
     String seed, {
     String? preferredLanguage,
-    bool lockLanguage = false,
+    bool lockLanguage = true,
     List<String> alternateSeeds = const <String>[],
     String seedArtist = '',
   }) {
@@ -450,8 +451,8 @@ class RadioService {
   }
 
   /// Pengambilan acak berbobot, bukan sort lalu selalu memilih dari 5 lagu
-  /// teratas. Gaya yang sama mendapat bobot terbesar; subgenre terkait masih
-  /// berpeluang terpilih. Bahasa hanya bonus kecil selama bukan filter eksplisit.
+  /// teratas. Gaya dan bahasa yang sama mendapat bobot terbesar; subgenre
+  /// terkait tetap punya peluang, dan lintas bahasa hanya dibuka oleh mood.
   YoutubeSearchResult _weightedRadioPick(
     List<YoutubeSearchResult> candidates, {
     required String? targetStyle,
@@ -1058,8 +1059,8 @@ class RadioService {
 
       if (!enforceContext) return true;
 
-      // Cross-language is allowed: the genre must match, language is only a
-      // ranking preference (see MusicStyleMatcher._similarityScore).
+      // Language is locked for ordinary Radio. Cross-language can only be
+      // enabled by the HomePage mood policy for a clearly sad/ballad seed.
       return MusicStyleMatcher.isCompatible(
         video: video,
         targetStyle: targetStyle,
@@ -1097,7 +1098,7 @@ class RadioService {
     // Isi pertama memakai DUA query sekaligus (seed utama + satu artis sejenis)
     // supaya lagu berikutnya langsung bercampur antar-artis, bukan baru
     // bercampur setelah pool satu artis habis. Isi ulang berikutnya bergilir
-    // antar seed cadangan (artis sejenis -> terpopuler di genre -> seed utama).
+    // antar seed cadangan (artis sejenis -> lagu serupa -> seed utama).
     // Tidak ada fallback ke chart global.
     // Pakai cadangan dulu. Jika pool sudah cukup, atau request jaringan baru
     // saja dilakukan, tidak perlu memanggil API.

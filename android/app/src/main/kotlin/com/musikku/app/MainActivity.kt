@@ -273,6 +273,28 @@ class MainActivity : AudioServiceActivity() {
             "musikku/audio_features",
         ).setMethodCallHandler { call, result ->
             when (call.method) {
+                "getDolbyAtmosCapabilities" -> {
+                    try {
+                        result.success(DolbyAtmosCapabilityProbe.snapshot(this))
+                    } catch (error: Exception) {
+                        MusikKuLogger.e(TAG, "Membaca kemampuan Dolby/Spatializer gagal", error)
+                        result.error("DOLBY_CAPABILITY_FAILED", error.message, null)
+                    }
+                }
+                "openSystemSoundSettings" -> {
+                    try {
+                        startActivity(Intent("android.settings.SOUND_SETTINGS"))
+                        result.success(true)
+                    } catch (_: Exception) {
+                        try {
+                            startActivity(Intent(Settings.ACTION_SETTINGS))
+                            result.success(true)
+                        } catch (error: Exception) {
+                            MusikKuLogger.e(TAG, "Membuka pengaturan suara Android gagal", error)
+                            result.success(false)
+                        }
+                    }
+                }
                 "setVisualizerEnabled" -> {
                     val enabled = call.argument<Boolean>("enabled") ?: false
                     MusikKuAudioVisualizationEvents.enabled = enabled
@@ -287,6 +309,18 @@ class MainActivity : AudioServiceActivity() {
                     val enabled = call.argument<Boolean>("enabled") ?: false
                     PlaybackService.setLoudnessNormalizationStatic(this, enabled)
                     result.success(true)
+                }
+                "setSpeakerSoundstage" -> {
+                    val enabled = call.argument<Boolean>("enabled") ?: false
+                    val strength = call.argument<Number>("strength")?.toInt() ?: 70
+                    try {
+                        result.success(
+                            PlaybackService.setSpeakerSoundstageStatic(this, enabled, strength),
+                        )
+                    } catch (error: Exception) {
+                        MusikKuLogger.e(TAG, "Menerapkan MusikKu Soundstage gagal", error)
+                        result.error("SOUNDSTAGE_APPLY_FAILED", error.message, null)
+                    }
                 }
                 else -> result.notImplemented()
             }

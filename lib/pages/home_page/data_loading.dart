@@ -38,6 +38,7 @@ extension _HomeDataLoading on _HomePageState {
     final watchProgress = results[7] as Map<String, double>;
     final crossfadeSeconds = results[8] as int;
     final equalizerPreset = results[9] as String;
+    var restoredEqualizerPreset = equalizerPreset;
     final listeningStats = results[10] as List<ListeningStat>;
     final watchDurations = results[11] as Map<String, double>;
     _listeningStatsById = {
@@ -56,6 +57,22 @@ extension _HomeDataLoading on _HomePageState {
       _playerVolumePercent = (prefs.getInt(_playerVolumePrefKey) ?? 100)
           .clamp(0, 100)
           .toInt();
+      final savedSpeakerMode = prefs.getBool(_speakerEnhancerPrefKey);
+      _speakerEnhancerStrength = (prefs.getInt(_speakerSoundstageStrengthPrefKey) ?? 70)
+          .clamp(0, 100)
+          .toInt();
+      // Migrate Speaker Clarity saved by the earlier experimental toggle.
+      _speakerEnhancerEnabled = savedSpeakerMode ??
+          equalizerPreset.trim().toLowerCase() == 'speaker clarity';
+      if (savedSpeakerMode == null) {
+        await prefs.setBool(_speakerEnhancerPrefKey, _speakerEnhancerEnabled);
+      }
+      if (Platform.isAndroid) {
+        await NativeAudioFeatures.setSpeakerSoundstage(
+          enabled: _speakerEnhancerEnabled,
+          strength: _speakerEnhancerStrength,
+        );
+      }
     } catch (_) {
       _playerVolumePercent = 100;
     }
@@ -104,6 +121,14 @@ extension _HomeDataLoading on _HomePageState {
       return;
     }
 
+    // The initial experimental build stored Speaker Clarity as a track/global
+    // preset. Normalize the global tone preset after migrating it to the new
+    // app-wide switch, so switching the enhancer off restores a neutral EQ.
+    if (restoredEqualizerPreset.trim().toLowerCase() == 'speaker clarity') {
+      await _storage.saveEqualizerPreset('Flat');
+      restoredEqualizerPreset = 'Flat';
+    }
+
     setState(() {
       _favorites = favorites;
       _playlists = playlists;
@@ -111,14 +136,16 @@ extension _HomeDataLoading on _HomePageState {
       _watchProgress = watchProgress;
       _watchDuration = watchDurations;
       _crossfadeSeconds = crossfadeSeconds.clamp(0, 6).toInt();
-      _equalizerPreset = equalizerPreset;
+      _equalizerPreset = restoredEqualizerPreset;
       _likedIds = likedIds;
       _dislikedIds = dislikedIds;
       _blockedChannelKeys = blockedChannelKeys;
     });
 
     try {
-      await _youtubeController.setEqualizerPreset(_equalizerPreset);
+      await _youtubeController.setEqualizerPreset(
+        _speakerEnhancerEnabled ? 'Speaker Clarity' : _equalizerPreset,
+      );
     } catch (e) {
       debugPrint('LOAD EQUALIZER PRESET ERROR: $e');
     }

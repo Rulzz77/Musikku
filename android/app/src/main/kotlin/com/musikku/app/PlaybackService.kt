@@ -48,6 +48,7 @@ import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
@@ -114,6 +115,49 @@ class PlaybackService : MediaBrowserServiceCompat() {
             context.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
                 .edit().putBoolean("flutter.audio_loudness_normalization_v1", enabled).apply()
             activeInstance?.pcmAudioProcessor?.normalizationEnabled = enabled
+        }
+
+        /**
+         * Saves and applies MusikKu's mono-safe PCM soundstage profile.
+         * This processor only touches audio decoded by this service's Media3
+         * ExoPlayer; it cannot process the embedded WebView/iframe fallback.
+         */
+        fun setSpeakerSoundstageStatic(
+            context: Context,
+            enabled: Boolean,
+            strength: Int,
+        ): Map<String, Any?> {
+            val safeStrength = strength.coerceIn(0, 100)
+            context.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean("flutter.speaker_soundstage_enabled_v1", enabled)
+                .putInt("flutter.speaker_soundstage_strength_v1", safeStrength)
+                .apply()
+
+            val service = activeInstance
+            service?.pcmAudioProcessor?.let { processor ->
+                processor.soundStageStrength = safeStrength
+                processor.soundStageEnabled = enabled
+                if (enabled) processor.resetForNewTrack()
+            }
+            val media3Active = service?.isAudioPlayerActive() == true
+            MusikKuLogger.d(
+                TAG,
+                "Soundstage enabled=$enabled strength=$safeStrength media3Active=$media3Active source=${service?.currentSourceType ?: "idle"}",
+            )
+            return mapOf(
+                "saved" to true,
+                "enabled" to enabled,
+                "strength" to safeStrength,
+                "processorReady" to (service != null),
+                "media3Active" to media3Active,
+                "sourceType" to (service?.currentSourceType ?: "idle"),
+                "message" to if (media3Active) {
+                    "Soundstage diterapkan ke audio PCM Media3 yang sedang aktif."
+                } else {
+                    "Profil disimpan dan akan diterapkan saat pemutar native Media3 memutar lagu."
+                },
+            )
         }
 
         fun isLocalActiveStatic(): Boolean = activeInstance?.isLocalActive() == true
@@ -1630,12 +1674,22 @@ class PlaybackService : MediaBrowserServiceCompat() {
     }
 
 
+    @OptIn(UnstableApi::class)
     private fun ensureLocalPlayer() {
         if (localPlayer != null) return
 
-        pcmAudioProcessor.normalizationEnabled = getSharedPreferences(
+        val audioPreferences = getSharedPreferences(
             "FlutterSharedPreferences", Context.MODE_PRIVATE,
-        ).getBoolean("flutter.audio_loudness_normalization_v1", false)
+        )
+        pcmAudioProcessor.normalizationEnabled = audioPreferences.getBoolean(
+            "flutter.audio_loudness_normalization_v1", false,
+        )
+        pcmAudioProcessor.soundStageEnabled = audioPreferences.getBoolean(
+            "flutter.speaker_soundstage_enabled_v1", false,
+        )
+        pcmAudioProcessor.soundStageStrength = audioPreferences.getInt(
+            "flutter.speaker_soundstage_strength_v1", 70,
+        ).coerceIn(0, 100)
         val renderersFactory = object : DefaultRenderersFactory(this) {
             @OptIn(UnstableApi::class)
             override fun buildAudioSink(
@@ -1650,11 +1704,22 @@ class PlaybackService : MediaBrowserServiceCompat() {
                     .build()
             }
         }
-        localPlayer = ExoPlayer.Builder(this, renderersFactory).build().also { player ->
+        val trackSelector = DefaultTrackSelector(this).apply {
+            // Let Media3 select multichannel audio only when Android reports
+            // that the current output route can actually spatialize it.
+            parameters = buildUponParameters()
+                .setConstrainAudioChannelCountToDeviceCapabilities(true)
+                .build()
+        }
+
+        localPlayer = ExoPlayer.Builder(this, renderersFactory)
+            .setTrackSelector(trackSelector)
+            .build().also { player ->
             player.setAudioAttributes(
                 AudioAttributes.Builder()
                     .setUsage(C.USAGE_MEDIA)
                     .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+                    .setSpatializationBehavior(C.SPATIALIZATION_BEHAVIOR_AUTO)
                     .build(),
                 true,
             )

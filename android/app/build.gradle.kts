@@ -175,6 +175,12 @@ dependencies {
     implementation(
         "androidx.media3:media3-common:1.8.0"
     )
+
+    // Manifest-based streaming sources are required for standard DASH/HLS
+    // delivery, including services that provide Dolby Digital Plus/Atmos.
+    // Media3 uses the platform Dolby decoders when the device exposes them.
+    implementation("androidx.media3:media3-exoplayer-dash:1.8.0")
+    implementation("androidx.media3:media3-exoplayer-hls:1.8.0")
 }
 
 flutter {

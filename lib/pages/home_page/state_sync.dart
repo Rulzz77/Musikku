@@ -146,10 +146,15 @@ extension _HomeStateSync on _HomePageState {
     // position. The transition itself is owned by Media3.
     unawaited(() async {
       try {
-        final preset = await _storage.loadEqualizerPresetForTrack(video.videoId);
+        var preset = await _storage.loadEqualizerPresetForTrack(video.videoId);
+        if (preset.trim().toLowerCase() == 'speaker clarity') {
+          preset = 'Flat';
+        }
         if (!mounted || _currentVideo?.videoId != video.videoId) return;
         _equalizerPreset = preset;
-        await _youtubeController.setEqualizerPreset(preset);
+        await _youtubeController.setEqualizerPreset(
+          _speakerEnhancerEnabled ? 'Flat' : preset,
+        );
         if (mounted) setState(() {});
       } catch (error) {
         debugPrint('GAPLESS TRACK EQ RESTORE ERROR: $error');

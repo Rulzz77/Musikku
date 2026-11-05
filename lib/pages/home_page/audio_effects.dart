@@ -213,7 +213,103 @@ extension _HomeAudioSettingsUi on _HomePageState {
     );
   }
 
+  Future<void> _setSpeakerEnhancerEnabled(bool enabled) async {
+    if (!Platform.isAndroid) {
+      _toast('MusikKu Soundstage saat ini hanya didukung pada Android.');
+      return;
+    }
+
+    _speakerEnhancerEnabled = enabled;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_speakerEnhancerPrefKey, enabled);
+    } catch (error) {
+      debugPrint('SAVE SOUNDSTAGE ERROR: $error');
+    }
+
+    var presetToApply = 'Speaker Clarity';
+    if (!enabled) {
+      final current = _currentVideo;
+      presetToApply = current == null
+          ? await _storage.loadEqualizerPreset()
+          : await _storage.loadEqualizerPresetForTrack(current.videoId);
+      if (presetToApply.trim().toLowerCase() == 'speaker clarity') {
+        presetToApply = 'Flat';
+      }
+      _equalizerPreset = presetToApply;
+    }
+
+    Map<String, dynamic> dspResult = const <String, dynamic>{'saved': false};
+    try {
+      dspResult = await NativeAudioFeatures.setSpeakerSoundstage(
+        enabled: enabled,
+        strength: _speakerEnhancerStrength,
+      );
+      if (dspResult['saved'] == true) {
+        // Keep the older output-mix EQ neutral while our PCM DSP is active.
+        // This prevents the system Equalizer and Soundstage from stacking.
+        if (enabled) {
+          await _youtubeController.setEqualizerPreset('Flat');
+          _equalizerPreset = 'Flat';
+        } else {
+          await _youtubeController.setEqualizerPreset(presetToApply);
+        }
+      } else if (enabled) {
+        _speakerEnhancerEnabled = false;
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool(_speakerEnhancerPrefKey, false);
+      }
+    } catch (error) {
+      debugPrint('APPLY SOUNDSTAGE ERROR: $error');
+    }
+
+    if (mounted) setState(() {});
+    final media3Active = dspResult['media3Active'] == true;
+    _toast(enabled
+        ? (dspResult['saved'] == true
+            ? (media3Active
+                ? 'MusikKu Soundstage sedang memproses audio Media3.'
+                : 'Soundstage tersimpan; aktif saat lagu diputar melalui Media3.')
+            : 'Soundstage gagal diterapkan: ${dspResult['error'] ?? 'bridge native tidak tersedia'}.')
+        : 'MusikKu Soundstage dimatikan. EQ sebelumnya dipulihkan.');
+  }
+
+  Future<void> _setSpeakerEnhancerStrength(int strength) async {
+    _speakerEnhancerStrength = strength.clamp(0, 100).toInt();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_speakerSoundstageStrengthPrefKey, _speakerEnhancerStrength);
+    } catch (error) {
+      debugPrint('SAVE SOUNDSTAGE STRENGTH ERROR: $error');
+    }
+
+    if (Platform.isAndroid) {
+      final result = await NativeAudioFeatures.setSpeakerSoundstage(
+        enabled: _speakerEnhancerEnabled,
+        strength: _speakerEnhancerStrength,
+      );
+      if (result['saved'] != true && mounted) {
+        _toast('Kekuatan efek tersimpan, tetapi bridge audio native gagal diperbarui.');
+      }
+    }
+    if (mounted) setState(() {});
+  }
+
   Future<void> _applyEqualizerPreset(String preset) async {
+    // A manually selected tone preset takes precedence over the global speaker
+    // profile, so turn the latter off before applying the selected preset.
+    _speakerEnhancerEnabled = false;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_speakerEnhancerPrefKey, false);
+      if (Platform.isAndroid) {
+        await NativeAudioFeatures.setSpeakerSoundstage(
+          enabled: false,
+          strength: _speakerEnhancerStrength,
+        );
+      }
+    } catch (_) {}
+
     _equalizerPreset = preset;
     var applied = false;
     try {
@@ -246,6 +342,9 @@ extension _HomeAudioSettingsUi on _HomePageState {
       (name: 'Vocal', detail: 'Fokus pada suara vokal'),
       (name: 'Electronic', detail: 'Bass dan treble untuk EDM'),
     ];
+    var dolbyCapabilitiesFuture = Platform.isAndroid
+        ? NativeAudioFeatures.getDolbyAtmosCapabilities()
+        : Future<Map<String, dynamic>>.value(const <String, dynamic>{});
 
     showModalBottomSheet<void>(
       context: context,
@@ -325,6 +424,264 @@ extension _HomeAudioSettingsUi on _HomePageState {
                     onTap: _showAudioOutputPicker,
                   ),
                 ),
+                const SizedBox(height: 10),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.fromLTRB(14, 13, 14, 12),
+                  decoration: BoxDecoration(
+                    color: scheme.primaryContainer.withValues(alpha: 0.30),
+                    borderRadius: BorderRadius.circular(17),
+                    border: Border.all(color: scheme.primary.withValues(alpha: 0.16)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            width: 38,
+                            height: 38,
+                            decoration: BoxDecoration(
+                              color: scheme.primary.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Icon(Icons.surround_sound_rounded, color: scheme.primary),
+                          ),
+                          const SizedBox(width: 11),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('MusikKu Speaker DSP', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900)),
+                                const SizedBox(height: 3),
+                                Text(
+                                  'Suara lebih berisi dan terbuka: bass harmonik, detail vokal, dan kontrol dinamika yang aman untuk speaker HP.',
+                                  style: TextStyle(fontSize: 10.5, height: 1.35, color: scheme.onSurfaceVariant),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Switch.adaptive(
+                            value: _speakerEnhancerEnabled,
+                            onChanged: (enabled) async {
+                              await _setSpeakerEnhancerEnabled(enabled);
+                              if (context.mounted) setSheetState(() {});
+                            },
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Text('Intensitas', style: TextStyle(fontSize: 10.5, color: scheme.onSurfaceVariant, fontWeight: FontWeight.w700)),
+                          const Spacer(),
+                          Text('$_speakerEnhancerStrength%', style: TextStyle(fontSize: 10.5, color: scheme.primary, fontWeight: FontWeight.w900)),
+                        ],
+                      ),
+                      Slider(
+                        value: _speakerEnhancerStrength.toDouble(),
+                        min: 0,
+                        max: 100,
+                        divisions: 20,
+                        label: '$_speakerEnhancerStrength%',
+                        onChanged: (value) => setSheetState(() => _speakerEnhancerStrength = value.round()),
+                        onChangeEnd: (value) async {
+                          await _setSpeakerEnhancerStrength(value.round());
+                          if (context.mounted) setSheetState(() {});
+                        },
+                      ),
+                      Text(
+                        'Pemrosesan PCM native: harmonik bass + detail + peak control. Bukan Dolby Atmos atau surround fisik; fallback iframe/WebView tidak diproses.',
+                        style: TextStyle(fontSize: 9.5, height: 1.35, color: scheme.onSurfaceVariant.withValues(alpha: 0.9)),
+                      ),
+                    ],
+                  ),
+                ),
+                if (Platform.isAndroid) ...[
+                  const SizedBox(height: 10),
+                  FutureBuilder<Map<String, dynamic>>(
+                    future: dolbyCapabilitiesFuture,
+                    builder: (context, snapshot) {
+                      final report = snapshot.data ?? const <String, dynamic>{};
+                      final eac3 = report['eac3DecoderAvailable'] == true;
+                      final ac4 = report['ac4DecoderAvailable'] == true;
+                      final spatialRaw = report['spatializer'];
+                      final spatial = spatialRaw is Map
+                          ? Map<String, dynamic>.from(spatialRaw)
+                          : const <String, dynamic>{};
+                      final spatialSupported = spatial['supported'] == true;
+                      final spatialAvailable = spatial['available'] == true;
+                      final spatialEnabled = spatial['enabled'] == true;
+                      final spatial51 = spatial['canSpatialize51'] == true;
+                      final codecsDetected = eac3 || ac4;
+                      final oemDolbyEffectDetected = report['oemDolbyEffectCandidateDetected'] == true;
+                      final loading = snapshot.connectionState == ConnectionState.waiting;
+                      final error = report['error']?.toString();
+
+                      Color statusColor(bool active) => active
+                          ? scheme.primary
+                          : scheme.onSurfaceVariant;
+
+                      Widget statusChip(String label, bool active) => Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: active
+                                  ? scheme.primary.withValues(alpha: 0.10)
+                                  : scheme.surfaceContainerHighest.withValues(alpha: 0.65),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: active
+                                    ? scheme.primary.withValues(alpha: 0.22)
+                                    : scheme.outlineVariant.withValues(alpha: 0.5),
+                              ),
+                            ),
+                            child: Text(
+                              label,
+                              style: TextStyle(
+                                color: statusColor(active),
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          );
+
+                      return Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: scheme.surfaceContainerHighest.withValues(alpha: 0.42),
+                          borderRadius: BorderRadius.circular(17),
+                          border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.55)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(Icons.surround_sound_rounded, color: scheme.primary, size: 21),
+                                const SizedBox(width: 9),
+                                const Expanded(
+                                  child: Text(
+                                    'Dolby Atmos bawaan perangkat',
+                                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900),
+                                  ),
+                                ),
+                                if (loading)
+                                  const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  )
+                                else
+                                  Icon(
+                                    codecsDetected ? Icons.info_rounded : Icons.help_outline_rounded,
+                                    color: scheme.onSurfaceVariant,
+                                    size: 18,
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 7),
+                            Text(
+                              loading
+                                  ? 'Memeriksa decoder Dolby dan kemampuan output Android…'
+                                  : error != null
+                                      ? 'Pemeriksaan perangkat gagal: $error'
+                                      : codecsDetected
+                                          ? 'Perangkat melaporkan decoder format Dolby yang dapat dipakai Media3. Ini belum membuktikan lisensi OEM atau bahwa lagu aktif berisi Atmos.'
+                                          : 'Decoder E-AC-3 / AC-4 tidak terdeteksi melalui API Android pada perangkat ini. Mode Dolby OEM, bila ada, tetap bisa dikelola oleh pengaturan sistem.',
+                              style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10.5, height: 1.4),
+                            ),
+                            const SizedBox(height: 10),
+                            Wrap(
+                              spacing: 6,
+                              runSpacing: 6,
+                              children: [
+                                statusChip('E-AC-3 ${eac3 ? 'tersedia' : 'tidak terdeteksi'}', eac3),
+                                statusChip('AC-4 ${ac4 ? 'tersedia' : 'tidak terdeteksi'}', ac4),
+                                statusChip(
+                                  'Efek OEM Dolby ${oemDolbyEffectDetected ? 'terdeteksi' : 'tidak terdeteksi'}',
+                                  oemDolbyEffectDetected,
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            Divider(height: 1, color: scheme.outlineVariant.withValues(alpha: 0.65)),
+                            const SizedBox(height: 10),
+                            Row(
+                              children: [
+                                Icon(Icons.surround_sound_rounded, color: scheme.primary, size: 18),
+                                const SizedBox(width: 8),
+                                const Expanded(
+                                  child: Text('Android Spatializer · output aktif', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800)),
+                                ),
+                                Text(
+                                  spatialSupported && spatialAvailable && spatialEnabled && spatial51
+                                      ? 'Siap untuk 5.1'
+                                      : spatialSupported
+                                          ? 'Terbatas / nonaktif'
+                                          : 'Tidak didukung',
+                                  style: TextStyle(
+                                    color: statusColor(spatialSupported && spatialAvailable && spatialEnabled && spatial51),
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if ((spatial['reason'] ?? '').toString().isNotEmpty) ...[
+                              const SizedBox(height: 5),
+                              Text(
+                                spatial['reason'].toString(),
+                                style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 9.5, height: 1.35),
+                              ),
+                            ],
+                            const SizedBox(height: 10),
+                            Text(
+                              'Atmos asli hanya aktif jika sumber membawa metadata Atmos (misalnya E-AC-3 JOC / format AC-4 yang sesuai) dan decoder serta jalur output perangkat mendukungnya. Lagu YouTube AAC/Opus biasa tidak berubah menjadi Atmos.',
+                              style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 9.5, height: 1.4),
+                            ),
+                            const SizedBox(height: 5),
+                            Text(
+                              'MusikKu tidak memaksa sakelar Dolby OEM. Jika merek HP menyediakan Dolby Atmos untuk speaker, aktifkan dari pengaturan suara sistem.',
+                              style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 9.5, height: 1.4),
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                TextButton.icon(
+                                  onPressed: loading
+                                      ? null
+                                      : () => setSheetState(() {
+                                            dolbyCapabilitiesFuture = NativeAudioFeatures.getDolbyAtmosCapabilities();
+                                          }),
+                                  icon: const Icon(Icons.refresh_rounded, size: 15),
+                                  label: const Text('Periksa ulang'),
+                                ),
+                                const SizedBox(width: 4),
+                                TextButton.icon(
+                                  onPressed: loading
+                                      ? null
+                                      : () async {
+                                          final opened = await NativeAudioFeatures.openSystemSoundSettings();
+                                          if (!opened && context.mounted) {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              const SnackBar(content: Text('Pengaturan suara Android tidak dapat dibuka pada perangkat ini.')),
+                                            );
+                                          }
+                                        },
+                                  icon: const Icon(Icons.settings_rounded, size: 15),
+                                  label: const Text('Pengaturan HP'),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ],
                 const SizedBox(height: 20),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.end,
@@ -457,11 +814,21 @@ extension _HomeAudioSettingsUi on _HomePageState {
                                                 onChangeEnd: (_) async {
                                                   var applied = false;
                                                   try {
+                                                    if (_speakerEnhancerEnabled) {
+                                                      _speakerEnhancerEnabled = false;
+                                                      final prefs = await SharedPreferences.getInstance();
+                                                      await prefs.setBool(_speakerEnhancerPrefKey, false);
+                                                      await NativeAudioFeatures.setSpeakerSoundstage(
+                                                        enabled: false,
+                                                        strength: _speakerEnhancerStrength,
+                                                      );
+                                                    }
                                                     applied = await _youtubeController.setEqualizerBands(customBands);
                                                     final prefs = await SharedPreferences.getInstance();
                                                     await prefs.setStringList(customBandsPrefKey, customBands.map((v) => v.toString()).toList());
                                                   } catch (_) {}
                                                   if (context.mounted) {
+                                                    setSheetState(() {});
                                                     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                                                       content: Text(applied ? 'Equalizer manual diterapkan' : 'Efek manual bergantung dukungan audio perangkat'),
                                                       duration: const Duration(seconds: 2),
@@ -490,11 +857,21 @@ extension _HomeAudioSettingsUi on _HomePageState {
                             setSheetState(() { for (var i = 0; i < customBands.length; i++) { customBands[i] = 0; } });
                             var applied = false;
                             try {
+                              if (_speakerEnhancerEnabled) {
+                                _speakerEnhancerEnabled = false;
+                                final prefs = await SharedPreferences.getInstance();
+                                await prefs.setBool(_speakerEnhancerPrefKey, false);
+                                await NativeAudioFeatures.setSpeakerSoundstage(
+                                  enabled: false,
+                                  strength: _speakerEnhancerStrength,
+                                );
+                              }
                               applied = await _youtubeController.setEqualizerBands(customBands);
                               final prefs = await SharedPreferences.getInstance();
                               await prefs.setStringList(customBandsPrefKey, customBands.map((v) => v.toString()).toList());
                             } catch (_) {}
                             if (context.mounted) {
+                              setSheetState(() {});
                               ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(applied ? 'Equalizer direset' : 'Nilai EQ direset; efek bergantung dukungan perangkat')));
                             }
                           },

@@ -13,6 +13,7 @@ import 'youtube_music_policy.dart';
 import 'youtube_search_response_parser.dart';
 import 'youtube_search_api_errors.dart';
 import 'youtube_api_request_guard.dart';
+import 'music_style_matcher.dart';
 
 export 'youtube_search_query.dart' show SmartSearchIntent;
 
@@ -511,11 +512,9 @@ class YoutubeSearchService {
   // ==========================================================
   //
   // Dipakai untuk tombol Next / auto-next saat lagu berasal dari pencarian.
-  // Bukan melanjutkan judul video yang sedang diputar. Radio tetap memakai
-  // kata kunci pencarian user, lalu mencari upload TERBARU yang masih berada
-  // di kategori Musik dan konteks Indonesia. Contoh: cari "dj" -> video DJ terbaru;
-  // cari "pop" -> video pop terbaru; cari "lagu jadul" -> upload terbaru yang
-  // masih memakai konteks "lagu jadul".
+  // Bukan melanjutkan judul video yang sedang diputar. Radio mengikuti artis,
+  // genre, dan bahasa seed; tidak boleh otomatis mengubah semua pencarian
+  // menjadi konteks Indonesia karena itu mencampur hasil lagu Barat/lokal.
   //
   // Setiap halaman search.list menghabiskan kuota search. videos.list memakai
   // kuota umum dan dapat mengembalikan detail sampai 50 video per panggilan;
@@ -534,8 +533,10 @@ class YoutubeSearchService {
     if (keyword.isEmpty) return const RadioPage(results: []);
 
     final normalized = keyword.toLowerCase();
+    // Versi cache berubah karena query Radio sekarang menjaga bahasa seed;
+    // hasil lama yang mungkin sudah tercampur konteks Indonesia tidak dipakai.
     final cacheKey =
-        'radioExplodeV2Official|$normalized|${pageToken ?? ''}';
+        'radioExplodeV3LanguageAware|$normalized|${pageToken ?? ''}';
     final cached = _cache[cacheKey];
     if (cached != null) {
       final age = DateTime.now().difference(cached.time);
@@ -562,8 +563,6 @@ class YoutubeSearchService {
     }
 
     final lowerKeyword = keyword.toLowerCase();
-    final hasIndonesia = lowerKeyword.contains('indonesia') ||
-        RegExp(r'(^|\s)indo($|\s)').hasMatch(lowerKeyword);
     final isSongSimilarityQuery = RegExp(
       r'\b(?:similar songs?|songs? like|similar music)\b',
       caseSensitive: false,
@@ -572,10 +571,37 @@ class YoutubeSearchService {
       r'\b(?:lagu|musik|music|songs?|audio|remix|dj|dangdut|pop|rock|jazz|hip\s*hop|kpop|metal|indie|akustik|nostalgia|karaoke|cover|mix|album)\b',
       caseSensitive: false,
     ).hasMatch(lowerKeyword);
+
+    // Artis yang dikenal memberi petunjuk bahasa meski query tidak menulis
+    // "English" atau "Indonesia" (misalnya "Billie Eilish pop"). Tambahkan
+    // bahasa hasil inferensi, bukan negara default. Jika bahasa tak diketahui,
+    // biarkan YouTube relevansi menentukan hasil tanpa bias negara.
+    final inferredLanguage = MusicStyleMatcher.languageFromText(keyword);
+    final explicitLanguage = MusicStyleMatcher.hasExplicitLanguageHint(keyword);
+    final languageQualifier = explicitLanguage
+        ? null
+        : switch (inferredLanguage) {
+            'english' => 'English',
+            'indonesian' => 'Indonesia',
+            'korean' => 'Korean',
+            'japanese' => 'Japanese',
+            'spanish' => 'Spanish',
+            'hindi' => 'Hindi',
+            'arabic' => 'Arabic',
+            'thai' => 'Thai',
+            'mandarin' => 'Mandarin',
+            'javanese' => 'Javanese',
+            'sundanese' => 'Sundanese',
+            _ => null,
+          };
+    final songQualifier = switch (inferredLanguage) {
+      'indonesian' || 'javanese' || 'sundanese' => 'lagu',
+      _ => 'song',
+    };
     final radioKeyword = [
       keyword,
-      if (!alreadyMusicWord && !isSongSimilarityQuery) 'lagu',
-      if (!hasIndonesia && !isSongSimilarityQuery) 'Indonesia',
+      if (!alreadyMusicWord && !isSongSimilarityQuery) songQualifier,
+      ?languageQualifier,
     ].join(' ');
     final officialRadioKeyword = _officialSearchQuery(radioKeyword);
     final pageSourceKey = officialRadioKeyword.toLowerCase();

@@ -363,9 +363,9 @@ class MusicStyleMatcher {
 
     if (_containsAnyPhrase(text, _koreanArtists)) return 'korean';
     if (_containsAnyPhrase(text, _englishArtists)) return 'english';
-    if (_containsAnyPhrase(text, _indonesianArtists) ||
-        _containsAnyPhrase(text, _javaneseArtists) ||
-        _containsAnyPhrase(text, _dangdutArtists)) {
+    if (_containsAnyPhrase(text, _javaneseArtists)) return 'javanese';
+    if (_containsAnyPhrase(text, _dangdutArtists) ||
+        _containsAnyPhrase(text, _indonesianArtists)) {
       return 'indonesian';
     }
 
@@ -436,6 +436,34 @@ class MusicStyleMatcher {
     return languageFromVideo(currentVideo) ?? languageFromText(query);
   }
 
+  static const String _sadBalladPattern =
+      r'\b(?:sad|sad song|sad songs|sad music|galau|lagu galau|lagu sedih|patah hati|heartbreak|heartbroken|broken heart|melancholy|melancholic|melankolis|ballad|power ballad|emotional song|slow song|slow pop)\b';
+
+  /// True jika metadata track secara eksplisit memberi sinyal sad / ballad.
+  /// Heuristik konservatif: tidak menebak mood hanya dari nama artis.
+  static bool isSadBalladTrack(YoutubeSearchResult? video) {
+    if (video == null) return false;
+    final context = normalize([
+      video.title,
+      video.description,
+      video.album,
+    ].where((part) => part.trim().isNotEmpty).join(' '));
+    return _matches(context, _sadBalladPattern);
+  }
+
+  /// Lagu lintas bahasa hanya dibuka ketika konteks lagu memang bertema sedih /
+  /// ballad. Untuk konteks lain, bahasa lagu aktif menjadi prioritas keras.
+  /// Sinyal diambil dari judul, deskripsi, dan seed; metadata YouTube tetap
+  /// heuristik sehingga lagu tanpa penanda mood tidak otomatis dianggap sedih.
+  static bool allowsCrossLanguageForTrack(
+    YoutubeSearchResult? video, {
+    String query = '',
+  }) {
+    if (video == null || styleFromVideo(video) == null) return false;
+    final queryContext = normalize(query);
+    return isSadBalladTrack(video) || _matches(queryContext, _sadBalladPattern);
+  }
+
   /// Hubungan antar-gaya dibuat simetris. Sebelumnya tabel satu arah: target
   /// pop_dj menerima dangdut, tetapi target dangdut menolak pop_dj (begitu
   /// juga sunda/jawa, melayu/pop_dj, blues/rock, country/acoustic, dst.),
@@ -453,19 +481,29 @@ class MusicStyleMatcher {
     bool allowCrossLanguage = false,
   }) {
     final candidateLanguage = languageFromVideo(video);
-    // Language is normally a filter for an explicit user query. Radio started
-    // from a track may cross languages when the musical style is compatible.
-    if (!allowCrossLanguage &&
-        targetLanguage != null &&
+    final languageMismatch = targetLanguage != null &&
         candidateLanguage != null &&
-        candidateLanguage != targetLanguage) {
+        candidateLanguage != targetLanguage;
+    if (languageMismatch && !allowCrossLanguage) return false;
+
+    final candidateStyle = styleFromVideo(video);
+    if (targetStyle != null &&
+        candidateStyle != null &&
+        !isRelatedStyle(candidateStyle, targetStyle)) {
       return false;
     }
 
-    if (targetStyle == null) return true;
-    final candidateStyle = styleFromVideo(video);
-    // Genre unknown is held as a fallback rather than discarded outright.
-    return candidateStyle == null || isRelatedStyle(candidateStyle, targetStyle);
+    // Perpindahan bahasa harus punya bukti kecocokan genre. Jangan menerima
+    // lagu lintas bahasa hanya karena metadata genre kandidat tidak dikenal.
+    if (languageMismatch &&
+        (targetStyle == null ||
+            candidateStyle == null ||
+            !isRelatedStyle(candidateStyle, targetStyle) ||
+            !isSadBalladTrack(video))) {
+      return false;
+    }
+
+    return true;
   }
 
   static double _similarityScore({
@@ -489,15 +527,23 @@ class MusicStyleMatcher {
 
     if (targetLanguage != null) {
       if (candidateLanguage == targetLanguage) {
-        score += 6.0;
+        score += 16.0;
       } else if (candidateLanguage == null) {
-        score += 3.0;
+        // Metadata bahasa tidak jelas: netral, tetapi tetap di bawah kandidat
+        // yang bahasa lagunya sudah dikenali sama dengan lagu aktif.
+        score += 0.0;
+      } else {
+        // Hanya boleh terjadi pada konteks ballad/sedih yang mengizinkan lintas
+        // bahasa; tetap beri penalti agar bahasa yang sama menang lebih dulu.
+        score -= 10.0;
       }
     }
     return score;
   }
 
-  /// Scores candidates by musical compatibility and a small language hint.
+  /// Scores candidates by musical compatibility and language preference.
+  /// Language match is a strong ranking signal; cross-language penalties apply
+  /// only after the caller explicitly enables a sad/ballad context.
   /// Popularity/view count and freshness deliberately do not affect the score:
   /// Radio must keep relevance to the current track ahead of chart rank.
   static double radioSimilarityScore({
@@ -512,14 +558,14 @@ class MusicStyleMatcher {
         targetLanguage: targetLanguage,
       );
 
-  /// Returns compatible tracks from all languages sorted by similarity.
-  /// Pass allowCrossLanguage=false only for an explicitly language-filtered
-  /// search; ordinary Radio should leave it enabled.
+  /// Returns compatible tracks sorted by musical relevance and language.
+  /// Ordinary track Radio locks to the current language; only the caller may
+  /// enable cross-language candidates for a clearly sad/ballad context.
   static List<YoutubeSearchResult> rankForRadio(
     Iterable<YoutubeSearchResult> videos, {
     required String? targetStyle,
     String? targetLanguage,
-    bool allowCrossLanguage = true,
+    bool allowCrossLanguage = false,
   }) {
     // Hitung gaya/bahasa tiap video sekali. Sebelumnya skor dihitung ulang
     // (dengan puluhan regex) di dalam comparator sort pada setiap perbandingan.
@@ -538,7 +584,26 @@ class MusicStyleMatcher {
       if (targetStyle != null && style != null && !isRelatedStyle(style, targetStyle)) {
         continue;
       }
+      // Cross-language only remains eligible when there is a recognizable
+      // related genre. Unknown genre + different language is not a safe match.
+      if (allowCrossLanguage &&
+          targetLanguage != null &&
+          language != null &&
+          language != targetLanguage &&
+          (targetStyle == null || style == null || !isSadBalladTrack(video))) {
+        continue;
+      }
       entries.add((video: video, style: style, language: language, index: index++));
+    }
+
+    // When language is locked, prefer positively identified same-language
+    // videos over unclassified uploads. Unknown language remains a fallback
+    // only if the search page contains no exact-language candidate.
+    if (!allowCrossLanguage && targetLanguage != null) {
+      final exactLanguage = entries
+          .where((entry) => entry.language == targetLanguage)
+          .toList(growable: false);
+      if (exactLanguage.isNotEmpty) entries = exactLanguage;
     }
 
     // For a known current style, never dilute the radio with unclassified
@@ -623,9 +688,9 @@ class MusicStyleMatcher {
   //   1. Seed utama  = artis lagu yang sedang diputar + label genre.
   //      Contoh: "denny caknan lagu jawa". Hasilnya lagu lain dari artis yang
   //      sama, bukan unggahan ulang/cover dari judul yang sama.
-  //   2. Seed cadangan = artis sejenis (satu kelompok genre) lalu pencarian
-  //      "terpopuler" untuk genre itu. RadioService memakainya bergantian di
-  //      setiap isi ulang, jadi daftar putar bercampur antar artis.
+  //   2. Seed cadangan = artis sejenis (satu kelompok genre), lalu query
+  //      "similar songs" yang mempertahankan bahasa dan gaya musik seed.
+  //      RadioService memakainya bergantian agar daftar tidak terpaku pada satu artis.
   // Semua kandidat tetap disaring oleh isCompatible/rankForRadio.
   // ---------------------------------------------------------------------------
 
@@ -946,7 +1011,7 @@ class MusicStyleMatcher {
   }
 
   /// Seed cadangan untuk dipakai bergantian oleh RadioService: beberapa artis
-  /// sejenis, lalu pencarian terpopuler untuk genre/bahasa lagu ini.
+  /// sejenis, lalu pencarian lagu serupa sesuai genre/bahasa lagu ini.
   static List<String> alternateSeedsFor(
     YoutubeSearchResult video, {
     int maxPeers = 3,
@@ -982,13 +1047,11 @@ class MusicStyleMatcher {
         if (!padded.contains(' $crossPeer ')) seeds.add(crossPeer);
       }
     }
-    // If the artist already belongs to a known peer group, keep queries
-    // anchored to the same musical/language scene. A broad genre chart can
-    // inject unrelated local-pop hits into an English artist's radio pool.
-    // Without a style or language the popular query falls back to an
-    // Indonesian chart, which would pollute an unidentified English artist.
+    // If the artist has no curated peer group, use a related-song query,
+    // never a global/popular chart. Charts bias the pool toward viral tracks
+    // instead of songs that actually fit the current track.
     if (group == null && (style != null || language != null)) {
-      seeds.add(_popularQueryFor(style, language));
+      seeds.add(_relatedQueryFor(style, language));
     }
 
     // Cadangan terakhir supaya Radio tidak punya SATU query saja. Lagu dengan
@@ -1010,64 +1073,54 @@ class MusicStyleMatcher {
     return seeds;
   }
 
-  /// Pencarian "terpopuler" yang tetap spesifik ke genre, sebagai pengganti
-  /// chart global yang tidak nyambung.
-  static String _popularQueryFor(String? style, String? language) {
-    switch (style) {
-      case 'jawa':
-        return 'lagu jawa terpopuler';
-      case 'sunda':
-        return 'lagu sunda terpopuler';
-      case 'dangdut':
-        return 'dangdut koplo terpopuler';
-      case 'dj_remix':
-        return 'dj remix terpopuler';
-      case 'pop_dj':
-        return 'pop dj remix terpopuler';
-      case 'kpop':
-        return 'kpop popular songs';
-      case 'religi':
-        return 'lagu religi terpopuler';
-      case 'melayu':
-        return 'lagu melayu terpopuler';
-      case 'hip_hop':
-        return language == 'indonesian'
-            ? 'rap indonesia terpopuler'
-            : 'hip hop popular songs';
-      case 'rnb':
-        return 'r&b popular songs';
-      case 'rock':
-        return language == 'indonesian'
-            ? 'lagu rock indonesia terpopuler'
-            : 'rock popular songs';
-      case 'indie':
-        return 'lagu indie indonesia populer';
-      case 'acoustic':
-        return 'lagu akustik populer';
-      case 'reggae':
-        return 'lagu reggae populer';
-      case 'ska':
-        return 'lagu ska populer';
-      case 'jazz':
-        return 'jazz popular songs';
-      case 'blues':
-        return 'blues popular songs';
-      case 'country':
-        return 'country popular songs';
-      case 'instrumental':
-        return 'instrumental popular songs';
-    }
-    switch (language) {
-      case 'english':
-        return 'english pop hits';
-      case 'korean':
-        return 'kpop popular songs';
-      case 'japanese':
-        return 'japanese pop popular songs';
-      case 'indonesian':
-        return 'lagu pop indonesia terpopuler';
-    }
-    return 'lagu populer indonesia';
+  /// Query cadangan untuk menemukan lagu yang mirip, bukan chart populer.
+  /// Bahasa ikut disebut agar pencarian genre umum tidak kembali ke katalog
+  /// Indonesia ketika seed berasal dari lagu berbahasa Inggris.
+  static String _relatedQueryFor(String? style, String? language) {
+    final genre = switch (style) {
+      'jawa' => 'lagu Jawa',
+      'sunda' => 'lagu Sunda',
+      'dangdut' => 'dangdut koplo',
+      'dj_remix' => 'DJ remix',
+      'pop_dj' => 'pop DJ remix',
+      'kpop' => 'K-pop',
+      'religi' => 'lagu religi',
+      'melayu' => 'lagu Melayu',
+      'hip_hop' => 'hip hop',
+      'rnb' => 'R&B',
+      'rock' => 'rock',
+      'indie' => 'indie pop',
+      'acoustic' => 'acoustic pop',
+      'reggae' => 'reggae',
+      'ska' => 'ska',
+      'jazz' => 'jazz',
+      'blues' => 'blues',
+      'country' => 'country',
+      'instrumental' => 'instrumental',
+      _ => 'pop',
+    };
+
+    final languagePrefix = switch (language) {
+      'english' => 'English',
+      'indonesian' when style != 'jawa' && style != 'sunda' => 'Indonesian',
+      'korean' when style != 'kpop' => 'Korean',
+      'japanese' => 'Japanese',
+      'spanish' => 'Spanish',
+      'hindi' => 'Hindi',
+      'arabic' => 'Arabic',
+      'thai' => 'Thai',
+      'mandarin' => 'Mandarin',
+      'javanese' when style != 'jawa' => 'Javanese',
+      'sundanese' when style != 'sunda' => 'Sundanese',
+      _ => '',
+    };
+
+    final query = [
+      if (languagePrefix.isNotEmpty) languagePrefix,
+      genre,
+      'similar songs',
+    ].join(' ');
+    return query.trim();
   }
 
   /// Seed lama: judul + artis + "similar songs". Hanya cadangan.

@@ -196,10 +196,16 @@ extension _HomePlayback on _HomePageState {
     // Preset EQ mengikuti track yang sedang diputar. Bila belum pernah diatur
     // untuk track ini, pakai preset default dari Settings.
     try {
-      final trackPreset = await _storage.loadEqualizerPresetForTrack(video.videoId);
+      var trackPreset = await _storage.loadEqualizerPresetForTrack(video.videoId);
+      // Legacy Speaker Clarity entries came from the old per-track toggle.
+      if (trackPreset.trim().toLowerCase() == 'speaker clarity') {
+        trackPreset = 'Flat';
+      }
       if (_playbackSessionGuard.isCurrentRequest(requestId)) {
         _equalizerPreset = trackPreset;
-        await _youtubeController.setEqualizerPreset(trackPreset);
+        await _youtubeController.setEqualizerPreset(
+          _speakerEnhancerEnabled ? 'Flat' : trackPreset,
+        );
         if (mounted) setState(() {});
       }
     } catch (e) {

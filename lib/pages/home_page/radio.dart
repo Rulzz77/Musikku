@@ -25,7 +25,7 @@ extension _HomeRadio on _HomePageState {
     _radio.start(
       seed,
       preferredLanguage: _radioPreferredLanguageFor(video),
-      lockLanguage: false,
+      lockLanguage: !MusicStyleMatcher.allowsCrossLanguageForTrack(video),
       alternateSeeds: MusicStyleMatcher.alternateSeedsFor(video),
       seedArtist: MusicStyleMatcher.seedArtistKeyFor(video),
     );
@@ -59,8 +59,8 @@ extension _HomeRadio on _HomePageState {
     _radio.start(
       seed,
       preferredLanguage: _radioPreferredLanguageFor(video),
-      lockLanguage: false,
-      // Artis sejenis + terpopuler di genre yang sama, dipakai bergantian
+      lockLanguage: !MusicStyleMatcher.allowsCrossLanguageForTrack(video),
+      // Artis sejenis + pencarian lagu serupa dalam genre yang sama, bergantian
       // dengan seed utama supaya lagu berikutnya tidak hanya dari satu artis.
       alternateSeeds: MusicStyleMatcher.alternateSeedsFor(video),
       seedArtist: MusicStyleMatcher.seedArtistKeyFor(video),
@@ -79,8 +79,8 @@ extension _HomeRadio on _HomePageState {
     }
   }
 
-  /// Playlist (favorit / terakhir diputar) habis → lanjut ke lagu populer
-  /// dengan genre/style yang nyambung, tanpa mengunci bahasa atau artis.
+  /// Playlist non-tetap habis → lanjut ke lagu terkait berdasarkan genre
+  /// dan bahasa; lintas bahasa hanya untuk konteks sedih/ballad.
   Future<void> _continueWithRadio(
     YoutubeSearchResult current, {
     required bool fromAutoNext,
@@ -144,6 +144,9 @@ extension _HomeRadio on _HomePageState {
       query: contextQuery,
       currentVideo: current,
     );
+    final allowCrossLanguage =
+        MusicStyleMatcher.allowsCrossLanguageForTrack(current, query: contextQuery);
+    final targetArtist = MusicStyleMatcher.artistKeyFor(current);
     final seenIds = <String>{};
     final candidates = <YoutubeSearchResult>[];
 
@@ -174,11 +177,15 @@ extension _HomeRadio on _HomePageState {
           continue;
         }
       }
+      if (targetStyle == null && targetLanguage == null) {
+        final candidateArtist = MusicStyleMatcher.artistKeyFor(video);
+        if (targetArtist.isEmpty || candidateArtist != targetArtist) continue;
+      }
       if (!MusicStyleMatcher.isCompatible(
         video: video,
         targetStyle: targetStyle,
         targetLanguage: targetLanguage,
-        allowCrossLanguage: true,
+        allowCrossLanguage: allowCrossLanguage,
       )) {
         continue;
       }
@@ -189,13 +196,13 @@ extension _HomeRadio on _HomePageState {
     // entries are checked by _pickNonShort, which let older songs repeat.
     final freshCandidates = _radio.filterUnplayedCandidates(candidates);
     if (freshCandidates.isNotEmpty) {
-      final ranked = targetStyle == null
+      final ranked = targetStyle == null && targetLanguage == null
           ? freshCandidates
           : MusicStyleMatcher.rankForRadio(
               freshCandidates,
               targetStyle: targetStyle,
               targetLanguage: targetLanguage,
-              allowCrossLanguage: true,
+              allowCrossLanguage: allowCrossLanguage,
             );
       final varied = _radio.preferArtistVariety(ranked.toList(growable: false));
       final next = _playerUiState.value.isShuffle &&
@@ -297,33 +304,78 @@ extension _HomeRadio on _HomePageState {
     return null;
   }
 
-  /// Fallback paling akhir: semua jalur Radio kosong (pool habis, API gagal,
-  /// genre tidak terdeteksi). Lebih baik memutar ulang lagu lama dari favorit /
-  /// terakhir diputar daripada diam. Filter genre dan "sudah pernah diputar"
-  /// sengaja diabaikan, tapi tetap menghormati blokir, dislike, Shorts, bukan
-  /// lagu sekarang, dan bukan 15 lagu terakhir (lewat _pickNonShort).
+  /// Fallback terakhir hanya memakai cache yang masih relevan dengan lagu aktif.
+  /// Tidak boleh melompat ke favorit acak atau mengulang lagu yang baru diputar.
   YoutubeSearchResult? _pickLastResortTrack() {
+    final current = _currentVideo;
+    if (current == null || current.isLocal) return null;
+
+    final targetStyle = MusicStyleMatcher.styleForContext(
+      query: _radio.seed,
+      currentVideo: current,
+    );
+    final targetLanguage = MusicStyleMatcher.languageForContext(
+      query: _radio.seed,
+      currentVideo: current,
+    );
+    final allowCrossLanguage =
+        MusicStyleMatcher.allowsCrossLanguageForTrack(current, query: _radio.seed);
+    final targetArtist = MusicStyleMatcher.artistKeyFor(current);
+    if (targetStyle == null && targetLanguage == null && targetArtist.isEmpty) {
+      return null;
+    }
+
     final seen = <String>{};
     final pool = <YoutubeSearchResult>[
       ..._favorites,
       ..._recentlyPlayed,
     ].where((video) {
-      return video.videoId.isNotEmpty &&
-          !video.isLocal &&
-          seen.add(video.videoId) &&
-          !_dislikedIds.contains(video.videoId) &&
-          !ChannelBlockFilter.isBlocked(video, _blockedChannelKeys) &&
-          YoutubeSearchService.isMusicCandidate(video) &&
-          !video.isLive &&
-          !video.isUpcoming;
+      if (video.videoId.isEmpty ||
+          video.isLocal ||
+          !seen.add(video.videoId) ||
+          _dislikedIds.contains(video.videoId) ||
+          ChannelBlockFilter.isBlocked(video, _blockedChannelKeys) ||
+          !YoutubeSearchService.isMusicCandidate(video) ||
+          YoutubeSearchService.isLikelyShortForm(video) ||
+          YoutubeSearchService.isLikelyNonMusicVideo(video) ||
+          video.isLive ||
+          video.isUpcoming ||
+          _wasPlayedInRecentPlaybackHistory(video) ||
+          _radio.wasPlayedRecently(video)) {
+        return false;
+      }
+
+      final candidateStyle = MusicStyleMatcher.styleFromVideo(video);
+      if (targetStyle != null &&
+          (candidateStyle == null ||
+              !MusicStyleMatcher.isRelatedStyle(candidateStyle, targetStyle))) {
+        return false;
+      }
+      if (targetStyle == null && targetLanguage == null) {
+        final candidateArtist = MusicStyleMatcher.artistKeyFor(video);
+        if (targetArtist.isEmpty || candidateArtist != targetArtist) return false;
+      }
+      return MusicStyleMatcher.isCompatible(
+        video: video,
+        targetStyle: targetStyle,
+        targetLanguage: targetLanguage,
+        allowCrossLanguage: allowCrossLanguage,
+      );
     }).toList(growable: false);
-    if (pool.isEmpty) return null;
-    final varied = _radio.preferArtistVariety(pool);
+
+    final fresh = _radio.filterUnplayedCandidates(pool);
+    if (fresh.isEmpty) return null;
+    final varied = _radio.preferArtistVariety(fresh);
     if (_playerUiState.value.isShuffle &&
         !_playerUiState.value.isSmartShuffle) {
       return _pickNonShort(varied, random: true);
     }
-    return _pickSmartWeightedCandidate(varied, currentVideo: _currentVideo);
+    return _pickSmartWeightedCandidate(
+      varied,
+      currentVideo: current,
+      targetStyle: targetStyle,
+      targetLanguage: targetLanguage,
+    );
   }
 
   /// Kandidat radio/cached fallback tidak boleh berupa lagu sekarang atau
@@ -431,12 +483,13 @@ extension _HomeRadio on _HomePageState {
         if (YoutubeSearchService.isLikelyNonMusicVideo(video)) return false;
         if (!YoutubeSearchService.isMusicCandidate(video)) return false;
         if (video.isLive || video.isUpcoming) return false;
-        // Cached non-radio lists may only backfill a known related genre;
-        // an old unclassified search result must not hijack song-specific Radio.
-        if (targetStyle == null) return false;
+        // Cached non-radio lists may only backfill a known related genre or
+        // the same known language. Unclassified results must not hijack Radio.
+        if (targetStyle == null && targetLanguage == null) return false;
         final candidateStyle = MusicStyleMatcher.styleFromVideo(video);
-        if (candidateStyle == null ||
-            !MusicStyleMatcher.isRelatedStyle(candidateStyle, targetStyle)) {
+        if (targetStyle != null &&
+            (candidateStyle == null ||
+                !MusicStyleMatcher.isRelatedStyle(candidateStyle, targetStyle))) {
           return false;
         }
         if (!MusicStyleMatcher.isCompatible(
@@ -509,14 +562,18 @@ extension _HomeRadio on _HomePageState {
             YoutubeSearchService.isMusicCandidate(video) &&
             !video.isLive &&
             !video.isUpcoming &&
-            targetStyle != null &&
-            candidateStyle != null &&
-            MusicStyleMatcher.isRelatedStyle(candidateStyle, targetStyle) &&
+            (targetStyle != null || targetLanguage != null) &&
+            (targetStyle == null ||
+                (candidateStyle != null &&
+                    MusicStyleMatcher.isRelatedStyle(candidateStyle, targetStyle))) &&
             MusicStyleMatcher.isCompatible(
               video: video,
               targetStyle: targetStyle,
               targetLanguage: targetLanguage,
-              allowCrossLanguage: !_radio.locksLanguage,
+              allowCrossLanguage: MusicStyleMatcher.allowsCrossLanguageForTrack(
+                _currentVideo,
+                query: _radio.seed,
+              ),
             );
       }).toList();
       // Favorites/history are a last-resort cache, not permission to replay the
@@ -530,7 +587,10 @@ extension _HomeRadio on _HomePageState {
           verifiedLocal,
           targetStyle: targetStyle,
           targetLanguage: targetLanguage,
-          allowCrossLanguage: !_radio.locksLanguage,
+          allowCrossLanguage: MusicStyleMatcher.allowsCrossLanguageForTrack(
+            _currentVideo,
+            query: _radio.seed,
+          ),
         );
         final variedLocal = _radio.preferArtistVariety(
           preferred.isNotEmpty ? preferred : verifiedLocal,
@@ -547,9 +607,9 @@ extension _HomeRadio on _HomePageState {
       }
     }
 
-    // Fallback 3: genre tidak terdeteksi / semua kandidat sudah pernah diputar.
-    // Fallback 1 mati di mode Radio (_activeList sengaja dikosongkan) dan
-    // Fallback 2 butuh targetStyle, jadi tanpa ini lagu berhenti diam-diam.
+    // Fallback 3: tetap relevan terhadap genre/bahasa/artis seed dan tidak
+    // mengulang track lama. Bila cache tak punya kandidat yang cocok, berhenti
+    // dengan aman daripada memutar lagu acak.
     next ??= _pickLastResortTrack();
 
     if (next == null) {

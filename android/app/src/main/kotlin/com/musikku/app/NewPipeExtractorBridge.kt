@@ -1,6 +1,7 @@
 package com.musikku.app
 
 import android.net.Uri
+import android.media.MediaCodecList
 import android.os.Handler
 import android.os.Looper
 import io.flutter.plugin.common.BinaryMessenger
@@ -166,17 +167,30 @@ internal object NewPipeExtractorBridge {
                 uri.encodedAuthority?.contains('@') != true &&
                 uri.fragment.isNullOrEmpty()
         }
-        // Prefer M4A/MP4 (typically AAC), which has broad decoder support on
-        // Android devices. Use the highest bitrate among compatible formats;
-        // if no such stream exists, fall back to the best available URL stream.
-        val selected = directStreams
-            .sortedWith(
-                compareByDescending<AudioStream> {
-                    val suffix = it.format?.suffix?.lowercase(Locale.ROOT)
-                    suffix == "m4a" || suffix == "mp4"
-                }.thenByDescending { it.averageBitrate }
-            )
-            .firstOrNull()
+        // Prefer a genuine Dolby-capable source only when the device exposes
+        // a platform E-AC-3 / AC-4 decoder. Otherwise keep the broad-compatible
+        // AAC/M4A preference. YouTube usually serves AAC/Opus, so this path
+        // only activates when the extractor actually returns a Dolby stream.
+        val dolbyStreams = directStreams.filter { stream ->
+            val codec = stream.codec?.lowercase(Locale.ROOT).orEmpty()
+            val suffix = stream.format?.suffix?.lowercase(Locale.ROOT).orEmpty()
+            when {
+                codec.contains("eac3") || codec.contains("e-ac-3") || codec.contains("ec-3") || suffix == "eac3" || suffix == "ec3" ->
+                    hasPlatformDecoder("audio/eac3")
+                codec.contains("ac4") || codec.contains("ac-4") || suffix == "ac4" ->
+                    hasPlatformDecoder("audio/ac4")
+                else -> false
+            }
+        }
+        val selected = dolbyStreams.maxByOrNull { it.averageBitrate }
+            ?: directStreams
+                .sortedWith(
+                    compareByDescending<AudioStream> {
+                        val suffix = it.format?.suffix?.lowercase(Locale.ROOT)
+                        suffix == "m4a" || suffix == "mp4"
+                    }.thenByDescending { it.averageBitrate }
+                )
+                .firstOrNull()
             ?: throw IOException("NewPipe tidak menemukan direct HTTPS audio stream untuk video ini.")
         val url = selected.content.trim()
         if (url.isEmpty()) throw IOException("URL audio dari NewPipe kosong.")
@@ -198,6 +212,12 @@ internal object NewPipeExtractorBridge {
             "codec" to selected.codec,
         )
     }
+
+    private fun hasPlatformDecoder(mimeType: String): Boolean = runCatching {
+        MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.any { codec ->
+            !codec.isEncoder && codec.supportedTypes.any { it.equals(mimeType, ignoreCase = true) }
+        }
+    }.getOrDefault(false)
 
     private fun extractVideoId(rawUrl: String): String? {
         return try {

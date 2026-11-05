@@ -20,6 +20,7 @@ import '../services/lyrics_service.dart';
 import '../services/listening_playback_tracker.dart';
 import '../services/floating_lyrics_bridge.dart';
 import '../services/native_playback_diagnostics.dart';
+import '../services/native_audio_features.dart';
 import '../services/listening_together_service.dart';
 import '../services/music_style_matcher.dart';
 import '../services/original_track_resolver.dart';
@@ -69,6 +70,8 @@ const String _shufflePrefKey = 'playback_shuffle_v1';
 const String _smartShufflePrefKey = 'playback_smart_shuffle_v1';
 const String _loopModePrefKey = 'playback_loop_mode_v1';
 const String _playerVolumePrefKey = 'player_volume_percent_v1';
+const String _speakerEnhancerPrefKey = 'speaker_enhancer_enabled_v1';
+const String _speakerSoundstageStrengthPrefKey = 'speaker_soundstage_strength_v1';
 
 /// Daftar lagu yang sedang menjadi "playlist" untuk next / previous / shuffle.
 enum _ListSource { none, search, favorites, radio, playlist, local, collection }
@@ -379,6 +382,9 @@ class _HomePageState extends State<HomePage>
 
   String _equalizerPreset = 'Flat';
 
+  // MusikKu Soundstage is a global Media3 PCM DSP mode, separate from per-track EQ.
+  bool _speakerEnhancerEnabled = false;
+  int _speakerEnhancerStrength = 70;
 
   String _crossfadeFadingVideoId = '';
 

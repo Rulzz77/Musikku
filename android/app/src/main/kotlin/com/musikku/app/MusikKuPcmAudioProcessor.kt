@@ -17,6 +17,7 @@ import kotlin.math.min
 import kotlin.math.pow
 import kotlin.math.sin
 import kotlin.math.sqrt
+import kotlin.math.tanh
 
 /** Emits a lightweight waveform from the actual PCM buffers handled by Media3. */
 object MusikKuAudioVisualizationEvents {
@@ -48,14 +49,89 @@ object MusikKuAudioVisualizationEvents {
 @UnstableApi
 class MusikKuPcmAudioProcessor : BaseAudioProcessor() {
     @Volatile var normalizationEnabled: Boolean = false
+
+    /**
+     * MusikKu Soundstage is a mono-safe psychoacoustic enhancement for the
+     * Media3 PCM path. It adds low-level bass harmonics, presence detail and
+     * gentle peak control. It is not Dolby decoding or multichannel surround.
+     */
+    @Volatile var soundStageEnabled: Boolean = false
+    @Volatile var soundStageStrength: Int = 70
     @Volatile private var resetGainPending = true
 
     private var sampleRateHz = 48000
     private var channelCount = 2
     private var shelfFilters = emptyArray<Biquad>()
     private var highPassFilters = emptyArray<Biquad>()
+    private var soundStageStates = emptyArray<SoundStageChannelState>()
     private var smoothedGain = 1.0
     private var smoothedWeightedEnergy = 0.012
+
+    /** Per-channel state; no allocation is performed inside the audio loop. */
+    private class SoundStageChannelState(sampleRate: Int) {
+        private val safeRate = sampleRate.coerceAtLeast(8000).toDouble()
+        private val bassAlpha = 1.0 - exp(-2.0 * PI * 145.0 / safeRate)
+        private val dcAlpha = 1.0 - exp(-2.0 * PI * 24.0 / safeRate)
+        private val detailAlpha = 1.0 - exp(-2.0 * PI * 3600.0 / safeRate)
+        private val attackAlpha = 1.0 - exp(-1.0 / (safeRate * 0.004))
+        private val releaseAlpha = 1.0 - exp(-1.0 / (safeRate * 0.110))
+        private var bassLow = 0.0
+        private var rectifiedDc = 0.0
+        private var detailLow = 0.0
+        private var peakEnvelope = 0.0
+        private var compressorGain = 1.0
+
+        fun process(input: Double, amount: Double): Double {
+            if (amount <= 0.0) return input
+
+            // Bass perception: extract the low band, full-wave rectify it and
+            // remove its DC component. The remaining low-level even harmonic
+            // helps tiny speakers suggest bass without boosting inaudible sub-bass.
+            bassLow += bassAlpha * (input - bassLow)
+            val rectified = abs(bassLow)
+            rectifiedDc += dcAlpha * (rectified - rectifiedDc)
+            val bassHarmonic = rectified - rectifiedDc
+
+            // Presence/detail lift is deliberately subtle; it avoids a large
+            // high-shelf boost that would make small phone speakers harsh.
+            detailLow += detailAlpha * (input - detailLow)
+            val detail = input - detailLow
+
+            var output = input + bassHarmonic * (0.19 * amount) + detail * (0.045 * amount)
+
+            // Gentle peak leveling with a slower release reduces harsh jumps.
+            val level = abs(output)
+            val envelopeCoefficient = if (level > peakEnvelope) attackAlpha else releaseAlpha
+            peakEnvelope += (level - peakEnvelope) * envelopeCoefficient
+            val threshold = 0.56
+            val ratio = 1.45
+            val targetGain = if (peakEnvelope > threshold) {
+                (threshold + (peakEnvelope - threshold) / ratio) / peakEnvelope.coerceAtLeast(1e-6)
+            } else {
+                1.0
+            }
+            val gainCoefficient = if (targetGain < compressorGain) 0.24 else 0.025
+            compressorGain += (targetGain - compressorGain) * gainCoefficient
+            output *= compressorGain
+
+            // Smooth saturation above the normal operating range; this avoids
+            // a hard digital edge while retaining headroom for the Android sink.
+            val magnitude = abs(output)
+            if (magnitude > 0.88) {
+                val limited = 0.88 + 0.12 * tanh((magnitude - 0.88) / 0.12)
+                output = if (output < 0.0) -limited else limited
+            }
+            return output
+        }
+
+        fun clear() {
+            bassLow = 0.0
+            rectifiedDc = 0.0
+            detailLow = 0.0
+            peakEnvelope = 0.0
+            compressorGain = 1.0
+        }
+    }
 
     private class Biquad(
         private val b0: Double,
@@ -140,8 +216,16 @@ class MusikKuPcmAudioProcessor : BaseAudioProcessor() {
             return AudioProcessor.AudioFormat.NOT_SET
         }
         sampleRateHz = inputAudioFormat.sampleRate.coerceAtLeast(8000)
-        channelCount = inputAudioFormat.channelCount.coerceIn(1, 8)
+        // Preserve the decoder's exact PCM channel count for the Media3 sink;
+        // do not downmix or clamp channels inside this processor.
+        if (inputAudioFormat.channelCount !in 1..24) {
+            shelfFilters = emptyArray()
+            highPassFilters = emptyArray()
+            return AudioProcessor.AudioFormat.NOT_SET
+        }
+        channelCount = inputAudioFormat.channelCount
         rebuildFilters()
+        soundStageStates = Array(channelCount) { SoundStageChannelState(sampleRateHz) }
         return inputAudioFormat
     }
 
@@ -154,6 +238,7 @@ class MusikKuPcmAudioProcessor : BaseAudioProcessor() {
     private fun resetFilters() {
         shelfFilters.forEach { it.clear() }
         highPassFilters.forEach { it.clear() }
+        soundStageStates.forEach { it.clear() }
     }
 
     override fun queueInput(inputBuffer: ByteBuffer) {
@@ -221,6 +306,8 @@ class MusikKuPcmAudioProcessor : BaseAudioProcessor() {
         val bucketSize = max(1, sampleCount / barsCount)
         val outputInput = inputBuffer.duplicate().order(ByteOrder.nativeOrder())
         val output = replaceOutputBuffer(byteCount).order(ByteOrder.nativeOrder())
+        val applySoundStage = soundStageEnabled
+        val soundAmount = soundStageStrength.coerceIn(0, 100) / 100.0
         for (index in 0 until sampleCount) {
             val raw = outputInput.short.toInt()
             val bucket = min(barsCount - 1, index / bucketSize)
@@ -228,7 +315,14 @@ class MusikKuPcmAudioProcessor : BaseAudioProcessor() {
             if (magnitude * 100.0 > bars[bucket]) {
                 bars[bucket] = (magnitude * 100.0).toInt().coerceIn(0, 100)
             }
-            val processed = (raw * gain).toInt().coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
+
+            var sample = (raw / 32768.0) * gain
+            if (applySoundStage && soundAmount > 0.0) {
+                val channel = index % channelCount
+                sample = soundStageStates.getOrNull(channel)?.process(sample, soundAmount) ?: sample
+            }
+            val processed = (sample * 32768.0).toInt()
+                .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
             output.putShort(processed.toShort())
         }
         if (byteCount % 2 != 0) output.put(outputInput.get())
@@ -248,5 +342,6 @@ class MusikKuPcmAudioProcessor : BaseAudioProcessor() {
         resetGainPending = true
         shelfFilters = emptyArray()
         highPassFilters = emptyArray()
+        soundStageStates = emptyArray()
     }
 }

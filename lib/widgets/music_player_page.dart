@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../models/loop_mode.dart';
 import '../models/native_youtube_state.dart';
@@ -115,46 +116,60 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: _canvas,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          Positioned.fill(
-            child: ImageFiltered(
-              imageFilter: ui.ImageFilter.blur(sigmaX: 38, sigmaY: 38),
-              child: Opacity(
-                opacity: 0.22,
-                child: AlbumArtworkImage(track: widget.video, fit: BoxFit.cover),
-              ),
-            ),
-          ),
-          const Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [Color(0xB50D1422), Color(0xE80D1422), _canvas],
-                  stops: [0, 0.48, 1],
+    // Keep the Android status bar visible and readable above the artwork.
+    // The artwork itself is laid out inside SafeArea, never behind the clock/icons.
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+        statusBarBrightness: Brightness.dark,
+        systemNavigationBarColor: _canvas,
+        systemNavigationBarIconBrightness: Brightness.light,
+        systemNavigationBarDividerColor: Colors.transparent,
+      ),
+      child: Material(
+        color: _canvas,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Positioned.fill(
+              child: ImageFiltered(
+                imageFilter: ui.ImageFilter.blur(sigmaX: 38, sigmaY: 38),
+                child: Opacity(
+                  opacity: 0.22,
+                  child: AlbumArtworkImage(track: widget.video, fit: BoxFit.cover),
                 ),
               ),
             ),
-          ),
-          SafeArea(
-            child: Column(
-              children: [
-                _buildHeader(),
-                Expanded(
-                  child: ValueListenableBuilder<NativeYoutubeState>(
-                    valueListenable: widget.nativeState,
-                    builder: (context, state, _) => _buildBody(context, state),
+            const Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Color(0xB50D1422), Color(0xE80D1422), _canvas],
+                    stops: [0, 0.48, 1],
                   ),
                 ),
-              ],
+              ),
             ),
-          ),
-        ],
+            SafeArea(
+              top: true,
+              bottom: true,
+              child: Column(
+                children: [
+                  _buildHeader(),
+                  Expanded(
+                    child: ValueListenableBuilder<NativeYoutubeState>(
+                      valueListenable: widget.nativeState,
+                      builder: (context, state, _) => _buildBody(context, state),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -235,28 +250,38 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
       builder: (context, constraints) {
         final width = constraints.maxWidth;
         final height = constraints.maxHeight;
-        final compact = height < 660;
-        final side = width >= 700 ? 44.0 : 20.0;
-        final maxCover = math.min(width - (side * 2), width >= 700 ? 420.0 : 356.0);
-        // Keep the artwork stage only slightly taller than the cover.
-        // Extra screen height is distributed between the content sections
-        // instead of being collected in one large gap above the bottom dock.
-        final artworkStageHeight = math.min(
-          height * (compact ? 0.42 : 0.50),
-          maxCover + (compact ? 6.0 : 12.0),
+        final compact = height < 640;
+        // Keep text and controls comfortably inset while letting the artwork
+        // run almost edge-to-edge, like the supplied player reference.
+        final side = width >= 700 ? 34.0 : 20.0;
+        final maxCover = math.min(width - 8.0, width >= 700 ? 460.0 : 440.0);
+
+        // Reserve enough room for title, queue shortcut, seek bar, transport,
+        // volume and the four existing actions. The cover expands on tall
+        // phones but shrinks predictably on short screens instead of causing
+        // the lower controls to overflow.
+        final reservedForExpandedControls = _showVolumeControl ? 14.0 : 0.0;
+        final reservedForPlaybackError =
+            matchesTrack && state.playbackState == NativePlaybackState.error ? 20.0 : 0.0;
+        final coverSize = math.min(
+          maxCover,
+          math.max(
+            136.0,
+            height - (compact ? 318.0 : 326.0) - reservedForExpandedControls - reservedForPlaybackError,
+          ),
         ).toDouble();
 
         return Padding(
-          padding: EdgeInsets.fromLTRB(side, compact ? 0 : 3, side, compact ? 2 : 7),
+          padding: EdgeInsets.fromLTRB(side, compact ? 0 : 2, side, compact ? 0 : 4),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               SizedBox(
-                height: artworkStageHeight,
+                height: coverSize,
                 child: LayoutBuilder(
                   builder: (context, stage) {
                     if (widget.platformPlayer != null) {
-                      final playerWidth = math.min(width - 12, 480.0).toDouble();
+                      final playerWidth = math.min(width - 8, 480.0).toDouble();
                       final playerHeight = math.min(playerWidth * 9 / 16, stage.maxHeight * 0.86).toDouble();
                       return Center(
                         child: SizedBox(
@@ -266,14 +291,21 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                         ),
                       );
                     }
-                    final size = math.min(maxCover, stage.maxHeight * 0.98).clamp(132.0, 420.0).toDouble();
-                    return Center(child: _buildAlbumCover(size));
+                    return Center(
+                      child: OverflowBox(
+                        minWidth: coverSize,
+                        maxWidth: coverSize,
+                        minHeight: coverSize,
+                        maxHeight: coverSize,
+                        alignment: Alignment.center,
+                        child: _buildAlbumCover(coverSize),
+                      ),
+                    );
                   },
                 ),
               ),
-              SizedBox(height: compact ? 7 : 12),
               _buildTrackInfo(busy),
-              SizedBox(height: compact ? 5 : 9),
+              _buildNextTrack(),
               _buildSeekBar(
                 context: context,
                 duration: duration,
@@ -281,34 +313,58 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                 sliderValue: sliderValue,
                 bufferedTrackValue: bufferedTrackValue,
               ),
-              SizedBox(height: compact ? 0 : 3),
               Transform.translate(
-                // Raise only Shuffle / Previous / Play-Pause / Next / Repeat.
-                // The volume control and Playlist-Lyrics-Timer-Queue dock
-                // keep their existing positions.
-                offset: Offset(0, compact ? -5 : -9),
+                offset: Offset(0, compact ? -3 : -7),
                 child: _buildControlDeck(busy: busy, playing: playing, compact: compact),
               ),
-              SizedBox(height: compact ? 0 : 3),
               _buildVolumeControl(compact: compact),
-              SizedBox(height: compact ? 1 : 5),
               if (matchesTrack && state.playbackState == NativePlaybackState.error)
                 const Padding(
-                  padding: EdgeInsets.only(bottom: 5),
+                  padding: EdgeInsets.only(bottom: 2),
                   child: Text(
                     'Audio gagal dimuat. Coba putar ulang atau pilih lagu berikutnya.',
                     textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(color: Color(0xFFFF9A91), fontSize: 10.5),
                   ),
                 ),
-              // MainAxisAlignment.spaceBetween above shares remaining height
-              // across the whole player. This keeps the lower dock anchored,
-              // without leaving one oversized empty area beneath the volume.
               _buildBottomActions(context),
             ],
           ),
         );
       },
+    );
+  }
+
+  Widget _buildNextTrack() {
+    final next = widget.nextVideo;
+    final title = next == null ? 'Lihat antrean' : MusicTitleFormatter.clean(next.title);
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: widget.onOpenQueue,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 4),
+          child: Row(
+            children: [
+              const Icon(Icons.music_note_rounded, color: _muted, size: 19),
+              const SizedBox(width: 9),
+              Expanded(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: _muted, fontSize: 13, fontWeight: FontWeight.w700),
+                ),
+              ),
+              const SizedBox(width: 6),
+              const Icon(Icons.chevron_right_rounded, color: _muted, size: 21),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -329,7 +385,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
         width: size,
         height: size,
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(7),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.42),

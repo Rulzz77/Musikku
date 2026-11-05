@@ -81,6 +81,45 @@ extension _HomePlayback on _HomePageState {
     return result;
   }
 
+  /// Prepares adjacent remote tracks for Media3 on Android. The queue stops
+  /// before local media so a source change remains controlled by Flutter.
+  List<Map<String, Object?>> _buildNativeYoutubeGaplessQueueFor(
+    YoutubeSearchResult video,
+  ) {
+    if (!Platform.isAndroid ||
+        video.isLocal ||
+        !_isFixedPlaybackList ||
+        _playerUiState.value.isShuffle ||
+        _playerUiState.value.loopMode != LoopModeCustom.off ||
+        _queueManager.isNotEmpty ||
+        _crossfadeSeconds > 0 ||
+        _stopAfterCurrent) {
+      return const <Map<String, Object?>>[];
+    }
+
+    final currentIndex = _activeList.indexWhere(
+      (item) => item.videoId == video.videoId,
+    );
+    if (currentIndex < 0 || currentIndex >= _activeList.length - 1) {
+      return const <Map<String, Object?>>[];
+    }
+
+    final result = <Map<String, Object?>>[];
+    for (final candidate in _activeList.skip(currentIndex + 1)) {
+      if (candidate.isLocal) break;
+      if (!RegExp(r'^[A-Za-z0-9_-]{11}$').hasMatch(candidate.videoId)) break;
+      result.add(<String, Object?>{
+        'videoId': candidate.videoId,
+        'title': candidate.title,
+        'artist': candidate.channelTitle,
+        'thumbnailUrl': candidate.coverUrl,
+        'durationSeconds': candidate.durationSeconds ?? 0.0,
+      });
+      if (result.length >= 6) break;
+    }
+    return result;
+  }
+
   /// Putar [video] dari [list]. Kalau sumber playlist berubah
   /// (misalnya dari pencarian ke favorit), playlist aktif diganti.
   Future<void> _playVideo(
@@ -291,6 +330,7 @@ extension _HomePlayback on _HomePageState {
             startSeconds: hasRestorePosition ? safeRestorePosition : 0.0,
             durationSeconds: video.durationSeconds ?? safeRestoreDuration,
             playing: autoPlay,
+            gaplessQueue: _buildNativeYoutubeGaplessQueueFor(video),
           );
         } catch (audioError) {
           // MusikKu adalah pemutar audio saja. Jangan diam-diam membuka video

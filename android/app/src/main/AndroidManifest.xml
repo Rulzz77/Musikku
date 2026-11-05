@@ -39,6 +39,7 @@
 
     <uses-permission
         android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <!-- ===================================================== -->
     <!-- ANDROID 14+ -->
@@ -155,6 +156,14 @@
             android:name=".FloatingLyricsService"
             android:enabled="true"
             android:exported="false" />
+
+        <!-- Foreground priority for the active offline download queue. -->
+        <service
+            android:name=".OfflineDownloadForegroundService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="dataSync"
+            android:stopWithTask="false" />
 
         <receiver
             android:name=".MusikKuHomeWidgetProvider"

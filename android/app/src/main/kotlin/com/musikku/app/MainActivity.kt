@@ -444,6 +444,54 @@ class MainActivity : AudioServiceActivity() {
         notificationMethodChannel =
             methodChannel
 
+        // Storage preflight for the offline download manager. Keep this in a
+        // dedicated channel so the transfer service can protect free space.
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "musikku/offline_download_foreground",
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "update" -> {
+                    try {
+                        val started = OfflineDownloadForegroundService.update(
+                            context = this,
+                            title = call.argument<String>("title").orEmpty(),
+                            artist = call.argument<String>("artist").orEmpty(),
+                            progress = call.argument<Number>("progress")?.toInt() ?: 0,
+                            downloadedBytes = call.argument<Number>("downloadedBytes")?.toLong() ?: 0L,
+                            totalBytes = call.argument<Number>("totalBytes")?.toLong() ?: 0L,
+                            queueCount = call.argument<Number>("queueCount")?.toInt() ?: 0,
+                            paused = call.argument<Boolean>("paused") ?: false,
+                        )
+                        result.success(started)
+                    } catch (error: Exception) {
+                        MusikKuLogger.e(TAG, "Memulai foreground download service gagal", error)
+                        result.error("OFFLINE_FGS_START_FAILED", error.message, null)
+                    }
+                }
+                "stop" -> {
+                    runCatching { OfflineDownloadForegroundService.stop(this) }
+                        .onSuccess { result.success(true) }
+                        .onFailure { result.error("OFFLINE_FGS_STOP_FAILED", it.message, null) }
+                }
+                else -> result.notImplemented()
+            }
+        }
+
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "musikku/storage",
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "getAvailableBytes" -> {
+                    runCatching {
+                        android.os.StatFs(filesDir.absolutePath).availableBytes
+                    }.onSuccess { result.success(it) }
+                        .onFailure { result.error("STORAGE_CHECK_FAILED", it.message, null) }
+                }
+                else -> result.notImplemented()
+            }
+        }
 
         MusikKuLogger.d(
             TAG,
@@ -516,6 +564,36 @@ class MainActivity : AudioServiceActivity() {
                     val immersive = call.argument<Boolean>("immersive") ?: false
                     setLandscapeSystemUi(immersive)
                     result.success(null)
+                }
+
+                "appendYoutubeGaplessQueue" -> {
+                    val currentVideoId = call.argument<String>("currentVideoId")?.trim().orEmpty()
+                    val rawTracks = call.argument<List<Map<String, Any?>>>("tracks") ?: emptyList()
+                    if (!currentVideoId.matches(Regex("[A-Za-z0-9_-]{11}"))) {
+                        result.error("INVALID_CURRENT_VIDEO", "ID lagu aktif tidak valid", null)
+                        return@setMethodCallHandler
+                    }
+                    val safeTracks = rawTracks.take(8).mapNotNull { raw ->
+                        val videoId = raw["videoId"]?.toString()?.trim().orEmpty()
+                        val streamUrl = raw["streamUrl"]?.toString()?.trim().orEmpty()
+                        if (!videoId.matches(Regex("[A-Za-z0-9_-]{11}")) ||
+                            videoId == currentVideoId || !isTrustedYoutubeAudioUrl(streamUrl)) {
+                            return@mapNotNull null
+                        }
+                        val duration = (raw["durationSeconds"] as? Number)?.toDouble() ?: 0.0
+                        mapOf(
+                            "videoId" to videoId,
+                            "title" to raw["title"]?.toString().orEmpty().take(256),
+                            "artist" to raw["artist"]?.toString().orEmpty().take(128),
+                            "thumbnailUrl" to raw["thumbnailUrl"]?.toString().orEmpty().take(2048),
+                            "streamUrl" to streamUrl,
+                            "headers" to sanitizeStreamHeaders(raw["headers"] as? Map<String, Any?> ?: emptyMap()),
+                            "durationSeconds" to if (duration.isFinite()) duration.coerceIn(0.0, 86400.0) else 0.0,
+                        )
+                    }.distinctBy { it["videoId"] }
+                    result.success(
+                        PlaybackService.appendYoutubeGaplessQueueStatic(currentVideoId, safeTracks),
+                    )
                 }
 
                 "loadYoutubeAudio" -> {

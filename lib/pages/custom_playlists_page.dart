@@ -155,21 +155,21 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
     final pending = <YoutubeSearchResult>[];
     for (final song in uniqueSongs.values) {
       if (song.isLocal) continue;
-      if (song.isOfflineDownloaded && await File(song.offlinePath).exists()) {
+      if (song.isOfflineDownloaded &&
+          await _downloads.isOfflineFileUsable(song.offlinePath)) {
         continue;
       }
       final existing = _downloads.itemFor(song.videoId);
       if (existing != null &&
           existing.status == OfflineDownloadStatus.completed &&
-          existing.filePath.isNotEmpty &&
-          await File(existing.filePath).exists()) {
+          await _downloads.hasUsableCompletedDownload(song.videoId)) {
         continue;
       }
       pending.add(song);
     }
 
-    // File.exists() above is asynchronous; the page may have been disposed
-    // while the playlist was being checked. Guard every later BuildContext use.
+    // Permission, storage, and file checks are asynchronous; do not touch the
+    // page context until every awaited preflight step has completed and mounted.
     if (!mounted) return;
 
     if (pending.isEmpty) {
@@ -180,14 +180,36 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
     }
 
     final knownFileSizes = <String, int>{};
+    final alreadyDownloadedBytes = <String, int>{};
     for (final song in pending) {
-      final totalBytes = _downloads.itemFor(song.videoId)?.totalBytes ?? 0;
+      final entry = _downloads.itemFor(song.videoId);
+      final totalBytes = entry?.totalBytes ?? 0;
+      final downloadedBytes = entry?.downloadedBytes ?? 0;
       if (totalBytes > 0) knownFileSizes[song.videoId] = totalBytes;
+      if (downloadedBytes > 0) {
+        alreadyDownloadedBytes[song.videoId] = downloadedBytes;
+      }
     }
     final estimate = AudioDownloadEstimate.fromSongs(
       pending,
       knownFileSizes: knownFileSizes,
+      alreadyDownloadedBytes: alreadyDownloadedBytes,
     );
+    const storageReserveBytes = 48 * 1024 * 1024;
+    int availableStorageBytes;
+    try {
+      availableStorageBytes = await _downloads.getAvailableStorageBytes();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Tidak bisa memeriksa penyimpanan: $error')),
+      );
+      return;
+    }
+    if (!mounted) return;
+    final estimatedRequiredBytes = estimate.maximumBytes;
+    final hasEnoughEstimatedSpace = !estimate.hasEstimate ||
+        estimatedRequiredBytes + storageReserveBytes <= availableStorageBytes;
     final alreadyQueued = pending.where((song) {
       final status = _downloads.itemFor(song.videoId)?.status;
       return status == OfflineDownloadStatus.queued ||
@@ -262,6 +284,16 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
                     '${pending.length} lagu',
                     scheme,
                   ),
+                  _downloadEstimateRow(
+                    'Penyimpanan tersedia',
+                    _formatMegabytes(availableStorageBytes),
+                    scheme,
+                  ),
+                  _downloadEstimateRow(
+                    'Cadangan ruang wajib',
+                    _formatMegabytes(storageReserveBytes),
+                    scheme,
+                  ),
                   if (alreadyQueued > 0)
                     _downloadEstimateRow(
                       'Sudah ada di antrean',
@@ -283,11 +315,22 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
                   if (estimate.unknownDurationTracks > 0) ...[
                     const SizedBox(height: 8),
                     Text(
-                      '${estimate.unknownDurationTracks} lagu belum memiliki ukuran atau data durasi, jadi belum masuk ke estimasi MB.',
+                      '${estimate.unknownDurationTracks} lagu belum memiliki ukuran atau data durasi, jadi belum masuk ke estimasi MB. Ruang akan tetap diperiksa selama transfer.',
                       style: TextStyle(
                         color: scheme.error,
                         fontSize: 11,
                         height: 1.35,
+                      ),
+                    ),
+                  ],
+                  if (!hasEnoughEstimatedSpace) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'Ruang penyimpanan diperkirakan tidak cukup. Kosongkan ruang atau unduh lagu lebih sedikit.',
+                      style: TextStyle(
+                        color: scheme.error,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ],
@@ -319,7 +362,9 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
               child: const Text('Batal'),
             ),
             FilledButton.icon(
-              onPressed: () => Navigator.pop(dialogContext, true),
+              onPressed: hasEnoughEstimatedSpace
+                  ? () => Navigator.pop(dialogContext, true)
+                  : null,
               icon: const Icon(Icons.download_rounded, size: 18),
               label: const Text('Mulai download'),
             ),
@@ -341,6 +386,9 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
       }
       if (result.alreadyDownloaded > 0) {
         summary.add('${result.alreadyDownloaded} sudah offline');
+      }
+      if (result.duplicateInput > 0) {
+        summary.add('${result.duplicateInput} duplikat diabaikan');
       }
       if (result.failed > 0) {
         summary.add('${result.failed} gagal ditambahkan');

@@ -172,17 +172,25 @@ extension _HomeStateSync on _HomePageState {
     if (state.videoId.isNotEmpty &&
         activeId.isNotEmpty &&
         state.videoId != activeId) {
-      if (state.trackTransition && state.videoId.startsWith('local:')) {
-        YoutubeSearchResult? nextLocalTrack;
+      if (state.trackTransition) {
+        YoutubeSearchResult? nextTrack;
         for (final candidate in _activeList) {
-          if (candidate.videoId == state.videoId && candidate.isLocal) {
-            nextLocalTrack = candidate;
+          if (candidate.videoId == state.videoId) {
+            nextTrack = candidate;
             break;
           }
         }
-        if (nextLocalTrack == null) return;
-        _applyNativeGaplessTrackTransition(nextLocalTrack, state);
-        activeId = nextLocalTrack.videoId;
+        if (nextTrack == null) return;
+        _applyNativeGaplessTrackTransition(nextTrack, state);
+        activeId = nextTrack.videoId;
+        if (!nextTrack.isLocal &&
+            Platform.isAndroid &&
+            _youtubeController.isUsingYoutubeAudio) {
+          unawaited(_youtubeController.appendRemoteGaplessSuccessors(
+            currentVideoId: nextTrack.videoId,
+            candidates: _buildNativeYoutubeGaplessQueueFor(nextTrack),
+          ));
+        }
       } else {
         return;
       }

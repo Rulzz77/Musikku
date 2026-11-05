@@ -385,7 +385,7 @@ class AppSettingsPage extends StatelessWidget {
                 builder: (context, value, _) => SwitchListTile(
                   secondary: const Icon(Icons.equalizer_rounded),
                   title: const Text('Penyeimbang volume adaptif (Beta)', style: TextStyle(fontWeight: FontWeight.w700)),
-                  subtitle: const Text('Meratakan RMS dan menjaga headroom pada audio native Media3. Bukan standar LUFS/ReplayGain; fallback iframe YouTube tidak terpengaruh.'),
+                  subtitle: const Text('Leveler K-weighted sekitar 400 ms dengan pembatas puncak pada audio native Media3. Bukan LUFS terintegrasi/ReplayGain; fallback iframe YouTube tidak terpengaruh.'),
                   value: value,
                   onChanged: (next) => unawaited(settings.setLoudnessNormalization(next)),
                 ),

@@ -32,6 +32,7 @@ class AudioDownloadEstimate {
   static AudioDownloadEstimate fromSongs(
     Iterable<YoutubeSearchResult> songs, {
     Map<String, int> knownFileSizes = const <String, int>{},
+    Map<String, int> alreadyDownloadedBytes = const <String, int>{},
   }) {
     var estimated = 0.0;
     var minimum = 0.0;
@@ -42,11 +43,17 @@ class AudioDownloadEstimate {
 
     for (final song in songs) {
       final knownBytes = knownFileSizes[song.videoId];
+      final downloaded = (alreadyDownloadedBytes[song.videoId] ?? 0)
+          .clamp(0, 1 << 60)
+          .toDouble();
       if (knownBytes != null && knownBytes > 0) {
         knownFileSizesCount++;
-        estimated += knownBytes;
-        minimum += knownBytes;
-        maximum += knownBytes;
+        final remaining = (knownBytes - downloaded)
+            .clamp(0, knownBytes)
+            .toDouble();
+        estimated += remaining;
+        minimum += remaining;
+        maximum += remaining;
         continue;
       }
 
@@ -60,9 +67,12 @@ class AudioDownloadEstimate {
       }
 
       known++;
-      estimated += _bytesFor(duration, nominalBitrateKbps);
-      minimum += _bytesFor(duration, minimumBitrateKbps);
-      maximum += _bytesFor(duration, maximumBitrateKbps);
+      final estimate = _bytesFor(duration, nominalBitrateKbps);
+      final low = _bytesFor(duration, minimumBitrateKbps);
+      final high = _bytesFor(duration, maximumBitrateKbps);
+      estimated += (estimate - downloaded).clamp(0, estimate).toDouble();
+      minimum += (low - downloaded).clamp(0, low).toDouble();
+      maximum += (high - downloaded).clamp(0, high).toDouble();
     }
 
     return AudioDownloadEstimate(

@@ -25,6 +25,7 @@ import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
 import android.view.KeyEvent
+import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.Executors
@@ -68,6 +69,7 @@ class PlaybackService : MediaBrowserServiceCompat() {
         private const val BROWSE_RECENT_ID = "local_recent"
         private const val BROWSE_ARTISTS_ID = "local_artists"
         private const val BROWSE_ALBUMS_ID = "local_albums"
+        private const val BROWSE_PLAYLISTS_ID = "musikku_playlists"
         private const val MEDIA_ID_SEPARATOR = "|"
         private const val ANDROID_AUTO_PREFETCH_REMAINING = 8
 
@@ -129,6 +131,12 @@ class PlaybackService : MediaBrowserServiceCompat() {
         fun stopLocalForYoutubeStatic() { activeInstance?.stopLocalForYoutube() }
         fun clearNativeGaplessQueueStatic(): Boolean =
             activeInstance?.clearNativeGaplessQueue() == true
+
+        fun appendYoutubeGaplessQueueStatic(
+            currentVideoId: String,
+            tracks: List<Map<String, Any?>>,
+        ): Map<String, Any?> = activeInstance?.appendYoutubeGaplessQueue(currentVideoId, tracks)
+            ?: mapOf("appended" to 0, "reason" to "service_not_active")
 
         fun updateAudioMetadataStatic(
             videoId: String,
@@ -422,6 +430,17 @@ class PlaybackService : MediaBrowserServiceCompat() {
 
         val callback = object : AudioDeviceCallback() {
             override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>) {
+                val removedIds = removedDevices.map { it.id }.toSet()
+                val preferredId = getSharedPreferences(
+                    "musikku_playback_settings", Context.MODE_PRIVATE,
+                ).getInt("preferredAudioOutputId", -1)
+                if (preferredId >= 0 && preferredId in removedIds && isAudioPlayerSource()) {
+                    // Let Android select its default route while the preferred
+                    // device is absent. Keep the saved preference so it can be
+                    // restored when the same device reconnects.
+                    applyPreferredAudioOutput(-1)
+                }
+
                 val bluetoothRemoved = removedDevices.any(::isBluetoothOutput)
                 if (!bluetoothRemoved) return
 
@@ -516,7 +535,17 @@ class PlaybackService : MediaBrowserServiceCompat() {
     private data class GaplessLocalTrack(
         val videoId: String, val title: String, val artist: String, val mediaUri: String,
     )
+    private data class GaplessRemoteTrack(
+        val videoId: String,
+        val title: String,
+        val artist: String,
+        val thumbnailUrl: String,
+        val streamUrl: String,
+        val headers: Map<String, String>,
+        val durationMs: Long,
+    )
     private var pendingGaplessQueue: List<GaplessLocalTrack> = emptyList()
+    private val gaplessRemoteTracks = linkedMapOf<String, GaplessRemoteTrack>()
     private var nativeGaplessQueueIds: Set<String> = emptySet()
     private var localPlayer: ExoPlayer? = null
     private val localStateHandler = android.os.Handler(Looper.getMainLooper())
@@ -568,6 +597,9 @@ class PlaybackService : MediaBrowserServiceCompat() {
     }
 
     private val androidAutoBrowseExecutor = Executors.newSingleThreadExecutor()
+    // Stream extraction can involve slow network work; keep it off the same
+    // executor that serves Android Auto's catalogue pages and search results.
+    private val androidAutoResolveExecutor = Executors.newSingleThreadExecutor()
     private val androidAutoMainHandler = Handler(Looper.getMainLooper())
     private val audioLibraryObserver = object : ContentObserver(androidAutoMainHandler) {
         override fun onChange(selfChange: Boolean, uri: Uri?) {
@@ -579,6 +611,8 @@ class PlaybackService : MediaBrowserServiceCompat() {
         }
     }
     private var audioLibraryObserverRegistered = false
+    private var savedPlaylistPreferences: android.content.SharedPreferences? = null
+    private var savedPlaylistPreferenceListener: android.content.SharedPreferences.OnSharedPreferenceChangeListener? = null
 
     private var notificationTitle = ""
     private var notificationArtist = ""
@@ -604,6 +638,63 @@ class PlaybackService : MediaBrowserServiceCompat() {
         runCatching { contentResolver.unregisterContentObserver(audioLibraryObserver) }
         audioLibraryObserverRegistered = false
     }
+
+    private fun registerSavedPlaylistObserver() {
+        if (savedPlaylistPreferenceListener != null) return
+        val preferences = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == "flutter.playlists_v1") {
+                androidAutoMainHandler.post {
+                    notifyChildrenChanged(BROWSE_ROOT_ID)
+                    notifyChildrenChanged(BROWSE_PLAYLISTS_ID)
+                    readSavedPlaylists().forEach { playlist ->
+                        val id = playlist.optString("id")
+                        if (id.isNotBlank()) notifyChildrenChanged("app_playlist:${Uri.encode(id)}")
+                    }
+                }
+            }
+        }
+        savedPlaylistPreferences = preferences
+        savedPlaylistPreferenceListener = listener
+        preferences.registerOnSharedPreferenceChangeListener(listener)
+    }
+
+    private fun unregisterSavedPlaylistObserver() {
+        val preferences = savedPlaylistPreferences
+        val listener = savedPlaylistPreferenceListener
+        if (preferences != null && listener != null) {
+            runCatching { preferences.unregisterOnSharedPreferenceChangeListener(listener) }
+        }
+        savedPlaylistPreferences = null
+        savedPlaylistPreferenceListener = null
+    }
+
+    private data class SavedPlaylistTrack(
+        val videoId: String,
+        val title: String,
+        val artist: String,
+        val thumbnailUrl: String,
+        val sourceType: String,
+        val mediaUri: String,
+        val offlinePath: String,
+        val durationMs: Long,
+        val position: Int,
+    )
+
+    private data class ResolvedPlaylistTrack(
+        val mediaId: String,
+        val videoId: String,
+        val title: String,
+        val artist: String,
+        val thumbnailUrl: String,
+        val mediaUri: String,
+        val durationMs: Long,
+        val isRemote: Boolean,
+        val headers: Map<String, String>,
+    )
+
+    private val androidAutoPlaylistMediaTracks = linkedMapOf<String, ResolvedPlaylistTrack>()
+    private var androidAutoCustomPlaylistId = ""
 
     private data class BrowseAudioTrack(
         val id: Long,
@@ -705,10 +796,14 @@ class PlaybackService : MediaBrowserServiceCompat() {
             )
             items += browsableItem(BROWSE_ARTISTS_ID, "Artis", librarySubtitle)
             items += browsableItem(BROWSE_ALBUMS_ID, "Album", librarySubtitle)
+            items += browsableItem(BROWSE_PLAYLISTS_ID, "Playlist MusikKu", "Playlist yang dibuat di aplikasi")
             return items
         }
 
-        if (!hasAudioLibraryPermission()) return emptyList()
+        if (!hasAudioLibraryPermission() &&
+            parentId != BROWSE_PLAYLISTS_ID &&
+            !parentId.startsWith("app_playlist:")
+        ) return emptyList()
 
         return when {
             parentId == BROWSE_SONGS_ID -> {
@@ -728,7 +823,260 @@ class PlaybackService : MediaBrowserServiceCompat() {
                 queryBrowseTracks(parentId, limit = pageSize, offset = offset)
                     .mapIndexed { index, track -> trackBrowseItem(track, parentId, offset + index) }
             }
+            parentId == BROWSE_PLAYLISTS_ID -> loadSavedPlaylistFolders(page, pageSize)
+            parentId.startsWith("app_playlist:") -> loadSavedPlaylistSongs(
+                Uri.decode(parentId.removePrefix("app_playlist:")), page, pageSize,
+            )
             else -> emptyList()
+        }
+    }
+
+    private fun readSavedPlaylists(): List<org.json.JSONObject> {
+        val raw = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+            .getString("flutter.playlists_v1", null) ?: return emptyList()
+        return runCatching {
+            val array = org.json.JSONArray(raw)
+            buildList {
+                for (index in 0 until array.length()) {
+                    val item = array.optJSONObject(index) ?: continue
+                    if (item.optString("id").isNotBlank()) add(item)
+                }
+            }
+        }.getOrDefault(emptyList())
+    }
+
+    private fun savedPlaylistTracks(playlistId: String): List<SavedPlaylistTrack> {
+        val playlist = readSavedPlaylists().firstOrNull { it.optString("id") == playlistId }
+            ?: return emptyList()
+        val songs = playlist.optJSONArray("songs") ?: return emptyList()
+        return buildList {
+            for (index in 0 until songs.length()) {
+                val song = songs.optJSONObject(index) ?: continue
+                val videoId = song.optString("videoId").trim()
+                if (videoId.isBlank()) continue
+                val durationSeconds = song.optDouble("durationSeconds", 0.0)
+                val durationMs = if (durationSeconds.isFinite() && durationSeconds > 0.0) {
+                    (durationSeconds.coerceAtMost(86400.0) * 1000.0).toLong()
+                } else 0L
+                add(
+                    SavedPlaylistTrack(
+                        videoId = videoId,
+                        title = song.optString("title", "Tanpa judul").take(256),
+                        artist = song.optString("channelTitle", "Artis tidak diketahui").take(160),
+                        thumbnailUrl = song.optString("thumbnailUrl").take(2048),
+                        sourceType = song.optString("sourceType", "youtube"),
+                        mediaUri = song.optString("mediaUri").take(4096),
+                        offlinePath = song.optString("offlinePath").take(4096),
+                        durationMs = durationMs,
+                        position = index,
+                    ),
+                )
+            }
+        }
+    }
+
+    private fun loadSavedPlaylistFolders(page: Int, pageSize: Int): List<MediaBrowserCompat.MediaItem> {
+        val playlists = readSavedPlaylists()
+        val offset = browseOffset(page, pageSize)
+        return playlists.drop(offset).take(pageSize).map { playlist ->
+            val id = playlist.optString("id")
+            val name = playlist.optString("name", "Playlist").ifBlank { "Playlist" }
+            val count = playlist.optJSONArray("songs")?.length() ?: 0
+            browsableItem("app_playlist:${Uri.encode(id)}", name.take(120), "$count lagu")
+        }
+    }
+
+    private fun loadSavedPlaylistSongs(
+        playlistId: String,
+        page: Int,
+        pageSize: Int,
+    ): List<MediaBrowserCompat.MediaItem> {
+        val tracks = savedPlaylistTracks(playlistId)
+        val offset = browseOffset(page, pageSize)
+        return tracks.filter { it.position >= offset }.take(pageSize).map { track ->
+            playableBrowseItem(
+                mediaId = "app_track|${Uri.encode(playlistId)}|${track.position}|${Uri.encode(track.videoId)}",
+                title = track.title,
+                artist = track.artist,
+                album = "Playlist MusikKu",
+                durationMs = track.durationMs,
+                artworkUri = track.thumbnailUrl.takeIf { it.startsWith("https://") }?.let(Uri::parse),
+            )
+        }
+    }
+
+    private fun resolveSavedPlaylistTrack(track: SavedPlaylistTrack): ResolvedPlaylistTrack? {
+        val mediaId = "${track.videoId}@${track.position}"
+        val appData = File(applicationInfo.dataDir).canonicalFile
+        val offlineFile = track.offlinePath.takeIf { it.isNotBlank() }?.let { raw ->
+            runCatching { File(raw).canonicalFile }.getOrNull()?.takeIf { file ->
+                val parent = file.parentFile
+                file.isFile && parent?.name == "Offline" &&
+                    parent.parentFile?.name == "MusikKu" &&
+                    file.path.startsWith(appData.path + File.separator)
+            }
+        }
+        if (offlineFile != null) {
+            return ResolvedPlaylistTrack(
+                mediaId, track.videoId, track.title, track.artist, track.thumbnailUrl,
+                Uri.fromFile(offlineFile).toString(), track.durationMs, false, emptyMap(),
+            )
+        }
+
+        if (track.sourceType == "local" || track.videoId.startsWith("local:")) {
+            val parsed = runCatching { Uri.parse(track.mediaUri) }.getOrNull() ?: return null
+            if (parsed.scheme !in setOf("content", "file")) return null
+            return ResolvedPlaylistTrack(
+                mediaId, track.videoId, track.title, track.artist, track.thumbnailUrl,
+                parsed.toString(), track.durationMs, false, emptyMap(),
+            )
+        }
+
+        if (!track.videoId.matches(Regex("[A-Za-z0-9_-]{11}"))) return null
+        val resolved = NewPipeExtractorBridge.resolveAudioForPlayback(track.videoId)
+        val streamUrl = resolved["streamUrl"]?.toString()?.trim().orEmpty()
+        val uri = runCatching { Uri.parse(streamUrl) }.getOrNull() ?: return null
+        val host = uri.host?.lowercase().orEmpty()
+        if (uri.scheme != "https" ||
+            (host != "googlevideo.com" && !host.endsWith(".googlevideo.com")) ||
+            (uri.port != -1 && uri.port != 443) || uri.encodedAuthority?.contains('@') == true || uri.fragment.isNotEmpty()) {
+            return null
+        }
+        val rawHeaders = resolved["headers"] as? Map<*, *> ?: emptyMap<Any, Any>()
+        val headers = rawHeaders.mapNotNull { (key, value) ->
+            val name = key?.toString()?.trim().orEmpty()
+            val content = value?.toString()?.trim().orEmpty()
+            if (name.lowercase() !in setOf("user-agent", "referer", "origin") ||
+                content.isBlank() || content.length > 2048 || content.any { it == '\r' || it == '\n' }) {
+                null
+            } else name to content
+        }.toMap()
+        return ResolvedPlaylistTrack(
+            mediaId, track.videoId, track.title, track.artist, track.thumbnailUrl,
+            streamUrl, track.durationMs, true, headers,
+        )
+    }
+
+    private fun createSavedPlaylistMediaSource(track: ResolvedPlaylistTrack): androidx.media3.exoplayer.source.MediaSource {
+        val item = MediaItem.Builder()
+            .setMediaId(track.mediaId)
+            .setUri(Uri.parse(track.mediaUri))
+            .setMediaMetadata(
+                MediaMetadata.Builder().setTitle(track.title).setArtist(track.artist).build(),
+            )
+            .build()
+        val factory = if (track.isRemote) {
+            val http = DefaultHttpDataSource.Factory()
+                .setDefaultRequestProperties(track.headers)
+                .setAllowCrossProtocolRedirects(false)
+            DefaultMediaSourceFactory(DefaultDataSource.Factory(this, http))
+        } else {
+            DefaultMediaSourceFactory(this)
+        }
+        return factory.createMediaSource(item)
+    }
+
+    private fun playFromSavedPlaylist(playlistId: String, position: Int, expectedVideoId: String) {
+        if (position < 0) return
+        val generation = ++androidAutoBrowseGeneration
+        androidAutoBrowseQueueLoading = true
+        androidAutoResolveExecutor.execute {
+            val tracks = savedPlaylistTracks(playlistId)
+            val selected = tracks.firstOrNull { it.position == position }
+            if (selected == null || selected.videoId != expectedVideoId) {
+                androidAutoMainHandler.post { androidAutoBrowseQueueLoading = false }
+                return@execute
+            }
+            val resolvedTracks = mutableListOf<ResolvedPlaylistTrack>()
+            var nextPosition = position
+            for (track in tracks.filter { it.position >= position }.take(12)) {
+                nextPosition = track.position + 1
+                val resolved = runCatching { resolveSavedPlaylistTrack(track) }
+                    .onFailure { MusikKuLogger.w(TAG, "Android Auto playlist track resolve failed: ${track.videoId}", it) }
+                    .getOrNull()
+                if (resolved != null) resolvedTracks += resolved
+                // Do not block a head unit for too long; build a rolling batch.
+                if (resolvedTracks.size >= 6) break
+            }
+            androidAutoMainHandler.post {
+                if (generation != androidAutoBrowseGeneration) return@post
+                androidAutoBrowseQueueLoading = false
+                val first = resolvedTracks.firstOrNull()?.takeIf { it.videoId == selected.videoId }
+                    ?: return@post
+                val player = localPlayer ?: return@post
+                androidAutoPlaylistMediaTracks.clear()
+                gaplessRemoteTracks.clear()
+                resolvedTracks.forEach { track ->
+                    androidAutoPlaylistMediaTracks[track.mediaId] = track
+                    if (track.isRemote) {
+                        gaplessRemoteTracks[track.mediaId] = GaplessRemoteTrack(
+                            videoId = track.videoId,
+                            title = track.title,
+                            artist = track.artist,
+                            thumbnailUrl = track.thumbnailUrl,
+                            streamUrl = track.mediaUri,
+                            headers = track.headers,
+                            durationMs = track.durationMs,
+                        )
+                    }
+                }
+                nativeGaplessQueueIds = resolvedTracks.map { it.mediaId }.toSet()
+                androidAutoBrowseQueue = true
+                androidAutoBrowseParentId = "app_playlist:${Uri.encode(playlistId)}"
+                androidAutoCustomPlaylistId = playlistId
+                androidAutoBrowseSearchQuery = ""
+                androidAutoNextBrowsePosition = if (nextPosition < tracks.size) nextPosition else -1
+
+                val previousId = currentVideoId
+                currentVideoId = first.videoId
+                currentTitle = first.title
+                currentArtist = first.artist
+                currentThumbnailUrl = first.thumbnailUrl
+                currentSourceType = if (first.isRemote) "youtube_audio" else "local"
+                currentMediaUri = first.mediaUri
+                currentStreamHeaders = first.headers
+                currentLocalMediaId = if (first.videoId.startsWith("local:")) {
+                    first.videoId.removePrefix("local:")
+                } else ""
+                currentPositionMs = 0L
+                currentDurationMs = first.durationMs
+                currentPlaying = true
+                notificationArtwork = null
+                artworkGeneration += 1L
+                syncWakeLock()
+
+                runCatching {
+                    player.pause()
+                    player.clearMediaItems()
+                    val sources = resolvedTracks.map(::createSavedPlaylistMediaSource)
+                    player.setMediaSources(sources, 0, 0L)
+                    player.prepare()
+                    player.playWhenReady = true
+                }.onFailure {
+                    MusikKuLogger.e(TAG, "Gagal menyiapkan playlist MusikKu di Android Auto", it)
+                    androidAutoBrowseQueue = false
+                    nativeGaplessQueueIds = emptySet()
+                    androidAutoPlaylistMediaTracks.clear()
+                    gaplessRemoteTracks.clear()
+                    return@post
+                }
+                persistPlaybackSnapshot()
+                updateMediaSession()
+                notifyChildrenChanged(BROWSE_ROOT_ID)
+                loadNotificationArtworkIfNeeded()
+                if (!foregroundStarted) {
+                    startForeground(NOTIFICATION_ID, createNotification())
+                    foregroundStarted = true
+                } else {
+                    notificationManager().notify(NOTIFICATION_ID, createNotification())
+                }
+                notificationTitle = currentTitle
+                notificationArtist = currentArtist
+                notificationPlaying = currentPlaying
+                notificationDurationMs = currentDurationMs
+                scheduleSnapshotPersistence()
+                MusikKuLogger.i(TAG, "Android Auto opened playlist $playlistId at $position (was $previousId)")
+            }
         }
     }
 
@@ -911,6 +1259,16 @@ class PlaybackService : MediaBrowserServiceCompat() {
     }
 
     private fun playFromBrowseMediaId(mediaId: String) {
+        if (mediaId.startsWith("app_track|")) {
+            val parts = mediaId.split("|", limit = 4)
+            if (parts.size == 4) {
+                val playlistId = Uri.decode(parts[1])
+                val position = parts[2].toIntOrNull() ?: return
+                val videoId = Uri.decode(parts[3])
+                playFromSavedPlaylist(playlistId, position, videoId)
+            }
+            return
+        }
         if (mediaId == "now_playing") {
             if (isAudioPlayerSource()) playAudio() else if (!currentPlaying) sendCommandToFlutter("notificationPlayPause")
             return
@@ -994,9 +1352,8 @@ class PlaybackService : MediaBrowserServiceCompat() {
      * the single source of truth.
      */
     private fun maybeAppendAndroidAutoBrowseQueue(player: ExoPlayer) {
-        if (!androidAutoBrowseQueue || currentSourceType != "local" ||
-            androidAutoBrowseParentId.isBlank() || androidAutoNextBrowsePosition < 0 ||
-            androidAutoBrowseQueueLoading) {
+        if (!androidAutoBrowseQueue || androidAutoBrowseParentId.isBlank() ||
+            androidAutoNextBrowsePosition < 0 || androidAutoBrowseQueueLoading) {
             return
         }
         val remaining = player.mediaItemCount - player.currentMediaItemIndex - 1
@@ -1007,8 +1364,55 @@ class PlaybackService : MediaBrowserServiceCompat() {
         val searchQuery = androidAutoBrowseSearchQuery
         val offset = androidAutoNextBrowsePosition
         val recentFirst = parentId == BROWSE_RECENT_ID
+        val customPlaylistId = androidAutoCustomPlaylistId
         androidAutoBrowseQueueLoading = true
-        androidAutoBrowseExecutor.execute {
+        androidAutoResolveExecutor.execute {
+            if (customPlaylistId.isNotBlank()) {
+                val allTracks = savedPlaylistTracks(customPlaylistId)
+                val resolved = mutableListOf<ResolvedPlaylistTrack>()
+                var nextCustomPosition = offset
+                for (track in allTracks.filter { it.position >= offset }.take(12)) {
+                    nextCustomPosition = track.position + 1
+                    val item = runCatching { resolveSavedPlaylistTrack(track) }
+                        .onFailure { MusikKuLogger.w(TAG, "Android Auto playlist prefetch failed: ${track.videoId}", it) }
+                        .getOrNull()
+                    if (item != null) resolved += item
+                    if (resolved.size >= 6) break
+                }
+                androidAutoMainHandler.post {
+                    if (generation != androidAutoBrowseGeneration || player !== localPlayer ||
+                        !androidAutoBrowseQueue || androidAutoCustomPlaylistId != customPlaylistId) {
+                        return@post
+                    }
+                    val fresh = resolved.filter { it.mediaId !in nativeGaplessQueueIds }
+                    if (fresh.isNotEmpty()) {
+                        runCatching {
+                            player.addMediaSources(player.mediaItemCount, fresh.map(::createSavedPlaylistMediaSource))
+                            fresh.forEach { track ->
+                                androidAutoPlaylistMediaTracks[track.mediaId] = track
+                                nativeGaplessQueueIds = nativeGaplessQueueIds + track.mediaId
+                                if (track.isRemote) {
+                                    gaplessRemoteTracks[track.mediaId] = GaplessRemoteTrack(
+                                        track.videoId, track.title, track.artist, track.thumbnailUrl,
+                                        track.mediaUri, track.headers, track.durationMs,
+                                    )
+                                }
+                            }
+                            androidAutoNextBrowsePosition = if (nextCustomPosition < allTracks.size) nextCustomPosition else -1
+                        }.onFailure { MusikKuLogger.e(TAG, "Android Auto playlist append failed", it) }
+                    } else {
+                        androidAutoNextBrowsePosition = if (nextCustomPosition > offset &&
+                            allTracks.any { it.position >= nextCustomPosition }) nextCustomPosition else -1
+                    }
+                    androidAutoBrowseQueueLoading = false
+                    if (fresh.isEmpty() && androidAutoNextBrowsePosition >= 0 &&
+                        player.currentMediaItem != null && player.mediaItemCount == player.currentMediaItemIndex + 1) {
+                        androidAutoMainHandler.postDelayed({ maybeAppendAndroidAutoBrowseQueue(player) }, 180L)
+                    }
+                }
+                return@execute
+            }
+
             val nextTracks = runCatching {
                 queryBrowseTracks(
                     parentId,
@@ -1049,15 +1453,15 @@ class PlaybackService : MediaBrowserServiceCompat() {
 
     private fun skipToNextPlayback() {
         val player = localPlayer
-        if (currentSourceType == "local" && androidAutoBrowseQueue) {
+        if (androidAutoBrowseQueue) {
             if (player?.hasNextMediaItem() == true) player.seekToNextMediaItem()
             return
         }
         // The app's local gapless queue is authoritative only while a native
         // successor is still loaded. At its end, let Flutter resolve the next
         // item so a mixed playlist can continue with its online track.
-        if (currentSourceType == "local" && nativeGaplessQueueIds.isNotEmpty() &&
-            player?.hasNextMediaItem() == true) {
+        if ((currentSourceType == "local" || currentSourceType == "youtube_audio") &&
+            nativeGaplessQueueIds.isNotEmpty() && player?.hasNextMediaItem() == true) {
             player.seekToNextMediaItem()
             return
         }
@@ -1066,10 +1470,41 @@ class PlaybackService : MediaBrowserServiceCompat() {
 
     private fun skipToPreviousPlayback() {
         val player = localPlayer
-        if (currentSourceType == "local" && androidAutoBrowseQueue) {
+        if (androidAutoBrowseQueue) {
             if (player != null) {
-                if (player.currentPosition > 3_000L) player.seekTo(0L)
-                else if (player.hasPreviousMediaItem()) player.seekToPreviousMediaItem()
+                if (player.currentPosition > 3_000L) {
+                    player.seekTo(0L)
+                } else if (player.hasPreviousMediaItem()) {
+                    player.seekToPreviousMediaItem()
+                } else if (androidAutoCustomPlaylistId.isNotBlank()) {
+                    // The native queue starts at the selected playlist row, so
+                    // the item before that row is not loaded. Resolve it on the
+                    // browse worker and rebuild the forward queue from there.
+                    val playlistId = androidAutoCustomPlaylistId
+                    val currentMediaId = player.currentMediaItem?.mediaId.orEmpty()
+                    val currentPosition = currentMediaId.substringAfterLast('@').toIntOrNull()
+                    if (currentPosition != null && currentPosition > 0 &&
+                        !androidAutoBrowseQueueLoading) {
+                        val generation = ++androidAutoBrowseGeneration
+                        androidAutoBrowseQueueLoading = true
+                        androidAutoBrowseExecutor.execute {
+                            val previous = savedPlaylistTracks(playlistId)
+                                .firstOrNull { it.position == currentPosition - 1 }
+                            androidAutoMainHandler.post {
+                                if (generation != androidAutoBrowseGeneration ||
+                                    androidAutoCustomPlaylistId != playlistId) return@post
+                                androidAutoBrowseQueueLoading = false
+                                if (previous != null) {
+                                    playFromSavedPlaylist(
+                                        playlistId,
+                                        previous.position,
+                                        previous.videoId,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
             }
             return
         }
@@ -1190,6 +1625,7 @@ class PlaybackService : MediaBrowserServiceCompat() {
         registerNoisyReceiver()
         registerAudioDeviceCallback()
         registerAudioLibraryObserver()
+        registerSavedPlaylistObserver()
     }
 
 
@@ -1243,21 +1679,36 @@ class PlaybackService : MediaBrowserServiceCompat() {
                 }
 
                 override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                    if (currentSourceType != "local" || mediaItem == null) return
+                    if (mediaItem == null) return
+                    pcmAudioProcessor.resetForNewTrack()
                     val nextId = mediaItem.mediaId
                     if (nextId == currentVideoId || nextId !in nativeGaplessQueueIds) return
-                    val nextUri = mediaItem.localConfiguration?.uri?.toString().orEmpty()
+                    val appPlaylistTrack = androidAutoPlaylistMediaTracks[nextId]
+                    val remoteTrack = gaplessRemoteTracks[nextId]
+                    val isRemoteTransition = appPlaylistTrack?.isRemote == true || remoteTrack != null
+                    val isLocalTransition = appPlaylistTrack?.isRemote == false ||
+                        (appPlaylistTrack == null && currentSourceType == "local" && nextId.startsWith("local:"))
+                    if (!isLocalTransition && !isRemoteTransition) return
+
+                    val nextUri = appPlaylistTrack?.mediaUri
+                        ?: mediaItem.localConfiguration?.uri?.toString().orEmpty()
                     if (nextUri.isBlank()) return
 
-                    currentVideoId = nextId
-                    currentTitle = mediaItem.mediaMetadata.title?.toString().orEmpty()
-                        .ifBlank { "Tanpa judul" }
-                    currentArtist = mediaItem.mediaMetadata.artist?.toString().orEmpty()
-                    currentThumbnailUrl = ""
+                    currentVideoId = appPlaylistTrack?.videoId ?: remoteTrack?.videoId ?: nextId
+                    currentSourceType = if (isRemoteTransition) "youtube_audio" else "local"
+                    currentTitle = appPlaylistTrack?.title
+                        ?: mediaItem.mediaMetadata.title?.toString().orEmpty().ifBlank { "Tanpa judul" }
+                    currentArtist = appPlaylistTrack?.artist
+                        ?: mediaItem.mediaMetadata.artist?.toString().orEmpty()
+                    currentThumbnailUrl = appPlaylistTrack?.thumbnailUrl ?: remoteTrack?.thumbnailUrl.orEmpty()
                     currentMediaUri = nextUri
-                    currentLocalMediaId = nextId.removePrefix("local:")
+                    currentStreamHeaders = appPlaylistTrack?.headers ?: remoteTrack?.headers ?: emptyMap()
+                    currentLocalMediaId = if (isLocalTransition && currentVideoId.startsWith("local:")) {
+                        currentVideoId.removePrefix("local:")
+                    } else ""
                     currentPositionMs = 0L
-                    currentDurationMs = player.duration.takeIf { it > 0L && it != C.TIME_UNSET }
+                    currentDurationMs = remoteTrack?.durationMs?.takeIf { it > 0L }
+                        ?: player.duration.takeIf { it > 0L && it != C.TIME_UNSET }
                         ?: currentDurationMs
                     currentPlaying = player.isPlaying
                     syncWakeLock()
@@ -1271,7 +1722,7 @@ class PlaybackService : MediaBrowserServiceCompat() {
                         if (player.isPlaying) "playing" else "buffering",
                         trackTransition = true,
                     )
-                    maybeAppendAndroidAutoBrowseQueue(player)
+                    if (androidAutoBrowseQueue) maybeAppendAndroidAutoBrowseQueue(player)
                     if (foregroundStarted) {
                         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
                         manager.notify(NOTIFICATION_ID, createNotification())
@@ -1289,7 +1740,12 @@ class PlaybackService : MediaBrowserServiceCompat() {
                             currentPlaying = false
                             emitLocalState("ended")
                             updateMediaSession()
-                            sendCommandToFlutter("notificationLocalEnded")
+                            // Android Auto browse queues are authoritative and
+                            // must stop at their own playlist boundary. Never
+                            // hand their end event to Flutter Radio/auto-next.
+                            if (!androidAutoBrowseQueue) {
+                                sendCommandToFlutter("notificationLocalEnded")
+                            }
                         }
                     }
                 }
@@ -1367,9 +1823,87 @@ class PlaybackService : MediaBrowserServiceCompat() {
             .build()
     }
 
+    private fun appendYoutubeGaplessQueue(
+        expectedCurrentVideoId: String,
+        rawTracks: List<Map<String, Any?>>,
+    ): Map<String, Any?> {
+        val player = localPlayer
+            ?: return mapOf("appended" to 0, "reason" to "player_not_ready")
+        if (currentSourceType != "youtube_audio" || currentVideoId != expectedCurrentVideoId) {
+            return mapOf("appended" to 0, "reason" to "track_changed")
+        }
+
+        val seen = (nativeGaplessQueueIds + currentVideoId).toMutableSet()
+        val tracks = rawTracks.mapNotNull { raw ->
+            val id = raw["videoId"]?.toString()?.trim().orEmpty()
+            val url = raw["streamUrl"]?.toString()?.trim().orEmpty()
+            val uri = runCatching { Uri.parse(url) }.getOrNull()
+            val host = uri?.host?.lowercase().orEmpty()
+            val trusted = uri != null && uri.scheme == "https" &&
+                (host == "googlevideo.com" || host.endsWith(".googlevideo.com")) &&
+                (uri.port == -1 || uri.port == 443) &&
+                uri.encodedAuthority?.contains('@') != true &&
+                uri.fragment.isNullOrEmpty()
+            if (!id.matches(Regex("[A-Za-z0-9_-]{11}")) || !trusted || !seen.add(id)) {
+                return@mapNotNull null
+            }
+            val rawHeaders = raw["headers"] as? Map<*, *> ?: emptyMap<Any, Any>()
+            val headers = rawHeaders.mapNotNull { (key, value) ->
+                val name = key?.toString()?.trim().orEmpty()
+                val data = value?.toString()?.trim().orEmpty()
+                if (name.lowercase() !in setOf("user-agent", "referer", "origin") ||
+                    data.isBlank() || data.length > 2048 || data.any { it == '\r' || it == '\n' }) {
+                    null
+                } else name to data
+            }.toMap()
+            val durationSeconds = (raw["durationSeconds"] as? Number)?.toDouble() ?: 0.0
+            GaplessRemoteTrack(
+                videoId = id,
+                title = raw["title"]?.toString().orEmpty().take(256).ifBlank { "Tanpa judul" },
+                artist = raw["artist"]?.toString().orEmpty().take(128),
+                thumbnailUrl = raw["thumbnailUrl"]?.toString().orEmpty().take(2048),
+                streamUrl = url,
+                headers = headers,
+                durationMs = if (durationSeconds.isFinite()) (durationSeconds.coerceIn(0.0, 86400.0) * 1000.0).toLong() else 0L,
+            )
+        }.take(8)
+
+        if (tracks.isEmpty()) return mapOf("appended" to 0, "reason" to "no_valid_tracks")
+        return try {
+            val sources = tracks.map { track ->
+                val metadata = MediaMetadata.Builder()
+                    .setTitle(track.title)
+                    .setArtist(track.artist)
+                    .build()
+                val mediaItem = MediaItem.Builder()
+                    .setMediaId(track.videoId)
+                    .setUri(Uri.parse(track.streamUrl))
+                    .setMediaMetadata(metadata)
+                    .build()
+                val httpFactory = DefaultHttpDataSource.Factory()
+                    .setDefaultRequestProperties(track.headers)
+                    .setAllowCrossProtocolRedirects(false)
+                val dataSourceFactory = DefaultDataSource.Factory(this, httpFactory)
+                DefaultMediaSourceFactory(dataSourceFactory).createMediaSource(mediaItem)
+            }
+            // Re-check after building sources: a new track selection can race
+            // this async extraction while source construction is in progress.
+            if (currentSourceType != "youtube_audio" || currentVideoId != expectedCurrentVideoId) {
+                return mapOf("appended" to 0, "reason" to "track_changed")
+            }
+            player.addMediaSources(player.mediaItemCount, sources)
+            tracks.forEach { gaplessRemoteTracks[it.videoId] = it }
+            nativeGaplessQueueIds = nativeGaplessQueueIds + tracks.map { it.videoId }
+            mapOf("appended" to tracks.size, "reason" to "ok")
+        } catch (error: Exception) {
+            MusikKuLogger.e(TAG, "Gagal menyiapkan native YouTube queue", error)
+            mapOf("appended" to 0, "reason" to "prepare_failed")
+        }
+    }
+
     private fun clearNativeGaplessQueue(): Boolean {
         val player = localPlayer ?: return false
-        if (currentSourceType != "local") return false
+        if (currentSourceType != "local" && currentSourceType != "youtube_audio") return false
         val firstFutureIndex = (player.currentMediaItemIndex + 1).coerceAtLeast(0)
         val count = player.mediaItemCount
         if (firstFutureIndex < count) {
@@ -1384,6 +1918,12 @@ class PlaybackService : MediaBrowserServiceCompat() {
         }
         nativeGaplessQueueIds = emptySet()
         pendingGaplessQueue = emptyList()
+        gaplessRemoteTracks.clear()
+        androidAutoPlaylistMediaTracks.clear()
+        androidAutoCustomPlaylistId = ""
+        androidAutoBrowseQueue = false
+        androidAutoBrowseParentId = ""
+        androidAutoNextBrowsePosition = -1
         return true
     }
 
@@ -1750,6 +2290,9 @@ class PlaybackService : MediaBrowserServiceCompat() {
         val previousPlaying = currentPlaying
         val previousDurationMs = currentDurationMs
 
+        gaplessRemoteTracks.clear()
+        androidAutoPlaylistMediaTracks.clear()
+        androidAutoCustomPlaylistId = ""
         currentVideoId = intent?.getStringExtra("videoId") ?: ""
         currentTitle = intent?.getStringExtra("title") ?: "MusikKu"
         currentArtist = intent?.getStringExtra("artist") ?: ""
@@ -2244,7 +2787,9 @@ class PlaybackService : MediaBrowserServiceCompat() {
 
     override fun onDestroy() {
         unregisterAudioLibraryObserver()
+        unregisterSavedPlaylistObserver()
         androidAutoBrowseExecutor.shutdownNow()
+        androidAutoResolveExecutor.shutdownNow()
         cancelPendingHeadsetClick()
         mediaButtonHandler.removeCallbacksAndMessages(null)
         snapshotHandler.removeCallbacks(snapshotRunnable)

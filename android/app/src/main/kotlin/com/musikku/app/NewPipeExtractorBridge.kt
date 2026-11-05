@@ -148,6 +148,9 @@ internal object NewPipeExtractorBridge {
         return output
     }
 
+    /** Resolve a current native playback stream for Android Auto playlist playback. */
+    internal fun resolveAudioForPlayback(videoId: String): Map<String, Any> = resolveAudio(videoId)
+
     private fun resolveAudio(videoId: String): Map<String, Any> {
         ensureInitialized()
         val watchUrl = "https://www.youtube.com/watch?v=$videoId"
@@ -192,6 +195,7 @@ internal object NewPipeExtractorBridge {
             ),
             "bitrate" to selected.averageBitrate,
             "format" to suffix,
+            "codec" to selected.codec,
         )
     }
 

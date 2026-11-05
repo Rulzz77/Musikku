@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/services.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 
@@ -38,6 +39,9 @@ class NativeYoutubeController {
   // Guard async stream resolution: a slow previous search must never replace
   // the song the user selected most recently.
   int _youtubeAudioLoadGeneration = 0;
+  final Set<String> _nativeRemoteGaplessQueueIds = <String>{};
+  int _remoteGaplessQueueGeneration = 0;
+  Future<void> _remoteGaplessAppendQueue = Future<void>.value();
 
   NativeYoutubeState get lastState => _lastState;
   /// True when a remote YouTube source is active on this platform.
@@ -343,6 +347,7 @@ class NativeYoutubeController {
     double startSeconds = 0.0,
     double durationSeconds = 0.0,
     bool playing = true,
+    List<Map<String, Object?>> gaplessQueue = const <Map<String, Object?>>[],
   }) async {
     if (!RegExp(r'^[A-Za-z0-9_-]{11}$').hasMatch(videoId)) {
       throw ArgumentError.value(videoId, 'videoId', 'ID YouTube tidak valid');
@@ -373,6 +378,8 @@ class NativeYoutubeController {
     }
 
     final generation = ++_youtubeAudioLoadGeneration;
+    _remoteGaplessQueueGeneration++;
+    _nativeRemoteGaplessQueueIds.clear();
     _activeVideoId = videoId;
     _usingYoutubeAudio = false;
     _setIntent(playing);
@@ -466,6 +473,13 @@ class NativeYoutubeController {
       });
       if (generation == _youtubeAudioLoadGeneration) {
         _usingYoutubeAudio = true;
+        if (gaplessQueue.isNotEmpty) {
+          unawaited(_resolveAndAppendRemoteGaplessQueue(
+            currentVideoId: videoId,
+            candidates: gaplessQueue,
+            generation: generation,
+          ));
+        }
       }
     } catch (_) {
       if (generation == _youtubeAudioLoadGeneration) {
@@ -479,6 +493,164 @@ class NativeYoutubeController {
         ));
       }
       rethrow;
+    }
+  }
+
+  /// Add a rolling window of upcoming remote items to the same Media3 player.
+  /// Calls are serialized so a transition cannot race an earlier resolver job.
+  Future<void> appendRemoteGaplessSuccessors({
+    required String currentVideoId,
+    required List<Map<String, Object?>> candidates,
+  }) async {
+    if (!Platform.isAndroid || !_usingYoutubeAudio || candidates.isEmpty) return;
+    final generation = _youtubeAudioLoadGeneration;
+    final queueGeneration = _remoteGaplessQueueGeneration;
+    final previous = _remoteGaplessAppendQueue;
+    final next = previous.then((_) => _performRemoteGaplessAppend(
+          currentVideoId: currentVideoId,
+          candidates: candidates,
+          generation: generation,
+          queueGeneration: queueGeneration,
+          maximumNewTracks: 6,
+        ));
+    _remoteGaplessAppendQueue = next.catchError((Object error, StackTrace stackTrace) {
+      debugPrint('REMOTE GAPLESS APPEND QUEUE ERROR: $error');
+    });
+    await next;
+  }
+
+  Future<void> _resolveAndAppendRemoteGaplessQueue({
+    required String currentVideoId,
+    required List<Map<String, Object?>> candidates,
+    required int generation,
+  }) async {
+    final queueGeneration = _remoteGaplessQueueGeneration;
+    final previous = _remoteGaplessAppendQueue;
+    final next = previous.then((_) => _performRemoteGaplessAppend(
+          currentVideoId: currentVideoId,
+          candidates: candidates,
+          generation: generation,
+          queueGeneration: queueGeneration,
+          maximumNewTracks: 6,
+        ));
+    _remoteGaplessAppendQueue = next.catchError((Object error, StackTrace stackTrace) {
+      debugPrint('REMOTE GAPLESS INITIAL QUEUE ERROR: $error');
+    });
+    await next;
+  }
+
+  Future<void> _performRemoteGaplessAppend({
+    required String currentVideoId,
+    required List<Map<String, Object?>> candidates,
+    required int generation,
+    required int queueGeneration,
+    required int maximumNewTracks,
+  }) async {
+    if (generation != _youtubeAudioLoadGeneration ||
+        queueGeneration != _remoteGaplessQueueGeneration ||
+        !_usingYoutubeAudio ||
+        candidates.isEmpty) {
+      return;
+    }
+
+    final resolvedTracks = <Map<String, Object?>>[];
+    final resolvedIds = <String>[];
+    for (final candidate in candidates) {
+      if (generation != _youtubeAudioLoadGeneration ||
+          queueGeneration != _remoteGaplessQueueGeneration) {
+        return;
+      }
+      if (resolvedTracks.length >= maximumNewTracks) break;
+      final videoId = candidate['videoId']?.toString().trim() ?? '';
+      if (!RegExp(r'^[A-Za-z0-9_-]{11}$').hasMatch(videoId) ||
+          videoId == currentVideoId ||
+          _nativeRemoteGaplessQueueIds.contains(videoId) ||
+          resolvedIds.contains(videoId)) {
+        continue;
+      }
+      try {
+        final resolved = await _newPipe.invokeMapMethod<String, dynamic>(
+          'resolveAudio',
+          {'videoId': videoId},
+        ).timeout(const Duration(seconds: 18));
+        if (generation != _youtubeAudioLoadGeneration ||
+            queueGeneration != _remoteGaplessQueueGeneration) {
+          return;
+        }
+        final streamUrl = resolved?['streamUrl']?.toString().trim() ?? '';
+        final uri = Uri.tryParse(streamUrl);
+        final host = uri?.host.toLowerCase() ?? '';
+        final trusted = uri != null &&
+            uri.scheme == 'https' &&
+            (host == 'googlevideo.com' || host.endsWith('.googlevideo.com')) &&
+            (uri.port == -1 || uri.port == 443) &&
+            uri.userInfo.isEmpty &&
+            uri.fragment.isEmpty;
+        if (!trusted) break;
+
+        final safeHeaders = <String, String>{};
+        final rawHeaders = resolved?['headers'];
+        if (rawHeaders is Map) {
+          for (final entry in rawHeaders.entries) {
+            final key = entry.key?.toString().trim() ?? '';
+            final value = entry.value?.toString().trim() ?? '';
+            if (!const {'user-agent', 'referer', 'origin'}
+                    .contains(key.toLowerCase()) ||
+                value.isEmpty ||
+                value.length > 2048 ||
+                value.contains('\r') ||
+                value.contains('\n')) {
+              continue;
+            }
+            safeHeaders[key] = value;
+          }
+        }
+        final duration = candidate['durationSeconds'];
+        final durationSeconds = duration is num && duration.isFinite
+            ? duration.toDouble().clamp(0.0, 86400.0)
+            : 0.0;
+        resolvedTracks.add(<String, Object?>{
+          'videoId': videoId,
+          'title': candidate['title']?.toString() ?? 'Tanpa judul',
+          'artist': candidate['artist']?.toString() ?? '',
+          'thumbnailUrl': candidate['thumbnailUrl']?.toString() ?? '',
+          'streamUrl': streamUrl,
+          'headers': safeHeaders,
+          'durationSeconds': durationSeconds,
+        });
+        resolvedIds.add(videoId);
+      } catch (error) {
+        // Stop at the first unavailable successor to preserve playlist order.
+        debugPrint('REMOTE GAPLESS PRELOAD STOPPED ($videoId): $error');
+        break;
+      }
+    }
+
+    if (generation != _youtubeAudioLoadGeneration ||
+        queueGeneration != _remoteGaplessQueueGeneration ||
+        resolvedTracks.isEmpty) {
+      return;
+    }
+    try {
+      final result = await _methods.invokeMapMethod<String, dynamic>(
+        'appendYoutubeGaplessQueue',
+        <String, Object?>{
+          'currentVideoId': currentVideoId,
+          'tracks': resolvedTracks,
+        },
+      ).timeout(const Duration(seconds: 20));
+      if (generation != _youtubeAudioLoadGeneration ||
+          queueGeneration != _remoteGaplessQueueGeneration ||
+          result == null) {
+        return;
+      }
+      final appended = (result['appended'] as num?)?.toInt() ?? 0;
+      final acceptedCount = appended.clamp(0, resolvedIds.length).toInt();
+      for (final id in resolvedIds.take(acceptedCount)) {
+        _nativeRemoteGaplessQueueIds.add(id);
+      }
+    } catch (error) {
+      debugPrint('REMOTE GAPLESS QUEUE NOT ATTACHED: $error');
     }
   }
 
@@ -521,6 +693,8 @@ class NativeYoutubeController {
   /// Remove only future native playlist entries; keep the current track running.
   Future<void> clearNativeGaplessQueue() async {
     if (!Platform.isAndroid) return;
+    _remoteGaplessQueueGeneration++;
+    _nativeRemoteGaplessQueueIds.clear();
     try {
       await _methods.invokeMethod<void>('clearNativeGaplessQueue');
     } catch (_) {

@@ -50,6 +50,18 @@ void main() {
       expect(result.estimatedBytes, 8640000);
     });
 
+    test('subtracts bytes already present in a resumable partial file', () {
+      final result = AudioDownloadEstimate.fromSongs(
+        [_song('known', 60), _song('estimate', 60)],
+        knownFileSizes: const {'known': 1500000},
+        alreadyDownloadedBytes: const {'known': 500000, 'estimate': 100000},
+      );
+
+      expect(result.estimatedBytes, 1860000);
+      expect(result.minimumBytes, 1620000);
+      expect(result.maximumBytes, 2340000);
+    });
+
     test('prefers an already known in-progress file size', () {
       final result = AudioDownloadEstimate.fromSongs(
         [_song('known', 60), _song('estimate', 60)],

@@ -75,6 +75,7 @@ class MusicPlayerPage extends StatefulWidget {
 
 class _MusicPlayerPageState extends State<MusicPlayerPage> {
   static const Color _canvas = appInk;
+  static const Color _playerBackground = Color(0xFF3B5554);
   static const Color _muted = Color(0xFFAAB7C8);
   static const Color _citrus = appGold;
   static const Color _coral = appSecondary;
@@ -123,20 +124,20 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
         statusBarColor: Colors.transparent,
         statusBarIconBrightness: Brightness.light,
         statusBarBrightness: Brightness.dark,
-        systemNavigationBarColor: _canvas,
+        systemNavigationBarColor: _playerBackground,
         systemNavigationBarIconBrightness: Brightness.light,
         systemNavigationBarDividerColor: Colors.transparent,
       ),
       child: Material(
-        color: _canvas,
+        color: _playerBackground,
         child: Stack(
           fit: StackFit.expand,
           children: [
             Positioned.fill(
               child: ImageFiltered(
-                imageFilter: ui.ImageFilter.blur(sigmaX: 38, sigmaY: 38),
+                imageFilter: ui.ImageFilter.blur(sigmaX: 52, sigmaY: 52),
                 child: Opacity(
-                  opacity: 0.22,
+                  opacity: 0.34,
                   child: AlbumArtworkImage(track: widget.video, fit: BoxFit.cover),
                 ),
               ),
@@ -147,25 +148,26 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [Color(0xB50D1422), Color(0xE80D1422), _canvas],
-                    stops: [0, 0.48, 1],
+                    colors: [
+                      Color(0x300D1422),
+                      Color(0x554B6764),
+                      Color(0xAA405B59),
+                      _playerBackground,
+                    ],
+                    stops: [0, 0.42, 0.76, 1],
                   ),
                 ),
               ),
             ),
+            // The artwork starts below the Android status bar. The header is
+            // overlaid on the artwork, while the image itself never covers the
+            // clock, signal, or battery area.
             SafeArea(
               top: true,
               bottom: true,
-              child: Column(
-                children: [
-                  _buildHeader(),
-                  Expanded(
-                    child: ValueListenableBuilder<NativeYoutubeState>(
-                      valueListenable: widget.nativeState,
-                      builder: (context, state, _) => _buildBody(context, state),
-                    ),
-                  ),
-                ],
+              child: ValueListenableBuilder<NativeYoutubeState>(
+                valueListenable: widget.nativeState,
+                builder: (context, state, _) => _buildBody(context, state),
               ),
             ),
           ],
@@ -250,90 +252,113 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
       builder: (context, constraints) {
         final width = constraints.maxWidth;
         final height = constraints.maxHeight;
-        final compact = height < 640;
-        // Keep text and controls comfortably inset while letting the artwork
-        // run almost edge-to-edge, like the supplied player reference.
+        final compact = height < 650;
         final side = width >= 700 ? 34.0 : 20.0;
-        final maxCover = math.min(width - 8.0, width >= 700 ? 460.0 : 440.0);
 
-        // Reserve enough room for title, queue shortcut, seek bar, transport,
-        // volume and the four existing actions. The cover expands on tall
-        // phones but shrinks predictably on short screens instead of causing
-        // the lower controls to overflow.
-        final reservedForExpandedControls = _showVolumeControl ? 14.0 : 0.0;
-        final reservedForPlaybackError =
-            matchesTrack && state.playbackState == NativePlaybackState.error ? 20.0 : 0.0;
-        final coverSize = math.min(
-          maxCover,
-          math.max(
-            136.0,
-            height - (compact ? 318.0 : 326.0) - reservedForExpandedControls - reservedForPlaybackError,
-          ),
+        // Wide, edge-to-edge artwork (not a square card). The lower edge fades
+        // into the blurred artwork backdrop to create the soft gradient seen
+        // in the user's reference. Height is responsive to short phone screens.
+        final artworkHeight = math.min(
+          width * 0.82,
+          height * (compact ? 0.39 : 0.44),
         ).toDouble();
 
-        return Padding(
-          padding: EdgeInsets.fromLTRB(side, compact ? 0 : 2, side, compact ? 0 : 4),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              SizedBox(
-                height: coverSize,
-                child: LayoutBuilder(
-                  builder: (context, stage) {
-                    if (widget.platformPlayer != null) {
-                      final playerWidth = math.min(width - 8, 480.0).toDouble();
-                      final playerHeight = math.min(playerWidth * 9 / 16, stage.maxHeight * 0.86).toDouble();
-                      return Center(
-                        child: SizedBox(
-                          width: playerWidth,
-                          height: playerHeight,
-                          child: widget.platformPlayer!,
-                        ),
-                      );
-                    }
-                    return Center(
-                      child: OverflowBox(
-                        minWidth: coverSize,
-                        maxWidth: coverSize,
-                        minHeight: coverSize,
-                        maxHeight: coverSize,
-                        alignment: Alignment.center,
-                        child: _buildAlbumCover(coverSize),
+        return Column(
+          children: [
+            _buildArtworkHero(width: width, height: artworkHeight),
+            Expanded(
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(side, compact ? 0 : 3, side, compact ? 0 : 5),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _buildTrackInfo(busy),
+                    _buildNextTrack(),
+                    _buildSeekBar(
+                      context: context,
+                      duration: duration,
+                      maxMs: maxMs,
+                      sliderValue: sliderValue,
+                      bufferedTrackValue: bufferedTrackValue,
+                    ),
+                    _buildControlDeck(busy: busy, playing: playing, compact: compact),
+                    _buildVolumeControl(compact: compact),
+                    if (matchesTrack && state.playbackState == NativePlaybackState.error)
+                      const Text(
+                        'Audio gagal dimuat. Coba putar ulang atau pilih lagu berikutnya.',
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: Color(0xFFFF9A91), fontSize: 10.5),
                       ),
-                    );
-                  },
+                    _buildBottomActions(context),
+                  ],
                 ),
               ),
-              _buildTrackInfo(busy),
-              _buildNextTrack(),
-              _buildSeekBar(
-                context: context,
-                duration: duration,
-                maxMs: maxMs,
-                sliderValue: sliderValue,
-                bufferedTrackValue: bufferedTrackValue,
-              ),
-              Transform.translate(
-                offset: Offset(0, compact ? -3 : -7),
-                child: _buildControlDeck(busy: busy, playing: playing, compact: compact),
-              ),
-              _buildVolumeControl(compact: compact),
-              if (matchesTrack && state.playbackState == NativePlaybackState.error)
-                const Padding(
-                  padding: EdgeInsets.only(bottom: 2),
-                  child: Text(
-                    'Audio gagal dimuat. Coba putar ulang atau pilih lagu berikutnya.',
-                    textAlign: TextAlign.center,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: Color(0xFFFF9A91), fontSize: 10.5),
-                  ),
-                ),
-              _buildBottomActions(context),
-            ],
-          ),
+            ),
+          ],
         );
       },
+    );
+  }
+
+  Widget _buildArtworkHero({required double width, required double height}) {
+    return SizedBox(
+      width: width,
+      height: height,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (widget.platformPlayer != null)
+            Center(
+              child: SizedBox(
+                width: width,
+                height: math.min(height, width * 9 / 16).toDouble(),
+                child: widget.platformPlayer!,
+              ),
+            )
+          else
+            ShaderMask(
+              blendMode: BlendMode.dstIn,
+              shaderCallback: (bounds) => const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Colors.black, Colors.black, Colors.black, Colors.transparent],
+                stops: [0, 0.48, 0.72, 1],
+              ).createShader(bounds),
+              child: AlbumArtworkImage(
+                key: ValueKey<String>('player-wide-art-${widget.video.videoId}'),
+                track: widget.video,
+                width: width,
+                height: height,
+                fit: BoxFit.cover,
+                iconSize: 58,
+              ),
+            ),
+          // Keep the header readable on bright album artwork without adding
+          // a card border, radius, or a separate square cover surface.
+          const Positioned.fill(
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Color(0x65000000), Colors.transparent, Colors.transparent],
+                    stops: [0, 0.27, 1],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: _buildHeader(),
+          ),
+        ],
+      ),
     );
   }
 
@@ -368,48 +393,6 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
     );
   }
 
-  Widget _buildAlbumCover(double size) {
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 420),
-      switchInCurve: Curves.easeOutCubic,
-      switchOutCurve: Curves.easeInCubic,
-      transitionBuilder: (child, animation) => FadeTransition(
-        opacity: animation,
-        child: ScaleTransition(
-          scale: Tween<double>(begin: 0.96, end: 1).animate(animation),
-          child: child,
-        ),
-      ),
-      child: Container(
-        key: ValueKey<String>('player-cover-frame-${widget.video.videoId}'),
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(7),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.42),
-              blurRadius: 38,
-              offset: const Offset(0, 18),
-            ),
-            BoxShadow(
-              color: const Color(0xFFEEF3FA).withValues(alpha: 0.055),
-              blurRadius: 1,
-              spreadRadius: 1,
-            ),
-          ],
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: AlbumArtworkImage(
-          track: widget.video,
-          width: size,
-          height: size,
-          fit: BoxFit.cover,
-          iconSize: 58,
-        ),
-      ),
-    );
-  }
 
   Widget _buildTrackInfo(bool busy) {
     return Row(

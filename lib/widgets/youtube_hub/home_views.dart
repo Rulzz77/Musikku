@@ -617,24 +617,29 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
     _showSongList('Favorit MusikKu', songs);
   }
 
-  /// Pintasan: ikon bulat dengan satu baris label. Keterangan tambahan
-  /// (jumlah lagu, dll.) tampil sebagai tooltip saat ditekan lama.
+  /// Dua pintasan utama Beranda memakai kartu yang lebih lega dan seimbang.
   Widget _homeShortcutRow(
     List<({String title, String subtitle, IconData icon, VoidCallback onTap})> actions,
   ) {
-    return SizedBox(
-      height: 78,
-      child: ListView.separated(
-        padding: const EdgeInsets.fromLTRB(16, 1, 16, 7),
-        scrollDirection: Axis.horizontal,
-        itemCount: actions.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 10),
-        itemBuilder: (context, index) => _homeShortcutItem(
-          title: actions[index].title,
-          subtitle: actions[index].subtitle,
-          icon: actions[index].icon,
-          onTap: actions[index].onTap,
-          highlighted: actions[index].title == 'Dengar bareng',
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 2, 16, 10),
+      child: SizedBox(
+        height: 104,
+        child: Row(
+          children: [
+            for (var index = 0; index < actions.length; index++) ...[
+              if (index > 0) const SizedBox(width: 12),
+              Expanded(
+                child: _homeShortcutItem(
+                  title: actions[index].title,
+                  subtitle: actions[index].subtitle,
+                  icon: actions[index].icon,
+                  onTap: actions[index].onTap,
+                  highlighted: actions[index].title == 'Dengar bareng',
+                ),
+              ),
+            ],
+          ],
         ),
       ),
     );
@@ -651,16 +656,15 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
     final accent = highlighted ? scheme.secondary : scheme.primary;
     return Tooltip(
       message: subtitle,
-      child: SizedBox(
-        width: 148,
+      child: SizedBox.expand(
         child: Material(
           color: scheme.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(19),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: onTap,
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(10, 9, 9, 8),
+              padding: const EdgeInsets.fromLTRB(13, 11, 12, 11),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -668,21 +672,49 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
                   Row(
                     children: [
                       Container(
-                        width: 30,
-                        height: 30,
-                        decoration: BoxDecoration(color: accent.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(10)),
-                        child: Icon(icon, size: 17, color: accent),
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: accent.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(icon, size: 20, color: accent),
                       ),
                       const Spacer(),
-                      Icon(Icons.arrow_outward_rounded, size: 13, color: scheme.onSurfaceVariant.withValues(alpha: 0.65)),
+                      Icon(
+                        Icons.arrow_outward_rounded,
+                        size: 15,
+                        color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
+                      ),
                     ],
                   ),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurface, fontSize: 11.5, fontWeight: FontWeight.w900)),
-                      const SizedBox(height: 2),
-                      Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 9.5, fontWeight: FontWeight.w600)),
+                      Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: scheme.onSurface,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: -0.15,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        subtitle,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: scheme.onSurfaceVariant,
+                          fontSize: 10.5,
+                          height: 1.15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ],
                   ),
                 ],

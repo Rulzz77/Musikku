@@ -282,7 +282,6 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                       bufferedTrackValue: bufferedTrackValue,
                     ),
                     _buildControlDeck(busy: busy, playing: playing, compact: compact),
-                    _buildVolumeControl(compact: compact),
                     if (matchesTrack && state.playbackState == NativePlaybackState.error)
                       const Text(
                         'Audio gagal dimuat. Coba putar ulang atau pilih lagu berikutnya.',
@@ -469,97 +468,6 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
     unawaited(widget.onVolumeChanged(next, persist));
   }
 
-  Widget _buildVolumeControl({required bool compact}) {
-    final expanded = _showVolumeControl;
-    final sliderWidth = compact ? 116.0 : 150.0;
-
-    return AnimatedSize(
-      duration: const Duration(milliseconds: 220),
-      curve: Curves.easeOutCubic,
-      alignment: Alignment.center,
-      child: SizedBox(
-        height: expanded ? 48 : 34,
-        child: Center(
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeOutCubic,
-            padding: EdgeInsets.symmetric(horizontal: expanded ? 8 : 0, vertical: 1),
-            decoration: BoxDecoration(
-              color: expanded ? const Color(0xFF151F30).withValues(alpha: 0.92) : Colors.transparent,
-              borderRadius: BorderRadius.circular(18),
-              border: expanded
-                  ? Border.all(color: const Color(0xFFEEF3FA).withValues(alpha: 0.09))
-                  : Border.all(color: Colors.transparent),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Tooltip(
-                  message: expanded ? 'Tutup pengatur volume' : 'Atur volume',
-                  child: InkWell(
-                    customBorder: const CircleBorder(),
-                    onTap: () => setState(() => _showVolumeControl = !_showVolumeControl),
-                    child: SizedBox(
-                      width: 34,
-                      height: 34,
-                      child: Icon(
-                        _volumePreview == 0 ? Icons.volume_off_rounded : Icons.volume_up_rounded,
-                        color: expanded ? _citrus : _muted,
-                        size: 20,
-                      ),
-                    ),
-                  ),
-                ),
-                AnimatedSize(
-                  duration: const Duration(milliseconds: 220),
-                  curve: Curves.easeOutCubic,
-                  alignment: Alignment.centerLeft,
-                  child: expanded
-                      ? Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            SizedBox(
-                              width: sliderWidth,
-                              child: SliderTheme(
-                                data: SliderTheme.of(context).copyWith(
-                                  trackHeight: 3,
-                                  activeTrackColor: _citrus,
-                                  inactiveTrackColor: const Color(0xFFEEF3FA).withValues(alpha: 0.16),
-                                  thumbColor: _citrus,
-                                  overlayColor: _citrus.withValues(alpha: 0.12),
-                                  thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                                  overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
-                                ),
-                                child: Slider(
-                                  min: 0,
-                                  max: 100,
-                                  divisions: 100,
-                                  value: _volumePreview.toDouble(),
-                                  onChanged: (value) => _setVolumePreview(value.round()),
-                                  onChangeEnd: (value) => _setVolumePreview(value.round(), persist: true),
-                                ),
-                              ),
-                            ),
-                            SizedBox(
-                              width: 34,
-                              child: Text(
-                                '$_volumePreview%',
-                                textAlign: TextAlign.end,
-                                style: const TextStyle(color: _muted, fontSize: 10, fontWeight: FontWeight.w800),
-                              ),
-                            ),
-                          ],
-                        )
-                      : const SizedBox(width: 0, height: 34),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildControlDeck({required bool busy, required bool playing, required bool compact}) {
     return ValueListenableBuilder<PlayerUiState>(
       valueListenable: widget.playerUiState,
@@ -664,23 +572,111 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
 
   Widget _buildBottomActions(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 5),
       decoration: BoxDecoration(
         color: const Color(0xFFEEF3FA).withValues(alpha: 0.055),
         borderRadius: BorderRadius.circular(15),
         border: Border.all(color: const Color(0xFFEEF3FA).withValues(alpha: 0.075)),
       ),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Expanded(child: _bottomAction(icon: widget.inPlaylist ? Icons.check_circle_rounded : Icons.playlist_add_rounded, label: 'Playlist', selected: widget.inPlaylist, onPressed: widget.onAddToPlaylist)),
-          Expanded(child: _bottomAction(icon: Icons.lyrics_rounded, label: 'Lirik', onPressed: widget.onOpenLyrics)),
-          Expanded(
-            child: ValueListenableBuilder<bool>(
-              valueListenable: widget.sleepActive,
-              builder: (context, active, _) => _bottomAction(icon: active ? Icons.timer_rounded : Icons.bedtime_outlined, label: 'Timer', selected: active, onPressed: widget.followingRoom ? null : widget.onOpenSleepTimer),
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: _bottomAction(
+                  icon: widget.inPlaylist ? Icons.check_circle_rounded : Icons.playlist_add_rounded,
+                  label: 'Playlist',
+                  selected: widget.inPlaylist,
+                  onPressed: widget.onAddToPlaylist,
+                ),
+              ),
+              Expanded(
+                child: _bottomAction(
+                  icon: Icons.lyrics_rounded,
+                  label: 'Lirik',
+                  onPressed: widget.onOpenLyrics,
+                ),
+              ),
+              Expanded(
+                child: _bottomAction(
+                  icon: _volumePreview == 0 ? Icons.volume_off_rounded : Icons.volume_up_rounded,
+                  label: 'Volume',
+                  selected: _showVolumeControl,
+                  onPressed: () => setState(() => _showVolumeControl = !_showVolumeControl),
+                ),
+              ),
+              Expanded(
+                child: ValueListenableBuilder<bool>(
+                  valueListenable: widget.sleepActive,
+                  builder: (context, active, _) => _bottomAction(
+                    icon: active ? Icons.timer_rounded : Icons.bedtime_outlined,
+                    label: 'Timer',
+                    selected: active,
+                    onPressed: widget.followingRoom ? null : widget.onOpenSleepTimer,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: _bottomAction(
+                  icon: Icons.queue_music_rounded,
+                  label: 'Antrean',
+                  onPressed: widget.onOpenQueue,
+                ),
+              ),
+            ],
           ),
-          Expanded(child: _bottomAction(icon: Icons.queue_music_rounded, label: 'Antrean', onPressed: widget.onOpenQueue)),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic,
+            alignment: Alignment.topCenter,
+            child: _showVolumeControl
+                ? Padding(
+                    padding: const EdgeInsets.fromLTRB(9, 5, 9, 1),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.volume_down_rounded, color: _muted, size: 17),
+                        const SizedBox(width: 5),
+                        Expanded(
+                          child: SliderTheme(
+                            data: SliderTheme.of(context).copyWith(
+                              trackHeight: 3,
+                              activeTrackColor: _citrus,
+                              inactiveTrackColor: const Color(0xFFEEF3FA).withValues(alpha: 0.16),
+                              thumbColor: _citrus,
+                              overlayColor: _citrus.withValues(alpha: 0.12),
+                              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                              overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+                            ),
+                            child: Slider(
+                              min: 0,
+                              max: 100,
+                              divisions: 100,
+                              value: _volumePreview.toDouble(),
+                              onChanged: (value) => _setVolumePreview(value.round()),
+                              onChangeEnd: (value) => _setVolumePreview(value.round(), persist: true),
+                            ),
+                          ),
+                        ),
+                        SizedBox(
+                          width: 35,
+                          child: Text(
+                            '$_volumePreview%',
+                            textAlign: TextAlign.end,
+                            style: const TextStyle(
+                              color: _muted,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 5),
+                        const Icon(Icons.volume_up_rounded, color: _muted, size: 17),
+                      ],
+                    ),
+                  )
+                : const SizedBox(width: 0, height: 0),
+          ),
         ],
       ),
     );

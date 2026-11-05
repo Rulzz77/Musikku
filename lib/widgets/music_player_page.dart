@@ -19,7 +19,6 @@ class MusicPlayerPage extends StatefulWidget {
   const MusicPlayerPage({
     super.key,
     required this.video,
-    this.nextVideo,
     required this.nativeState,
     required this.playerUiState,
     required this.onBack,
@@ -45,7 +44,6 @@ class MusicPlayerPage extends StatefulWidget {
   });
 
   final YoutubeSearchResult video;
-  final YoutubeSearchResult? nextVideo;
   final ValueListenable<NativeYoutubeState> nativeState;
   final ValueListenable<PlayerUiState> playerUiState;
   final VoidCallback onBack;
@@ -258,9 +256,12 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
         // Wide, edge-to-edge artwork (not a square card). The lower edge fades
         // into the blurred artwork backdrop to create the soft gradient seen
         // in the user's reference. Height is responsive to short phone screens.
+        // Keep the artwork visibly taller so the track title sits a little
+        // lower, close to the approved reference, without pushing controls
+        // toward the bottom edge on compact phones.
         final artworkHeight = math.min(
-          width * 0.82,
-          height * (compact ? 0.39 : 0.44),
+          width * 1.12,
+          height * (compact ? 0.46 : 0.54),
         ).toDouble();
 
         return Column(
@@ -273,7 +274,6 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
                     _buildTrackInfo(busy),
-                    _buildNextTrack(),
                     _buildSeekBar(
                       context: context,
                       duration: duration,
@@ -324,7 +324,9 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [Colors.black, Colors.black, Colors.black, Colors.transparent],
-                stops: [0, 0.48, 0.72, 1],
+                // Preserve the artwork longer and let the blur/gradient begin
+                // lower, then blend it smoothly into the player background.
+                stops: [0, 0.66, 0.84, 1],
               ).createShader(bounds),
               child: AlbumArtworkImage(
                 key: ValueKey<String>('player-wide-art-${widget.video.videoId}'),
@@ -361,38 +363,6 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
       ),
     );
   }
-
-  Widget _buildNextTrack() {
-    final next = widget.nextVideo;
-    final title = next == null ? 'Lihat antrean' : MusicTitleFormatter.clean(next.title);
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: widget.onOpenQueue,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 4),
-          child: Row(
-            children: [
-              const Icon(Icons.music_note_rounded, color: _muted, size: 19),
-              const SizedBox(width: 9),
-              Expanded(
-                child: Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: _muted, fontSize: 13, fontWeight: FontWeight.w700),
-                ),
-              ),
-              const SizedBox(width: 6),
-              const Icon(Icons.chevron_right_rounded, color: _muted, size: 21),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
 
   Widget _buildTrackInfo(bool busy) {
     return Row(

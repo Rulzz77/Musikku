@@ -939,7 +939,7 @@ class PlaybackService : MediaBrowserServiceCompat() {
         val host = uri.host?.lowercase().orEmpty()
         if (uri.scheme != "https" ||
             (host != "googlevideo.com" && !host.endsWith(".googlevideo.com")) ||
-            (uri.port != -1 && uri.port != 443) || uri.encodedAuthority?.contains('@') == true || uri.fragment.isNotEmpty()) {
+            (uri.port != -1 && uri.port != 443) || uri.encodedAuthority?.contains('@') == true || !uri.fragment.isNullOrEmpty()) {
             return null
         }
         val rawHeaders = resolved["headers"] as? Map<*, *> ?: emptyMap<Any, Any>()
@@ -1068,7 +1068,8 @@ class PlaybackService : MediaBrowserServiceCompat() {
                     startForeground(NOTIFICATION_ID, createNotification())
                     foregroundStarted = true
                 } else {
-                    notificationManager().notify(NOTIFICATION_ID, createNotification())
+                    val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                    manager.notify(NOTIFICATION_ID, createNotification())
                 }
                 notificationTitle = currentTitle
                 notificationArtist = currentArtist

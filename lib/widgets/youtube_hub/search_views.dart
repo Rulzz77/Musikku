@@ -19,7 +19,6 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
     if (picked == null || picked.query.trim().isEmpty || !mounted) return;
     setState(() {
       _activeChip = -1;
-      _searchMode = 'music';
       _activeSearchFilters = picked.filters;
     });
     _searchController.text = picked.query.trim();
@@ -115,8 +114,9 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
         queryTokens.every(channelTokens.contains);
   }
 
-  /// Turunkan kartu artis dari hasil pencarian yang sudah ada: channel yang
-  /// namanya cocok dengan query dan memiliki minimal 3 lagu di hasil teratas.
+  /// Turunkan kartu artis dari hasil pencarian yang sudah ada. Satu hasil
+  /// dari channel yang namanya cocok sudah cukup karena hasil tersebut sudah
+  /// melewati filter musik dan pencarian channel tidak perlu menunggu 3 lagu.
   List<YoutubeChannelSearchResult> _artistChannelsFromResults(String query) {
     final counts = <String, int>{};
     final samples = <String, YoutubeSearchResult>{};
@@ -131,7 +131,7 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
     }
     final ranked = counts.entries
         .where((entry) =>
-            entry.value >= 3 &&
+            entry.value >= 1 &&
             _channelNameMatchesArtistQuery(
               samples[entry.key]!.channelTitle,
               query,
@@ -217,7 +217,6 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
       _activeChip = 0;
       _loading = false;
       _query = '';
-      _searchMode = 'music';
       _searchResults = const [];
       _searchChannels = const [];
       _channelSearchLoading = false;
@@ -238,8 +237,7 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
       setState(() {
         _activeChip = 0;
         _query = '';
-        _searchMode = 'music';
-        _searchResults = const [];
+          _searchResults = const [];
         _searchChannels = const [];
         _channelSearchLoading = false;
         _artistChannelMode = false;
@@ -268,7 +266,7 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
     try {
       final filters = _activeSearchFilters;
       final searchQuery = filters.buildQuery(query);
-      final videos = await _searchService.search(searchQuery, filter: _searchMode);
+      final videos = await _searchService.search(searchQuery);
       if (!mounted || requestId != _searchRequestId) return;
 
       final updatedHistory = List<String>.from(_searchHistory)
@@ -366,7 +364,7 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
       _exploreError = '';
     });
     try {
-      var results = await _searchService.search(query, filter: 'music');
+      var results = await _searchService.search(query);
 
       // Dangdut sering diunggah melalui label/artist channels yang tidak selalu
       // memakai kata "official" di judul. Cari variasi tambahan hanya saat hasil
@@ -389,10 +387,7 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
         };
         for (final fallbackQuery in fallbackQueries) {
           try {
-            final extra = await _searchService.search(
-              fallbackQuery,
-              filter: 'music',
-            );
+            final extra = await _searchService.search(fallbackQuery);
             for (final video in extra) {
               if (video.videoId.isNotEmpty &&
                   !video.isLive &&

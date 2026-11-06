@@ -6,9 +6,6 @@ import '../models/youtube_search_result.dart';
 import '../services/search_suggest_service.dart';
 import '../widgets/music_design.dart';
 
-/// Mode pencarian MusikKu: katalog lagu saja.
-enum YoutubeSearchMode { music }
-
 enum SearchDurationFilter { any, underFourMinutes, fourToTwentyMinutes, overTwentyMinutes }
 enum SearchContentFilter { any, officialAudio, musicVideo, livePerformance }
 enum SearchSortOrder { relevance, newest, mostViewed }
@@ -114,12 +111,10 @@ class YoutubeSearchFilters {
 
 class YoutubeSearchRequest {
   final String query;
-  final YoutubeSearchMode mode;
   final YoutubeSearchFilters filters;
 
   const YoutubeSearchRequest({
     required this.query,
-    required this.mode,
     this.filters = const YoutubeSearchFilters(),
   });
 }
@@ -199,7 +194,7 @@ class _YoutubeSearchPageState extends State<YoutubeSearchPage> {
     final q = value.trim();
     if (q.isEmpty) return;
     Navigator.of(context).pop(
-      YoutubeSearchRequest(query: q, mode: YoutubeSearchMode.music, filters: _filters),
+      YoutubeSearchRequest(query: q, filters: _filters),
     );
   }
 

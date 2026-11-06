@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:crypto/crypto.dart' show sha256;
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:http/http.dart' as http;
 import 'package:youtube_explode_dart/youtube_explode_dart.dart' as ytex;
@@ -39,13 +38,6 @@ class _ChannelCacheEntry {
   final List<YoutubeChannelSearchResult> results;
 
   _ChannelCacheEntry(this.time, this.results);
-}
-
-class _VideoDetailCacheEntry {
-  final DateTime time;
-  final YoutubeSearchResult result;
-
-  _VideoDetailCacheEntry(this.time, this.result);
 }
 
 /// Satu halaman hasil lagu terbaru yang masih relevan dengan konteks pencarian untuk autoplay.
@@ -144,19 +136,6 @@ class YoutubeSearchService {
     ttl: Duration(days: 30),
   );
 
-  // Detail metadata for video IDs reused across queries, radio, and the home
-  // feed. This cache shares snippets/statistics/durations locally so a new
-  // query that returns familiar songs does not need another videos.list call.
-  static const Duration _videoDetailTtl = Duration(hours: 24);
-  static const DiskCache _videoDetailDisk = DiskCache(
-    namespace: 'video_detail',
-    maxEntries: 250,
-    ttl: _videoDetailTtl,
-  );
-  static final Map<String, _VideoDetailCacheEntry> _videoDetailCache =
-      <String, _VideoDetailCacheEntry>{};
-  static Future<void> _videoDetailWriteQueue = Future<void>.value();
-
   static List<YoutubeSearchResult> _resultsFromJson(Object? raw) =>
       YoutubeSearchResponseParser.resultsFromJson(raw);
 
@@ -173,8 +152,6 @@ class YoutubeSearchService {
 
   SmartSearchIntent interpretSearch(String query) =>
       YoutubeSearchQueryParser.interpret(query);
-
-  String describeSearch(String query) => interpretSearch(query).label;
 
   /// Konversi metadata Video dari youtube_explode_dart menjadi model app.
   /// Properti dibaca defensif karena metadata video YouTube bisa tidak lengkap.
@@ -333,25 +310,53 @@ class YoutubeSearchService {
     }
   }
 
-  Future<List<YoutubeSearchResult>> search(
-    String query, {
-    String filter = 'music',
-  }) async {
+  static int _channelSearchMatchScore(String channelTitle, String query) {
+    String normalize(String value) => value
+        .toLowerCase()
+        .replaceAll(
+          RegExp(
+            r'\b(?:official(?:\s+music)?(?:\s+channel)?|vevo|topic|music\s+channel|channel)\b',
+            caseSensitive: false,
+          ),
+          ' ',
+        )
+        .replaceAll(RegExp(r'[^a-z0-9\s]'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+
+    final wanted = normalize(query);
+    final found = normalize(channelTitle);
+    if (wanted.isEmpty || found.isEmpty) return 0;
+    if (wanted == found) return 100;
+    if (found.startsWith('$wanted ') || wanted.startsWith('$found ')) return 85;
+    final tokens = wanted.split(' ').where((token) => token.length > 1).toSet();
+    final channelTokens = found.split(' ').toSet();
+    if (tokens.isNotEmpty && tokens.every(channelTokens.contains)) return 70;
+    return 0;
+  }
+
+  Future<List<YoutubeSearchResult>> search(String query) async {
     final keyword = query.trim();
     if (keyword.isEmpty) return const [];
 
     final intent = interpretSearch(keyword);
-    final safeFilter = 'official-music';
-    final effectiveQuery = _officialSearchQuery(intent.apiQuery);
+    // Jangan paksa kata 'official' pada pencarian artis. Rilis artis
+    // independen sering tidak memakai marker tersebut; policy di bawah tetap
+    // ketat untuk pencarian umum dan hanya melonggar pada channel artis cocok.
+    final effectiveQuery = intent.apiQuery;
     final cacheKey =
-        'explodeSearchV2Official|${effectiveQuery.toLowerCase()}|${intent.latest ? 'date' : 'relevance'}|$safeFilter';
+        'explodeSearchV3ArtistAware|${effectiveQuery.toLowerCase()}|${intent.latest ? 'date' : 'relevance'}';
     final cached = _cache[cacheKey];
 
     if (cached != null &&
         DateTime.now().difference(cached.time) < _cacheTtl) {
       debugPrint('EXPLODE SEARCH CACHE HIT (memory): ${intent.apiQuery}');
       return cached.results
-          .where(YoutubeMusicPolicy.isOfficialMusicReleaseCandidate)
+          .where((video) =>
+              YoutubeMusicPolicy.isOfficialMusicReleaseCandidateForQuery(
+                video,
+                query: keyword,
+              ))
           .toList(growable: false);
     }
 
@@ -362,12 +367,15 @@ class YoutubeSearchService {
     final diskResults = _resultsFromJson(diskRaw);
     if (diskRaw is List && (diskRaw.isEmpty || diskResults.isNotEmpty)) {
       debugPrint('EXPLODE SEARCH CACHE HIT (disk): ${intent.apiQuery}');
-      final officialResults = diskResults
-          .where(YoutubeMusicPolicy.isOfficialMusicReleaseCandidate)
+      final acceptedResults = diskResults
+          .where((video) =>
+              YoutubeMusicPolicy.isOfficialMusicReleaseCandidateForQuery(
+                video,
+                query: keyword,
+              ))
           .toList(growable: false);
-      _putCache(cacheKey, _CacheEntry(DateTime.now(), officialResults));
-      _rememberVideoDetails(officialResults);
-      return officialResults;
+      _putCache(cacheKey, _CacheEntry(DateTime.now(), acceptedResults));
+      return acceptedResults;
     }
 
     debugPrint('EXPLODE SEARCH NETWORK REQUEST: ${intent.apiQuery}');
@@ -387,14 +395,15 @@ class YoutubeSearchService {
             if (video.isLive || video.isUpcoming) return false;
             final seconds = video.durationSeconds;
             if (seconds != null && seconds <= 60) return false;
-            return isMusicCatalogItem(video) &&
-                YoutubeMusicPolicy.isOfficialMusicReleaseCandidate(video);
+            return YoutubeMusicPolicy.isOfficialMusicReleaseCandidateForQuery(
+              video,
+              query: keyword,
+            );
           })
-          .take(dataSaverLevel >= 2 ? 6 : (dataSaverLevel == 1 ? 10 : 16))
+          .take(dataSaverLevel >= 2 ? 6 : (dataSaverLevel == 1 ? 10 : 30))
           .toList(growable: false);
 
       _putCache(cacheKey, _CacheEntry(DateTime.now(), results));
-      _rememberVideoDetails(results);
       await _disk.put(
         'q|$cacheKey',
         results.map((video) => video.toJson()).toList(),
@@ -412,7 +421,7 @@ class YoutubeSearchService {
     final keyword = query.trim();
     if (keyword.isEmpty) return const [];
 
-    final cacheKey = 'channelExplodeV1|${keyword.toLowerCase()}';
+    final cacheKey = 'channelExplodeV2ArtistRanked|${keyword.toLowerCase()}';
     final cached = _channelCache[cacheKey];
     if (cached != null &&
         DateTime.now().difference(cached.time) < _cacheTtl) {
@@ -452,7 +461,13 @@ class YoutubeSearchService {
         if (channelId.isNotEmpty) candidates.putIfAbsent(channelId, () => item);
       }
 
-      final tasks = candidates.entries.take(8).map((entry) async {
+      final orderedCandidates = candidates.entries.toList()
+        ..sort((a, b) => _channelSearchMatchScore(
+              _explodeVideoAuthor(b.value), keyword,
+            ).compareTo(
+              _channelSearchMatchScore(_explodeVideoAuthor(a.value), keyword),
+            ));
+      final tasks = orderedCandidates.take(12).map((entry) async {
         final fallback = entry.value;
         var title = _decodeHtml(_explodeVideoAuthor(fallback));
         var description = _decodeHtml(_explodeVideoDescription(fallback));
@@ -735,7 +750,6 @@ class YoutubeSearchService {
             .where(YoutubeMusicPolicy.isOfficialMusicReleaseCandidate)
             .toList(growable: false);
         _putCache(cacheKey, _CacheEntry(DateTime.now(), officialFromDisk));
-        _rememberVideoDetails(officialFromDisk);
         return officialFromDisk.take(maxResults).toList(growable: false);
       }
     }
@@ -756,7 +770,6 @@ class YoutubeSearchService {
     );
     final items = data['items'];
     final parsed = _parseVideoResources(items is List ? items : const []);
-    _rememberVideoDetails(parsed);
     final results = parsed
         .where(isMusicCatalogItem)
         .where(YoutubeMusicPolicy.isOfficialMusicReleaseCandidate)
@@ -839,57 +852,10 @@ class YoutubeSearchService {
     return results.take(maxResults).toList(growable: false);
   }
 
-  static String _videoDetailDiskKey(String videoId) =>
-      'video|${sha256.convert(utf8.encode(videoId))}';
-
-  /// Simpan detail video ke cache memori (LRU) dan ke disk dalam satu batch.
-  /// Hanya video yang punya durasi atau status live/upcoming yang disimpan.
-  static void _rememberVideoDetails(Iterable<YoutubeSearchResult> details) {
-    final toDisk = <String, Object>{};
-
-    for (final detail in details) {
-      if (detail.videoId.isEmpty ||
-          detail.isLocal ||
-          (detail.durationSeconds == null &&
-              !detail.isLive &&
-              !detail.isUpcoming)) {
-        continue;
-      }
-
-      _videoDetailCache.remove(detail.videoId); // pindah ke posisi terbaru
-      _videoDetailCache[detail.videoId] =
-          _VideoDetailCacheEntry(DateTime.now(), detail);
-
-      try {
-        toDisk[_videoDetailDiskKey(detail.videoId)] = detail.toJson();
-      } catch (_) {
-        // Entri yang tidak bisa diserialisasi cukup dilewati.
-      }
-    }
-
-    while (_videoDetailCache.length > 300) {
-      _videoDetailCache.remove(_videoDetailCache.keys.first);
-    }
-
-    if (toDisk.isEmpty) return;
-    // DiskCache sudah menyerialkan penulisan per namespace dan tidak pernah
-    // melempar error; catchError di sini hanya sebagai pengaman tambahan.
-    _videoDetailWriteQueue = _videoDetailWriteQueue
-        .then((_) => _videoDetailDisk.putAll(toDisk))
-        .catchError((_) {});
-  }
-
   /// Resource videos.list -> model; buang durasi sangat pendek di parser.
   /// Penyaringan Shorts tanpa hashtag dan video pendek non-musik ada di policy.
   List<YoutubeSearchResult> _parseVideoResources(List items) =>
       YoutubeSearchResponseParser.parseVideoResources(items);
-
-  /// Alias untuk source lama. Semua radio baru memakai [searchLatest].
-  Future<RadioPage> searchPopular(
-    String query, {
-    String? pageToken,
-  }) =>
-      searchLatest(query, pageToken: pageToken);
 
   Future<http.Response> _getWithRetry(
     Uri uri, {
@@ -1051,12 +1017,6 @@ class YoutubeSearchService {
   // ini menambah trafik di luar API resmi dan dapat memicu 403/429.
   // Sekarang filter memakai metadata yang sudah dimiliki aplikasi (judul,
   // deskripsi, dan nama channel), tanpa request tambahan ke halaman HTML.
-
-  /// Kompatibilitas untuk pemanggil lama. ID saja tidak cukup untuk menentukan
-  /// Short melalui Data API resmi; pakai [isLikelyShortForm] pada metadata video.
-  @Deprecated(
-      'Gunakan isLikelyShortForm(YoutubeSearchResult); ID tidak memberi status Shorts resmi.')
-  Future<bool> isShortVideo(String videoId) async => false;
 
   /// Buang kandidat yang metadata-nya secara jelas menandai Shorts.
   /// Fungsi ini sengaja tidak membuat request jaringan per video.

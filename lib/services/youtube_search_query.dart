@@ -1,3 +1,5 @@
+import 'music_style_matcher.dart';
+
 /// Parsed intent used to tune YouTube search without changing the user's query.
 class SmartSearchIntent {
   final String originalQuery;
@@ -82,7 +84,10 @@ class YoutubeSearchQueryParser {
     }
 
     final hasIndonesia = _indonesiaPattern.hasMatch(original);
-    final addIndonesia = musicContext && !hasIndonesia;
+    final addIndonesia =
+        musicContext &&
+        !hasIndonesia &&
+        !MusicStyleMatcher.isKnownArtistName(original);
 
     final labels = <String>[
       if (musicContext) 'musik',

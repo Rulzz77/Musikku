@@ -249,6 +249,94 @@ class YoutubeMusicPolicy {
     return officialTitle || officialChannel || artistNamedChannelRelease;
   }
 
+  /// Allows normal-length tracks from a channel whose name matches the
+  /// artist the user searched for. This fills the gap for independent artists
+  /// whose real uploads do not carry "Official", "Topic", or label markers.
+  /// It is deliberately query-scoped: generic genre/song searches still use
+  /// the strict official-release policy above.
+  static bool isOfficialMusicReleaseCandidateForQuery(
+    YoutubeSearchResult video, {
+    required String query,
+  }) {
+    if (isOfficialMusicReleaseCandidate(video)) return true;
+    if (video.isLocal ||
+        video.videoId.isEmpty ||
+        video.isLive ||
+        video.isUpcoming ||
+        isLikelyShortForm(video) ||
+        isLikelyNonMusicVideo(video) ||
+        isLikelyAiGeneratedMusic(video)) {
+      return false;
+    }
+
+    final artistQuery = _normalizeArtistSearchName(query);
+    if (artistQuery.isEmpty) return false;
+
+    // Album/playlist upload tidak boleh masuk meskipun channel-nya cocok.
+    if (RegExp(
+      r'\b(?:full\s+album|complete\s+album|entire\s+album|whole\s+album|'
+      r'album|full\s+discography|complete\s+discography|discography|'
+      r'greatest\s+hits|best\s+of|compilation|playlist|non[ -]?stop|'
+      r'continuous\s+mix|song\s+collection|all\s+(?:songs|tracks)|medley)\b',
+      caseSensitive: false,
+    ).hasMatch(video.title)) {
+      return false;
+    }
+    const genericQueries = <String>{
+      'pop', 'rock', 'jazz', 'metal', 'indie', 'dangdut', 'koplo', 'dj',
+      'remix', 'k pop', 'hip hop', 'lofi', 'lo fi', 'radio', 'soundtrack',
+      'instrumental', 'karaoke', 'chill', 'blues', 'reggae', 'classical',
+      'country', 'folk', 'edm', 'house', 'techno', 'trance', 'ambient',
+      'pop indonesia', 'rock indonesia', 'lagu inggris', 'lagu indonesia',
+      'lagu jawa', 'lagu akustik', 'dangdut koplo', 'dj remix', 'galau',
+    };
+    if (genericQueries.contains(artistQuery)) return false;
+
+    final queryTokens = artistQuery.split(' ').where((word) => word.length > 1).toSet();
+    if (queryTokens.isEmpty || queryTokens.length > 4) return false;
+    if (queryTokens.length == 1 &&
+        genericQueries.contains(queryTokens.single)) {
+      return false;
+    }
+
+    final channel = _normalizeArtistSearchName(video.channelTitle);
+    final channelTokens = channel.split(' ').where((word) => word.length > 1).toSet();
+    if (channel.isEmpty || !queryTokens.every(channelTokens.contains)) {
+      return false;
+    }
+
+    // An exact artist-channel match is a strong signal, but do not admit
+    // covers, karaoke, fan edits, remixes, or promotional snippets as tracks.
+    final nonOriginal = RegExp(
+      r'\b(?:cover(?:ed)?|karaoke|fan[ -]?made|unofficial|tribute|slowed|'
+      r'sped\s*up|nightcore|dance\s+practice|teaser|trailer|snippet|'
+      r'mash[ -]?up|bootleg|ai[ -]?(?:cover|version|voice|vocals?|generated)|suno|udio)\b',
+      caseSensitive: false,
+    );
+    if (nonOriginal.hasMatch(video.title)) return false;
+
+    final seconds = video.durationSeconds;
+    if (seconds != null && (seconds <= 60 || seconds > 15 * 60)) {
+      return false;
+    }
+    return true;
+  }
+
+  static String _normalizeArtistSearchName(String value) => value
+      .toLowerCase()
+      .replaceAll(
+        RegExp(
+          r'\b(?:official(?:\s+music)?(?:\s+channel)?|vevo|topic|music\s+channel|'
+          r'channel|songs?|song|lagu(?:nya)?|music|musik|audio|video|mv|'
+          r'lyrics?|lyric|lirik|terbaru|latest|single|album)\b',
+          caseSensitive: false,
+        ),
+        ' ',
+      )
+      .replaceAll(RegExp(r'[^a-z0-9\s]'), ' ')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+
   static bool isMusicCandidate(YoutubeSearchResult video) =>
       video.isLocal || isOfficialMusicReleaseCandidate(video);
 

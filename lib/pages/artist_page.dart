@@ -74,6 +74,14 @@ class _ArtistPageState extends State<ArtistPage> {
     caseSensitive: false,
   );
 
+  static final RegExp _albumOrCompilation = RegExp(
+    r'\b(?:full\s+album|complete\s+album|entire\s+album|whole\s+album|'
+    r'album|full\s+discography|complete\s+discography|discography|'
+    r'greatest\s+hits|best\s+of|compilation|playlist|non[ -]?stop|'
+    r'continuous\s+mix|song\s+collection|all\s+(?:songs|tracks)|medley)\b',
+    caseSensitive: false,
+  );
+
   bool _isClearlyNonMusic(YoutubeSearchResult video) =>
       _nonMusicContentTitle.hasMatch(video.title);
 
@@ -122,6 +130,12 @@ class _ArtistPageState extends State<ArtistPage> {
           video.isLive ||
           video.isUpcoming ||
           _isClearlyNonMusic(video) ||
+          _albumOrCompilation.hasMatch(video.title) ||
+          _unofficialContent.hasMatch(video.title) ||
+          YoutubeSearchService.isLikelyShortForm(video) ||
+          YoutubeSearchService.isLikelyAiGeneratedMusic(video) ||
+          YoutubeSearchService.isLikelyNonMusicVideo(video) ||
+          !_hasSongLikeDuration(video) ||
           !seen.add(video.videoId)) {
         continue;
       }
@@ -137,12 +151,15 @@ class _ArtistPageState extends State<ArtistPage> {
           '${video.title} ${video.description} ${video.channelTitle}';
       if (_unofficialContent.hasMatch(rawMetadata)) continue;
       if (!artistChannel && !officialPattern.hasMatch(rawMetadata)) continue;
-      if (!YoutubeSearchService.isMusicChannelUpload(
+
+      // Hasil yang sudah cocok dengan nama channel artis tidak wajib punya
+      // kata "music" di metadata channel. Banyak channel solo independen
+      // hanya memakai nama artisnya sendiri.
+      final hasMusicMetadata = YoutubeSearchService.isMusicChannelUpload(
         video,
         channelTitle: video.channelTitle,
-      )) {
-        continue;
-      }
+      );
+      if (!artistChannel && !hasMusicMetadata) continue;
       tracks.add(video);
     }
 
@@ -219,9 +236,7 @@ class _ArtistPageState extends State<ArtistPage> {
       // Fallback hanya saat katalog dari channel dan hasil awal sama-sama kosong.
       if (_songs.isEmpty) {
         _usedSearchFallback = true;
-        final searchResults = await widget.searchService.search(
-          '${widget.artist} songs',
-        );
+        final searchResults = await widget.searchService.search(widget.artist);
         List<YoutubeSearchResult> enrichedResults;
         try {
           enrichedResults = await _channelService.withViewCounts(searchResults);
@@ -235,11 +250,7 @@ class _ArtistPageState extends State<ArtistPage> {
                   !video.isLocal &&
                   !video.isLive &&
                   !video.isUpcoming &&
-                  !_isClearlyNonMusic(video) &&
-                  YoutubeSearchService.isMusicChannelUpload(
-                    video,
-                    channelTitle: video.channelTitle,
-                  ),
+                  !_isClearlyNonMusic(video),
             )
             .toList(growable: false);
         final cleanResults = await widget.searchService.removeShorts(
@@ -275,21 +286,34 @@ class _ArtistPageState extends State<ArtistPage> {
     }
 
     final tracks = enriched
-        .where(
-          (video) =>
-              video.videoId.isNotEmpty &&
-              !video.isLocal &&
-              !video.isLive &&
-              !video.isUpcoming &&
-              !_isClearlyNonMusic(video) &&
-              !_unofficialContent.hasMatch(video.title) &&
-              _hasSongLikeDuration(video) &&
-              YoutubeSearchService.isMusicChannelUpload(
+        .where((video) {
+          if (video.videoId.isEmpty ||
+              video.isLocal ||
+              video.isLive ||
+              video.isUpcoming ||
+              _isClearlyNonMusic(video) ||
+              _unofficialContent.hasMatch(video.title) ||
+              _albumOrCompilation.hasMatch(video.title) ||
+              !_hasSongLikeDuration(video) ||
+              YoutubeSearchService.isLikelyShortForm(video) ||
+              YoutubeSearchService.isLikelyAiGeneratedMusic(video) ||
+              YoutubeSearchService.isLikelyNonMusicVideo(video)) {
+            return false;
+          }
+
+          // We are already inside the artist's uploads playlist. Accept a
+          // normal-length single even when the channel/title lacks an
+          // "official audio" marker; the selected channel is the artist scope.
+          return YoutubeSearchService.isMusicChannelUpload(
                 video,
                 channelTitle: channelTitle,
                 channelDescription: channelDescription,
-              ),
-        )
+              ) ||
+              video.categoryId == '10' ||
+              (video.durationSeconds == null ||
+                  (video.durationSeconds! > 60 &&
+                      video.durationSeconds! <= 15 * 60));
+        })
         .toList(growable: false);
     return widget.searchService.removeShorts(tracks);
   }

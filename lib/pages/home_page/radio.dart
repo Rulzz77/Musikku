@@ -283,8 +283,7 @@ extension _HomeRadio on _HomePageState {
         return null;
       }
 
-      // Filter metadata lokal saja. isShortVideo(videoId) adalah API lama
-      // yang sekarang selalu false dan tidak memberi sinyal tambahan.
+      // Filter metadata lokal saja; ID video tidak cukup untuk mengenali Shorts.
       if (!YoutubeSearchService.isMusicCandidate(candidate) ||
           YoutubeSearchService.isLikelyShortForm(candidate) ||
           YoutubeSearchService.isLikelyNonMusicVideo(candidate)) {

@@ -456,7 +456,7 @@ extension _HomeAudioSettingsUi on _HomePageState {
                                 const Text('MusikKu Speaker DSP', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900)),
                                 const SizedBox(height: 3),
                                 Text(
-                                  'Suara lebih berisi dan terbuka: bass harmonik, detail vokal, dan kontrol dinamika yang aman untuk speaker HP.',
+                                  'Otomatis aktif pada speaker bawaan. Saat headset / output eksternal tersambung, DSP MusikKu bypass agar Dolby bawaan perangkat dapat bekerja tanpa efek bertumpuk.',
                                   style: TextStyle(fontSize: 10.5, height: 1.35, color: scheme.onSurfaceVariant),
                                 ),
                               ],
@@ -511,8 +511,13 @@ extension _HomeAudioSettingsUi on _HomePageState {
                           final status = snapshot.data ?? const <String, dynamic>{};
                           final configured = status['pcmConfigured'] == true;
                           final serviceAttached = status['serviceAttached'] == true;
-                          final enabled = _speakerEnhancerEnabled &&
-                              (status['enabled'] == true || !serviceAttached);
+                          final requestedEnabled = _speakerEnhancerEnabled &&
+                              (status['soundStageRequestedEnabled'] == true || !serviceAttached);
+                          final outputProfile = status['outputProfile']?.toString() ?? 'unknown';
+                          final outputDeviceName = status['outputDeviceName']?.toString() ?? 'Belum terdeteksi';
+                          final routeReason = status['routeDetectionReason']?.toString() ?? '';
+                          final enabled = requestedEnabled &&
+                              (status['soundStageApplied'] == true || status['enabled'] == true);
                           final playing = status['playerIsPlaying'] == true;
                           final pcmBuffers = (status['pcmBuffersProcessed'] as num?)?.toInt() ?? 0;
                           final dspBuffers = (status['soundStageBuffersProcessed'] as num?)?.toInt() ?? 0;
@@ -525,26 +530,45 @@ extension _HomeAudioSettingsUi on _HomePageState {
                           final reason = status['unsupportedFormatReason']?.toString() ?? '';
                           final actuallyProcessing = enabled && playing && configured &&
                               pcmFlowing && pcmBuffers > 0 && dspBuffers > 0 && delta > 0.000001;
-                          final title = actuallyProcessing
-                              ? 'DSP benar-benar mengubah sampel audio'
-                              : !enabled
-                                  ? 'Soundstage sedang OFF'
-                                  : !serviceAttached
-                                      ? 'Layanan audio belum aktif'
-                                      : !playing
-                                      ? 'Putar lagu untuk menguji DSP'
-                                      : !configured
-                                          ? 'PCM belum masuk ke DSP'
-                                          : !pcmFlowing
-                                          ? 'PCM tidak sedang mengalir. Pastikan lagu diputar melalui audio native Media3.'
-                                          : 'PCM masuk, tetapi perubahan sampel belum terdeteksi. Naikkan intensitas ke 85–90% atau cek sumber audio.';
-                          final detail = actuallyProcessing
-                              ? '$format · $dspBuffers blok PCM diproses · perubahan RMS ${delta.toStringAsFixed(5)} · aliran aktif'
-                              : source != 'local' && source != 'youtube_audio'
-                                  ? 'Sumber $source bukan jalur Media3. Soundstage tidak menerima audio ini.'
-                                  : reason.isNotEmpty
-                                      ? reason
-                                      : 'PCM: $pcmBuffers blok · sumber: $source. Putar lagu dari awal lalu periksa kembali.';
+                          final isExternalOutput = outputProfile == 'external_output';
+                          final routeUnknown = outputProfile == 'unknown';
+                          final isMedia3Source = source == 'local' || source == 'youtube_audio';
+                          final title = !requestedEnabled
+                              ? 'MusikKu Soundstage sedang OFF'
+                              : isExternalOutput
+                                  ? 'Headset / output eksternal terdeteksi — DSP bypass'
+                                  : routeUnknown
+                                      ? 'Rute output belum pasti — DSP standby'
+                                      : actuallyProcessing
+                                          ? 'DSP benar-benar mengubah sampel audio'
+                                          : !serviceAttached
+                                              ? 'Layanan audio belum aktif'
+                                              : !isMedia3Source
+                                                  ? 'Sumber audio tidak melewati Media3'
+                                                  : !playing
+                                                      ? 'Putar lagu untuk menguji DSP speaker'
+                                                      : !configured
+                                                          ? 'PCM belum masuk ke DSP'
+                                                          : !pcmFlowing
+                                                              ? 'PCM tidak sedang mengalir. Pastikan audio native Media3 sedang diputar.'
+                                                              : 'PCM masuk, tetapi perubahan sampel belum terdeteksi.';
+                          final profileLabel = outputProfile == 'speaker_internal'
+                              ? 'Speaker bawaan'
+                              : isExternalOutput
+                                  ? 'Headset / perangkat eksternal'
+                                  : 'Output belum diketahui';
+                          final routeDetail = '$profileLabel · $outputDeviceName';
+                          final detail = isExternalOutput
+                              ? '$routeDetail. DSP MusikKu dilewati agar efek audio sistem seperti Dolby (jika aktif) tidak bertumpuk. $routeReason'
+                              : routeUnknown
+                                  ? '$routeDetail. DSP dimatikan sementara agar tidak salah memproses headset. $routeReason'
+                                  : actuallyProcessing
+                                      ? '$routeDetail · $format · $dspBuffers blok PCM diproses · perubahan RMS ${delta.toStringAsFixed(5)} · aliran aktif'
+                                      : !isMedia3Source
+                                          ? 'Sumber $source bukan jalur Media3. Soundstage tidak menerima audio ini. $routeDetail'
+                                          : reason.isNotEmpty
+                                              ? '$routeDetail · $reason'
+                                              : '$routeDetail · PCM: $pcmBuffers blok · sumber: $source. Putar lagu dari awal lalu periksa kembali.';
                           return Container(
                             padding: const EdgeInsets.all(11),
                             decoration: BoxDecoration(

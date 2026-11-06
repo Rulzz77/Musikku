@@ -56,7 +56,6 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
     setState(() {
       _activeChip = index;
       _query = '';
-      _searchMode = 'music';
       _searchResults = const [];
       _searchChannels = const [];
       _section = _YoutubeSection.home;

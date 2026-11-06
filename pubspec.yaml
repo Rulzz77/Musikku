@@ -1,7 +1,7 @@
 name: flutter_application_5
 description: "MusikKu - pemutar musik lintas platform."
 publish_to: 'none'
-version: 5.5.5+35
+version: 5.5.6+36
 
 environment:
   sdk: ^3.13.4
@@ -12,8 +12,6 @@ dependencies:
 
   crypto: ^3.0.7
   audio_service: ^0.18.19
-  flutter_local_notifications: ^22.3.1
-  google_sign_in: ^6.3.0
   http: ^1.5.0
   image_picker: 1.1.2
   path_provider: ^2.1.6

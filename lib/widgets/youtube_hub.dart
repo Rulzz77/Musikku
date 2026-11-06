@@ -166,7 +166,6 @@ class _YoutubeHubState extends State<YoutubeHub> {
   bool _loading = false;
   String _error = '';
   String _query = '';
-  String _searchMode = 'music';
   YoutubeSearchFilters _activeSearchFilters = const YoutubeSearchFilters();
   List<String> _searchHistory = const [];
   List<YoutubeSearchResult> _searchResults = const [];
@@ -318,7 +317,6 @@ class _YoutubeHubState extends State<YoutubeHub> {
       _error = '';
       if (nextSection == _YoutubeSection.home) {
         _activeChip = 0;
-        _searchMode = 'music';
       }
     });
     if (nextSection == _YoutubeSection.home) {

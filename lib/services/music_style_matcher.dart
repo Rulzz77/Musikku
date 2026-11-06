@@ -179,6 +179,11 @@ class MusicStyleMatcher {
       normalizedText.isNotEmpty &&
       _containsAnyPhrase(normalizedText, _allKnownArtists);
 
+  /// Menandai query yang sudah menyebut artis dikenal agar pencarian tidak
+  /// otomatis diberi pembatas wilayah Indonesia.
+  static bool isKnownArtistName(String value) =>
+      _isKnownArtist(normalize(value));
+
   /// Genre yang disebut eksplisit lewat kata kunci (tanpa petunjuk artis).
   /// Urutan penting: Pop DJ dipisahkan dari DJ/remix biasa, dan subgenre lokal
   /// tidak boleh jatuh ke Pop umum. [text] harus sudah dinormalisasi.

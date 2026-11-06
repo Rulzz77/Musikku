@@ -135,11 +135,10 @@ class PlaybackService : MediaBrowserServiceCompat() {
                 .apply()
 
             val service = activeInstance
-            service?.pcmAudioProcessor?.let { processor ->
-                processor.soundStageStrength = safeStrength
-                processor.soundStageEnabled = enabled
-                if (enabled) processor.resetForNewTrack()
-            }
+            service?.speakerSoundstageRequestedEnabled = enabled
+            service?.pcmAudioProcessor?.soundStageStrength = safeStrength
+            service?.refreshSoundstageOutputProfile()
+            if (enabled) service?.pcmAudioProcessor?.resetForNewTrack()
             val media3Active = service?.localPlayer?.isPlaying == true
             val pcmDiagnostics = service?.pcmAudioProcessor?.diagnostics().orEmpty()
             MusikKuLogger.d(
@@ -158,10 +157,20 @@ class PlaybackService : MediaBrowserServiceCompat() {
                 "sourceType" to (service?.currentSourceType ?: "idle"),
                 "playerIsPlaying" to media3Active,
                 "playerReady" to (service?.localPlayer != null),
-                "message" to if (media3Active) {
-                    "Media3 sedang memutar audio; status pemrosesan PCM tersedia untuk diperiksa."
-                } else {
-                    "Profil disimpan. Putar audio melalui Media3 untuk mulai memproses PCM."
+                "soundStageRequestedEnabled" to (service?.speakerSoundstageRequestedEnabled ?: enabled),
+                "soundStageApplied" to (service?.pcmAudioProcessor?.soundStageEnabled == true),
+                "outputProfile" to (service?.soundstageOutputProfile ?: "unknown"),
+                "outputDeviceName" to (service?.soundstageOutputDeviceName ?: "Belum terdeteksi"),
+                "outputDeviceType" to (service?.soundstageOutputDeviceType ?: -1),
+                "routeDetectionReason" to (service?.soundstageRouteDetectionReason ?: "Layanan audio belum aktif"),
+                "message" to when (service?.soundstageOutputProfile) {
+                    "speaker_internal" -> if (media3Active && service?.pcmAudioProcessor?.soundStageEnabled == true) {
+                        "Speaker internal terdeteksi. MusikKu Soundstage diterapkan pada audio Media3."
+                    } else {
+                        "Speaker internal terdeteksi. Soundstage akan memproses saat audio Media3 diputar."
+                    }
+                    "external_output" -> "Headset/perangkat eksternal terdeteksi. DSP MusikKu bypass agar efek audio sistem seperti Dolby tidak bertumpuk."
+                    else -> "Profil disimpan. Rute audio belum dapat dipastikan; DSP dinonaktifkan sementara demi keamanan audio."
                 },
             ) + pcmDiagnostics
         }
@@ -177,6 +186,13 @@ class PlaybackService : MediaBrowserServiceCompat() {
                     "soundStageBuffersProcessed" to 0L,
                     "configuredFormat" to "Belum ada layanan Media3",
                     "unsupportedFormatReason" to "PlaybackService belum aktif",
+                    "soundStageRequestedEnabled" to false,
+                    "soundStageApplied" to false,
+                    "outputProfile" to "unknown",
+                    "outputDeviceName" to "Belum terdeteksi",
+                    "outputDeviceType" to -1,
+                    "routeDetectionReason" to "Layanan audio belum aktif",
+                    "autoOutputSwitching" to true,
                 )
             val status = service.pcmAudioProcessor.diagnostics().toMutableMap()
             status["serviceAttached"] = true
@@ -184,6 +200,13 @@ class PlaybackService : MediaBrowserServiceCompat() {
             status["playerReady"] = service.localPlayer != null
             status["playerIsPlaying"] = service.localPlayer?.isPlaying == true
             status["currentVideoId"] = service.currentVideoId
+            status["soundStageRequestedEnabled"] = service.speakerSoundstageRequestedEnabled
+            status["soundStageApplied"] = service.pcmAudioProcessor.soundStageEnabled
+            status["outputProfile"] = service.soundstageOutputProfile
+            status["outputDeviceName"] = service.soundstageOutputDeviceName
+            status["outputDeviceType"] = service.soundstageOutputDeviceType
+            status["routeDetectionReason"] = service.soundstageRouteDetectionReason
+            status["autoOutputSwitching"] = true
             return status
         }
 
@@ -298,6 +321,18 @@ class PlaybackService : MediaBrowserServiceCompat() {
 
     private lateinit var mediaSession: MediaSessionCompat
     private val pcmAudioProcessor = MusikKuPcmAudioProcessor()
+
+    // The user's Soundstage preference is global, but the DSP is only applied
+    // to the built-in speaker route. External outputs are deliberately kept
+    // dry so Samsung/OEM headphone effects (including Dolby, when supported)
+    // are not stacked with MusikKu's PCM processing.
+    @Volatile private var speakerSoundstageRequestedEnabled = false
+    @Volatile private var soundstageOutputProfile = "unknown"
+    @Volatile private var soundstageOutputDeviceName = "Belum terdeteksi"
+    @Volatile private var soundstageOutputDeviceType = -1
+    @Volatile private var soundstageRouteDetectionReason = "Menunggu deteksi output Android"
+    private val soundstageRouteHandler = Handler(Looper.getMainLooper())
+    private val soundstageRouteRefreshRunnable = Runnable { refreshSoundstageOutputProfile() }
 
     // Beberapa headset kabel hanya mengirim KEYCODE_HEADSETHOOK untuk semua
     // klik. Tunda satu klik sebentar agar klik ganda bisa dibaca sebagai NEXT
@@ -494,6 +529,144 @@ class PlaybackService : MediaBrowserServiceCompat() {
         }
     }
 
+    private fun isBuiltInSpeaker(device: AudioDeviceInfo): Boolean {
+        if (!device.isSink) return false
+        return device.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER ||
+            (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
+                device.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER_SAFE)
+    }
+
+    private fun externalOutputPriority(device: AudioDeviceInfo): Int = when (device.type) {
+        AudioDeviceInfo.TYPE_WIRED_HEADSET,
+        AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
+        AudioDeviceInfo.TYPE_USB_HEADSET -> 0
+        AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
+        AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> 1
+        AudioDeviceInfo.TYPE_BLE_HEADSET -> 1
+        AudioDeviceInfo.TYPE_USB_DEVICE,
+        AudioDeviceInfo.TYPE_USB_ACCESSORY -> 2
+        AudioDeviceInfo.TYPE_HDMI,
+        AudioDeviceInfo.TYPE_HDMI_ARC,
+        AudioDeviceInfo.TYPE_HDMI_EARC,
+        AudioDeviceInfo.TYPE_LINE_ANALOG,
+        AudioDeviceInfo.TYPE_LINE_DIGITAL,
+        AudioDeviceInfo.TYPE_DOCK,
+        AudioDeviceInfo.TYPE_AUX_LINE,
+        AudioDeviceInfo.TYPE_BUS,
+        AudioDeviceInfo.TYPE_HEARING_AID -> 3
+        AudioDeviceInfo.TYPE_BLE_SPEAKER,
+        AudioDeviceInfo.TYPE_BLE_BROADCAST -> 4
+        else -> 5
+    }
+
+    private data class SoundstageOutputRoute(
+        val profile: String,
+        val name: String,
+        val type: Int,
+        val reason: String,
+    )
+
+    /**
+     * Resolves an output profile from an explicit user route, when configured,
+     * otherwise from Android's currently connected output-device topology.
+     * Android's public AudioDeviceCallback reports connection changes, not a
+     * universal active-media-route getter; when the route is ambiguous this
+     * method fails safe and bypasses Soundstage rather than double-processing
+     * a headset/external output.
+     */
+    private fun resolveSoundstageOutputRoute(): SoundstageOutputRoute {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+            return SoundstageOutputRoute(
+                "unknown", "Output Android tidak tersedia", -1,
+                "Deteksi output otomatis membutuhkan Android 6.0 atau lebih baru.",
+            )
+        }
+
+        return try {
+            val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            val outputs = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+                .filter { it.isSink }
+            val preferences = getSharedPreferences("musikku_playback_settings", Context.MODE_PRIVATE)
+            val preferredId = preferences.getInt("preferredAudioOutputId", -1)
+            val preferredType = preferences.getInt("preferredAudioOutputType", -1)
+            val preferredName = preferences.getString("preferredAudioOutputName", "").orEmpty()
+
+            val explicitlySelected = if (preferredId >= 0) {
+                outputs.firstOrNull { it.id == preferredId }
+                    ?: outputs.firstOrNull {
+                        it.type == preferredType &&
+                            (preferredName.isBlank() || it.productName?.toString().orEmpty() == preferredName)
+                    }
+            } else {
+                null
+            }
+
+            val selected = explicitlySelected ?: outputs
+                .filterNot {
+                    isBuiltInSpeaker(it) || it.type == AudioDeviceInfo.TYPE_BUILTIN_EARPIECE
+                }
+                .sortedWith(compareBy<AudioDeviceInfo> { externalOutputPriority(it) }.thenBy { it.id })
+                .firstOrNull()
+                ?: outputs.firstOrNull(::isBuiltInSpeaker)
+                ?: outputs.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_EARPIECE }
+
+            if (selected == null) {
+                SoundstageOutputRoute(
+                    "unknown", "Output tidak diketahui", -1,
+                    "Android belum melaporkan speaker internal atau perangkat output yang dapat dikenali.",
+                )
+            } else if (isBuiltInSpeaker(selected)) {
+                SoundstageOutputRoute(
+                    "speaker_internal",
+                    selected.productName?.toString()?.ifBlank { "Speaker bawaan HP" } ?: "Speaker bawaan HP",
+                    selected.type,
+                    if (explicitlySelected != null) "Speaker internal dipilih secara manual." else
+                        "Tidak ada output eksternal yang terdeteksi; memakai speaker internal Android.",
+                )
+            } else {
+                SoundstageOutputRoute(
+                    "external_output",
+                    selected.productName?.toString()?.ifBlank { "Headset / perangkat eksternal" }
+                        ?: "Headset / perangkat eksternal",
+                    selected.type,
+                    if (explicitlySelected != null) "Output eksternal dipilih secara manual; DSP MusikKu dibypass." else
+                        "Output eksternal tersedia. DSP MusikKu dibypass untuk menghindari penumpukan efek OEM.",
+                )
+            }
+        } catch (error: Exception) {
+            SoundstageOutputRoute(
+                "unknown", "Output tidak diketahui", -1,
+                error.message ?: "Gagal mendeteksi rute output Android.",
+            )
+        }
+    }
+
+    private fun refreshSoundstageOutputProfile() {
+        val route = resolveSoundstageOutputRoute()
+        soundstageOutputProfile = route.profile
+        soundstageOutputDeviceName = route.name
+        soundstageOutputDeviceType = route.type
+        soundstageRouteDetectionReason = route.reason
+
+        val shouldApplySoundstage = speakerSoundstageRequestedEnabled && route.profile == "speaker_internal"
+        val wasApplied = pcmAudioProcessor.soundStageEnabled
+        pcmAudioProcessor.soundStageEnabled = shouldApplySoundstage
+        if (wasApplied != shouldApplySoundstage) {
+            pcmAudioProcessor.resetForNewTrack()
+        }
+
+        MusikKuLogger.d(
+            TAG,
+            "AUTO AUDIO PROFILE requested=$speakerSoundstageRequestedEnabled profile=${route.profile} " +
+                "device=${route.name} type=${route.type} soundstageApplied=$shouldApplySoundstage reason=${route.reason}",
+        )
+    }
+
+    private fun scheduleSoundstageOutputRefresh(delayMs: Long = 300L) {
+        soundstageRouteHandler.removeCallbacks(soundstageRouteRefreshRunnable)
+        soundstageRouteHandler.postDelayed(soundstageRouteRefreshRunnable, delayMs)
+    }
+
     private fun registerAudioDeviceCallback() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || audioDeviceCallback != null) {
             return
@@ -501,6 +674,7 @@ class PlaybackService : MediaBrowserServiceCompat() {
 
         val callback = object : AudioDeviceCallback() {
             override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>) {
+                scheduleSoundstageOutputRefresh()
                 val removedIds = removedDevices.map { it.id }.toSet()
                 val preferredId = getSharedPreferences(
                     "musikku_playback_settings", Context.MODE_PRIVATE,
@@ -525,6 +699,7 @@ class PlaybackService : MediaBrowserServiceCompat() {
             }
 
             override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>) {
+                scheduleSoundstageOutputRefresh()
                 val preferredId = getSharedPreferences(
                     "musikku_playback_settings", Context.MODE_PRIVATE,
                 ).getInt("preferredAudioOutputId", -1)
@@ -544,6 +719,7 @@ class PlaybackService : MediaBrowserServiceCompat() {
         audioDeviceCallback = callback
         val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         audioManager.registerAudioDeviceCallback(callback, Handler(Looper.getMainLooper()))
+        scheduleSoundstageOutputRefresh(150L)
     }
 
     private fun unregisterAudioDeviceCallback() {
@@ -1711,9 +1887,10 @@ class PlaybackService : MediaBrowserServiceCompat() {
         pcmAudioProcessor.normalizationEnabled = audioPreferences.getBoolean(
             "flutter.audio_loudness_normalization_v1", false,
         )
-        pcmAudioProcessor.soundStageEnabled = audioPreferences.getBoolean(
+        speakerSoundstageRequestedEnabled = audioPreferences.getBoolean(
             "flutter.speaker_soundstage_enabled_v1", false,
         )
+        pcmAudioProcessor.soundStageEnabled = false
         pcmAudioProcessor.soundStageStrength = audioPreferences.getInt(
             "flutter.speaker_soundstage_strength_v1", 85,
         ).coerceIn(0, 100)
@@ -1865,6 +2042,7 @@ class PlaybackService : MediaBrowserServiceCompat() {
                 }
             })
         }
+        refreshSoundstageOutputProfile()
     }
 
     private fun isAudioPlayerSource(): Boolean =
@@ -2187,6 +2365,7 @@ class PlaybackService : MediaBrowserServiceCompat() {
         }
         return runCatching {
             player.setPreferredAudioDevice(target)
+            scheduleSoundstageOutputRefresh(180L)
             true
         }.getOrDefault(false)
     }
@@ -2894,6 +3073,7 @@ class PlaybackService : MediaBrowserServiceCompat() {
         localPlayer?.release()
         localPlayer = null
         unregisterNoisyReceiver()
+        soundstageRouteHandler.removeCallbacks(soundstageRouteRefreshRunnable)
         unregisterAudioDeviceCallback()
         if (wakeLock.isHeld) {
             wakeLock.release()

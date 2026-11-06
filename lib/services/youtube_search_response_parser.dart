@@ -15,11 +15,9 @@ class YoutubeSearchResponseParser {
         .where((video) => video.videoId.isNotEmpty)
         .toList();
 
-    // Cache lama (sebelum ada channelId) bikin foto channel tidak pernah
-    // muncul. Anggap cache seperti itu kedaluwarsa supaya diambil ulang.
-    if (list.any((v) => !v.isLocal && v.channelId.isEmpty)) {
-      return <YoutubeSearchResult>[];
-    }
+    // channelId bisa kosong pada sebagian hasil youtube_explode. Jangan buang
+    // seluruh daftar lagu hanya karena satu item tidak membawa metadata channel;
+    // playback dan metadata judul tetap valid tanpa channelId.
     return list;
   }
 

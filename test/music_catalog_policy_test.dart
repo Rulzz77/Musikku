@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_application_5/models/youtube_search_result.dart';
 import 'package:flutter_application_5/services/youtube_music_policy.dart';
+import 'package:flutter_application_5/services/youtube_search_response_parser.dart';
 import 'package:flutter_application_5/services/youtube_search_query.dart';
 
 YoutubeSearchResult _track({
@@ -38,6 +39,40 @@ void main() {
     );
 
     test(
+      'accepts an artist credited in the title when the upload channel is a label',
+      () {
+        final labelRelease = _track(
+          title: 'Fiersa Besari - Celengan Rindu',
+          channel: 'Independent Upload Channel',
+        );
+        expect(
+          YoutubeMusicPolicy.isOfficialMusicReleaseCandidateForQuery(
+            labelRelease,
+            query: 'Fiersa Besari',
+          ),
+          isTrue,
+        );
+      },
+    );
+
+    test(
+      'accepts artist credit after the track title on an official label upload',
+      () {
+        final labelRelease = _track(
+          title: 'Celengan Rindu - Fiersa Besari',
+          channel: 'Bintang Lokal',
+        );
+        expect(
+          YoutubeMusicPolicy.isOfficialMusicReleaseCandidateForQuery(
+            labelRelease,
+            query: 'Fiersa Besari',
+          ),
+          isTrue,
+        );
+      },
+    );
+
+    test(
       'supports common Indonesian artist channels, not only Fiersa Besari',
       () {
         for (final artist in ['Fiersa Besari', 'Tulus', 'Raisa', 'Hindia']) {
@@ -53,6 +88,19 @@ void main() {
         }
       },
     );
+
+    test('keeps cached songs when one result has no channelId metadata', () {
+      final restored = YoutubeSearchResponseParser.resultsFromJson([
+        _track(
+          title: 'Celengan Rindu',
+          channel: 'Fiersa Besari',
+        ).toJson(),
+      ]);
+
+      expect(restored, hasLength(1));
+      expect(restored.single.title, 'Celengan Rindu');
+      expect(restored.single.channelId, isEmpty);
+    });
 
     test('does not force Indonesia onto known artist queries', () {
       expect(

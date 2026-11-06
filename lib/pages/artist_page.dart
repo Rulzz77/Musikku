@@ -141,16 +141,24 @@ class _ArtistPageState extends State<ArtistPage> {
       }
 
       final title = _normalizeArtistText(video.title);
+      final description = _normalizeArtistText(video.description);
       final channel = _normalizeArtistText(video.channelTitle);
       final artistInTitle = _containsArtistPhrase(title, artist);
+      final artistInDescription = _containsArtistPhrase(description, artist);
       final artistChannel = _containsArtistPhrase(channel, artist) ||
           _containsArtistPhrase(artist, channel);
-      if (!artistInTitle && !artistChannel) continue;
+      if (!artistInTitle && !artistInDescription && !artistChannel) continue;
 
       final rawMetadata =
           '${video.title} ${video.description} ${video.channelTitle}';
-      if (_unofficialContent.hasMatch(rawMetadata)) continue;
-      if (!artistChannel && !officialPattern.hasMatch(rawMetadata)) continue;
+      // Kata "cover" pada deskripsi rilis kadang berarti cover artwork, bukan
+      // cover lagu. Hanya judul yang dipakai untuk menolak versi cover.
+      if (_unofficialContent.hasMatch(video.title)) continue;
+      final titleCreditsArtist = artistInTitle && title != artist;
+      if (!artistChannel && !titleCreditsArtist &&
+          !officialPattern.hasMatch(rawMetadata)) {
+        continue;
+      }
 
       // Hasil yang sudah cocok dengan nama channel artis tidak wajib punya
       // kata "music" di metadata channel. Banyak channel solo independen
@@ -159,7 +167,7 @@ class _ArtistPageState extends State<ArtistPage> {
         video,
         channelTitle: video.channelTitle,
       );
-      if (!artistChannel && !hasMusicMetadata) continue;
+      if (!artistChannel && !titleCreditsArtist && !hasMusicMetadata) continue;
       tracks.add(video);
     }
 

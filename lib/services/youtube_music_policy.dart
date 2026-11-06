@@ -249,9 +249,9 @@ class YoutubeMusicPolicy {
     return officialTitle || officialChannel || artistNamedChannelRelease;
   }
 
-  /// Allows normal-length tracks from a channel whose name matches the
-  /// artist the user searched for. This fills the gap for independent artists
-  /// whose real uploads do not carry "Official", "Topic", or label markers.
+  /// Allows normal-length tracks when the searched artist is credited in the
+  /// title/description or the channel name. This fills the gap for releases
+  /// uploaded by labels that do not carry an official marker on the title.
   /// It is deliberately query-scoped: generic genre/song searches still use
   /// the strict official-release policy above.
   static bool isOfficialMusicReleaseCandidateForQuery(
@@ -301,12 +301,29 @@ class YoutubeMusicPolicy {
 
     final channel = _normalizeArtistSearchName(video.channelTitle);
     final channelTokens = channel.split(' ').where((word) => word.length > 1).toSet();
-    if (channel.isEmpty || !queryTokens.every(channelTokens.contains)) {
+    final channelMatchesArtist = channel.isNotEmpty &&
+        queryTokens.every(channelTokens.contains);
+
+    // Banyak rilisan asli diunggah oleh label/distributor, bukan channel artis.
+    // Dalam kasus itu, nama artis justru muncul pada judul video, misalnya
+    // "Fiersa Besari - Celengan Rindu" dari channel label. Filter lama hanya
+    // mencocokkan nama channel sehingga hasil seperti ini selalu dibuang.
+    bool containsArtistPhrase(String text) =>
+        text == artistQuery ||
+        text.startsWith('$artistQuery ') ||
+        text.endsWith(' $artistQuery') ||
+        text.contains(' $artistQuery ');
+
+    final normalizedTitle = _normalizeArtistSearchName(video.title);
+    final normalizedDescription = _normalizeArtistSearchName(video.description);
+    final titleCreditsArtist = containsArtistPhrase(normalizedTitle);
+    final descriptionCreditsArtist = containsArtistPhrase(normalizedDescription);
+    if (!channelMatchesArtist && !titleCreditsArtist && !descriptionCreditsArtist) {
       return false;
     }
 
-    // An exact artist-channel match is a strong signal, but do not admit
-    // covers, karaoke, fan edits, remixes, or promotional snippets as tracks.
+    // An exact artist/channel or explicit artist credit is a strong signal,
+    // but do not admit covers, karaoke, fan edits, remixes, or promo snippets.
     final nonOriginal = RegExp(
       r'\b(?:cover(?:ed)?|karaoke|fan[ -]?made|unofficial|tribute|slowed|'
       r'sped\s*up|nightcore|dance\s+practice|teaser|trailer|snippet|'
@@ -314,6 +331,7 @@ class YoutubeMusicPolicy {
       caseSensitive: false,
     );
     if (nonOriginal.hasMatch(video.title)) return false;
+    if (titleCreditsArtist && normalizedTitle == artistQuery) return false;
 
     final seconds = video.durationSeconds;
     if (seconds != null && (seconds <= 60 || seconds > 15 * 60)) {

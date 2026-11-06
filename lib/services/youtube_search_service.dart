@@ -91,7 +91,7 @@ class YoutubeSearchService {
   static const Duration _cacheTtl = Duration(hours: 6);
   // Cache katalog pencarian disimpan lama di perangkat agar query berulang,
   // termasuk setelah aplikasi dibuka ulang, tidak meminta search.list lagi.
-  static const Duration _catalogSearchDiskTtl = Duration(days: 90);
+  static const Duration _catalogSearchDiskTtl = Duration(days: 14);
   static const Duration _latestSearchDiskTtl = Duration(hours: 6);
   // Radio pages stabil cukup lama untuk dipakai ulang lintas sesi. Next tetap
   // dilarang mengambil halaman jaringan baru; TTL ini berlaku saat Radio dimulai.
@@ -340,24 +340,29 @@ class YoutubeSearchService {
     if (keyword.isEmpty) return const [];
 
     final intent = interpretSearch(keyword);
-    // Jangan paksa kata 'official' pada pencarian artis. Rilis artis
-    // independen sering tidak memakai marker tersebut; policy di bawah tetap
-    // ketat untuk pencarian umum dan hanya melonggar pada channel artis cocok.
     final effectiveQuery = intent.apiQuery;
+    // V4 memisahkan cache berdasarkan query asli dan query API. Ini juga
+    // membatalkan cache V3 yang sempat menyimpan hasil kosong setelah filter
+    // terlalu ketat. Hasil mentah disimpan agar perubahan filter tidak
+    // mengabadikan daftar lagu yang sudah terlanjur terpotong.
     final cacheKey =
-        'explodeSearchV3ArtistAware|${effectiveQuery.toLowerCase()}|${intent.latest ? 'date' : 'relevance'}';
+        'explodeSearchV4ArtistCredit|${keyword.toLowerCase()}|${effectiveQuery.toLowerCase()}|${intent.latest ? 'date' : 'relevance'}';
     final cached = _cache[cacheKey];
 
-    if (cached != null &&
-        DateTime.now().difference(cached.time) < _cacheTtl) {
-      debugPrint('EXPLODE SEARCH CACHE HIT (memory): ${intent.apiQuery}');
-      return cached.results
-          .where((video) =>
-              YoutubeMusicPolicy.isOfficialMusicReleaseCandidateForQuery(
-                video,
-                query: keyword,
-              ))
-          .toList(growable: false);
+    if (cached != null) {
+      final age = DateTime.now().difference(cached.time);
+      final ttl = cached.results.isEmpty ? _emptyResultTtl : _cacheTtl;
+      if (age < ttl && cached.results.isNotEmpty) {
+        debugPrint('EXPLODE SEARCH CACHE HIT (memory): $effectiveQuery');
+        return cached.results
+            .where((video) =>
+                YoutubeMusicPolicy.isOfficialMusicReleaseCandidateForQuery(
+                  video,
+                  query: keyword,
+                ))
+            .take(30)
+            .toList(growable: false);
+      }
     }
 
     final diskRaw = await _disk.get(
@@ -365,34 +370,46 @@ class YoutubeSearchService {
       maxAge: intent.latest ? _latestSearchDiskTtl : _catalogSearchDiskTtl,
     );
     final diskResults = _resultsFromJson(diskRaw);
-    if (diskRaw is List && (diskRaw.isEmpty || diskResults.isNotEmpty)) {
-      debugPrint('EXPLODE SEARCH CACHE HIT (disk): ${intent.apiQuery}');
-      final acceptedResults = diskResults
+    // Cache kosong tidak pernah dianggap hasil final: query perlu dicoba lagi.
+    if (diskRaw is List && diskResults.isNotEmpty) {
+      debugPrint('EXPLODE SEARCH CACHE HIT (disk): $effectiveQuery');
+      _putCache(cacheKey, _CacheEntry(DateTime.now(), diskResults));
+      return diskResults
           .where((video) =>
               YoutubeMusicPolicy.isOfficialMusicReleaseCandidateForQuery(
                 video,
                 query: keyword,
               ))
+          .take(30)
           .toList(growable: false);
-      _putCache(cacheKey, _CacheEntry(DateTime.now(), acceptedResults));
-      return acceptedResults;
     }
 
-    debugPrint('EXPLODE SEARCH NETWORK REQUEST: ${intent.apiQuery}');
+    debugPrint('EXPLODE SEARCH NETWORK REQUEST: $effectiveQuery');
     try {
       final sort = intent.latest
           ? ytex.SortFilters.uploadDate
           : ytex.SortFilters.relevance;
-      final dynamic page = await _youtubeExplode.search.search(
+      final dynamic firstPage = await _youtubeExplode.search.search(
         effectiveQuery,
         filter: sort,
       );
-      final rawItems = (page as Iterable).cast<dynamic>().toList();
-      final results = rawItems
-          .map(_fromExplodeVideo)
-          .where((video) => video.videoId.isNotEmpty)
+
+      final rawResults = <YoutubeSearchResult>[];
+      final seenIds = <String>{};
+      void appendPage(dynamic sourcePage) {
+        if (sourcePage is! Iterable) return;
+        for (final item in sourcePage.cast<dynamic>()) {
+          final video = _fromExplodeVideo(item);
+          if (video.videoId.isNotEmpty && seenIds.add(video.videoId)) {
+            rawResults.add(video);
+          }
+        }
+      }
+
+      appendPage(firstPage);
+      List<YoutubeSearchResult> accepted() => rawResults
+          .where((video) => !video.isLive && !video.isUpcoming)
           .where((video) {
-            if (video.isLive || video.isUpcoming) return false;
             final seconds = video.durationSeconds;
             if (seconds != null && seconds <= 60) return false;
             return YoutubeMusicPolicy.isOfficialMusicReleaseCandidateForQuery(
@@ -400,13 +417,35 @@ class YoutubeSearchService {
               query: keyword,
             );
           })
-          .take(dataSaverLevel >= 2 ? 6 : (dataSaverLevel == 1 ? 10 : 30))
           .toList(growable: false);
 
-      _putCache(cacheKey, _CacheEntry(DateTime.now(), results));
-      await _disk.put(
-        'q|$cacheKey',
-        results.map((video) => video.toJson()).toList(),
+      // YouTube relevance can put label uploads and artist tracks below unrelated
+      // clips. When the first page yields few usable tracks, inspect one more
+      // page before concluding the catalogue is empty. This is limited to one page.
+      if (accepted().length < 12) {
+        try {
+          final dynamic nextPage = await firstPage.nextPage();
+          if (nextPage != null) appendPage(nextPage);
+        } catch (paginationError) {
+          debugPrint('EXPLODE SEARCH NEXT PAGE SKIPPED: $paginationError');
+        }
+      }
+
+      final results = accepted()
+          .take(30)
+          .toList(growable: false);
+
+      // Persist kandidat mentah, bukan hanya lagu yang lolos policy hari ini.
+      // Jangan simpan daftar kosong agar hasil kosong sementara tidak menetap.
+      if (rawResults.isNotEmpty) {
+        _putCache(cacheKey, _CacheEntry(DateTime.now(), rawResults));
+        await _disk.put(
+          'q|$cacheKey',
+          rawResults.map((video) => video.toJson()).toList(),
+        );
+      }
+      debugPrint(
+        'EXPLODE SEARCH RESULT: raw=${rawResults.length}, accepted=${results.length}, query=$effectiveQuery',
       );
       return results;
     } catch (error) {
@@ -421,9 +460,10 @@ class YoutubeSearchService {
     final keyword = query.trim();
     if (keyword.isEmpty) return const [];
 
-    final cacheKey = 'channelExplodeV2ArtistRanked|${keyword.toLowerCase()}';
+    final cacheKey = 'channelExplodeV3ArtistTitleAware|${keyword.toLowerCase()}';
     final cached = _channelCache[cacheKey];
     if (cached != null &&
+        cached.results.isNotEmpty &&
         DateTime.now().difference(cached.time) < _cacheTtl) {
       debugPrint('EXPLODE CHANNEL CACHE HIT (memory): $keyword');
       return cached.results;
@@ -442,9 +482,12 @@ class YoutubeSearchService {
                 thumbnailUrl: item['thumbnailUrl']?.toString() ?? '',
               ))
           .toList(growable: false);
-      _putChannelCache(cacheKey, restored);
-      debugPrint('EXPLODE CHANNEL CACHE HIT (disk): $keyword');
-      return restored;
+      if (restored.isNotEmpty) {
+        _putChannelCache(cacheKey, restored);
+        debugPrint('EXPLODE CHANNEL CACHE HIT (disk): $keyword');
+        return restored;
+      }
+      // Hasil channel kosong bisa sementara; jangan jadikan cache final.
     }
 
     try {
@@ -490,18 +533,20 @@ class YoutubeSearchService {
           .where((channel) => channel.channelId.isNotEmpty)
           .toList(growable: false);
 
-      _putChannelCache(cacheKey, channels);
-      await _channelDisk.put(
-        'q|$cacheKey',
-        channels
-            .map((channel) => {
-                  'channelId': channel.channelId,
-                  'title': channel.title,
-                  'description': channel.description,
-                  'thumbnailUrl': channel.thumbnailUrl,
-                })
-            .toList(growable: false),
-      );
+      if (channels.isNotEmpty) {
+        _putChannelCache(cacheKey, channels);
+        await _channelDisk.put(
+          'q|$cacheKey',
+          channels
+              .map((channel) => {
+                    'channelId': channel.channelId,
+                    'title': channel.title,
+                    'description': channel.description,
+                    'thumbnailUrl': channel.thumbnailUrl,
+                  })
+              .toList(growable: false),
+        );
+      }
       return channels;
     } catch (error) {
       debugPrint('EXPLODE CHANNEL SEARCH ERROR: $error');

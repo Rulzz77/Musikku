@@ -108,6 +108,12 @@ extension _HomePlayback on _HomePageState {
     for (final candidate in _activeList.skip(currentIndex + 1)) {
       if (candidate.isLocal) break;
       if (!RegExp(r'^[A-Za-z0-9_-]{11}$').hasMatch(candidate.videoId)) break;
+      // Only pass catalogue-approved YouTube tracks to Media3. Skipped items
+      // remain in the user's source list and keep the relative order of valid
+      // successors intact.
+      if (!PlaybackSourcePolicy.isAllowedForAutomaticNext(candidate)) {
+        continue;
+      }
       result.add(<String, Object?>{
         'videoId': candidate.videoId,
         'title': candidate.title,

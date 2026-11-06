@@ -419,28 +419,17 @@ extension _HomeControls on _HomePageState {
     // NORMAL
     // ==========================================================
 
-    final index = _activeList.indexWhere(
-      (video) => video.videoId == current.videoId,
+    final nextVideo = PlaybackSourcePolicy.nextAllowedInOrder(
+      _activeList,
+      currentVideoId: current.videoId,
+      repeatAll: loopMode == LoopModeCustom.all,
     );
 
-    // Lagu aktif bukan bagian dari playlist ini (misalnya dari antrean
-    // atau pencarian lama) → mulai dari lagu pertama.
-    if (index < 0) {
-      await _playVideo(_activeList.first);
-
-      return;
-    }
-
-    if (index < _activeList.length - 1) {
-      await _playVideo(_activeList[index + 1]);
-
-      return;
-    }
-
-    // Sudah di lagu terakhir.
-    if (loopMode == LoopModeCustom.all) {
-      await _playVideo(_activeList.first);
-
+    if (nextVideo != null) {
+      // Invalid collection uploads are skipped without mutating/reordering the
+      // user's saved playlist. Explicit taps and manual queue items still play
+      // exactly what the user selected.
+      await _playVideo(nextVideo);
       return;
     }
 
@@ -449,7 +438,7 @@ extension _HomeControls on _HomePageState {
       if (!fromAutoNext) {
         _toast(_activeSource == _ListSource.local
             ? 'Daftar musik lokal selesai.'
-            : 'Playlist selesai. Aktifkan Repeat Semua untuk mengulang.');
+            : 'Tidak ada lagu berikutnya yang memenuhi filter. Playlist selesai.');
       }
       return;
     }

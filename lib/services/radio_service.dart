@@ -8,6 +8,7 @@ import '../models/youtube_search_result.dart';
 import 'channel_block_filter.dart';
 import 'music_style_matcher.dart';
 import 'youtube_search_service.dart';
+import 'youtube_music_policy.dart';
 
 /// Autoplay / "radio": menyiapkan lagu terbaru yang masih relevan dengan kata kunci
 /// supaya tombol Next dan auto-next tetap punya lagu berikutnya.
@@ -85,7 +86,8 @@ class RadioService {
   Future<void>? _historyLoad;
   Timer? _persistTimer;
 
-  static const int _maxTrackSeconds = 30 * 60;
+  static const int _maxTrackSeconds =
+      YoutubeMusicPolicy.maxStandaloneTrackDurationSeconds;
   static const int _maxPlayedIds = 1000;
   static const int _maxPlayedTrackKeys = 1200;
   static const int _selectionCooldownTracks = 10;

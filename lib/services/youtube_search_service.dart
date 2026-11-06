@@ -337,7 +337,7 @@ class YoutubeSearchService {
     // terlalu ketat. Hasil mentah disimpan agar perubahan filter tidak
     // mengabadikan daftar lagu yang sudah terlanjur terpotong.
     final cacheKey =
-        'explodeSearchV4ArtistCredit|${keyword.toLowerCase()}|${effectiveQuery.toLowerCase()}|${intent.latest ? 'date' : 'relevance'}';
+        'explodeSearchV5SingleTrackOnly|${keyword.toLowerCase()}|${effectiveQuery.toLowerCase()}|${intent.latest ? 'date' : 'relevance'}';
     final cached = _cache[cacheKey];
 
     if (cached != null) {
@@ -574,7 +574,8 @@ class YoutubeSearchService {
   // Shorts bisa sampai 3 menit, sementara Data API tidak memberi flag isShort.
   // Filter lokal memakai label metadata dan durasi untuk membatasi kandidat.
   static const int _radioMinSeconds = 31;
-  static const int _radioMaxSeconds = 30 * 60;
+  static const int _radioMaxSeconds =
+      YoutubeMusicPolicy.maxStandaloneTrackDurationSeconds;
 
   Future<RadioPage> searchLatest(
     String query, {
@@ -587,7 +588,7 @@ class YoutubeSearchService {
     // Versi cache berubah karena query Radio sekarang menjaga bahasa seed;
     // hasil lama yang mungkin sudah tercampur konteks Indonesia tidak dipakai.
     final cacheKey =
-        'radioExplodeV7InclusiveMusicPolicy|$normalized|${pageToken ?? ''}';
+        'radioExplodeV8SingleTrackOnly|$normalized|${pageToken ?? ''}';
     final cached = _cache[cacheKey];
     if (cached != null) {
       final age = DateTime.now().difference(cached.time);
@@ -769,7 +770,7 @@ class YoutubeSearchService {
     final musicCategoryId = categoryId == null || categoryId.trim().isEmpty
         ? '10'
         : categoryId.trim();
-    final cacheKey = 'mostPopularMusicPolicyV7|$musicCategoryId';
+    final cacheKey = 'mostPopularMusicPolicyV8|$musicCategoryId';
     final cached = _cache[cacheKey];
     if (cached != null) {
       final age = DateTime.now().difference(cached.time);
@@ -831,7 +832,7 @@ class YoutubeSearchService {
       );
     }
 
-    const cacheKey = 'recentMusicPolicyV9FromPopular';
+    const cacheKey = 'recentMusicPolicyV10SingleTrackOnly';
     final cached = _cache[cacheKey];
     if (cached != null) {
       final age = DateTime.now().difference(cached.time);

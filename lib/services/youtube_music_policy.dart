@@ -202,6 +202,55 @@ class YoutubeMusicPolicy {
     return videos.where((video) => !isLikelyAiGeneratedMusic(video)).toList();
   }
 
+  /// A public catalogue item must represent one standalone track, not a
+  /// multi-track album/playlist upload. Text markers are checked even when
+  /// duration metadata is missing (as happens in some search responses).
+  /// A 15-minute ceiling catches long-form compilations whose titles are vague;
+  /// normal extended singles up to this limit remain eligible.
+  static const int maxStandaloneTrackDurationSeconds = 15 * 60;
+
+  static bool isLikelyAlbumOrPlaylist(YoutubeSearchResult video) {
+    if (video.isLocal) return false;
+
+    final title = video.title
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+
+    // These phrases describe a multi-track upload, not a single song. Include
+    // common Indonesian wording because local uploads often do not use English
+    // metadata. Do not block the bare words "album" or "playlist"; a song can
+    // legitimately have either word as its title.
+    final collectionMarkers = RegExp(
+      r'\b(?:'
+      r'full (?:length )?album|complete album|entire album|whole album|'
+      r'album (?:full|lengkap|penuh|komplit|kompilasi)|'
+      r'(?:full|complete|entire|whole) playlist|'
+      r'playlist (?:lengkap|penuh|full|lagu|musik|songs?|music|mix|of|terbaik|pilihan|terbaru|galau|pop|indonesia|viral|hits)|'
+      r'daftar putar|'
+      r'kumpulan (?:lagu|musik|songs?|tracks?)|'
+      r'koleksi (?:lagu|musik|songs?|tracks?)|'
+      r'kompilasi(?: (?:lagu|musik|songs?|tracks?|album))?|'
+      r'(?:semua|seluruh) (?:lagu|songs?|tracks?|album)|'
+      r'(?:all|every) (?:songs?|tracks?|albums?)|'
+      r'greatest hits|best of (?:collection|album|songs?|tracks?|hits?|discography)|best songs?|top \d+ (?:lagu|songs?|tracks?)|'
+      r'\d+ (?:lagu|songs?|tracks?) (?:terbaik|hits|pilihan)|'
+      r'lagu (?:terbaik|hits|pilihan)|'
+      r'(?:song|music) collection|'
+      r'full discography|complete discography|discography|'
+      r'full mix|continuous mix|non ?stop|longplay|medley|'
+      r'\d+ (?:hours?|hrs?|jam)|'
+      r'(?:music|songs?|lagu|musik) (?:\d+ )?(?:hours?|hrs?|jam)'
+      r')\b',
+      caseSensitive: false,
+    );
+    if (collectionMarkers.hasMatch(title)) return true;
+
+    final seconds = video.durationSeconds;
+    return seconds != null && seconds > maxStandaloneTrackDurationSeconds;
+  }
+
   /// Filter ketat untuk hasil katalog publik MusikKu: prioritaskan rilis
   /// single resmi saja. youtube_explode_dart tidak mengekspos badge
   /// verifikasi channel secara konsisten, jadi keputusan ini berbasis marker
@@ -219,23 +268,17 @@ class YoutubeMusicPolicy {
         isLikelyNonMusicVideo(video) ||
         _hasExplicitNonMusicShortLabel(video) ||
         isLikelyAiGeneratedMusic(video) ||
-        isLikelyUnofficialMusicVersion(video)) {
+        isLikelyUnofficialMusicVersion(video) ||
+        isLikelyAlbumOrPlaylist(video)) {
       return false;
     }
 
-    // Pengguna meminta single, bukan album penuh, kompilasi atau playlist.
-    final albumOrCompilation = RegExp(
-      r'\b(?:full\s+album|complete\s+album|entire\s+album|whole\s+album|full\s+discography|complete\s+discography|discography|greatest\s+hits|best\s+of|compilation|full\s+playlist|playlist\s+(?:of|mix)|non[ -]?stop|continuous\s+mix|song\s+collection|music\s+collection|all\s+(?:songs|tracks)|medley|karaoke\s+version)\b',
-      caseSensitive: false,
-    );
-    if (albumOrCompilation.hasMatch(title)) return false;
-
     final seconds = video.durationSeconds;
-    if (seconds != null && (seconds <= 30 || seconds > 30 * 60)) return false;
+    if (seconds != null && seconds <= 30) return false;
 
     // Kalau YouTube Data API mengidentifikasi video sebagai kategori Music,
     // itu sinyal positif yang lebih baik daripada mewajibkan kata "Official".
-    // Penolakan cover/karaoke/AI, kompilasi, dan durasi ekstrem sudah di atas.
+    // Penolakan cover/karaoke/AI, album/playlist, dan durasi panjang sudah di atas.
     if (video.categoryId.trim() == '10') return true;
 
     // Lagu DJ/remix (funkot, breakbeat, slow bass, dsb.) hampir selalu diunggah
@@ -301,23 +344,14 @@ class YoutubeMusicPolicy {
         isLikelyNonMusicVideo(video) ||
         _hasExplicitNonMusicShortLabel(video) ||
         isLikelyAiGeneratedMusic(video) ||
-        isLikelyUnofficialMusicVersion(video)) {
+        isLikelyUnofficialMusicVersion(video) ||
+        isLikelyAlbumOrPlaylist(video)) {
       return false;
     }
 
     final artistQuery = _normalizeArtistSearchName(query);
     if (artistQuery.isEmpty) return false;
 
-    // Album/playlist upload tidak boleh masuk meskipun channel-nya cocok.
-    if (RegExp(
-      r'\b(?:full\s+album|complete\s+album|entire\s+album|whole\s+album|'
-      r'full\s+discography|complete\s+discography|discography|'
-      r'greatest\s+hits|best\s+of|compilation|full\s+playlist|playlist\s+(?:of|mix)|non[ -]?stop|'
-      r'continuous\s+mix|song\s+collection|music\s+collection|all\s+(?:songs|tracks)|medley)\b',
-      caseSensitive: false,
-    ).hasMatch(video.title)) {
-      return false;
-    }
     const genericMusicTerms = <String>{
       'pop', 'rock', 'jazz', 'metal', 'indie', 'dangdut', 'koplo', 'dj',
       'remix', 'k', 'hip', 'hop', 'lofi', 'lo', 'fi', 'radio',
@@ -370,7 +404,7 @@ class YoutubeMusicPolicy {
     if (titleCreditsArtist && normalizedTitle == artistQuery) return false;
 
     final seconds = video.durationSeconds;
-    if (seconds != null && (seconds <= 30 || seconds > 30 * 60)) {
+    if (seconds != null && seconds <= 30) {
       return false;
     }
     return true;
@@ -395,7 +429,7 @@ class YoutubeMusicPolicy {
   /// YouTube tidak menyediakan badge resmi yang konsisten pada hasil search;
   /// karena itu lagu berdurasi normal tidak boleh ditolak hanya karena judulnya
   /// tidak menyertakan kata Official/VEVO/Topic. Penanda cover/karaoke/AI,
-  /// album penuh, Shorts, dan konten nonmusik tetap dikeluarkan.
+  /// album/playlist, Shorts, dan konten nonmusik tetap dikeluarkan.
   static bool isMusicCandidate(YoutubeSearchResult video) {
     if (video.isLocal) return true;
     if (video.videoId.isEmpty ||
@@ -406,22 +440,13 @@ class YoutubeMusicPolicy {
         isLikelyNonMusicVideo(video) ||
         _hasExplicitNonMusicShortLabel(video) ||
         isLikelyAiGeneratedMusic(video) ||
-        isLikelyUnofficialMusicVersion(video)) {
+        isLikelyUnofficialMusicVersion(video) ||
+        isLikelyAlbumOrPlaylist(video)) {
       return false;
     }
 
-    final title = video.title.toLowerCase();
-    final albumOrCompilation = RegExp(
-      r'\b(?:full\s+album|complete\s+album|entire\s+album|whole\s+album|'
-      r'full\s+discography|complete\s+discography|discography|'
-      r'greatest\s+hits|best\s+of|compilation|full\s+playlist|playlist\s+(?:of|mix)|non[ -]?stop|'
-      r'continuous\s+mix|song\s+collection|music\s+collection|all\s+(?:songs|tracks)|medley)\b',
-      caseSensitive: false,
-    );
-    if (albumOrCompilation.hasMatch(title)) return false;
-
     final seconds = video.durationSeconds;
-    if (seconds != null && (seconds <= 30 || seconds > 30 * 60)) return false;
+    if (seconds != null && seconds <= 30) return false;
 
     final category = video.categoryId.trim();
     if (category == '10') return true;
@@ -431,7 +456,8 @@ class YoutubeMusicPolicy {
     // artis/label tidak memakai kata "official" pada nama atau judul.
     return isOfficialMusicReleaseCandidate(video) ||
         seconds == null ||
-        (seconds > 30 && seconds <= 30 * 60);
+        (seconds > 30 &&
+            seconds <= maxStandaloneTrackDurationSeconds);
   }
 
   /// Label non-musik yang sering muncul pada Shorts. Dipakai hanya untuk video
@@ -469,7 +495,7 @@ class YoutubeMusicPolicy {
   }) {
     if (video.isLocal) return true;
     final seconds = video.durationSeconds;
-    if (seconds != null && (seconds <= 30 || seconds > 30 * 60)) return false;
+    if (seconds != null && seconds <= 30) return false;
 
     if (video.videoId.isEmpty ||
         video.title.trim().isEmpty ||
@@ -477,7 +503,8 @@ class YoutubeMusicPolicy {
         _hasExplicitNonMusicShortLabel(video) ||
         isLikelyNonMusicVideo(video) ||
         isLikelyAiGeneratedMusic(video) ||
-        isLikelyUnofficialMusicVersion(video)) {
+        isLikelyUnofficialMusicVersion(video) ||
+        isLikelyAlbumOrPlaylist(video)) {
       return false;
     }
 

@@ -673,6 +673,113 @@ void main() {
       );
     });
 
+    test('rejects Indonesian and English album/playlist collection titles', () {
+      for (final title in <String>[
+        'Album Lengkap Fiersa Besari',
+        'Album Penuh - Semua Lagu Tulus',
+        'Kumpulan Lagu Terbaik Raisa',
+        'Playlist Lagu Galau Indonesia',
+        'Daftar Putar Lagu Pop Terbaru',
+        'Kompilasi Lagu 2000an',
+        'Semua Lagu Hindia',
+        'Seluruh Lagu Coldplay',
+        'Full Album - The Complete Collection',
+        'Best Of Adele - Greatest Hits',
+        'Nonstop Music Mix 2026',
+        '2 Hours of Indonesian Songs',
+      ]) {
+        final video = _track(
+          title: title,
+          channel: 'Official Music Channel',
+          duration: 2400,
+          categoryId: '10',
+        );
+        expect(
+          YoutubeMusicPolicy.isMusicCandidate(video),
+          isFalse,
+          reason: 'Collection should be rejected: $title',
+        );
+        expect(
+          YoutubeMusicPolicy.isOfficialMusicReleaseCandidate(video),
+          isFalse,
+          reason: 'Collection should be rejected: $title',
+        );
+        expect(
+          YoutubeMusicPolicy.isOfficialMusicReleaseCandidateForQuery(
+            video,
+            query: 'Fiersa Besari',
+          ),
+          isFalse,
+          reason: 'Collection should be rejected for artist search: $title',
+        );
+      }
+    });
+
+    test('rejects playlist labels even when YouTube omitted duration metadata', () {
+      final playlist = _track(
+        title: 'Playlist Terbaik Indonesia - Lagu Galau',
+        channel: 'Music Channel',
+        duration: null,
+      );
+      expect(YoutubeMusicPolicy.isLikelyAlbumOrPlaylist(playlist), isTrue);
+      expect(YoutubeMusicPolicy.isMusicCandidate(playlist), isFalse);
+    });
+
+    test('rejects long single-video compilations even without title markers', () {
+      final longUpload = _track(
+        title: 'Lagu Pilihan Indonesia',
+        channel: 'Official Music Channel',
+        duration: 18 * 60,
+        categoryId: '10',
+      );
+      expect(YoutubeMusicPolicy.isLikelyAlbumOrPlaylist(longUpload), isTrue);
+      expect(YoutubeMusicPolicy.isMusicCandidate(longUpload), isFalse);
+      expect(
+        YoutubeMusicPolicy.isMusicChannelUpload(
+          longUpload,
+          channelTitle: 'Official Music Channel',
+          channelDescription: 'Official music uploads',
+        ),
+        isFalse,
+      );
+    });
+
+    test('keeps extended but still single-track uploads under 15 minutes', () {
+      final extendedSingle = _track(
+        title: 'Long Original Instrumental',
+        channel: 'Artist Official',
+        duration: 12 * 60,
+        categoryId: '10',
+      );
+      expect(YoutubeMusicPolicy.isLikelyAlbumOrPlaylist(extendedSingle), isFalse);
+      expect(YoutubeMusicPolicy.isMusicCandidate(extendedSingle), isTrue);
+    });
+
+    test('does not reject a legitimate single titled Best of Me', () {
+      final track = _track(
+        title: 'Best of Me',
+        channel: 'The Artist',
+        duration: 220,
+      );
+      expect(YoutubeMusicPolicy.isLikelyAlbumOrPlaylist(track), isFalse);
+      expect(YoutubeMusicPolicy.isMusicCandidate(track), isTrue);
+    });
+
+    test('does not reject a song titled only Album or Playlist', () {
+      expect(
+        YoutubeMusicPolicy.isLikelyAlbumOrPlaylist(
+          _track(title: 'Album', channel: 'The Artist', duration: 220),
+        ),
+        isFalse,
+      );
+      expect(
+        YoutubeMusicPolicy.isLikelyAlbumOrPlaylist(
+          _track(title: 'Playlist', channel: 'The Artist', duration: 220),
+        ),
+        isFalse,
+      );
+    });
+
     test('keeps short original tracks above 30 seconds', () {
       final track = _track(
         title: 'Interlude',

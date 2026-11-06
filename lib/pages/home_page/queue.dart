@@ -49,6 +49,9 @@ extension _HomeQueue on _HomePageState {
     final allowMixedPlaylistSources =
         _activeSource == _ListSource.playlist && _activePlaylistId != null;
     _shufflePool = _activeList.where((video) {
+      if (!PlaybackSourcePolicy.isAllowedForAutomaticNext(video)) {
+        return false;
+      }
       // A user-authored playlist is an explicit selection; dislike should not
       // silently remove one of its tracks from that fixed playback list.
       if (_activeSource != _ListSource.playlist &&
@@ -240,6 +243,9 @@ extension _HomeQueue on _HomePageState {
     final language = _shuffleMusicLanguage;
     final current = _currentVideo;
     _shufflePool.removeWhere((video) {
+      if (!PlaybackSourcePolicy.isAllowedForAutomaticNext(video)) {
+        return true;
+      }
       if (_activeSource != _ListSource.playlist &&
           _dislikedIds.contains(video.videoId)) {
         return true;

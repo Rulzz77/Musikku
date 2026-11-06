@@ -186,6 +186,21 @@ extension _HomeStateSync on _HomePageState {
           }
         }
         if (nextTrack == null) return;
+        if (!PlaybackSourcePolicy.isAllowedForAutomaticNext(nextTrack)) {
+          // Defence in depth: native must never advance into a blocked album,
+          // playlist, karaoke, cover, or AI upload. Clear the preloaded tail,
+          // pause that transition, then continue from the next allowed item.
+          unawaited(_youtubeController.clearNativeGaplessQueue());
+          unawaited(() async {
+            try {
+              await _youtubeController.pauseVideo();
+              if (mounted) await _next(fromAutoNext: true);
+            } catch (error) {
+              debugPrint('BLOCKED NATIVE GAPLESS TRANSITION: $error');
+            }
+          }());
+          return;
+        }
         _applyNativeGaplessTrackTransition(nextTrack, state);
         activeId = nextTrack.videoId;
         if (!nextTrack.isLocal &&

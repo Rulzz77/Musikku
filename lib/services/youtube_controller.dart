@@ -7,6 +7,8 @@ import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 
 import '../models/native_youtube_state.dart';
 import '../models/youtube_player_debug.dart';
+import '../models/youtube_search_result.dart';
+import 'youtube_music_policy.dart';
 
 class NativeYoutubeController {
   static const MethodChannel _methods =
@@ -568,6 +570,23 @@ class NativeYoutubeController {
           resolvedIds.contains(videoId)) {
         continue;
       }
+      final title = candidate['title']?.toString().trim() ?? '';
+      final artist = candidate['artist']?.toString().trim() ?? '';
+      final rawDuration = candidate['durationSeconds'];
+      final durationSeconds = rawDuration is num && rawDuration.isFinite
+          ? rawDuration.toDouble()
+          : 0.0;
+      final policyCandidate = YoutubeSearchResult(
+        videoId: videoId,
+        title: title,
+        channelTitle: artist,
+        thumbnailUrl: candidate['thumbnailUrl']?.toString() ?? '',
+        durationSeconds: durationSeconds > 0 ? durationSeconds : null,
+      );
+      if (!YoutubeMusicPolicy.isMusicCandidate(policyCandidate)) {
+        debugPrint('GAPLESS: reject non-track successor $videoId | $title');
+        continue;
+      }
       try {
         final resolved = await _newPipe.invokeMapMethod<String, dynamic>(
           'resolveAudio',
@@ -605,18 +624,15 @@ class NativeYoutubeController {
             safeHeaders[key] = value;
           }
         }
-        final duration = candidate['durationSeconds'];
-        final durationSeconds = duration is num && duration.isFinite
-            ? duration.toDouble().clamp(0.0, 86400.0)
-            : 0.0;
+        final safeDurationSeconds = durationSeconds.clamp(0.0, 86400.0);
         resolvedTracks.add(<String, Object?>{
           'videoId': videoId,
-          'title': candidate['title']?.toString() ?? 'Tanpa judul',
-          'artist': candidate['artist']?.toString() ?? '',
+          'title': title.isEmpty ? 'Tanpa judul' : title,
+          'artist': artist,
           'thumbnailUrl': candidate['thumbnailUrl']?.toString() ?? '',
           'streamUrl': streamUrl,
           'headers': safeHeaders,
-          'durationSeconds': durationSeconds,
+          'durationSeconds': safeDurationSeconds,
         });
         resolvedIds.add(videoId);
       } catch (error) {

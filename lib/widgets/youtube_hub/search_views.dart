@@ -368,18 +368,20 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
 
       // Dangdut sering diunggah melalui label/artist channels yang tidak selalu
       // memakai kata "official" di judul. Cari variasi tambahan hanya saat hasil
-      // pertama sedikit, lalu gabungkan unik; hasil tetap melewati filter rilis
-      // resmi, AI, karaoke, album penuh, dan Shorts di YoutubeSearchService.
+      // pertama sedikit, lalu gabungkan unik; semua hasil melewati kebijakan
+      // musik bersama yang menolak cover, karaoke, AI, dan konten nonmusik jelas.
       if ((category == 'Dangdut' || category == 'Dangdut/Koplo') &&
           results.length < 6) {
         final fallbackQueries = category == 'Dangdut'
             ? const <String>[
-                'dangdut Indonesia official audio',
-                'NAGASWARA dangdut official music video',
+                'lagu dangdut Indonesia',
+                'dangdut Indonesia audio',
+                'NAGASWARA dangdut music',
               ]
             : const <String>[
-                'dangdut koplo official music video Indonesia',
-                'Milady Record dangdut koplo official',
+                'lagu dangdut koplo Indonesia',
+                'dangdut koplo Indonesia music',
+                'Milady Record dangdut koplo',
               ];
         final combined = <String, YoutubeSearchResult>{
           for (final video in results)

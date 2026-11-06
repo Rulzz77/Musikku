@@ -155,15 +155,6 @@ class YoutubeSearchService {
 
   /// Konversi metadata Video dari youtube_explode_dart menjadi model app.
   /// Properti dibaca defensif karena metadata video YouTube bisa tidak lengkap.
-  static String _officialSearchQuery(String query) {
-    final trimmed = query.trim();
-    if (trimmed.isEmpty) return trimmed;
-    if (RegExp(r'\b(?:official|vevo)\b', caseSensitive: false).hasMatch(trimmed)) {
-      return trimmed;
-    }
-    return '$trimmed official';
-  }
-
   /// "3 months ago" / "5 hari yang lalu" -> perkiraan tanggal. Perkiraan kasar
   /// (bulan = 30 hari, tahun = 365 hari), cukup untuk menilai baru atau lama.
   static DateTime? _approximateDateFromRelative(String raw) {
@@ -411,7 +402,7 @@ class YoutubeSearchService {
           .where((video) => !video.isLive && !video.isUpcoming)
           .where((video) {
             final seconds = video.durationSeconds;
-            if (seconds != null && seconds <= 60) return false;
+            if (seconds != null && seconds <= 30) return false;
             return YoutubeMusicPolicy.isOfficialMusicReleaseCandidateForQuery(
               video,
               query: keyword,
@@ -582,8 +573,8 @@ class YoutubeSearchService {
 
   // Shorts bisa sampai 3 menit, sementara Data API tidak memberi flag isShort.
   // Filter lokal memakai label metadata dan durasi untuk membatasi kandidat.
-  static const int _radioMinSeconds = 61;
-  static const int _radioMaxSeconds = 12 * 60;
+  static const int _radioMinSeconds = 31;
+  static const int _radioMaxSeconds = 30 * 60;
 
   Future<RadioPage> searchLatest(
     String query, {
@@ -596,7 +587,7 @@ class YoutubeSearchService {
     // Versi cache berubah karena query Radio sekarang menjaga bahasa seed;
     // hasil lama yang mungkin sudah tercampur konteks Indonesia tidak dipakai.
     final cacheKey =
-        'radioExplodeV3LanguageAware|$normalized|${pageToken ?? ''}';
+        'radioExplodeV7InclusiveMusicPolicy|$normalized|${pageToken ?? ''}';
     final cached = _cache[cacheKey];
     if (cached != null) {
       final age = DateTime.now().difference(cached.time);
@@ -604,7 +595,7 @@ class YoutubeSearchService {
       if (age < ttl) {
         final filtered = _rankRadio(_filterAiMusicCandidates(
           _filterNonMusicCandidates(_filterShortFormCandidates(cached.results)),
-        ).where(YoutubeMusicPolicy.isOfficialMusicReleaseCandidate).toList());
+        ).where(YoutubeMusicPolicy.isMusicCandidate).toList());
         return RadioPage(results: filtered, nextPageToken: cached.nextPageToken);
       }
     }
@@ -616,7 +607,7 @@ class YoutubeSearchService {
       if (restored.isNotEmpty) {
         final filtered = _rankRadio(_filterAiMusicCandidates(
           _filterNonMusicCandidates(_filterShortFormCandidates(restored)),
-        ).where(YoutubeMusicPolicy.isOfficialMusicReleaseCandidate).toList());
+        ).where(YoutubeMusicPolicy.isMusicCandidate).toList());
         _putCache(cacheKey, _CacheEntry(DateTime.now(), filtered, token));
         return RadioPage(results: filtered, nextPageToken: token);
       }
@@ -663,8 +654,10 @@ class YoutubeSearchService {
       if (!alreadyMusicWord && !isSongSimilarityQuery) songQualifier,
       ?languageQualifier,
     ].join(' ');
-    final officialRadioKeyword = _officialSearchQuery(radioKeyword);
-    final pageSourceKey = officialRadioKeyword.toLowerCase();
+    // Jangan menambahkan kata 'official' secara paksa: banyak single asli dari
+    // channel artis/label independen tidak memakai marker itu di YouTube.
+    final radioSearchQuery = radioKeyword;
+    final pageSourceKey = radioSearchQuery.toLowerCase();
 
     int requestedPage = 1;
     if (pageToken != null && pageToken.startsWith('explode:page:')) {
@@ -681,7 +674,7 @@ class YoutubeSearchService {
       // Radio sebelumnya sudah mencapai halaman berikutnya.
       if (requestedPage == 1 || source == null) {
         source = await _youtubeExplode.search.search(
-          officialRadioKeyword,
+          radioSearchQuery,
           filter: ytex.SortFilters.relevance,
         );
         sourcePageNumber = 1;
@@ -728,7 +721,7 @@ class YoutubeSearchService {
       results = _filterNonMusicCandidates(results);
       results = _filterAiMusicCandidates(results);
       results = results
-          .where(YoutubeMusicPolicy.isOfficialMusicReleaseCandidate)
+          .where(YoutubeMusicPolicy.isMusicCandidate)
           .toList(growable: false);
       results = _rankRadio(results);
 
@@ -776,7 +769,7 @@ class YoutubeSearchService {
     final musicCategoryId = categoryId == null || categoryId.trim().isEmpty
         ? '10'
         : categoryId.trim();
-    final cacheKey = 'mostPopularOfficialMusicV4|$musicCategoryId';
+    final cacheKey = 'mostPopularMusicPolicyV7|$musicCategoryId';
     final cached = _cache[cacheKey];
     if (cached != null) {
       final age = DateTime.now().difference(cached.time);
@@ -838,7 +831,7 @@ class YoutubeSearchService {
       );
     }
 
-    const cacheKey = 'recentOfficialMusicV6FromPopular';
+    const cacheKey = 'recentMusicPolicyV9FromPopular';
     final cached = _cache[cacheKey];
     if (cached != null) {
       final age = DateTime.now().difference(cached.time);
@@ -1021,6 +1014,9 @@ class YoutubeSearchService {
 
   static bool isLikelyAiGeneratedMusic(YoutubeSearchResult video) =>
       YoutubeMusicPolicy.isLikelyAiGeneratedMusic(video);
+
+  static bool isLikelyUnofficialMusicVersion(YoutubeSearchResult video) =>
+      YoutubeMusicPolicy.isLikelyUnofficialMusicVersion(video);
 
   List<YoutubeSearchResult> _filterAiMusicCandidates(
     List<YoutubeSearchResult> videos,

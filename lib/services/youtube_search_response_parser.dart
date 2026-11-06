@@ -32,7 +32,7 @@ class YoutubeSearchResponseParser {
       );
       if (video == null) continue;
       final seconds = video.durationSeconds;
-      if (!video.isLive && !video.isUpcoming && seconds != null && seconds <= 60) {
+      if (!video.isLive && !video.isUpcoming && seconds != null && seconds <= 30) {
         continue;
       }
       out.add(video);

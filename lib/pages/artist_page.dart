@@ -65,20 +65,15 @@ class _ArtistPageState extends State<ArtistPage> {
   }
 
   static final RegExp _nonMusicContentTitle = RegExp(
-    r'\b(?:vlogs?|daily\s+vlog|podcasts?|interviews?|wawancara|reaction(?:s)?|reacts?\s+to|reviews?|tutorials?|how\s+to|behind\s+the\s+scenes|making\s+of|studio\s+tour|day\s+in\s+the\s+life|daily\s+life|life\s+update|career\s+update|channel\s+update|tour\s+diary|travel\s+(?:vlog|diary)|road\s+trip|gaming|gameplay|lets?\s+play|challenges?|unboxing|q\s*&\s*a|questions?\s+and\s+answers?|news\s+(?:update|report)|breaking\s+news|announcements?|pranks?|comedy|funny\s+moments?|shorts?|skits?|documentar(?:y|ies)|meet\s+and\s+greet|press\s+conference|livestreams?)\b',
-    caseSensitive: false,
-  );
-
-  static final RegExp _unofficialContent = RegExp(
-    r'\b(?:cover(?:ed)?|karaoke|fan[ -]?made|unofficial|reaction|reacts?|tribute|slowed|sped\s*up|nightcore|dance\s+practice|teasers?|trailers?|snippets?)\b',
+    r'\b(?:vlogs?|daily\s+vlog|podcasts?|interviews?|wawancara|reacts?\s+to|reaction\s+(?:video|to)|(?:album|song)\s+review|review\s+of|tutorials?|how\s+to|behind\s+the\s+scenes|making\s+of|studio\s+tour|day\s+in\s+the\s+life|daily\s+life|life\s+update|career\s+update|channel\s+update|tour\s+diary|travel\s+(?:vlog|diary)|road\s+trip\s+vlog|gaming|gameplay|lets?\s+play|unboxing|q\s*&\s*a|questions?\s+and\s+answers?|news\s+(?:update|report)|breaking\s+news|pranks?|comedy\s+(?:skit|video|moments?)|funny\s+moments?|shorts\s+video|skits?|documentar(?:y|ies)|meet\s+and\s+greet|press\s+conference|livestreams?)\b',
     caseSensitive: false,
   );
 
   static final RegExp _albumOrCompilation = RegExp(
     r'\b(?:full\s+album|complete\s+album|entire\s+album|whole\s+album|'
-    r'album|full\s+discography|complete\s+discography|discography|'
-    r'greatest\s+hits|best\s+of|compilation|playlist|non[ -]?stop|'
-    r'continuous\s+mix|song\s+collection|all\s+(?:songs|tracks)|medley)\b',
+    r'full\s+discography|complete\s+discography|discography|'
+    r'greatest\s+hits|best\s+of|compilation|full\s+playlist|playlist\s+(?:of|mix)|non[ -]?stop|'
+    r'continuous\s+mix|song\s+collection|music\s+collection|all\s+(?:songs|tracks)|medley)\b',
     caseSensitive: false,
   );
 
@@ -87,7 +82,7 @@ class _ArtistPageState extends State<ArtistPage> {
 
   bool _hasSongLikeDuration(YoutubeSearchResult video) {
     final seconds = video.durationSeconds;
-    return seconds == null || (seconds >= 45 && seconds <= 900);
+    return seconds == null || (seconds >= 31 && seconds <= 1800);
   }
 
   String _normalizeArtistText(String value) => value
@@ -131,7 +126,7 @@ class _ArtistPageState extends State<ArtistPage> {
           video.isUpcoming ||
           _isClearlyNonMusic(video) ||
           _albumOrCompilation.hasMatch(video.title) ||
-          _unofficialContent.hasMatch(video.title) ||
+          YoutubeSearchService.isLikelyUnofficialMusicVersion(video) ||
           YoutubeSearchService.isLikelyShortForm(video) ||
           YoutubeSearchService.isLikelyAiGeneratedMusic(video) ||
           YoutubeSearchService.isLikelyNonMusicVideo(video) ||
@@ -151,11 +146,11 @@ class _ArtistPageState extends State<ArtistPage> {
 
       final rawMetadata =
           '${video.title} ${video.description} ${video.channelTitle}';
-      // Kata "cover" pada deskripsi rilis kadang berarti cover artwork, bukan
-      // cover lagu. Hanya judul yang dipakai untuk menolak versi cover.
-      if (_unofficialContent.hasMatch(video.title)) continue;
+      // Gunakan aturan pusat agar deskripsi "cover artwork" tidak salah
+      // dianggap cover lagu, tetapi cover/karaoke/AI yang jelas tetap ditolak.
+      if (YoutubeSearchService.isLikelyUnofficialMusicVersion(video)) continue;
       final titleCreditsArtist = artistInTitle && title != artist;
-      if (!artistChannel && !titleCreditsArtist &&
+      if (!artistChannel && !titleCreditsArtist && !artistInDescription &&
           !officialPattern.hasMatch(rawMetadata)) {
         continue;
       }
@@ -167,7 +162,10 @@ class _ArtistPageState extends State<ArtistPage> {
         video,
         channelTitle: video.channelTitle,
       );
-      if (!artistChannel && !titleCreditsArtist && !hasMusicMetadata) continue;
+      if (!artistChannel && !titleCreditsArtist && !artistInDescription &&
+          !hasMusicMetadata) {
+        continue;
+      }
       tracks.add(video);
     }
 
@@ -300,7 +298,7 @@ class _ArtistPageState extends State<ArtistPage> {
               video.isLive ||
               video.isUpcoming ||
               _isClearlyNonMusic(video) ||
-              _unofficialContent.hasMatch(video.title) ||
+              YoutubeSearchService.isLikelyUnofficialMusicVersion(video) ||
               _albumOrCompilation.hasMatch(video.title) ||
               !_hasSongLikeDuration(video) ||
               YoutubeSearchService.isLikelyShortForm(video) ||
@@ -319,8 +317,8 @@ class _ArtistPageState extends State<ArtistPage> {
               ) ||
               video.categoryId == '10' ||
               (video.durationSeconds == null ||
-                  (video.durationSeconds! > 60 &&
-                      video.durationSeconds! <= 15 * 60));
+                  (video.durationSeconds! > 30 &&
+                      video.durationSeconds! <= 30 * 60));
         })
         .toList(growable: false);
     return widget.searchService.removeShorts(tracks);

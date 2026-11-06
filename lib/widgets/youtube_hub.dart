@@ -227,16 +227,18 @@ class _YoutubeHubState extends State<YoutubeHub> {
   ];
 
   static const Map<String, String> _exploreQueries = {
-    'Pop Indonesia': 'lagu pop Indonesia official music video',
-    'Dangdut': 'lagu dangdut Indonesia official music video',
-    'Dangdut/Koplo': 'lagu dangdut koplo Indonesia official music video',
-    'K-Pop': 'K-pop official music video latest',
-    'Hip-hop': 'hip hop music official video',
-    'Rock': 'rock music official video',
-    'Jazz': 'jazz music official',
+    // Jangan mewajibkan kata "official": banyak rilisan asli artis/label
+    // independen tidak memakai marker itu pada judul atau metadata YouTube.
+    'Pop Indonesia': 'lagu pop Indonesia',
+    'Dangdut': 'lagu dangdut Indonesia',
+    'Dangdut/Koplo': 'lagu dangdut koplo Indonesia',
+    'K-Pop': 'K-pop songs latest',
+    'Hip-hop': 'hip hop music',
+    'Rock': 'rock music songs',
+    'Jazz': 'jazz music songs',
     'Lo-fi': 'lofi hip hop music mix',
-    'Musik religi': 'lagu religi Indonesia official music',
-    'Soundtrack': 'soundtrack film Indonesia official music',
+    'Musik religi': 'lagu religi Indonesia',
+    'Soundtrack': 'soundtrack film Indonesia',
   };
 
   // ---------------------------------------------------------------------------

@@ -52,16 +52,42 @@ class YoutubeMusicPolicy {
   }
 
   static bool isLikelyShortForm(YoutubeSearchResult video) {
-    final title = video.title.toLowerCase();
-    final description = video.description.toLowerCase();
-    final channel = video.channelTitle.toLowerCase();
-    final combined = '$title $description $channel';
-
-    // Menangkap label yang umum dipakai pada Shorts / short-form uploads.
-    return RegExp(
+    final titleAndChannel = '${video.title} ${video.channelTitle}';
+    final shortMarker = RegExp(
       r'''(?:#shorts?\b|\bytshorts\b|\byoutube\s+shorts\b|\bshorts?\s*(?:video|music|song|remix)\b|\bshort\s+video\b|\bvertical\s+(?:video|music)\b|\bshort-form\b)''',
       caseSensitive: false,
-    ).hasMatch(combined);
+    );
+
+    // Deskripsi resmi sering berisi hashtag #Shorts sebagai template promosi.
+    // Hanya penanda kuat pada judul/channel yang dipakai agar lagu asli tidak
+    // hilang hanya karena hashtag generik di bagian deskripsi.
+    return shortMarker.hasMatch(titleAndChannel);
+  }
+
+  /// Menolak versi yang jelas bukan rilisan original. Pola cover sengaja
+  /// spesifik: judul lagu sah seperti "Cover Me in Sunshine" tidak dibuang.
+  static bool isLikelyUnofficialMusicVersion(YoutubeSearchResult video) {
+    const rejected =
+        r'''\bkaraoke\b|\b(?:fan[ -]?made|unofficial|tribute|nightcore|sped[ -]?up|slowed(?:\s*(?:and|&|\+)\s*reverb)?|reverb\s+version|8d\s+audio|8d\s+music|mash[ -]?up|bootleg|fan[ -]?edit)\b|\bcover(?:ed)?\s+(?:by|version|song|lagu|music|musik|of)\b|\b(?:song|track|music|lagu)\s+covers?\b|\b(?:acoustic|piano|guitar|gitar|live|instrumental|singing|vocal)\s+cover\b|\b(?:my|our)\s+cover\b|\bversi\s+cover\b|\bkover\b|(?:\(|\[|[-–—|])\s*cover(?:\s+by\s+[^)\]]+)?\s*(?:\)|\])?$''';
+    final title = video.title.trim();
+    final description = video.description;
+    final titleHasReject = RegExp(rejected, caseSensitive: false).hasMatch(title);
+    final titleHasParenthesizedCover = RegExp(
+          r'(?:\(|\[|[-–—|])[^)\]]{0,60}\bcover\b[^)\]]*(?:\)|\])?$',
+          caseSensitive: false,
+        ).hasMatch(title) &&
+        !RegExp(r'\b(?:cover\s+art|album\s+cover|cover\s+artwork)\b',
+                caseSensitive: false)
+            .hasMatch(title);
+    if (titleHasReject || titleHasParenthesizedCover) return true;
+
+    // Deskripsi boleh menyebut cover artwork; hanya frasa yang menyatakan
+    // cover lagu/karaoke yang dihitung sebagai versi non-original.
+    final descriptionHasCover = RegExp(
+      r'''\b(?:my|our|this is a|this is my|acoustic|piano|guitar|gitar)\s+cover\s+(?:of|song|lagu|version)\b|\bcover\s+(?:song|lagu|music|musik|version|of|by)\b|\b(?:song|track|music|lagu)\s+cover\b|\bversi\s+cover\b|\bkover\b|\bkaraoke\s+(?:version|track|song|lyrics?|instrumental)\b|\b(?:fan[ -]?made|unofficial)\s+(?:cover|version|song|music|audio|video)\b|\btribute\s+(?:to|version)\b''',
+      caseSensitive: false,
+    ).hasMatch(description);
+    return descriptionHasCover;
   }
 
 
@@ -80,14 +106,22 @@ class YoutubeMusicPolicy {
       'wawancara',
       'talkshow',
       'talk show',
-      'reaction',
-      'reaksi',
-      'review',
+      'reaction video',
+      'reacting to',
+      'reaction to',
+      'album review',
+      'song review',
+      'review of',
       'tutorial',
       'how to',
       'cara membuat',
-      'berita',
-      'news',
+      'news update',
+      'breaking news',
+      'news report',
+      'daily news',
+      'berita terkini',
+      'berita terbaru',
+      'laporan berita',
       'vlog',
       'daily vlog',
       'trailer',
@@ -99,8 +133,8 @@ class YoutubeMusicPolicy {
       'live stream',
       'web series',
       'webseries',
-      'talking',
-      'diskusi',
+      'panel discussion',
+      'forum diskusi',
     ];
 
     // Match whole words/phrases, not arbitrary substrings. Generic substring
@@ -120,7 +154,8 @@ class YoutubeMusicPolicy {
   static bool isLikelyAiGeneratedMusic(YoutubeSearchResult video) {
     final title = video.title.toLowerCase();
     final channel = video.channelTitle.toLowerCase();
-    final combined = '$title $channel';
+    final description = video.description.toLowerCase();
+    final combined = '$title $channel $description';
 
     // Tidak ada flag API yang menyatakan 'AI music' secara sempurna. Karena
     // itu filter memakai sinyal yang kuat dan spesifik, bukan sekadar kata
@@ -142,22 +177,20 @@ class YoutubeMusicPolicy {
       'deepfake voice',
       'suno ai',
       'udio ai',
+      'made with suno',
+      'generated with suno',
+      'created with suno',
+      'suno generated',
+      'made with udio',
+      'generated with udio',
+      'created with udio',
+      'udio generated',
     ];
 
     if (strongMarkers.any(combined.contains)) {
       return true;
     }
 
-    if (RegExp(r'\b(?:suno|udio)\b').hasMatch(channel)) {
-      return true;
-    }
-
-    // Banyak channel generatif memberi label 'AI' di nama channel, misalnya
-    // 'Kacaw AI'. Untuk radio musik, hindari channel yang secara eksplisit
-    // menandai dirinya sebagai AI.
-    if (RegExp(r'(?:^|[\s_-])ai(?:$|[\s_-])').hasMatch(channel)) {
-      return true;
-    }
 
     return RegExp(r'\b(?:artificial\s+intelligence|synthetic\s+voice)\b')
         .hasMatch(combined);
@@ -178,22 +211,32 @@ class YoutubeMusicPolicy {
 
     final title = video.title.toLowerCase().trim();
     final channel = video.channelTitle.toLowerCase().trim();
-    final combined = '$title $channel';
 
     if (title.isEmpty || video.videoId.isEmpty) return false;
-    if (isLikelyShortForm(video) ||
+    if (video.isLive ||
+        video.isUpcoming ||
+        isLikelyShortForm(video) ||
         isLikelyNonMusicVideo(video) ||
-        isLikelyNonMusicShort(video) ||
-        isLikelyAiGeneratedMusic(video)) {
+        _hasExplicitNonMusicShortLabel(video) ||
+        isLikelyAiGeneratedMusic(video) ||
+        isLikelyUnofficialMusicVersion(video)) {
       return false;
     }
 
     // Pengguna meminta single, bukan album penuh, kompilasi atau playlist.
     final albumOrCompilation = RegExp(
-      r'\b(?:full\s+album|complete\s+album|entire\s+album|whole\s+album|album|full\s+discography|complete\s+discography|discography|greatest\s+hits|best\s+of|compilation|playlist|non[ -]?stop|continuous\s+mix|song\s+collection|all\s+(?:songs|tracks)|medley|karaoke\s+version)\b',
+      r'\b(?:full\s+album|complete\s+album|entire\s+album|whole\s+album|full\s+discography|complete\s+discography|discography|greatest\s+hits|best\s+of|compilation|full\s+playlist|playlist\s+(?:of|mix)|non[ -]?stop|continuous\s+mix|song\s+collection|music\s+collection|all\s+(?:songs|tracks)|medley|karaoke\s+version)\b',
       caseSensitive: false,
     );
     if (albumOrCompilation.hasMatch(title)) return false;
+
+    final seconds = video.durationSeconds;
+    if (seconds != null && (seconds <= 30 || seconds > 30 * 60)) return false;
+
+    // Kalau YouTube Data API mengidentifikasi video sebagai kategori Music,
+    // itu sinyal positif yang lebih baik daripada mewajibkan kata "Official".
+    // Penolakan cover/karaoke/AI, kompilasi, dan durasi ekstrem sudah di atas.
+    if (video.categoryId.trim() == '10') return true;
 
     // Lagu DJ/remix (funkot, breakbeat, slow bass, dsb.) hampir selalu diunggah
     // channel DJ non-resmi, jadi tidak punya penanda "official". Tanpa
@@ -207,20 +250,11 @@ class YoutubeMusicPolicy {
     if (isDjTrack) {
       // Untuk lagu DJ, hanya tolak yang memang cover/karaoke/AI. Label seperti
       // slowed, sped up, nightcore, 8D, mashup, bootleg adalah gaya DJ yang wajar.
-      final badDjVersion = RegExp(
-        r'\b(?:karaoke|cover|fan[ -]?made|unofficial|tribute|'
-        r'ai[ -]?(?:cover|version|voice|vocals?|generated)|suno|udio)\b',
-        caseSensitive: false,
-      );
-      return !badDjVersion.hasMatch(combined);
+      return !isLikelyUnofficialMusicVersion(video);
     }
 
     // Tolak versi non-original yang biasa mencemari hasil pencarian.
-    final nonOfficialVersion = RegExp(
-      r'\b(?:karaoke|cover|fan[ -]?made|unofficial|tribute|nightcore|sped[ -]?up|slowed(?:\s*(?:and|&|\+)\s*reverb)?|reverb\s+version|8d\s+audio|8d\s+music|mash[ -]?up|bootleg|fan[ -]?edit|ai[ -]?(?:cover|version|voice|vocals?|generated)|suno|udio)\b',
-      caseSensitive: false,
-    );
-    if (nonOfficialVersion.hasMatch(combined)) return false;
+    if (isLikelyUnofficialMusicVersion(video)) return false;
 
     // Explicit title markers for official singles/audio/video/visualizer.
     final officialTitle = RegExp(
@@ -252,20 +286,22 @@ class YoutubeMusicPolicy {
   /// Allows normal-length tracks when the searched artist is credited in the
   /// title/description or the channel name. This fills the gap for releases
   /// uploaded by labels that do not carry an official marker on the title.
-  /// It is deliberately query-scoped: generic genre/song searches still use
-  /// the strict official-release policy above.
+  /// It is query-scoped for artist names; generic genre/song searches use the
+  /// safe music-candidate policy without requiring an official-name marker.
   static bool isOfficialMusicReleaseCandidateForQuery(
     YoutubeSearchResult video, {
     required String query,
   }) {
-    if (isOfficialMusicReleaseCandidate(video)) return true;
-    if (video.isLocal ||
-        video.videoId.isEmpty ||
+    if (video.isLocal) return true;
+    if (video.videoId.isEmpty ||
+        video.title.trim().isEmpty ||
         video.isLive ||
         video.isUpcoming ||
         isLikelyShortForm(video) ||
         isLikelyNonMusicVideo(video) ||
-        isLikelyAiGeneratedMusic(video)) {
+        _hasExplicitNonMusicShortLabel(video) ||
+        isLikelyAiGeneratedMusic(video) ||
+        isLikelyUnofficialMusicVersion(video)) {
       return false;
     }
 
@@ -275,28 +311,34 @@ class YoutubeMusicPolicy {
     // Album/playlist upload tidak boleh masuk meskipun channel-nya cocok.
     if (RegExp(
       r'\b(?:full\s+album|complete\s+album|entire\s+album|whole\s+album|'
-      r'album|full\s+discography|complete\s+discography|discography|'
-      r'greatest\s+hits|best\s+of|compilation|playlist|non[ -]?stop|'
-      r'continuous\s+mix|song\s+collection|all\s+(?:songs|tracks)|medley)\b',
+      r'full\s+discography|complete\s+discography|discography|'
+      r'greatest\s+hits|best\s+of|compilation|full\s+playlist|playlist\s+(?:of|mix)|non[ -]?stop|'
+      r'continuous\s+mix|song\s+collection|music\s+collection|all\s+(?:songs|tracks)|medley)\b',
       caseSensitive: false,
     ).hasMatch(video.title)) {
       return false;
     }
-    const genericQueries = <String>{
+    const genericMusicTerms = <String>{
       'pop', 'rock', 'jazz', 'metal', 'indie', 'dangdut', 'koplo', 'dj',
-      'remix', 'k pop', 'hip hop', 'lofi', 'lo fi', 'radio', 'soundtrack',
-      'instrumental', 'karaoke', 'chill', 'blues', 'reggae', 'classical',
-      'country', 'folk', 'edm', 'house', 'techno', 'trance', 'ambient',
-      'pop indonesia', 'rock indonesia', 'lagu inggris', 'lagu indonesia',
-      'lagu jawa', 'lagu akustik', 'dangdut koplo', 'dj remix', 'galau',
+      'remix', 'k', 'hip', 'hop', 'lofi', 'lo', 'fi', 'radio',
+      'soundtrack', 'instrumental', 'karaoke', 'chill', 'blues', 'reggae',
+      'classical', 'country', 'folk', 'edm', 'house', 'techno', 'trance',
+      'ambient', 'indonesia', 'indonesian', 'inggris', 'english', 'jawa',
+      'javanese', 'akustik', 'religi', 'film', 'mix', 'music', 'song',
+      'lagu', 'galau', 'nostalgia', 'viral', 'terbaru', 'latest', 'top',
+      'hits', 'best', '50', '2024', '2025', '2026', 'r', 'b',
     };
-    if (genericQueries.contains(artistQuery)) return false;
+    final genericTokens = artistQuery.split(' ').where((word) => word.isNotEmpty).toSet();
+    if (genericTokens.isNotEmpty &&
+        genericTokens.every(genericMusicTerms.contains)) {
+      return isMusicCandidate(video);
+    }
 
     final queryTokens = artistQuery.split(' ').where((word) => word.length > 1).toSet();
-    if (queryTokens.isEmpty || queryTokens.length > 4) return false;
-    if (queryTokens.length == 1 &&
-        genericQueries.contains(queryTokens.single)) {
-      return false;
+    if (queryTokens.isEmpty || queryTokens.length > 4) {
+      // Query panjang berisi genre/bahasa/konteks tambahan; jangan buang semua
+      // lagu hanya karena parser tidak bisa memastikan satu nama artis.
+      return isMusicCandidate(video);
     }
 
     final channel = _normalizeArtistSearchName(video.channelTitle);
@@ -323,18 +365,12 @@ class YoutubeMusicPolicy {
     }
 
     // An exact artist/channel or explicit artist credit is a strong signal,
-    // but do not admit covers, karaoke, fan edits, remixes, or promo snippets.
-    final nonOriginal = RegExp(
-      r'\b(?:cover(?:ed)?|karaoke|fan[ -]?made|unofficial|tribute|slowed|'
-      r'sped\s*up|nightcore|dance\s+practice|teaser|trailer|snippet|'
-      r'mash[ -]?up|bootleg|ai[ -]?(?:cover|version|voice|vocals?|generated)|suno|udio)\b',
-      caseSensitive: false,
-    );
-    if (nonOriginal.hasMatch(video.title)) return false;
+    // but do not admit covers, karaoke, fan edits, AI versions, or promo snippets.
+    if (isLikelyUnofficialMusicVersion(video)) return false;
     if (titleCreditsArtist && normalizedTitle == artistQuery) return false;
 
     final seconds = video.durationSeconds;
-    if (seconds != null && (seconds <= 60 || seconds > 15 * 60)) {
+    if (seconds != null && (seconds <= 30 || seconds > 30 * 60)) {
       return false;
     }
     return true;
@@ -355,91 +391,60 @@ class YoutubeMusicPolicy {
       .replaceAll(RegExp(r'\s+'), ' ')
       .trim();
 
-  static bool isMusicCandidate(YoutubeSearchResult video) =>
-      video.isLocal || isOfficialMusicReleaseCandidate(video);
-
-  /// Shorts tidak selalu diberi hashtag #Shorts di metadata YouTube.
-  /// Untuk video berdurasi sampai 3 menit, kategori YouTube "Music" saja
-  /// tidak cukup: upload pendek tanpa penanda lagu/performer sering berupa
-  /// meme, tren, potongan lucu, atau video acak yang salah kategori.
-  /// Lagu pendek tetap boleh lolos bila judul/deskripsi/channel memberi sinyal
-  /// musik yang cukup kuat.
-  static bool isLikelyNonMusicShort(
-    YoutubeSearchResult video, {
-    String channelTitle = '',
-    String channelDescription = '',
-  }) {
-    if (video.isLocal) return false;
-    final duration = video.durationSeconds;
-    if (duration == null || duration <= 0 || duration > 180) return false;
-    final effectiveChannel = channelTitle.trim().isNotEmpty
-        ? channelTitle.trim()
-        : video.channelTitle;
-    final contextualVideo = effectiveChannel == video.channelTitle
-        ? video
-        : video.copyWith(channelTitle: effectiveChannel);
-    if (_hasExplicitNonMusicShortLabel(contextualVideo) ||
-        isLikelyShortForm(contextualVideo) ||
-        isLikelyNonMusicVideo(contextualVideo)) {
-      return true;
+  /// Kandidat musik yang aman untuk daftar, riwayat, Radio, dan queue.
+  /// YouTube tidak menyediakan badge resmi yang konsisten pada hasil search;
+  /// karena itu lagu berdurasi normal tidak boleh ditolak hanya karena judulnya
+  /// tidak menyertakan kata Official/VEVO/Topic. Penanda cover/karaoke/AI,
+  /// album penuh, Shorts, dan konten nonmusik tetap dikeluarkan.
+  static bool isMusicCandidate(YoutubeSearchResult video) {
+    if (video.isLocal) return true;
+    if (video.videoId.isEmpty ||
+        video.title.trim().isEmpty ||
+        video.isLive ||
+        video.isUpcoming ||
+        isLikelyShortForm(video) ||
+        isLikelyNonMusicVideo(video) ||
+        _hasExplicitNonMusicShortLabel(video) ||
+        isLikelyAiGeneratedMusic(video) ||
+        isLikelyUnofficialMusicVersion(video)) {
+      return false;
     }
-    return !_hasStrongMusicSignal(
-      contextualVideo,
-      channelDescription: channelDescription,
+
+    final title = video.title.toLowerCase();
+    final albumOrCompilation = RegExp(
+      r'\b(?:full\s+album|complete\s+album|entire\s+album|whole\s+album|'
+      r'full\s+discography|complete\s+discography|discography|'
+      r'greatest\s+hits|best\s+of|compilation|full\s+playlist|playlist\s+(?:of|mix)|non[ -]?stop|'
+      r'continuous\s+mix|song\s+collection|music\s+collection|all\s+(?:songs|tracks)|medley)\b',
+      caseSensitive: false,
     );
+    if (albumOrCompilation.hasMatch(title)) return false;
+
+    final seconds = video.durationSeconds;
+    if (seconds != null && (seconds <= 30 || seconds > 30 * 60)) return false;
+
+    final category = video.categoryId.trim();
+    if (category == '10') return true;
+
+    // youtube_explode_dart tidak mengembalikan categoryId. Untuk hasil dari
+    // pencarian musik, durasi single yang wajar adalah fallback ketika channel
+    // artis/label tidak memakai kata "official" pada nama atau judul.
+    return isOfficialMusicReleaseCandidate(video) ||
+        seconds == null ||
+        (seconds > 30 && seconds <= 30 * 60);
   }
 
   /// Label non-musik yang sering muncul pada Shorts. Dipakai hanya untuk video
   /// maksimal 3 menit agar tidak memblokir lagu berdurasi normal.
   static bool _hasExplicitNonMusicShortLabel(YoutubeSearchResult video) {
+    final duration = video.durationSeconds;
+    if (duration == null || duration > 180 || duration <= 0) return false;
     return RegExp(
-      r'\b(?:comedy|komedi|skit|prank|iseng|meme|funny\s+moments?|momen\s+lucu|fail(?:s|ed)?|blooper(?:s)?|challenge|tantangan|story\s*time|storytime|unboxing|kecelakaan|accident|viral\s+moments?|random\s+moments?|cute\s+(?:cat|dog)|cat\s+video|dog\s+video|animal\s+video|pet\s+video|hewan\s+lucu|kucing\s+lucu|anjing\s+lucu)\b',
+      r'\b(?:comedy|komedi|skit|prank|iseng|meme|funny\s+moments?|momen\s+lucu|fail(?:s|ed)?|blooper(?:s)?|unboxing|kecelakaan|accident|viral\s+moments?|random\s+moments?|cute\s+(?:cat|dog)|cat\s+video|dog\s+video|animal\s+video|pet\s+video|hewan\s+lucu|kucing\s+lucu|anjing\s+lucu)\b',
       caseSensitive: false,
     ).hasMatch(video.title);
   }
 
-  static bool _hasStrongMusicSignal(
-    YoutubeSearchResult video, {
-    String channelDescription = '',
-  }) {
-    final title = video.title.toLowerCase();
-    final description = video.description.toLowerCase();
-    final trackLikeTitle = RegExp(r'\s(?:-|–|—|\|)\s').hasMatch(video.title);
-    final titleSignal = RegExp(
-      r'\b(?:music|musik|song|songs|lagu|official\s+audio|audio\s+resmi|official\s+music\s+video|music\s+video|official\s+lyrics?|lyrics?|lirik|single|album|track|remix|cover(?:\s+song|\s+version)?|karaoke|instrumental|acoustic|akustik|live\s+performance|live\s+session|medley|soundtrack|ost|dj\s+set|piano|guitar|gitar|violin|biola|vocal|vokal|singing|nyanyi|bernyanyi|singer|penyanyi|orchestra|orkestra|choir|paduan\s+suara)\b',
-      caseSensitive: false,
-    ).hasMatch(title);
-    if (titleSignal ||
-        (trackLikeTitle && RegExp(r'\bofficial\s+(?:music\s+)?video\b').hasMatch(title))) {
-      return true;
-    }
-
-    // Deskripsi dihitung hanya jika menerangkan rilis/performa lagu. Kata
-    // "background music" saja tidak cukup untuk meloloskan klip non-musik.
-    final descriptionSignal = RegExp(
-      r'\b(?:official\s+audio|audio\s+resmi|official\s+music\s+video|music\s+video|official\s+lyrics?|lyrics?|lirik|cover(?:\s+(?:song|version|lagu|by|of))?|versi\s+cover|cover\s+akustik|performed\s+by|sung\s+by|vocals?\s+by|singing\s+by|dinyanyikan\s+oleh|dibawakan\s+oleh|karaoke|instrumental\s+version|acoustic\s+version|live\s+performance|remix|medley|new\s+single|official\s+release)\b',
-      caseSensitive: false,
-    ).hasMatch(description);
-    if (descriptionSignal) return true;
-
-    // Art Track dan rilis resmi sering memakai format "Artis - Judul" tanpa
-    // kata music/lagu. Izinkan jika format judul dan channel sama-sama memberi
-    // sinyal kuat bahwa ini sebuah rilis musik.
-    if (trackLikeTitle) {
-      final channel = video.channelTitle.toLowerCase();
-      final knownMusicChannel = RegExp(
-        r'\b(?:topic|vevo|official|records?|recordings?|music|musik|audio|label|band|singer|artist)\b',
-        caseSensitive: false,
-      ).hasMatch(channel) ||
-          isLikelyMusicChannelProfile(video.channelTitle, channelDescription);
-      if (knownMusicChannel) return true;
-    }
-
-    // Nama/deskripsi channel saja tidak cukup untuk meloloskan klip pendek.
-    // Judul atau deskripsi video tetap harus menunjukkan lagu/performa, atau
-    // memakai format "Artis - Judul" dari channel musik yang teridentifikasi.
-    return false;
-  }
 
   /// Detects a channel profile that is likely focused on music. This is used
   /// only for subscription/channel discovery; it is intentionally permissive
@@ -454,20 +459,25 @@ class YoutubeMusicPolicy {
   }
 
   /// Classifies a channel's upload without requiring its YouTube category to
-  /// be `10`. Independent singers and cover creators often use Entertainment
-  /// or People & Blogs for otherwise genuine musical performances.
+  /// be `10`. Independent artists can publish official singles under
+  /// Entertainment/People & Blogs; explicit cover/karaoke/AI uploads are still
+  /// rejected by the shared policy.
   static bool isMusicChannelUpload(
     YoutubeSearchResult video, {
     String channelTitle = '',
     String channelDescription = '',
   }) {
     if (video.isLocal) return true;
-    if (isLikelyShortForm(video) ||
-        isLikelyNonMusicShort(
-          video,
-          channelTitle: channelTitle,
-          channelDescription: channelDescription,
-        )) {
+    final seconds = video.durationSeconds;
+    if (seconds != null && (seconds <= 30 || seconds > 30 * 60)) return false;
+
+    if (video.videoId.isEmpty ||
+        video.title.trim().isEmpty ||
+        isLikelyShortForm(video) ||
+        _hasExplicitNonMusicShortLabel(video) ||
+        isLikelyNonMusicVideo(video) ||
+        isLikelyAiGeneratedMusic(video) ||
+        isLikelyUnofficialMusicVersion(video)) {
       return false;
     }
 
@@ -477,7 +487,7 @@ class YoutubeMusicPolicy {
     // music channel. Keep this list title-based so channel names do not wrongly
     // suppress their music uploads.
     final clearlyNonMusic = RegExp(
-      r'\b(?:podcast|interview|wawancara|talk\s*show|talkshow|reaction|reaksi|review|tutorial|how\s+to|cara\s+membuat|vlog|daily\s+vlog|trailer|teaser|gameplay|gaming|livestream|live\s+stream|web\s*series|diskusi|unboxing|q\s*&\s*a|question\s+and\s+answer|news\s+update|breaking\s+news|news\s+report|daily\s+news|berita\s+terkini|berita\s+terbaru|laporan\s+berita)\b',
+      r'\b(?:podcast|interview|wawancara|talk\s*show|talkshow|reaction\s+(?:video|to)|reacting\s+to|album\s+review|song\s+review|review\s+of|tutorial|how\s+to|cara\s+membuat|vlog|daily\s+vlog|trailer|teaser|gameplay|gaming|livestream|live\s+stream|web\s+series|panel\s+discussion|forum\s+diskusi|unboxing|q\s*&\s*a|question\s+and\s+answer|news\s+update|breaking\s+news|news\s+report|daily\s+news|berita\s+terkini|berita\s+terbaru|laporan\s+berita)\b',
       caseSensitive: false,
     ).hasMatch(title);
     if (clearlyNonMusic) return false;
@@ -485,11 +495,11 @@ class YoutubeMusicPolicy {
     // A clear song/performance marker wins over ambiguous words in song titles
     // such as "Talking to the Moon" or "No News Is Good News".
     final explicitMusicTitle = RegExp(
-      r'\b(?:covers?|covering|song|songs|lagu|music|musik|official\s+audio|audio\s+resmi|track|single|album|lyrics?|lirik|karaoke|instrumental|acoustic|akustik|remix|piano|guitar|gitar|bass|drums?|violin|biola|vocal|vokal|sing|singing|nyanyi|menyanyi|bernyanyi|singer|penyanyi|unplugged|medley|soundtrack|ost|orchestra|orkestra|choir|paduan\s+suara|music\s+video|official\s+music\s+video|live\s+performance|live\s+session)\b',
+      r'\b(?:song|songs|lagu|music|musik|official\s+audio|audio\s+resmi|track|single|album|lyrics?|lirik|instrumental|acoustic|akustik|remix|piano|guitar|gitar|bass|drums?|violin|biola|vocal|vokal|sing|singing|nyanyi|menyanyi|bernyanyi|singer|penyanyi|unplugged|medley|soundtrack|ost|orchestra|orkestra|choir|paduan\s+suara|music\s+video|official\s+music\s+video|live\s+performance|live\s+session)\b',
       caseSensitive: false,
     ).hasMatch(title);
     final explicitMusicDescription = RegExp(
-      r'\b(?:covers?|covering|cover\s+(?:song|version|lagu|by|of)|versi\s+cover|cover\s+akustik|performed\s+by|sung\s+by|vocals?\s+by|singing\s+by|dinyanyikan\s+oleh|dibawakan\s+oleh|karaoke|instrumental\s+version|acoustic\s+version|official\s+audio|official\s+lyrics|music\s+video|live\s+performance|remix|medley)\b',
+      r'\b(?:performed\s+by|sung\s+by|vocals?\s+by|singing\s+by|dinyanyikan\s+oleh|dibawakan\s+oleh|instrumental\s+version|acoustic\s+version|official\s+audio|official\s+lyrics|music\s+video|live\s+performance|remix|medley)\b',
       caseSensitive: false,
     ).hasMatch(videoDescription);
     if (explicitMusicTitle || explicitMusicDescription) return true;
@@ -506,10 +516,10 @@ class YoutubeMusicPolicy {
     );
   }
 
-  /// MusicKu's strict catalogue filter. Search/trending endpoints generally
-  /// request YouTube category 10; this remains for generic search and lists
-  /// that should contain music-category videos only. Channel uploads use the
-  /// more inclusive [isMusicChannelUpload] policy above.
+  /// Strict category gate used by the public trending feed, which explicitly
+  /// requests YouTube category 10. Artist search and channel uploads must use
+  /// [isMusicCandidate] / [isMusicChannelUpload] so legitimate releases tagged
+  /// under Entertainment or People & Blogs are not discarded.
   static bool isMusicCatalogItem(
     YoutubeSearchResult video, {
     bool requireCategoryId = false,
@@ -518,6 +528,6 @@ class YoutubeMusicPolicy {
     final category = video.categoryId.trim();
     if (category.isNotEmpty && category != '10') return false;
     if (requireCategoryId && category != '10') return false;
-    return isOfficialMusicReleaseCandidate(video);
+    return isMusicCandidate(video);
   }
 }

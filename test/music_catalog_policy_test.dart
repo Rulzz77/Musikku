@@ -8,6 +8,8 @@ YoutubeSearchResult _track({
   required String title,
   required String channel,
   double? duration = 220,
+  String categoryId = '',
+  String description = '',
 }) {
   return YoutubeSearchResult(
     videoId: 'abcdefghijk',
@@ -15,6 +17,8 @@ YoutubeSearchResult _track({
     channelTitle: channel,
     thumbnailUrl: '',
     durationSeconds: duration,
+    categoryId: categoryId,
+    description: description,
   );
 }
 
@@ -117,6 +121,39 @@ void main() {
       );
     });
 
+    test('does not localize unknown international artist searches to Indonesia', () {
+      for (final query in [
+        'NewJeans songs',
+        'Ethel Cain music',
+        'The Last Dinner Party songs',
+      ]) {
+        expect(
+          YoutubeSearchQueryParser.interpret(query).apiQuery,
+          query,
+          reason: 'Artist query should remain global: $query',
+        );
+      }
+    });
+
+    test('only adds Indonesia to a generic genre query, not a specific title', () {
+      expect(
+        YoutubeSearchQueryParser.interpret('lagu pop').apiQuery,
+        'lagu pop Indonesia',
+      );
+      expect(
+        YoutubeSearchQueryParser.interpret('rock music').apiQuery,
+        'rock music',
+      );
+      expect(
+        YoutubeSearchQueryParser.interpret('K-pop songs latest').apiQuery,
+        'K-pop songs latest',
+      );
+      expect(
+        YoutubeSearchQueryParser.interpret('Monokrom song').apiQuery,
+        'Monokrom song',
+      );
+    });
+
     test('removes search qualifiers before matching the artist channel', () {
       final track = _track(
         title: 'Waktu Yang Salah',
@@ -132,10 +169,11 @@ void main() {
       );
     });
 
-    test('does not loosen the strict filter for a generic genre query', () {
+    test('keeps normal songs in generic genre queries without official labels', () {
       final track = _track(
-        title: 'Lagu Cinta',
-        channel: 'Pop Indonesia',
+        title: 'Monokrom',
+        channel: 'Tulus',
+        duration: 240,
       );
 
       expect(
@@ -143,7 +181,7 @@ void main() {
           track,
           query: 'Pop Indonesia',
         ),
-        isFalse,
+        isTrue,
       );
     });
 
@@ -197,6 +235,217 @@ void main() {
       );
     });
 
+
+    test('accepts official artist-channel singles without official keywords', () {
+      for (final entry in <({String artist, String title})>[
+        (artist: 'Fiersa Besari', title: 'Celengan Rindu'),
+        (artist: 'Tulus', title: 'Monokrom'),
+        (artist: 'Raisa', title: 'Kali Kedua'),
+        (artist: 'Hindia', title: 'Evaluasi'),
+        (artist: 'Billie Eilish', title: 'What Was I Made For?'),
+        (artist: 'Adele', title: 'Easy On Me'),
+        (artist: 'Coldplay', title: 'Yellow'),
+        (artist: 'Taylor Swift', title: 'Anti-Hero'),
+        (artist: 'BTS', title: 'Spring Day'),
+      ]) {
+        final track = _track(title: entry.title, channel: entry.artist);
+        expect(
+          YoutubeMusicPolicy.isOfficialMusicReleaseCandidateForQuery(
+            track,
+            query: entry.artist,
+          ),
+          isTrue,
+          reason: 'Official single by ${entry.artist} should not need an Official label',
+        );
+      }
+    });
+
+    test('accepts genre search singles without an official label marker', () {
+      final track = _track(
+        title: 'Monokrom',
+        channel: 'Tulus',
+        duration: 240,
+      );
+      expect(
+        YoutubeMusicPolicy.isOfficialMusicReleaseCandidateForQuery(
+          track,
+          query: 'lagu pop Indonesia official music video',
+        ),
+        isTrue,
+      );
+      expect(YoutubeMusicPolicy.isMusicCandidate(track), isTrue);
+    });
+
+    test('YouTube Music category is a positive signal without Official text', () {
+      final track = _track(
+        title: 'Easy On Me',
+        channel: 'Adele',
+        categoryId: '10',
+      );
+      expect(YoutubeMusicPolicy.isOfficialMusicReleaseCandidate(track), isTrue);
+      expect(YoutubeMusicPolicy.isMusicCatalogItem(track), isTrue);
+    });
+
+    test('keeps valid song when search duration metadata is missing', () {
+      final track = _track(
+        title: 'Yellow',
+        channel: 'Coldplay',
+        duration: null,
+      );
+      expect(YoutubeMusicPolicy.isMusicCandidate(track), isTrue);
+      expect(
+        YoutubeMusicPolicy.isOfficialMusicReleaseCandidateForQuery(
+          track,
+          query: 'Coldplay',
+        ),
+        isTrue,
+      );
+    });
+
+    test('does not confuse a legitimate song title containing Cover with a cover', () {
+      final track = _track(
+        title: 'Cover Me in Sunshine',
+        channel: 'P!nk',
+      );
+      expect(YoutubeMusicPolicy.isLikelyUnofficialMusicVersion(track), isFalse);
+      expect(YoutubeMusicPolicy.isMusicCandidate(track), isTrue);
+    });
+
+    test('does not classify long official music videos as Shorts because of description tags', () {
+      final track = _track(
+        title: 'Monokrom Official Music Video',
+        channel: 'Tulus',
+        duration: 240,
+        description: 'Follow us #Shorts #NewMusic',
+      );
+      expect(YoutubeMusicPolicy.isLikelyShortForm(track), isFalse);
+      expect(YoutubeMusicPolicy.isOfficialMusicReleaseCandidate(track), isTrue);
+    });
+
+
+    test('does not discard a normal single because its description has a Shorts hashtag', () {
+      final track = _track(
+        title: 'Evaluasi',
+        channel: 'Hindia',
+        duration: 120,
+        description: 'Official release. Follow #Shorts for updates.',
+      );
+      expect(YoutubeMusicPolicy.isLikelyShortForm(track), isFalse);
+      expect(YoutubeMusicPolicy.isMusicCandidate(track), isTrue);
+    });
+
+    test('rejects karaoke even when uploaded from the artist channel', () {
+      final track = _track(
+        title: 'Celengan Rindu Karaoke',
+        channel: 'Fiersa Besari',
+      );
+      expect(YoutubeMusicPolicy.isMusicCandidate(track), isFalse);
+      expect(
+        YoutubeMusicPolicy.isOfficialMusicReleaseCandidateForQuery(
+          track,
+          query: 'Fiersa Besari',
+        ),
+        isFalse,
+      );
+    });
+
+    test('rejects AI music even when its channel imitates an artist name', () {
+      final track = _track(
+        title: 'Monokrom AI Version',
+        channel: 'Tulus Official',
+      );
+      expect(YoutubeMusicPolicy.isMusicCandidate(track), isFalse);
+    });
+
+
+    test('does not mistake a singer named Ai for AI-generated music', () {
+      final track = _track(
+        title: 'Sakura',
+        channel: 'Ai Otsuka',
+        duration: 240,
+      );
+      expect(YoutubeMusicPolicy.isLikelyAiGeneratedMusic(track), isFalse);
+      expect(YoutubeMusicPolicy.isMusicCandidate(track), isTrue);
+      expect(
+        YoutubeMusicPolicy.isOfficialMusicReleaseCandidateForQuery(
+          track,
+          query: 'Ai Otsuka',
+        ),
+        isTrue,
+      );
+    });
+
+    test('keeps an artist-matched official track even when its category is not Music', () {
+      final track = _track(
+        title: 'Celengan Rindu',
+        channel: 'Fiersa Besari',
+        categoryId: '24',
+      );
+      expect(YoutubeMusicPolicy.isMusicCandidate(track), isTrue);
+      expect(
+        YoutubeMusicPolicy.isOfficialMusicReleaseCandidateForQuery(
+          track,
+          query: 'Fiersa Besari',
+        ),
+        isTrue,
+      );
+    });
+
+    test('rejects explicit cover uploads from channel and artist query paths', () {
+      final track = _track(
+        title: 'Monokrom (Cover by Fan Singer)',
+        channel: 'Tulus',
+      );
+      expect(YoutubeMusicPolicy.isMusicCandidate(track), isFalse);
+      expect(
+        YoutubeMusicPolicy.isMusicChannelUpload(track, channelTitle: 'Tulus'),
+        isFalse,
+      );
+    });
+
+
+    test('rejects acoustic and song-cover title variants', () {
+      for (final title in [
+        'Celengan Rindu - Acoustic Cover',
+        'Celengan Rindu Song Cover',
+        'Cover of Celengan Rindu',
+      ]) {
+        final track = _track(title: title, channel: 'Fan Singer');
+        expect(
+          YoutubeMusicPolicy.isLikelyUnofficialMusicVersion(track),
+          isTrue,
+          reason: 'Expected cover form to be rejected: $title',
+        );
+        expect(YoutubeMusicPolicy.isMusicCandidate(track), isFalse);
+      }
+    });
+
+    test('rejects AI markers even when the marker appears in description', () {
+      final track = _track(
+        title: 'Yellow',
+        channel: 'Coldplay',
+        description: 'AI-generated voice clone version made with Suno AI',
+      );
+      expect(YoutubeMusicPolicy.isLikelyAiGeneratedMusic(track), isTrue);
+      expect(YoutubeMusicPolicy.isMusicCandidate(track), isFalse);
+    });
+
+    test('rejects cover uploads even when the cover marker is in description', () {
+      final track = _track(
+        title: 'Celengan Rindu',
+        channel: 'Fan Singer',
+        description: 'This is my acoustic cover of Celengan Rindu',
+      );
+      expect(YoutubeMusicPolicy.isLikelyUnofficialMusicVersion(track), isTrue);
+      expect(
+        YoutubeMusicPolicy.isOfficialMusicReleaseCandidateForQuery(
+          track,
+          query: 'Fiersa Besari',
+        ),
+        isFalse,
+      );
+    });
+
     test('continues to reject covers even on the matching artist channel', () {
       final track = _track(
         title: 'Celengan Rindu (Cover)',
@@ -209,6 +458,234 @@ void main() {
           query: 'Fiersa Besari',
         ),
         isFalse,
+      );
+    });
+
+
+    test('keeps a short official single from an artist channel without labels', () {
+      final track = _track(
+        title: 'Evaluasi',
+        channel: 'Hindia',
+        duration: 45,
+      );
+      expect(
+        YoutubeMusicPolicy.isOfficialMusicReleaseCandidateForQuery(
+          track,
+          query: 'Hindia',
+        ),
+        isTrue,
+      );
+      expect(YoutubeMusicPolicy.isMusicCandidate(track), isTrue);
+      expect(
+        YoutubeMusicPolicy.isMusicChannelUpload(
+          track,
+          channelTitle: 'Hindia',
+          channelDescription: 'Indonesian singer and songwriter',
+        ),
+        isTrue,
+      );
+    });
+
+    test('does not reject song titles that merely contain album or playlist', () {
+      final albumTitle = _track(title: 'Album', channel: 'The Artist');
+      final playlistTitle = _track(title: 'Playlist', channel: 'The Artist');
+      expect(YoutubeMusicPolicy.isMusicCandidate(albumTitle), isTrue);
+      expect(YoutubeMusicPolicy.isMusicCandidate(playlistTitle), isTrue);
+    });
+
+    test('still rejects explicit comedy clips even when short', () {
+      final clip = _track(
+        title: 'Funny Moments Challenge',
+        channel: 'Hindia',
+        duration: 105,
+      );
+      expect(YoutubeMusicPolicy.isMusicCandidate(clip), isFalse);
+      expect(
+        YoutubeMusicPolicy.isOfficialMusicReleaseCandidateForQuery(
+          clip,
+          query: 'Hindia',
+        ),
+        isFalse,
+      );
+    });
+
+    test('does not reject original song because description links karaoke content', () {
+      final track = _track(
+        title: 'Monokrom Official Music Video',
+        channel: 'Tulus',
+        description: 'Official video. For karaoke fans, visit our separate channel.',
+      );
+      expect(YoutubeMusicPolicy.isLikelyUnofficialMusicVersion(track), isFalse);
+      expect(YoutubeMusicPolicy.isMusicCandidate(track), isTrue);
+    });
+
+    test('accepts artist credit in description without official channel words', () {
+      final track = _track(
+        title: 'Celengan Rindu',
+        channel: 'Bintang Lokal',
+        description: 'Single by Fiersa Besari. Original release.',
+      );
+      expect(
+        YoutubeMusicPolicy.isOfficialMusicReleaseCandidateForQuery(
+          track,
+          query: 'Fiersa Besari',
+        ),
+        isTrue,
+      );
+    });
+
+
+    test('does not reject official song titles containing talking or news', () {
+      for (final title in ['Talking to the Moon', 'News', 'Review']) {
+        final track = _track(
+          title: title,
+          channel: 'Bruno Mars',
+          duration: 240,
+        );
+        expect(YoutubeMusicPolicy.isLikelyNonMusicVideo(track), isFalse);
+        expect(YoutubeMusicPolicy.isMusicCandidate(track), isTrue);
+      }
+    });
+
+    test('rejects an explicitly labelled reaction video', () {
+      final clip = _track(
+        title: 'Reaction Video: New Song',
+        channel: 'Music Commentary',
+        duration: 240,
+      );
+      expect(YoutubeMusicPolicy.isLikelyNonMusicVideo(clip), isTrue);
+      expect(YoutubeMusicPolicy.isMusicCandidate(clip), isFalse);
+    });
+
+    test('does not reject a normal-length song titled Challenge', () {
+      final track = _track(
+        title: 'Challenge',
+        channel: 'Artist Official',
+        duration: 210,
+      );
+      expect(YoutubeMusicPolicy.isMusicCandidate(track), isTrue);
+    });
+
+    test('keeps an original single whose description only mentions karaoke links', () {
+      final track = _track(
+        title: 'Easy On Me Official Music Video',
+        channel: 'Adele',
+        description: 'Listen to the official single. Karaoke channel links are below.',
+      );
+      expect(YoutubeMusicPolicy.isLikelyUnofficialMusicVersion(track), isFalse);
+      expect(YoutubeMusicPolicy.isMusicCandidate(track), isTrue);
+    });
+
+
+    test('does not return a different official artist for a specific artist query', () {
+      final track = _track(
+        title: 'Easy On Me Official Music Video',
+        channel: 'Adele',
+        categoryId: '10',
+      );
+      expect(
+        YoutubeMusicPolicy.isOfficialMusicReleaseCandidateForQuery(
+          track,
+          query: 'Fiersa Besari',
+        ),
+        isFalse,
+      );
+    });
+
+
+    test('rejects Indonesian cover labels and alternate cover wording', () {
+      for (final title in [
+        'Celengan Rindu - Cover Lagu',
+        'Celengan Rindu (Versi Cover)',
+        'Celengan Rindu Kover',
+        'Celengan Rindu (Fiersa Besari Cover)',
+        'Celengan Rindu - Cover Music',
+        'Celengan Rindu - Singing Cover',
+      ]) {
+        final track = _track(title: title, channel: 'Fan Singer');
+        expect(
+          YoutubeMusicPolicy.isLikelyUnofficialMusicVersion(track),
+          isTrue,
+          reason: 'Expected Indonesian cover form to be rejected: $title',
+        );
+        expect(YoutubeMusicPolicy.isMusicCandidate(track), isFalse);
+      }
+    });
+
+    test('rejects music explicitly generated with Suno or Udio', () {
+      for (final description in [
+        'This track was generated with Suno.',
+        'Created with Udio for this channel.',
+        'Suno generated song, AI vocals.',
+      ]) {
+        final track = _track(
+          title: 'New Song',
+          channel: 'Independent Music Channel',
+          description: description,
+        );
+        expect(
+          YoutubeMusicPolicy.isLikelyAiGeneratedMusic(track),
+          isTrue,
+          reason: 'Expected generator disclosure to be detected: $description',
+        );
+        expect(YoutubeMusicPolicy.isMusicCandidate(track), isFalse);
+      }
+    });
+
+    test('does not treat cover art as a performed cover version', () {
+      final track = _track(
+        title: 'Monokrom - Cover Art',
+        channel: 'Tulus',
+      );
+      expect(YoutubeMusicPolicy.isLikelyUnofficialMusicVersion(track), isFalse);
+    });
+
+    test('does not reject cover artwork references in a real music description', () {
+      final track = _track(
+        title: 'Monokrom Official Music Video',
+        channel: 'Tulus',
+        description: 'Cover artwork by the album designer. Original recording.',
+      );
+      expect(YoutubeMusicPolicy.isLikelyUnofficialMusicVersion(track), isFalse);
+      expect(YoutubeMusicPolicy.isMusicCandidate(track), isTrue);
+    });
+
+    test('rejects very short and very long tracks even in Music category', () {
+      final short = _track(
+        title: 'Short Clip',
+        channel: 'Artist Official',
+        duration: 20,
+        categoryId: '10',
+      );
+      final long = _track(
+        title: 'Live Session',
+        channel: 'Artist Official',
+        duration: 3600,
+        categoryId: '10',
+      );
+      expect(YoutubeMusicPolicy.isMusicCandidate(short), isFalse);
+      expect(YoutubeMusicPolicy.isMusicCandidate(long), isFalse);
+      expect(YoutubeMusicPolicy.isOfficialMusicReleaseCandidate(short), isFalse);
+      expect(YoutubeMusicPolicy.isOfficialMusicReleaseCandidate(long), isFalse);
+      expect(
+        YoutubeMusicPolicy.isMusicChannelUpload(long, channelTitle: 'Artist Official'),
+        isFalse,
+      );
+    });
+
+    test('keeps short original tracks above 30 seconds', () {
+      final track = _track(
+        title: 'Interlude',
+        channel: 'Artist Official',
+        duration: 45,
+      );
+      expect(YoutubeMusicPolicy.isMusicCandidate(track), isTrue);
+      expect(
+        YoutubeMusicPolicy.isOfficialMusicReleaseCandidateForQuery(
+          track,
+          query: 'Artist',
+        ),
+        isTrue,
       );
     });
   });

@@ -85,7 +85,7 @@ class RadioService {
   Future<void>? _historyLoad;
   Timer? _persistTimer;
 
-  static const int _maxTrackSeconds = 10 * 60;
+  static const int _maxTrackSeconds = 30 * 60;
   static const int _maxPlayedIds = 1000;
   static const int _maxPlayedTrackKeys = 1200;
   static const int _selectionCooldownTracks = 10;

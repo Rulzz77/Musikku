@@ -67,6 +67,40 @@ class YoutubeSearchQueryParser {
 
   static final RegExp _whitespace = RegExp(r'\s+');
 
+  // Query yang memuat nama artis tidak boleh otomatis dipersempit ke Indonesia.
+  // Daftar ini mencakup kata konteks musik/genre; token lain dianggap sebagai
+  // nama artis, judul, atau konteks spesifik dan dibiarkan tanpa qualifier wilayah.
+  static const Set<String> _genericMusicSearchTerms = <String>{
+    'lagu', 'lagunya', 'musik', 'music', 'song', 'songs', 'track', 'tracks',
+    'audio', 'video', 'mv', 'official', 'officials', 'lyrics', 'lyric', 'lirik',
+    'terbaru', 'terkini', 'latest', 'new', 'newest', 'popular', 'populer',
+    'top', 'best', 'hits', 'mix', 'playlist', 'radio', 'live', 'acoustic',
+    'akustik', 'instrumental', 'pop', 'rock', 'jazz', 'metal', 'indie',
+    'dangdut', 'koplo', 'hip', 'hop', 'hiphop', 'kpop', 'k-pop', 'rnb', 'r&b',
+    'edm', 'house', 'techno', 'trance', 'disco', 'reggae', 'blues', 'country',
+    'folk', 'classical', 'lofi', 'lo-fi', 'ambient', 'soundtrack', 'ost',
+    'religi', 'galau', 'nostalgia', 'viral', 'dj', 'remix', 'indonesia',
+    'indonesian', 'inggris', 'english', 'jawa', 'javanese', 'sunda', 'sundanese',
+    '2020', '2021', '2022', '2023', '2024', '2025', '2026', '2027',
+    '80s', '90s', '2000s', '2010s', '2020s',
+  };
+
+  static bool _isGenericMusicSearch(String query) {
+    final tokens = query
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9&-]+'), ' ')
+        .split(_whitespace)
+        .where((token) => token.isNotEmpty)
+        .toList(growable: false);
+    return tokens.isNotEmpty &&
+        tokens.every(_genericMusicSearchTerms.contains);
+  }
+
+  static bool _hasIndonesianMusicHint(String query) => RegExp(
+        r'\b(?:lagu|musik|dangdut|koplo|religi|galau|nostalgia|jawa|javanese|sunda|sundanese)\b',
+        caseSensitive: false,
+      ).hasMatch(query);
+
   static SmartSearchIntent interpret(String query) {
     // Rapikan spasi ganda agar query yang sama berbagi kunci cache.
     final original = query.trim().replaceAll(_whitespace, ' ');
@@ -87,6 +121,8 @@ class YoutubeSearchQueryParser {
     final addIndonesia =
         musicContext &&
         !hasIndonesia &&
+        _isGenericMusicSearch(original) &&
+        _hasIndonesianMusicHint(original) &&
         !MusicStyleMatcher.isKnownArtistName(original);
 
     final labels = <String>[

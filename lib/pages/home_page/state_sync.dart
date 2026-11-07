@@ -383,6 +383,7 @@ extension _HomeStateSync on _HomePageState {
       videoId: video.videoId,
       title: video.title,
       artist: video.channelTitle,
+      artistName: video.artistName,
       thumbnailUrl: video.coverUrl,
       playCount: (existing?.playCount ?? 0) + (sample.newPlay ? 1 : 0),
       skipCount: existing?.skipCount ?? 0,

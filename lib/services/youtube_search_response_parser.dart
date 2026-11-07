@@ -1,4 +1,5 @@
 import '../models/youtube_search_result.dart';
+import 'youtube_music_metadata_parser.dart';
 
 /// Stateless decoding of YouTube API payloads into app models.
 class YoutubeSearchResponseParser {
@@ -35,7 +36,14 @@ class YoutubeSearchResponseParser {
       if (!video.isLive && !video.isUpcoming && seconds != null && seconds <= 30) {
         continue;
       }
-      out.add(video);
+      final releaseMetadata = YoutubeMusicMetadataParser.parse(
+        title: video.title,
+        description: video.description,
+      );
+      out.add(video.copyWith(
+        artistName: releaseMetadata.artistName,
+        album: releaseMetadata.album,
+      ));
     }
     return out;
   }
@@ -61,14 +69,23 @@ class YoutubeSearchResponseParser {
         continue;
       }
 
+      final title = decodeHtml(snippet['title']?.toString() ?? 'Tanpa judul');
+      final description = decodeHtml(snippet['description']?.toString() ?? '');
+      final channelTitle = decodeHtml(
+        snippet['channelTitle']?.toString() ?? 'Unknown',
+      );
+      final releaseMetadata = YoutubeMusicMetadataParser.parse(
+        title: title,
+        description: description,
+      );
       results.add(
         YoutubeSearchResult(
           videoId: videoId,
-          title: decodeHtml(snippet['title']?.toString() ?? 'Tanpa judul'),
-          description: decodeHtml(snippet['description']?.toString() ?? ''),
-          channelTitle: decodeHtml(
-            snippet['channelTitle']?.toString() ?? 'Unknown',
-          ),
+          title: title,
+          description: description,
+          channelTitle: channelTitle,
+          artistName: releaseMetadata.artistName,
+          album: releaseMetadata.album,
           thumbnailUrl: pickThumbnail(snippet['thumbnails']),
           publishedAt: DateTime.tryParse(snippet['publishedAt']?.toString() ?? ''),
           channelId: snippet['channelId']?.toString() ?? '',
@@ -84,7 +101,7 @@ class YoutubeSearchResponseParser {
       return '';
     }
 
-    for (final size in const ['high', 'medium', 'default']) {
+    for (final size in const ['maxres', 'high', 'standard', 'medium', 'default']) {
       final image = thumbnails[size];
 
       if (image is Map) {

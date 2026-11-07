@@ -6,6 +6,7 @@ import '../models/youtube_search_result.dart';
 import '../services/youtube_public_channel_service.dart';
 import '../models/youtube_channel_models.dart';
 import '../services/youtube_search_service.dart';
+import '../widgets/unified_artwork.dart';
 import '../widgets/live_badge.dart';
 import '../widgets/music_design.dart';
 
@@ -486,7 +487,7 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      Image.network(video.coverUrl, fit: BoxFit.cover, errorBuilder: (_, _, _) => ColoredBox(color: scheme.surfaceContainerHighest)),
+                      UnifiedArtwork(track: video, fit: BoxFit.cover, iconSize: 24),
                       if (video.liveStatus.isNotEmpty) Positioned(left: 6, top: 6, child: LiveBadge(video: video)),
                       Positioned(right: 6, bottom: 6, child: DurationBadge(video: video)),
                       Positioned(

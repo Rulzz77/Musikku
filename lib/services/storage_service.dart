@@ -661,6 +661,11 @@ class StorageService {
                       videoId: stat.videoId,
                       title: statIsNewer ? stat.title : previous.title,
                       artist: statIsNewer ? stat.artist : previous.artist,
+                      artistName: statIsNewer && stat.artistName.isNotEmpty
+                          ? stat.artistName
+                          : previous.artistName.isNotEmpty
+                              ? previous.artistName
+                              : stat.artistName,
                       thumbnailUrl: stat.thumbnailUrl.isNotEmpty
                           ? stat.thumbnailUrl
                           : previous.thumbnailUrl,
@@ -823,6 +828,7 @@ class StorageService {
       videoId: video.videoId,
       title: video.title,
       artist: video.channelTitle,
+      artistName: video.artistName,
       thumbnailUrl: video.coverUrl,
       playCount: (current?.playCount ?? 0) + (newPlay ? 1 : 0),
       skipCount: current?.skipCount ?? 0,
@@ -844,6 +850,7 @@ class StorageService {
       videoId: video.videoId,
       title: video.title,
       artist: video.channelTitle,
+      artistName: video.artistName,
       thumbnailUrl: video.coverUrl,
       playCount: current?.playCount ?? 0,
       skipCount: (current?.skipCount ?? 0) + 1,

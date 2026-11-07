@@ -1,4 +1,5 @@
 import '../models/youtube_search_result.dart';
+import 'youtube_music_metadata_parser.dart';
 
 /// Converts public YouTube API payloads into the app's track model.
 class YoutubePublicResponseParser {
@@ -10,13 +11,21 @@ class YoutubePublicResponseParser {
       final snippet = Map<String, dynamic>.from(map['snippet'] as Map? ?? const {});
       final content = Map<String, dynamic>.from(map['contentDetails'] as Map? ?? const {});
       final videoId = content['videoId']?.toString() ?? '';
+      final title = snippet['title']?.toString() ?? 'Tanpa judul';
+      final description = snippet['description']?.toString() ?? '';
+      final releaseMetadata = YoutubeMusicMetadataParser.parse(
+        title: title,
+        description: description,
+      );
       return YoutubeSearchResult(
         videoId: videoId,
-        title: snippet['title']?.toString() ?? 'Tanpa judul',
-        description: snippet['description']?.toString() ?? '',
+        title: title,
+        description: description,
         channelTitle: snippet['videoOwnerChannelTitle']?.toString() ??
             snippet['channelTitle']?.toString() ??
             'Channel',
+        artistName: releaseMetadata.artistName,
+        album: releaseMetadata.album,
         thumbnailUrl: thumbnail(snippet['thumbnails']),
         publishedAt: DateTime.tryParse(snippet['publishedAt']?.toString() ?? ''),
         channelId: snippet['videoOwnerChannelId']?.toString() ?? '',

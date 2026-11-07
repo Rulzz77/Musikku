@@ -4,6 +4,9 @@ class YoutubeSearchResult {
   /// Deskripsi video YouTube; berguna untuk membedakan cover dari upload nonmusik.
   final String description;
   final String channelTitle;
+  /// Canonical performer credit when known (e.g. Spotify import).
+  /// Kept separate from channelTitle because a label may upload the audio.
+  final String artistName;
   final String thumbnailUrl;
   final int? viewCount;
   final DateTime? publishedAt;
@@ -82,6 +85,7 @@ class YoutubeSearchResult {
     required this.title,
     this.description = '',
     required this.channelTitle,
+    this.artistName = '',
     required this.thumbnailUrl,
     this.viewCount,
     this.publishedAt,
@@ -104,6 +108,7 @@ class YoutubeSearchResult {
     String? title,
     String? description,
     String? channelTitle,
+    String? artistName,
     String? thumbnailUrl,
     int? viewCount,
     DateTime? publishedAt,
@@ -125,6 +130,7 @@ class YoutubeSearchResult {
       title: title ?? this.title,
       description: description ?? this.description,
       channelTitle: channelTitle ?? this.channelTitle,
+      artistName: artistName ?? this.artistName,
       thumbnailUrl: thumbnailUrl ?? this.thumbnailUrl,
       viewCount: viewCount ?? this.viewCount,
       publishedAt: publishedAt ?? this.publishedAt,
@@ -149,6 +155,7 @@ class YoutubeSearchResult {
       'title': title,
       'description': description,
       'channelTitle': channelTitle,
+      'artistName': artistName,
       'thumbnailUrl': thumbnailUrl,
       'viewCount': viewCount,
       'publishedAt': publishedAt?.toIso8601String(),
@@ -176,6 +183,7 @@ class YoutubeSearchResult {
       title: json['title']?.toString() ?? 'Tanpa judul',
       description: json['description']?.toString() ?? '',
       channelTitle: json['channelTitle']?.toString() ?? 'Unknown',
+      artistName: json['artistName']?.toString() ?? '',
       thumbnailUrl: json['thumbnailUrl']?.toString() ?? '',
       viewCount: json['viewCount'] is num ? (json['viewCount'] as num).toInt() : null,
       publishedAt: DateTime.tryParse(json['publishedAt']?.toString() ?? ''),

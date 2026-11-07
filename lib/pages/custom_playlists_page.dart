@@ -747,6 +747,7 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
       }
       if (!mounted) return;
 
+      final supplementaryTracksController = TextEditingController();
       final preview = await showDialog<bool>(
         context: context,
         builder: (dialogContext) => AlertDialog(
@@ -759,16 +760,36 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
               children: [
                 Text(
                   snapshot.totalTrackCount != null
-                      ? '${snapshot.tracks.length} lagu terbaca dari ${snapshot.totalTrackCount} lagu yang tercatat di metadata publik Spotify.'
-                      : '${snapshot.tracks.length} lagu terbaca dari halaman embed publik Spotify.',
+                      ? '${snapshot.tracks.length} lagu terbaca dari total ${snapshot.totalTrackCount} lagu yang diiklankan metadata publik Spotify.'
+                      : snapshot.tracks.length >= 100
+                          ? '≥${snapshot.tracks.length} lagu terbaca dari embed publik. Itu hanya jumlah minimum yang terlihat, BUKAN total playlist. Spotify tidak memberikan halaman lanjutan pada embed ini.'
+                          : snapshot.mayBePartial
+                              ? '${snapshot.tracks.length} lagu terbaca dari embed publik. Jumlah total playlist belum bisa dipastikan.'
+                              : '${snapshot.tracks.length} lagu terbaca dari halaman embed publik Spotify.',
                 ),
                 if (snapshot.mayBePartial) ...[
                   const SizedBox(height: 8),
                   Text(
                     snapshot.knownMissingTrackCount > 0
                         ? 'Embed publik hanya menampilkan ${snapshot.tracks.length} dari ${snapshot.totalTrackCount} lagu. Sisa ${snapshot.knownMissingTrackCount} lagu tidak disediakan oleh halaman publik ini. Tanpa pagination publik/API, MusikKu tidak bisa mengambil sisanya.'
-                        : 'Embed publik mungkin hanya menampilkan sebagian daftar. Tanpa pagination publik/API, MusikKu tidak bisa menjamin seluruh lagu playlist terbaca.',
+                        : snapshot.tracks.length == 100
+                            ? 'Embed publik pada playlist ini berhenti di 100 baris pertama. Jumlah total dan lagu setelahnya tidak disediakan oleh halaman ini. Tempel daftar lagu yang tersisa untuk melengkapinya tanpa API.'
+                            : snapshot.tracks.length > 100
+                                ? 'Embed publik mengirim ${snapshot.tracks.length} baris, tetapi tidak mengiklankan total playlist. Angka ini adalah jumlah minimum yang terbaca, bukan total akhir.'
+                                : 'Embed publik mungkin hanya menampilkan sebagian daftar. Jika Spotify tidak mengirim baris sisanya, MusikKu tidak bisa mengambilnya tanpa pagination publik/API.',
                     style: const TextStyle(color: Colors.orange),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: supplementaryTracksController,
+                    minLines: 2,
+                    maxLines: 5,
+                    decoration: InputDecoration(
+                      labelText: 'Tambahkan lagu setelah ${snapshot.tracks.length} lagu yang terbaca (opsional)',
+                      hintText: 'Judul lagu<TAB>Artis\natau Judul lagu — Artis',
+                      helperText: 'Tempel lagu yang belum muncul, satu lagu per baris. Format: Judul<TAB>Artis atau Judul — Artis. Urutan dan duplikat dipertahankan.',
+                      border: OutlineInputBorder(),
+                    ),
                   ),
                 ],
                 const SizedBox(height: 12),
@@ -817,7 +838,16 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
           ],
         ),
       );
+      final supplementaryTracks =
+          SpotifyPlaylistImportService.parseSupplementaryTrackText(
+        supplementaryTracksController.text,
+      );
+      supplementaryTracksController.dispose();
       if (!mounted || preview != true) return;
+      final tracksToImport = <SpotifyPlaylistTrack>[
+        ...snapshot.tracks,
+        ...supplementaryTracks,
+      ];
 
       final progressText = ValueNotifier<String>('Menyiapkan pencarian lagu…');
       final progress = ValueNotifier<double>(0);
@@ -862,20 +892,20 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
       );
 
       final resolved = List<YoutubeSearchResult?>.filled(
-        snapshot.tracks.length,
+        tracksToImport.length,
         null,
       );
       try {
         // Small batches keep network pressure low while preserving Spotify's
         // original ordering in the resolved array.
-        for (var start = 0; start < snapshot.tracks.length; start += 2) {
-          final end = (start + 2 < snapshot.tracks.length)
+        for (var start = 0; start < tracksToImport.length; start += 2) {
+          final end = (start + 2 < tracksToImport.length)
               ? start + 2
-              : snapshot.tracks.length;
-          progressText.value = 'Mencocokkan lagu ${start + 1}–$end dari ${snapshot.tracks.length}…';
+              : tracksToImport.length;
+          progressText.value = 'Mencocokkan lagu ${start + 1}–$end dari ${tracksToImport.length}…';
           final indexes = List<int>.generate(end - start, (offset) => start + offset);
           final batch = await Future.wait(indexes.map((index) async {
-            final track = snapshot.tracks[index];
+            final track = tracksToImport[index];
             try {
               // Search by performer + title first, then title alone. YouTube
               // may order these fields either way ("Artist - Song" or
@@ -944,7 +974,7 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
           for (var offset = 0; offset < indexes.length; offset++) {
             resolved[indexes[offset]] = batch[offset];
           }
-          progress.value = end / snapshot.tracks.length;
+          progress.value = end / tracksToImport.length;
         }
       } finally {
         final dialogContext = progressDialogContext;
@@ -965,13 +995,13 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
           .toList(growable: true);
 
       final unmatchedTracks = <SpotifyPlaylistTrack>[
-        for (var index = 0; index < snapshot.tracks.length; index++)
-          if (resolved[index] == null) snapshot.tracks[index],
+        for (var index = 0; index < tracksToImport.length; index++)
+          if (resolved[index] == null) tracksToImport[index],
       ];
       if (importedSongs.isEmpty) {
         await _showSpotifyUnmatchedReport(
           unmatchedTracks,
-          summary: 'Metadata ${snapshot.tracks.length} lagu terbaca, tetapi tidak ada pasangan YouTube Music yang cukup cocok. Playlist tidak dibuat.',
+          summary: 'Metadata ${tracksToImport.length} lagu terbaca, tetapi tidak ada pasangan YouTube Music yang cukup cocok. Playlist tidak dibuat.',
         );
         return;
       }
@@ -991,12 +1021,14 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
       widget.onChanged();
 
       final summary = <String>[
-        '${importedSongs.length}/${snapshot.tracks.length} lagu berhasil diimpor',
+        '${importedSongs.length}/${tracksToImport.length} lagu berhasil diimpor',
         if (unmatchedCount > 0) '$unmatchedCount tidak ditemukan/cocok',
         if (snapshot.mayBePartial)
           snapshot.knownMissingTrackCount > 0
-              ? '${snapshot.knownMissingTrackCount} lagu tidak tersedia di embed publik'
-              : 'daftar Spotify mungkin belum lengkap',
+              ? '${(snapshot.knownMissingTrackCount - supplementaryTracks.length).clamp(0, snapshot.knownMissingTrackCount)} lagu dari metadata belum dilengkapi'
+              : 'jumlah asli belum diketahui; sekurangnya ${snapshot.tracks.length} baris terlihat di embed, bukan total playlist',
+        if (supplementaryTracks.isNotEmpty)
+          '${supplementaryTracks.length} lagu tambahan dibaca dari daftar tempel',
       ];
       if (unmatchedTracks.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(

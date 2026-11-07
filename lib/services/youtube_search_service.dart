@@ -9,6 +9,7 @@ import '../models/youtube_search_result.dart';
 import 'disk_cache.dart';
 import 'youtube_search_query.dart';
 import 'youtube_music_policy.dart';
+import 'youtube_music_metadata_parser.dart';
 import 'youtube_search_response_parser.dart';
 import 'youtube_search_api_errors.dart';
 import 'youtube_api_request_guard.dart';
@@ -214,6 +215,10 @@ class YoutubeSearchService {
     final title = _decodeHtml(readString(() => video.title, 'Tanpa judul'));
     final description = _decodeHtml(readString(() => video.description));
     final channelTitle = _decodeHtml(readString(() => video.author, 'Unknown'));
+    final releaseMetadata = YoutubeMusicMetadataParser.parse(
+      title: title,
+      description: description,
+    );
 
     String thumbnailUrl = readString(() => video.thumbnails.maxResUrl);
     if (thumbnailUrl.isEmpty) {
@@ -259,6 +264,8 @@ class YoutubeSearchService {
       title: title,
       description: description,
       channelTitle: channelTitle,
+      artistName: releaseMetadata.artistName,
+      album: releaseMetadata.album,
       thumbnailUrl: thumbnailUrl,
       viewCount: viewCount,
       publishedAt: publishedAt,

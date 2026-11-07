@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
 import '../models/youtube_search_result.dart';
+import '../services/album_artwork_service.dart';
 import '../services/local_media_service.dart';
 import '../services/track_artwork_service.dart';
 
@@ -38,6 +39,7 @@ class _UnifiedArtworkState extends State<UnifiedArtwork> {
 
   Future<Uint8List?>? _future;
   Future<String?>? _customArtworkFuture;
+  Future<String>? _albumArtworkFuture;
 
   @override
   void initState() {
@@ -54,7 +56,12 @@ class _UnifiedArtworkState extends State<UnifiedArtwork> {
   @override
   void didUpdateWidget(covariant UnifiedArtwork oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.track.videoId != widget.track.videoId) {
+    if (oldWidget.track.videoId != widget.track.videoId ||
+        oldWidget.track.title != widget.track.title ||
+        oldWidget.track.channelTitle != widget.track.channelTitle ||
+        oldWidget.track.artistName != widget.track.artistName ||
+        oldWidget.track.album != widget.track.album ||
+        oldWidget.track.thumbnailUrl != widget.track.thumbnailUrl) {
       _prepare();
     }
   }
@@ -63,8 +70,11 @@ class _UnifiedArtworkState extends State<UnifiedArtwork> {
     _customArtworkFuture = TrackArtworkService.pathFor(widget.track.videoId);
     if (!widget.track.isLocal) {
       _future = null;
+      _albumArtworkFuture =
+          AlbumArtworkService.resolveCoverUrl(widget.track);
       return;
     }
+    _albumArtworkFuture = null;
 
     final id = widget.track.localMediaId;
     if (id.isEmpty) {
@@ -130,20 +140,42 @@ class _UnifiedArtworkState extends State<UnifiedArtwork> {
               );
             },
           )
-        : (widget.track.coverUrl.isEmpty
-            ? _fallback(context)
-            : Image.network(
-                widget.track.coverUrl,
+        : FutureBuilder<String>(
+            future: _albumArtworkFuture,
+            builder: (context, snapshot) {
+              final verifiedUrl = snapshot.data?.trim() ?? '';
+              final url = verifiedUrl.isNotEmpty
+                  ? verifiedUrl
+                  : widget.track.coverUrl;
+              if (url.isEmpty) return _fallback(context);
+              return Image.network(
+                url,
                 fit: widget.fit,
                 cacheWidth: widget.cacheWidth?.round(),
                 gaplessPlayback: true,
-                filterQuality: FilterQuality.medium,
+                filterQuality: FilterQuality.high,
                 loadingBuilder: (context, child, loadingProgress) {
                   if (loadingProgress == null) return child;
                   return _fallback(context);
                 },
-                errorBuilder: (context, error, stackTrace) => _fallback(context),
-              ));
+                errorBuilder: (context, error, stackTrace) {
+                  final fallback = widget.track.coverUrl;
+                  if (fallback.isNotEmpty && fallback != url) {
+                    return Image.network(
+                      fallback,
+                      fit: widget.fit,
+                      cacheWidth: widget.cacheWidth?.round(),
+                      gaplessPlayback: true,
+                      filterQuality: FilterQuality.medium,
+                      errorBuilder: (context, error, stackTrace) =>
+                          _fallback(context),
+                    );
+                  }
+                  return _fallback(context);
+                },
+              );
+            },
+          );
   }
 
   @override

@@ -2,6 +2,8 @@ class ListeningStat {
   final String videoId;
   final String title;
   final String artist;
+  /// Primary credited performer used for artwork lookup; [artist] keeps display credits.
+  final String artistName;
   final String thumbnailUrl;
   final int playCount;
   final int skipCount;
@@ -12,6 +14,7 @@ class ListeningStat {
     required this.videoId,
     required this.title,
     required this.artist,
+    this.artistName = '',
     required this.thumbnailUrl,
     required this.playCount,
     this.skipCount = 0,
@@ -23,6 +26,7 @@ class ListeningStat {
         'videoId': videoId,
         'title': title,
         'artist': artist,
+        'artistName': artistName,
         'thumbnailUrl': thumbnailUrl,
         'playCount': playCount,
         'skipCount': skipCount,
@@ -35,6 +39,7 @@ class ListeningStat {
       videoId: json['videoId']?.toString() ?? '',
       title: json['title']?.toString() ?? 'Tanpa judul',
       artist: json['artist']?.toString() ?? 'Unknown',
+      artistName: json['artistName']?.toString() ?? '',
       thumbnailUrl: json['thumbnailUrl']?.toString() ?? '',
       playCount: (json['playCount'] as num?)?.toInt() ?? 0,
       skipCount: (json['skipCount'] as num?)?.toInt() ?? 0,

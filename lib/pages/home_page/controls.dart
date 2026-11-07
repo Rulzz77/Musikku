@@ -105,6 +105,7 @@ extension _HomeControls on _HomePageState {
       videoId: video.videoId,
       title: video.title,
       artist: video.channelTitle,
+      artistName: video.artistName,
       thumbnailUrl: video.coverUrl,
       playCount: existing?.playCount ?? 0,
       skipCount: (existing?.skipCount ?? 0) + 1,

@@ -11,12 +11,14 @@ class SpotifyPlaylistTrack {
     required this.artists,
     this.spotifyTrackId = '',
     this.durationMs,
+    this.album = '',
   });
 
   final String title;
   final List<String> artists;
   final String spotifyTrackId;
   final int? durationMs;
+  final String album;
 
   String get primaryArtist => artists.isEmpty ? '' : artists.first;
 }
@@ -278,7 +280,11 @@ class SpotifyPlaylistImportService {
       if (tracks.length > bestTracks.length) {
         bestTracks = tracks;
       }
-      totalTrackCount ??= _findPlaylistTrackCount(decoded);
+      final advertisedCount = _findPlaylistTrackCount(decoded);
+      if (advertisedCount != null &&
+          (totalTrackCount == null || advertisedCount > totalTrackCount)) {
+        totalTrackCount = advertisedCount;
+      }
       if (titleFromJson.isEmpty) {
         titleFromJson = _findPlaylistTitle(decoded);
       }
@@ -296,7 +302,11 @@ class SpotifyPlaylistImportService {
         final decoded = _decodeJsonScript(rawPayload.trim());
         if (decoded != null) {
           bestTracks = _extractTracks(decoded);
-          totalTrackCount ??= _findPlaylistTrackCount(decoded);
+          final advertisedCount = _findPlaylistTrackCount(decoded);
+          if (advertisedCount != null &&
+              (totalTrackCount == null || advertisedCount > totalTrackCount)) {
+            totalTrackCount = advertisedCount;
+          }
           if (titleFromJson.isEmpty) titleFromJson = _findPlaylistTitle(decoded);
         }
       }
@@ -305,11 +315,29 @@ class SpotifyPlaylistImportService {
     final title = _cleanPlaylistTitle(
       titleFromJson.isNotEmpty ? titleFromJson : titleFromMeta,
     );
+    final descriptionCount = _countTracksFromDescription(description);
+    if (descriptionCount != null &&
+        (totalTrackCount == null || descriptionCount > totalTrackCount)) {
+      totalTrackCount = descriptionCount;
+    }
     if (bestTracks.isEmpty) {
       throw const SpotifyPlaylistImportException(
         'Spotify tidak menampilkan daftar lagu pada halaman embed ini. Playlist mungkin privat, dibatasi, atau format halaman Spotify berubah. MusikKu tidak akan membuat playlist kosong.',
       );
     }
+
+    // Spotify's public playlist embed commonly exposes exactly the first 100
+    // rows even when the underlying playlist is longer. A count equal to the
+    // number of rows at that boundary is therefore not authoritative: it may
+    // simply be the embed's visible-row count. Only treat a larger advertised
+    // value as a known full count. The parser itself still retains >100 rows
+    // whenever Spotify actually includes them in the HTML.
+    final reachedEmbedBoundary = bestTracks.length >= 100;
+    final trustedTotalTrackCount = totalTrackCount != null &&
+            (totalTrackCount > bestTracks.length ||
+                (!reachedEmbedBoundary && totalTrackCount == bestTracks.length))
+        ? totalTrackCount
+        : null;
 
     return SpotifyPlaylistSnapshot(
       id: playlistId,
@@ -317,84 +345,159 @@ class SpotifyPlaylistImportService {
       sourceUrl: sourceUrl,
       description: description,
       tracks: List<SpotifyPlaylistTrack>.unmodifiable(bestTracks),
-      totalTrackCount: totalTrackCount,
-      // Some public embed variants expose only a finite first section. If the
-      // payload reports a total, compare it with the parsed rows. Otherwise
-      // warn conservatively at the observed embed page size. Never fabricate
-      // tracks or call undocumented/private pagination endpoints.
-      mayBePartial: totalTrackCount != null
-          ? totalTrackCount > bestTracks.length
-          : bestTracks.length >= 50,
+      totalTrackCount: trustedTotalTrackCount,
+      // At 100 rows the embed may have reached its public first-page boundary;
+      // report partial/unknown instead of falsely claiming the playlist has 100.
+      mayBePartial: reachedEmbedBoundary ||
+          (trustedTotalTrackCount != null &&
+              trustedTotalTrackCount > bestTracks.length),
     );
+  }
+
+  /// Parses supplementary rows copied/exported by the user when Spotify's
+  /// public embed stops at its first 100 tracks. Supported rows are:
+  /// `Title<TAB>Artist` and `Title — Artist` (one track per line).
+  /// It deliberately preserves ordering and duplicates.
+  static List<SpotifyPlaylistTrack> parseSupplementaryTrackText(String raw) {
+    final tracks = <SpotifyPlaylistTrack>[];
+    for (final sourceLine in raw.split(RegExp(r'\r?\n'))) {
+      var line = sourceLine.trim();
+      if (line.isEmpty) continue;
+      line = line.replaceFirst(RegExp(r'^\s*\d{1,4}[.)]?\s+'), '').trim();
+      if (line.isEmpty) continue;
+
+      String title;
+      String artistCredit;
+      if (line.contains('\t')) {
+        final columns = line.split('\t').map((part) => part.trim()).toList();
+        if (columns.length < 2) continue;
+        title = columns[0];
+        artistCredit = columns[1];
+      } else {
+        final separators = RegExp(r'\s+[—–]\s+|\s+-\s+')
+            .allMatches(line)
+            .toList(growable: false);
+        if (separators.isEmpty) continue;
+        final separator = separators.last;
+        title = line.substring(0, separator.start).trim();
+        artistCredit = line.substring(separator.end).trim();
+      }
+
+      if (title.isEmpty || artistCredit.isEmpty) continue;
+      if (title.toLowerCase() == 'title' ||
+          artistCredit.toLowerCase() == 'artist' ||
+          title.toLowerCase() == 'judul') {
+        continue;
+      }
+      final artists = _readArtists(artistCredit);
+      if (artists.isEmpty) continue;
+      tracks.add(SpotifyPlaylistTrack(
+        title: title,
+        artists: List<String>.unmodifiable(artists),
+      ));
+    }
+    return List<SpotifyPlaylistTrack>.unmodifiable(tracks);
+  }
+
+  /// Reads an explicit song/track count from embed description metadata.
+  /// Counts equal to the visible 100-row boundary are handled as unknown below.
+  static int? _countTracksFromDescription(String description) {
+    final match = RegExp(
+      r'\b(\d{1,5})\s+(?:songs?|tracks?|lagu)\b',
+      caseSensitive: false,
+    ).firstMatch(description);
+    final count = int.tryParse(match?.group(1) ?? '');
+    return count != null && count > 0 ? count : null;
   }
 
   /// Reads a playlist's advertised item count when the public embed provides it.
   /// Spotify has used several field names across embed payload versions. This
   /// deliberately ignores generic counts outside playlist/track-list objects.
   static int? _findPlaylistTrackCount(Object? node) {
-    if (node is List) {
-      for (final child in node) {
-        final count = _findPlaylistTrackCount(child);
-        if (count != null) return count;
-      }
-      return null;
-    }
-    if (node is! Map) return null;
+    int? bestCount;
 
-    final map = Map<String, dynamic>.from(node);
-    final type = _firstString(map, const ['type', 'entityType', 'entity_type'])
-        .toLowerCase();
-    final looksLikePlaylist = type == 'playlist' ||
-        map.containsKey('trackList') ||
-        map.containsKey('tracks');
-    if (looksLikePlaylist) {
-      for (final key in const [
-        'totalTrackCount',
-        'total_track_count',
-        'trackCount',
-        'track_count',
-        'totalTracks',
-        'total_tracks',
-        'totalCount',
-      ]) {
-        final value = map[key];
-        if (value is num && value >= 0) return value.toInt();
-        if (value is String) {
-          final parsed = int.tryParse(value.trim());
-          if (parsed != null && parsed >= 0) return parsed;
-        }
+    void consider(Object? value) {
+      int? parsed;
+      if (value is num) {
+        parsed = value.toInt();
+      } else if (value is String) {
+        parsed = int.tryParse(value.trim());
       }
-      final tracks = map['tracks'];
-      if (tracks is Map) {
-        final trackMap = Map<String, dynamic>.from(tracks);
-        for (final key in const ['total', 'totalCount', 'total_count']) {
-          final value = trackMap[key];
-          if (value is num && value >= 0) return value.toInt();
-          if (value is String) {
-            final parsed = int.tryParse(value.trim());
-            if (parsed != null && parsed >= 0) return parsed;
-          }
-        }
-      }
-      final trackList = map['trackList'];
-      if (trackList is Map) {
-        final listMap = Map<String, dynamic>.from(trackList);
-        for (final key in const ['total', 'totalCount', 'total_count']) {
-          final value = listMap[key];
-          if (value is num && value >= 0) return value.toInt();
-          if (value is String) {
-            final parsed = int.tryParse(value.trim());
-            if (parsed != null && parsed >= 0) return parsed;
-          }
-        }
+      if (parsed != null && parsed >= 0 &&
+          (bestCount == null || parsed > bestCount!)) {
+        bestCount = parsed;
       }
     }
 
-    for (final value in map.values) {
-      final count = _findPlaylistTrackCount(value);
-      if (count != null) return count;
+    void visit(Object? current) {
+      if (current is List) {
+        for (final child in current) {
+          visit(child);
+        }
+        return;
+      }
+      if (current is! Map) return;
+
+      final map = Map<String, dynamic>.from(current);
+      final type = _firstString(map, const ['type', 'entityType', 'entity_type'])
+          .toLowerCase();
+      final looksLikePlaylist = type == 'playlist' ||
+          map.containsKey('trackList') ||
+          map.containsKey('tracks');
+      if (looksLikePlaylist) {
+        const countKeys = <String>[
+          'totalTrackCount',
+          'totalTracksCount',
+          'total_track_count',
+          'total_tracks_count',
+          'trackCount',
+          'tracksCount',
+          'track_count',
+          'tracks_count',
+          'totalTracks',
+          'total_tracks',
+          'totalCount',
+          'total_count',
+          'total',
+          'totalLength',
+          'total_length',
+          'numberOfTracks',
+          'number_of_tracks',
+          'numTracks',
+          'num_tracks',
+          'numberOfItems',
+          'number_of_items',
+          'numItems',
+          'num_items',
+          'itemCount',
+          'item_count',
+          'totalItems',
+          'total_items',
+        ];
+        for (final key in countKeys) {
+          consider(map[key]);
+        }
+        for (final nestedKey in const ['tracks', 'trackList']) {
+          final nested = map[nestedKey];
+          if (nested is Map) {
+            final nestedMap = Map<String, dynamic>.from(nested);
+            for (final key in countKeys) {
+              consider(nestedMap[key]);
+            }
+          }
+        }
+      }
+
+      // Do not return on the first count: a page payload can contain the
+      // preview row count (100) and a separate advertised total (e.g. 168).
+      // Keep the largest count found inside playlist/track-list structures.
+      for (final value in map.values) {
+        visit(value);
+      }
     }
-    return null;
+
+    visit(node);
+    return bestCount;
   }
 
   static Object? _decodeJsonScript(String source) {
@@ -495,6 +598,9 @@ class SpotifyPlaylistImportService {
       artists: List<String>.unmodifiable(artists),
       spotifyTrackId: id,
       durationMs: _readDurationMs(map),
+      album: _readAlbumTitle(map['album']).isNotEmpty
+          ? _readAlbumTitle(map['album'])
+          : _firstString(map, const ['albumName', 'album_name']),
     );
   }
 
@@ -546,6 +652,23 @@ class SpotifyPlaylistImportService {
         .map((artist) => artist.trim())
         .where((artist) => artist.isNotEmpty)
         .toList(growable: false);
+  }
+
+  static String _readAlbumTitle(dynamic raw) {
+    if (raw is String) return raw.trim();
+    if (raw is Map) {
+      final map = Map<String, dynamic>.from(raw);
+      final direct = _firstString(map, const ['name', 'title', 'albumName']);
+      if (direct.isNotEmpty) return direct;
+      for (final key in const ['album', 'release', 'entity']) {
+        final nested = map[key];
+        if (nested is Map || nested is String) {
+          final result = _readAlbumTitle(nested);
+          if (result.isNotEmpty) return result;
+        }
+      }
+    }
+    return '';
   }
 
   static int? _readDurationMs(Map<String, dynamic> map) {

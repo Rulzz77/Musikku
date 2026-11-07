@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../models/listening_stat.dart';
+import '../models/youtube_search_result.dart';
 import '../services/storage_service.dart';
 import '../widgets/flow_components.dart';
 import '../widgets/music_design.dart';
+import '../widgets/unified_artwork.dart';
 
 class StatsPage extends StatefulWidget {
   const StatsPage({super.key, required this.storage});
@@ -504,9 +506,15 @@ class _StatSongTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final thumbUrl = stat.thumbnailUrl.isEmpty
-        ? 'https://i.ytimg.com/vi/${stat.videoId}/hqdefault.jpg'
-        : stat.thumbnailUrl;
+    final artworkTrack = YoutubeSearchResult(
+      videoId: stat.videoId,
+      title: stat.title,
+      channelTitle: stat.artist,
+      artistName: stat.artistName.isNotEmpty
+          ? stat.artistName
+          : stat.artist.split(',').first.trim(),
+      thumbnailUrl: stat.thumbnailUrl,
+    );
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -526,18 +534,13 @@ class _StatSongTile extends StatelessWidget {
           ),
           ClipRRect(
             borderRadius: BorderRadius.circular(10),
-            child: Image.network(
-              thumbUrl,
+            child: UnifiedArtwork(
+              track: artworkTrack,
               width: 52,
               height: 52,
               fit: BoxFit.cover,
               cacheWidth: 156,
-              errorBuilder: (_, _, _) => Container(
-                width: 52,
-                height: 52,
-                color: scheme.surfaceContainerHighest,
-                child: const Icon(Icons.music_note_rounded),
-              ),
+              iconSize: 24,
             ),
           ),
           const SizedBox(width: 11),

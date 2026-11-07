@@ -64,8 +64,29 @@ class SpotifyYoutubeTrackMatcher {
         .join(', ');
     return candidate.copyWith(
       title: track.title.trim(),
+      // Keep the visible Spotify credit aligned with the playlist while also
+      // preserving the primary performer separately for verified album art.
       channelTitle: credits.isEmpty ? candidate.channelTitle : credits,
+      artistName: track.primaryArtist,
+      album: track.album.trim().isNotEmpty
+          ? track.album.trim()
+          : (candidate.album.trim().isNotEmpty
+              ? candidate.album.trim()
+              : _albumFromOfficialDescription(candidate.description)),
     );
+  }
+
+  static String _albumFromOfficialDescription(String rawDescription) {
+    if (!RegExp(r'provided to youtube by', caseSensitive: false)
+        .hasMatch(rawDescription)) {
+      return '';
+    }
+    final match = RegExp(
+      r'^\s*(?:album|album title)\s*[:\-]\s*(.*?)\s*$',
+      caseSensitive: false,
+      multiLine: true,
+    ).firstMatch(rawDescription);
+    return match?.group(1)?.trim() ?? '';
   }
 
   static String _normalize(String value) => value

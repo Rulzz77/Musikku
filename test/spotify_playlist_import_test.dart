@@ -1,12 +1,33 @@
 import 'dart:convert';
 
-import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_application_5/models/listening_stat.dart';
 import 'package:flutter_application_5/models/youtube_search_result.dart';
+import 'package:flutter_application_5/services/album_artwork_service.dart';
 import 'package:flutter_application_5/services/spotify_playlist_import_service.dart';
 import 'package:flutter_application_5/services/spotify_youtube_track_matcher.dart';
+import 'package:flutter_application_5/services/youtube_music_metadata_parser.dart';
 import 'package:flutter_application_5/services/youtube_music_policy.dart';
+import 'package:flutter_application_5/services/youtube_search_response_parser.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  group('Listening stat artwork artist metadata', () {
+    test('round-trips primary artist separately from full display credits', () {
+      const source = ListeningStat(
+        videoId: 'satru-video',
+        title: 'Satru',
+        artist: 'Denny Caknan, Happy Asmara',
+        artistName: 'Denny Caknan',
+        thumbnailUrl: 'https://example.com/satru.jpg',
+        playCount: 1,
+        listenedSeconds: 60,
+      );
+      final restored = ListeningStat.fromJson(source.toJson());
+      expect(restored.artist, 'Denny Caknan, Happy Asmara');
+      expect(restored.artistName, 'Denny Caknan');
+    });
+  });
+
   group('Spotify public embed playlist parser', () {
     test('extracts playlist name and ordered track metadata from embedded JSON', () {
       const html = '''
@@ -224,6 +245,131 @@ void main() {
       expect(snapshot.totalTrackCount, 180);
       expect(snapshot.knownMissingTrackCount, 55);
       expect(snapshot.mayBePartial, isTrue);
+    });
+
+    test('treats a 100-row embed count as a lower bound, not the playlist total', () {
+      final trackList = List<Map<String, dynamic>>.generate(100, (index) {
+        final id = index.toString().padLeft(22, '0');
+        return <String, dynamic>{
+          'uri': 'spotify:track:$id',
+          'title': 'Track $index',
+          'subtitle': 'Artist $index',
+          'duration': 180000,
+          'entityType': 'track',
+        };
+      });
+      final payload = <String, dynamic>{
+        'entity': <String, dynamic>{
+          'type': 'playlist',
+          'name': 'Playlist over one hundred',
+          // Some embed payloads expose the capped row count here.
+          'totalCount': 100,
+          'trackList': trackList,
+        },
+      };
+      final html = '<script id="__NEXT_DATA__" type="application/json">'
+          '${jsonEncode(payload)}</script>';
+      final snapshot = SpotifyPlaylistImportService.parseEmbedHtml(
+        html,
+        playlistId: '12345678901234567890',
+        sourceUrl: 'https://open.spotify.com/playlist/12345678901234567890',
+      );
+
+      expect(snapshot.tracks, hasLength(100));
+      expect(snapshot.totalTrackCount, isNull);
+      expect(snapshot.mayBePartial, isTrue);
+      expect(snapshot.knownMissingTrackCount, 0);
+    });
+
+    test('keeps supplementary pasted track rows in order and preserves duplicates', () {
+      final tracks = SpotifyPlaylistImportService.parseSupplementaryTrackText(
+        '101. Nemen — Guyon Waton\n'
+        'Evaluasi\tHindia\tMenari Dengan Bayangan\n'
+        'Nemen — Guyon Waton\n'
+        'Judul\tArtis\n',
+      );
+      expect(tracks, hasLength(3));
+      expect(tracks[0].title, 'Nemen');
+      expect(tracks[0].artists, ['Guyon Waton']);
+      expect(tracks[1].title, 'Evaluasi');
+      expect(tracks[1].primaryArtist, 'Hindia');
+      expect(tracks[2].title, 'Nemen');
+    });
+
+    test('stores primary artist separately from the upload channel after import', () {
+      const spotifyTrack = SpotifyPlaylistTrack(
+        title: 'Satru',
+        artists: ['Denny Caknan', 'Happy Asmara'],
+        album: 'Satru (Single)',
+      );
+      const candidate = YoutubeSearchResult(
+        videoId: 'video123',
+        title: 'Satru Official Audio',
+        channelTitle: 'Music Label - Topic',
+        thumbnailUrl: 'https://example.com/thumb.jpg',
+      );
+      final imported = SpotifyYoutubeTrackMatcher.applySpotifyMetadata(
+        spotifyTrack,
+        candidate,
+      );
+      expect(imported.artistName, 'Denny Caknan');
+      expect(imported.channelTitle, 'Denny Caknan, Happy Asmara');
+      expect(imported.album, 'Satru (Single)');
+    });
+
+
+    test('reads album title only from a structured YouTube Music description', () {
+      const track = SpotifyPlaylistTrack(
+        title: 'Sinarengan',
+        artists: ['Denny Caknan', 'Bella Bonita'],
+      );
+      const candidate = YoutubeSearchResult(
+        videoId: 'album-description-video',
+        title: 'Sinarengan Official Audio',
+        channelTitle: 'Denny Caknan - Topic',
+        description: 'Provided to YouTube by Example Label\n'
+            'Sinarengan\n'
+            'Denny Caknan\n'
+            'Album: Sinarengan (Single)\n'
+            'Auto-generated by YouTube.',
+        thumbnailUrl: 'https://example.com/cover.jpg',
+      );
+      final imported = SpotifyYoutubeTrackMatcher.applySpotifyMetadata(
+        track,
+        candidate,
+      );
+      expect(imported.album, 'Sinarengan (Single)');
+    });
+
+    test('parses album metadata when the public embed supplies it', () {
+      const html = '''
+        <html><body>
+          <script id="__NEXT_DATA__" type="application/json">
+          {
+            "props": {"pageProps": {"state": {"data": {"entity": {
+              "type": "playlist",
+              "name": "Album metadata",
+              "trackList": [
+                {
+                  "uri": "spotify:track:3333333333333333333333",
+                  "title": "Sinarengan",
+                  "subtitle": "Denny Caknan, Bella Bonita",
+                  "duration": 333000,
+                  "album": {"name": "Sinarengan"},
+                  "entityType": "track"
+                }
+              ]
+            }}}}}
+          }
+          </script>
+        </body></html>
+      ''';
+      final snapshot = SpotifyPlaylistImportService.parseEmbedHtml(
+        html,
+        playlistId: '12345678901234567890',
+        sourceUrl: 'https://open.spotify.com/playlist/12345678901234567890',
+      );
+      expect(snapshot.tracks.single.album, 'Sinarengan');
     });
 
     test('does not treat podcast episodes as playlist songs', () {
@@ -655,4 +801,233 @@ void main() {
       );
     });
   });
+
+  group('YouTube official music metadata parser', () {
+    test('extracts artist and album from an auto-generated music description', () {
+      const description = '''
+Provided to YouTube by Believe SAS
+
+Cundamani · Denny Caknan
+Album: Cundamani
+Released on: 2023-07-17
+Auto-generated by YouTube.
+''';
+      final metadata = YoutubeMusicMetadataParser.parse(
+        title: 'Cundamani (Official Audio)',
+        description: description,
+      );
+      expect(metadata.artistName, 'Denny Caknan');
+      expect(metadata.album, 'Cundamani');
+    });
+
+    test('does not trust artist names in an ordinary promotional description', () {
+      final metadata = YoutubeMusicMetadataParser.parse(
+        title: 'Cundamani',
+        description: 'Provided to YouTube by Believe SAS\nSubscribe to Denny Caknan and listen now.',
+      );
+      expect(metadata.artistName, isEmpty);
+      expect(metadata.album, isEmpty);
+    });
+
+    test('requires the embedded title line to match before taking artist credit', () {
+      final metadata = YoutubeMusicMetadataParser.parse(
+        title: 'Satru',
+        description: 'Provided to YouTube by Label\nCundamani · Denny Caknan',
+      );
+      expect(metadata.artistName, isEmpty);
+    });
+
+    test('parses soundtrack source suffix and keeps primary credited performer', () {
+      final metadata = YoutubeMusicMetadataParser.parse(
+        title: 'Koyo Jogja Istimewa - From "Cidro Asmoro"',
+        description: 'Provided to YouTube by Label\n'
+            'Koyo Jogja Istimewa · Ndarboy Genk, Niken Salindry\n'
+            'Album: Cidro Asmoro',
+      );
+      expect(metadata.artistName, 'Ndarboy Genk');
+      expect(metadata.album, 'Cidro Asmoro');
+    });
+
+    test('uses the first artist from explicit collaborative credits', () {
+      final metadata = YoutubeMusicMetadataParser.parse(
+        title: 'Satru',
+        description: 'Provided to YouTube by Label\n'
+            'Artist: Denny Caknan, Happy Asmara\n'
+            'Album: Satru',
+      );
+      expect(metadata.artistName, 'Denny Caknan');
+    });
+  });
+
+
+  group('Spotify public embed count metadata', () {
+    test('reads an advertised count above the visible embed rows', () {
+      final trackList = List<Map<String, dynamic>>.generate(100, (index) {
+        final id = index.toString().padLeft(22, '0');
+        return <String, dynamic>{
+          'uri': 'spotify:track:$id',
+          'title': 'Track $index',
+          'subtitle': 'Artist $index',
+          'duration': 180000,
+          'entityType': 'track',
+        };
+      });
+      final payload = <String, dynamic>{
+        'props': <String, dynamic>{
+          'pageProps': <String, dynamic>{
+            'state': <String, dynamic>{
+              'data': <String, dynamic>{
+                'entity': <String, dynamic>{
+                  'type': 'playlist',
+                  'name': 'Large playlist',
+                  'totalLength': 145,
+                  'trackList': trackList,
+                },
+              },
+            },
+          },
+        },
+      };
+      final html = '<html><body><script id="__NEXT_DATA__" '
+          'type="application/json">${jsonEncode(payload)}</script></body></html>';
+      final snapshot = SpotifyPlaylistImportService.parseEmbedHtml(
+        html,
+        playlistId: '12345678901234567890',
+        sourceUrl: 'https://open.spotify.com/playlist/12345678901234567890',
+      );
+      expect(snapshot.tracks, hasLength(100));
+      expect(snapshot.totalTrackCount, 145);
+      expect(snapshot.knownMissingTrackCount, 45);
+    });
+
+    test('uses a public embed description count only when it exceeds visible rows', () {
+      final trackList = List<Map<String, dynamic>>.generate(100, (index) {
+        final id = index.toString().padLeft(22, '0');
+        return <String, dynamic>{
+          'uri': 'spotify:track:$id',
+          'title': 'Track $index',
+          'subtitle': 'Artist $index',
+          'duration': 180000,
+          'entityType': 'track',
+        };
+      });
+      final payload = <String, dynamic>{
+        'entity': <String, dynamic>{
+          'type': 'playlist',
+          'name': 'Large playlist',
+          'trackList': trackList,
+        },
+      };
+      final html = '<html><head><meta property="og:description" '
+          'content="A playlist with 152 songs" /></head><body>'
+          '<script id="__NEXT_DATA__" type="application/json">'
+          '${jsonEncode(payload)}</script></body></html>';
+      final snapshot = SpotifyPlaylistImportService.parseEmbedHtml(
+        html,
+        playlistId: '12345678901234567890',
+        sourceUrl: 'https://open.spotify.com/playlist/12345678901234567890',
+      );
+      expect(snapshot.totalTrackCount, 152);
+      expect(snapshot.knownMissingTrackCount, 52);
+    });
+
+
+    test('keeps the largest advertised total across embed payload scripts', () {
+      final trackList = List<Map<String, dynamic>>.generate(100, (index) {
+        final id = index.toString().padLeft(22, '0');
+        return <String, dynamic>{
+          'uri': 'spotify:track:$id',
+          'title': 'Track $index',
+          'subtitle': 'Artist $index',
+          'duration': 180000,
+          'entityType': 'track',
+        };
+      });
+      final previewPayload = <String, dynamic>{
+        'entity': <String, dynamic>{
+          'type': 'playlist',
+          'totalCount': 100,
+          'trackList': trackList,
+        },
+      };
+      final fullCountPayload = <String, dynamic>{
+        'entity': <String, dynamic>{
+          'type': 'playlist',
+          'totalTrackCount': 168,
+          'trackList': trackList,
+        },
+      };
+      final html = '<html><body>'
+          '<script type="application/json">${jsonEncode(previewPayload)}</script>'
+          '<script type="application/json">${jsonEncode(fullCountPayload)}</script>'
+          '</body></html>';
+      final snapshot = SpotifyPlaylistImportService.parseEmbedHtml(
+        html,
+        playlistId: '12345678901234567890',
+        sourceUrl: 'https://open.spotify.com/playlist/12345678901234567890',
+      );
+      expect(snapshot.tracks, hasLength(100));
+      expect(snapshot.totalTrackCount, 168);
+      expect(snapshot.knownMissingTrackCount, 68);
+    });
+  });
+
+
+  group('Verified album cover selection', () {
+    test('selects the highest-resolution approved front cover only', () {
+      final selected = AlbumArtworkService.selectApprovedFrontImageUrl([
+        {
+          'approved': false,
+          'front': true,
+          'thumbnails': {'1200': 'https://covers.example/unapproved.jpg'},
+        },
+        {
+          'approved': true,
+          'front': false,
+          'types': ['Back'],
+          'thumbnails': {'1200': 'https://covers.example/back.jpg'},
+        },
+        {
+          'approved': true,
+          'front': true,
+          'thumbnails': {
+            '250': 'https://covers.example/front-250.jpg',
+            '500': 'https://covers.example/front-500.jpg',
+            '1200': 'https://covers.example/front-1200.jpg',
+          },
+        },
+      ]);
+      expect(selected, 'https://covers.example/front-1200.jpg');
+    });
+
+    test('does not return unapproved or back-cover images', () {
+      final selected = AlbumArtworkService.selectApprovedFrontImageUrl([
+        {
+          'approved': false,
+          'front': true,
+          'image': 'https://covers.example/unapproved.jpg',
+        },
+        {
+          'approved': true,
+          'front': false,
+          'types': ['Back'],
+          'image': 'https://covers.example/back.jpg',
+        },
+      ]);
+      expect(selected, isNull);
+    });
+  });
+
+  group('YouTube artwork thumbnail selection', () {
+    test('prefers max-resolution thumbnails for song artwork', () {
+      final url = YoutubeSearchResponseParser.pickThumbnail({
+        'default': {'url': 'https://img.example/default.jpg'},
+        'medium': {'url': 'https://img.example/medium.jpg'},
+        'high': {'url': 'https://img.example/high.jpg'},
+        'maxres': {'url': 'https://img.example/maxres.jpg'},
+      });
+      expect(url, 'https://img.example/maxres.jpg');
+    });
+  });
+
 }

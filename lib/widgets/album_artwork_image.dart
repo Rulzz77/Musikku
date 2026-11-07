@@ -47,7 +47,10 @@ class _AlbumArtworkImageState extends State<AlbumArtworkImage> {
     final current = widget.track;
     if (old.videoId != current.videoId ||
         old.title != current.title ||
-        old.channelTitle != current.channelTitle) {
+        old.channelTitle != current.channelTitle ||
+        old.artistName != current.artistName ||
+        old.album != current.album ||
+        old.thumbnailUrl != current.thumbnailUrl) {
       _prepare();
     }
   }
@@ -93,7 +96,7 @@ class _AlbumArtworkImageState extends State<AlbumArtworkImage> {
       width: widget.width,
       height: widget.height,
       fit: widget.fit,
-      filterQuality: FilterQuality.medium,
+      filterQuality: FilterQuality.high,
       gaplessPlayback: true,
       loadingBuilder: (context, child, loadingProgress) {
         if (loadingProgress == null) return child;
@@ -129,7 +132,7 @@ class _AlbumArtworkImageState extends State<AlbumArtworkImage> {
             height: widget.height,
             fit: widget.fit,
             gaplessPlayback: true,
-            filterQuality: FilterQuality.medium,
+            filterQuality: FilterQuality.high,
             errorBuilder: (context, error, stackTrace) => _resolvedArtwork(context),
           );
         }

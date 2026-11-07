@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
@@ -11,6 +12,8 @@ import '../models/player_ui_state.dart';
 import '../models/native_youtube_state.dart';
 import '../models/youtube_search_result.dart';
 import '../services/offline_download_service.dart';
+import '../services/spotify_playlist_import_service.dart';
+import '../services/spotify_youtube_track_matcher.dart';
 import '../services/audio_download_estimator.dart';
 import '../widgets/playlist_widgets.dart' show showPlaylistNameDialog;
 import '../widgets/unified_artwork.dart';
@@ -29,6 +32,7 @@ class CustomPlaylistsPage extends StatefulWidget {
     this.initialPlaylistId,
     required this.playerUiState,
     this.availableSongs = const [],
+    this.searchSongs,
     required this.onChanged,
     required this.onPlayPlaylist,
     this.onPlayOfflinePlaylist,
@@ -46,6 +50,7 @@ class CustomPlaylistsPage extends StatefulWidget {
   final String? initialPlaylistId;
   final ValueListenable<PlayerUiState> playerUiState;
   final List<YoutubeSearchResult> availableSongs;
+  final Future<List<YoutubeSearchResult>> Function(String query)? searchSongs;
   final VoidCallback onChanged;
   final Future<void> Function(Playlist playlist) onPlayPlaylist;
   final Future<void> Function(Playlist playlist)? onPlayOfflinePlaylist;
@@ -71,6 +76,9 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
   final Set<String> _selectedSongIds = <String>{};
   _PlaylistSortMode _sortMode = _PlaylistSortMode.recent;
   final OfflineDownloadService _downloads = OfflineDownloadService.instance;
+  final SpotifyPlaylistImportService _spotifyImporter =
+      SpotifyPlaylistImportService();
+  bool _spotifyImporting = false;
 
   @override
   void initState() {
@@ -83,6 +91,7 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
   @override
   void dispose() {
     _downloads.removeListener(_handleDownloadChanges);
+    _spotifyImporter.close();
     super.dispose();
   }
 
@@ -631,6 +640,334 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
       _selectedPlaylistId = playlist.id;
     });
     widget.onChanged();
+  }
+
+  Future<void> _importSpotifyPlaylist() async {
+    if (_spotifyImporting) return;
+    final searchSongs = widget.searchSongs;
+    if (searchSongs == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Pencarian YouTube belum siap untuk impor.')),
+      );
+      return;
+    }
+
+    final controller = TextEditingController();
+    final link = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Impor playlist Spotify'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Tempel link playlist Spotify yang bisa dibuka secara publik. '
+              'Tidak perlu Spotify API, API key, atau login.',
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              keyboardType: TextInputType.url,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (value) => Navigator.pop(dialogContext, value.trim()),
+              decoration: InputDecoration(
+                hintText: 'https://open.spotify.com/playlist/...',
+                border: const OutlineInputBorder(),
+                suffixIcon: IconButton(
+                  tooltip: 'Tempel link',
+                  icon: const Icon(Icons.content_paste_rounded),
+                  onPressed: () async {
+                    final clipboard = await Clipboard.getData(Clipboard.kTextPlain);
+                    final value = clipboard?.text?.trim();
+                    if (value != null && value.isNotEmpty) {
+                      controller.text = value;
+                      controller.selection = TextSelection.collapsed(
+                        offset: controller.text.length,
+                      );
+                    }
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, controller.text.trim()),
+            child: const Text('Baca playlist'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (!mounted || link == null || link.trim().isEmpty) return;
+
+    setState(() => _spotifyImporting = true);
+    try {
+      BuildContext? readingDialogContext;
+      final readingDialog = showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) {
+          readingDialogContext = dialogContext;
+          return const PopScope(
+            canPop: false,
+            child: AlertDialog(
+              content: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2.5),
+                  ),
+                  SizedBox(width: 16),
+                  Text('Membaca halaman playlist Spotify…'),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+      late final SpotifyPlaylistSnapshot snapshot;
+      try {
+        snapshot = await _spotifyImporter.fetchPublicPlaylist(link);
+      } finally {
+        final dialogContext = readingDialogContext;
+        if (dialogContext != null && dialogContext.mounted) {
+          Navigator.of(dialogContext).pop();
+        }
+        await readingDialog;
+      }
+      if (!mounted) return;
+
+      final preview = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text(snapshot.title, maxLines: 2, overflow: TextOverflow.ellipsis),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  snapshot.totalTrackCount != null
+                      ? '${snapshot.tracks.length} lagu terbaca dari ${snapshot.totalTrackCount} lagu yang tercatat di metadata publik Spotify.'
+                      : '${snapshot.tracks.length} lagu terbaca dari halaman embed publik Spotify.',
+                ),
+                if (snapshot.mayBePartial) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    snapshot.knownMissingTrackCount > 0
+                        ? 'Embed publik hanya menampilkan ${snapshot.tracks.length} dari ${snapshot.totalTrackCount} lagu. Sisa ${snapshot.knownMissingTrackCount} lagu tidak disediakan oleh halaman publik ini. Tanpa pagination publik/API, MusikKu tidak bisa mengambil sisanya.'
+                        : 'Embed publik mungkin hanya menampilkan sebagian daftar. Tanpa pagination publik/API, MusikKu tidak bisa menjamin seluruh lagu playlist terbaca.',
+                    style: const TextStyle(color: Colors.orange),
+                  ),
+                ],
+                const SizedBox(height: 12),
+                ...snapshot.tracks.take(5).map(
+                  (track) => Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 3),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.music_note_rounded, size: 16),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            '${track.title} — ${track.artists.join(', ')}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (snapshot.tracks.length > 5)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text('dan ${snapshot.tracks.length - 5} lagu lainnya…'),
+                  ),
+                const SizedBox(height: 10),
+                const Text(
+                  'MusikKu akan mencari pasangan lagu di YouTube Music. Lagu yang tidak cocok akan dilewati, bukan diganti dengan lagu lain.',
+                  style: TextStyle(fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Batal'),
+            ),
+            FilledButton.icon(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              icon: const Icon(Icons.playlist_add_rounded),
+              label: const Text('Cocokkan & impor'),
+            ),
+          ],
+        ),
+      );
+      if (!mounted || preview != true) return;
+
+      final progressText = ValueNotifier<String>('Menyiapkan pencarian lagu…');
+      final progress = ValueNotifier<double>(0);
+      BuildContext? progressDialogContext;
+      final progressDialog = showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) {
+          progressDialogContext = dialogContext;
+          return PopScope(
+            canPop: false,
+            child: AlertDialog(
+              title: const Text('Mengimpor playlist'),
+              content: SizedBox(
+                width: 320,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ValueListenableBuilder<String>(
+                      valueListenable: progressText,
+                      builder: (_, value, _) => Text(value),
+                    ),
+                    const SizedBox(height: 14),
+                    ValueListenableBuilder<double>(
+                      valueListenable: progress,
+                      builder: (_, value, _) => Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          LinearProgressIndicator(value: value),
+                          const SizedBox(height: 6),
+                          Text('${(value * 100).round()}%'),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      );
+
+      final resolved = List<YoutubeSearchResult?>.filled(
+        snapshot.tracks.length,
+        null,
+      );
+      try {
+        // Small batches keep network pressure low while preserving Spotify's
+        // original ordering in the resolved array.
+        for (var start = 0; start < snapshot.tracks.length; start += 2) {
+          final end = (start + 2 < snapshot.tracks.length)
+              ? start + 2
+              : snapshot.tracks.length;
+          progressText.value = 'Mencocokkan lagu ${start + 1}–$end dari ${snapshot.tracks.length}…';
+          final indexes = List<int>.generate(end - start, (offset) => start + offset);
+          final batch = await Future.wait(indexes.map((index) async {
+            final track = snapshot.tracks[index];
+            try {
+              // Search by title first so the existing query-aware catalogue
+              // policy does not mistake a combined "title artist" query for
+              // one artist's exact channel name. The matcher then verifies
+              // artist credit. If title search misses, retry by artist.
+              var candidates = await searchSongs(track.title);
+              var match = SpotifyYoutubeTrackMatcher.bestMatch(track, candidates);
+              if (match == null && track.primaryArtist.isNotEmpty) {
+                candidates = await searchSongs(track.primaryArtist);
+                match = SpotifyYoutubeTrackMatcher.bestMatch(track, candidates);
+              }
+              return match;
+            } catch (error) {
+              debugPrint('SPOTIFY IMPORT SEARCH FAILED [${track.title}]: $error');
+              return null;
+            }
+          }));
+          for (var offset = 0; offset < indexes.length; offset++) {
+            resolved[indexes[offset]] = batch[offset];
+          }
+          progress.value = end / snapshot.tracks.length;
+        }
+      } finally {
+        final dialogContext = progressDialogContext;
+        if (dialogContext != null && dialogContext.mounted) {
+          Navigator.of(dialogContext).pop();
+        }
+        await progressDialog;
+        progressText.dispose();
+        progress.dispose();
+      }
+
+      if (!mounted) return;
+      // Preserve every resolved Spotify occurrence, including intentional
+      // repeats of the same song. A playlist is an ordered sequence, not a
+      // set; duplicate entries are valid Spotify playlist content.
+      final importedSongs = resolved
+          .whereType<YoutubeSearchResult>()
+          .toList(growable: true);
+
+      if (importedSongs.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Metadata ${snapshot.tracks.length} lagu terbaca, tetapi tidak ada pasangan YouTube Music yang cukup cocok. Playlist tidak dibuat.',
+            ),
+            duration: const Duration(seconds: 6),
+          ),
+        );
+        return;
+      }
+
+      final unmatchedCount = snapshot.tracks.length -
+          resolved.where((song) => song != null).length;
+      final playlist = Playlist(
+        id: DateTime.now().microsecondsSinceEpoch.toString(),
+        name: snapshot.title,
+        description: 'Diimpor dari playlist Spotify publik · ${snapshot.sourceUrl}',
+        folderName: 'Impor Spotify',
+        songs: importedSongs,
+      );
+      setState(() {
+        widget.playlists.insert(0, playlist);
+        _selectedPlaylistId = playlist.id;
+      });
+      widget.onChanged();
+
+      final summary = <String>[
+        '${importedSongs.length}/${snapshot.tracks.length} lagu berhasil diimpor',
+        if (unmatchedCount > 0) '$unmatchedCount tidak ditemukan/cocok',
+        if (snapshot.mayBePartial)
+          snapshot.knownMissingTrackCount > 0
+              ? '${snapshot.knownMissingTrackCount} lagu tidak tersedia di embed publik'
+              : 'daftar Spotify mungkin belum lengkap',
+      ];
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(summary.join(' · ')),
+          duration: const Duration(seconds: 7),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Impor Spotify gagal: $error'),
+          duration: const Duration(seconds: 7),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _spotifyImporting = false);
+    }
   }
 
   Future<void> _changePlaylistArtwork(Playlist playlist) async {
@@ -1255,6 +1592,12 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
             actionLabel: 'Buat playlist',
             onAction: () => unawaited(_createPlaylist()),
           ),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed: _spotifyImporting ? null : () => unawaited(_importSpotifyPlaylist()),
+            icon: const Icon(Icons.link_rounded),
+            label: const Text('Impor dari Spotify'),
+          ),
         ],
       );
     }
@@ -1276,7 +1619,23 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
                 ],
               ),
             ),
-            FilledButton.tonalIcon(onPressed: () => unawaited(_createPlaylist()), icon: const Icon(Icons.add_rounded, size: 18), label: const Text('Baru')),
+            Wrap(
+              spacing: 7,
+              runSpacing: 7,
+              alignment: WrapAlignment.end,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: _spotifyImporting ? null : () => unawaited(_importSpotifyPlaylist()),
+                  icon: const Icon(Icons.link_rounded, size: 17),
+                  label: const Text('Spotify'),
+                ),
+                FilledButton.tonalIcon(
+                  onPressed: () => unawaited(_createPlaylist()),
+                  icon: const Icon(Icons.add_rounded, size: 18),
+                  label: const Text('Baru'),
+                ),
+              ],
+            ),
           ],
         ),
         const SizedBox(height: 13),
@@ -1637,7 +1996,7 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
                   itemBuilder: (context, index) {
                     final song = playlist.songs[index];
                     return ValueListenableBuilder<PlayerUiState>(
-                      key: ValueKey<String>('${playlist.id}:${song.videoId}'),
+                      key: ValueKey<String>('${playlist.id}:$index:${song.videoId}'),
                       valueListenable: widget.playerUiState,
                       builder: (context, playerState, _) {
                         final current = playerState.video;

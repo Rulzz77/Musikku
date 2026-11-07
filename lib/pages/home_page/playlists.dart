@@ -178,7 +178,7 @@ extension _HomePlaylists on _HomePageState {
       onCreateNew: () => unawaited(_createPlaylist(thenAdd: video)),
       onToggle: (playlist) {
         final index = playlist.songs.indexWhere(
-          (song) => song.videoId == video.videoId,
+          (song) => Playlist.sameTrack(song, video),
         );
 
         setState(() {
@@ -204,7 +204,7 @@ extension _HomePlaylists on _HomePageState {
 
   void _removeFromPlaylist(Playlist playlist, YoutubeSearchResult video) {
     setState(() {
-      playlist.songs.removeWhere((song) => song.videoId == video.videoId);
+      playlist.songs.removeWhere((song) => Playlist.sameTrack(song, video));
     });
 
     _savePlaylists();

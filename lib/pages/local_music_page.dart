@@ -209,7 +209,7 @@ class _LocalMusicPageState extends State<LocalMusicPage> with WidgetsBindingObse
                           itemCount: widget.playlists.length,
                           itemBuilder: (context, index) {
                             final playlist = widget.playlists[index];
-                            final contains = playlist.contains(video.videoId);
+                            final contains = playlist.containsTrack(video);
                             return ListTile(
                               leading: Icon(
                                 contains ? Icons.check_circle_rounded : Icons.queue_music_rounded,
@@ -255,7 +255,7 @@ class _LocalMusicPageState extends State<LocalMusicPage> with WidgetsBindingObse
         }
       }
       if (target == null) return;
-      if (!target.contains(video.videoId)) {
+      if (!target.containsTrack(video)) {
         target.songs.add(video);
       }
     }

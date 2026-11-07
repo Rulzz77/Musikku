@@ -1320,9 +1320,10 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
     );
     if (targetId == null || !mounted) return;
     final target = destinations.firstWhere((item) => item.id == targetId);
-    final ids = target.songs.map((song) => song.videoId).toSet();
     for (final song in source.songs) {
-      if (song.videoId.isNotEmpty && ids.add(song.videoId)) target.songs.add(song);
+      if (song.videoId.isNotEmpty && !target.containsTrack(song)) {
+        target.songs.add(song);
+      }
     }
     final oldArtwork = source.artworkPath;
     setState(() {
@@ -1368,7 +1369,7 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
     final seen = <String>{};
     final candidates = widget.availableSongs
         .where((song) => song.videoId.isNotEmpty &&
-            !playlist.contains(song.videoId) &&
+            !playlist.containsTrack(song) &&
             seen.add(song.videoId))
         .toList(growable: false);
     if (candidates.isEmpty) {
@@ -1480,7 +1481,7 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
     var added = 0;
     setState(() {
       for (final song in candidates) {
-        if (selected.contains(song.videoId) && !playlist.contains(song.videoId)) {
+        if (selected.contains(song.videoId) && !playlist.containsTrack(song)) {
           playlist.songs.add(song);
           added++;
         }
@@ -2204,6 +2205,17 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
                                           overflow: TextOverflow.ellipsis,
                                           style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant),
                                         ),
+                                        if (song.sourceChannelTitle.trim().isNotEmpty &&
+                                            song.sourceChannelTitle.trim() != song.channelTitle.trim())
+                                          Padding(
+                                            padding: const EdgeInsets.only(top: 2),
+                                            child: Text(
+                                              'Sumber YouTube: ${song.sourceChannelTitle}',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: TextStyle(fontSize: 9.5, color: scheme.onSurfaceVariant.withValues(alpha: 0.78)),
+                                            ),
+                                          ),
                                       ],
                                     ),
                                   ),

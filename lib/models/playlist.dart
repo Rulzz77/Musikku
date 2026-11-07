@@ -1,4 +1,5 @@
 import 'youtube_search_result.dart';
+import 'playlist_track_identity.dart';
 
 /// Playlist buatan pengguna (disimpan lokal di HP).
 class Playlist {
@@ -24,6 +25,16 @@ class Playlist {
 
   bool contains(String videoId) =>
       songs.any((song) => song.videoId == videoId);
+
+  /// True when a matching song is already saved, even if Spotify import and
+  /// a later YouTube search resolved the same track to different video IDs.
+  bool containsTrack(YoutubeSearchResult candidate) =>
+      songs.any((song) => PlaylistTrackIdentity.matches(song, candidate));
+
+  static bool sameTrack(
+    YoutubeSearchResult first,
+    YoutubeSearchResult second,
+  ) => PlaylistTrackIdentity.matches(first, second);
 
   /// Number of online playlist entries that have a saved offline copy.
   int get offlineSongCount =>

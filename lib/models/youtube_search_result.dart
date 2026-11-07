@@ -7,6 +7,9 @@ class YoutubeSearchResult {
   /// Canonical performer credit when known (e.g. Spotify import).
   /// Kept separate from channelTitle because a label may upload the audio.
   final String artistName;
+  /// Actual YouTube upload channel, preserved when Spotify credits are used
+  /// as the visible performer name for an imported playlist entry.
+  final String sourceChannelTitle;
   final String thumbnailUrl;
   final int? viewCount;
   final DateTime? publishedAt;
@@ -86,6 +89,7 @@ class YoutubeSearchResult {
     this.description = '',
     required this.channelTitle,
     this.artistName = '',
+    this.sourceChannelTitle = '',
     required this.thumbnailUrl,
     this.viewCount,
     this.publishedAt,
@@ -109,6 +113,7 @@ class YoutubeSearchResult {
     String? description,
     String? channelTitle,
     String? artistName,
+    String? sourceChannelTitle,
     String? thumbnailUrl,
     int? viewCount,
     DateTime? publishedAt,
@@ -131,6 +136,7 @@ class YoutubeSearchResult {
       description: description ?? this.description,
       channelTitle: channelTitle ?? this.channelTitle,
       artistName: artistName ?? this.artistName,
+      sourceChannelTitle: sourceChannelTitle ?? this.sourceChannelTitle,
       thumbnailUrl: thumbnailUrl ?? this.thumbnailUrl,
       viewCount: viewCount ?? this.viewCount,
       publishedAt: publishedAt ?? this.publishedAt,
@@ -156,6 +162,7 @@ class YoutubeSearchResult {
       'description': description,
       'channelTitle': channelTitle,
       'artistName': artistName,
+      'sourceChannelTitle': sourceChannelTitle,
       'thumbnailUrl': thumbnailUrl,
       'viewCount': viewCount,
       'publishedAt': publishedAt?.toIso8601String(),
@@ -184,6 +191,7 @@ class YoutubeSearchResult {
       description: json['description']?.toString() ?? '',
       channelTitle: json['channelTitle']?.toString() ?? 'Unknown',
       artistName: json['artistName']?.toString() ?? '',
+      sourceChannelTitle: json['sourceChannelTitle']?.toString() ?? '',
       thumbnailUrl: json['thumbnailUrl']?.toString() ?? '',
       viewCount: json['viewCount'] is num ? (json['viewCount'] as num).toInt() : null,
       publishedAt: DateTime.tryParse(json['publishedAt']?.toString() ?? ''),

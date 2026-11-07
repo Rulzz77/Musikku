@@ -88,7 +88,7 @@ class YoutubeMusicMetadataParser {
     if (commaStageNames.contains(normalized.toLowerCase())) return normalized;
     return normalized
         .split(RegExp(
-          r',|&|\s+feat(?:uring)?\.?\s+|\s+ft\.?\s+|\s+x\s+',
+          r',|&|[·•]|\s+feat(?:uring)?\.?\s+|\s+ft\.?\s+|\s+x\s+',
           caseSensitive: false,
         ))
         .first

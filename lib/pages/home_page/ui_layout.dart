@@ -115,7 +115,7 @@ extension _HomeUiLayout on _HomePageState {
                           onOpenListeningRoom: _showListenTogetherSheet,
                           followingRoom: _listenTogether.isGuest,
                           inPlaylist: _playlists.any(
-                            (playlist) => playlist.contains((watch ?? current!).videoId),
+                            (playlist) => playlist.containsTrack(watch ?? current!),
                           ),
                           sleepActive: _sleepActive,
                           platformPlayer: Platform.isIOS && !(watch ?? current!).isLocal

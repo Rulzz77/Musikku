@@ -112,7 +112,7 @@ void showAddToPlaylistSheet(
       return StatefulBuilder(
         builder: (innerContext, setSheetState) {
           final scheme = Theme.of(sheetContext).colorScheme;
-          final addedCount = playlists.where((playlist) => playlist.contains(video.videoId)).length;
+          final addedCount = playlists.where((playlist) => playlist.containsTrack(video)).length;
           return ConstrainedBox(
             constraints: BoxConstraints(maxHeight: MediaQuery.of(sheetContext).size.height * 0.78),
             child: Column(
@@ -217,7 +217,7 @@ void showAddToPlaylistSheet(
                           separatorBuilder: (_, _) => const SizedBox(height: 7),
                           itemBuilder: (context, index) {
                             final playlist = playlists[index];
-                            final contains = playlist.contains(video.videoId);
+                            final contains = playlist.containsTrack(video);
                             return Material(
                               color: contains ? scheme.primary.withValues(alpha: 0.10) : scheme.surfaceContainerLow,
                               borderRadius: BorderRadius.circular(15),

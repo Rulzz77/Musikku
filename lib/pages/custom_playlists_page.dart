@@ -517,7 +517,7 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
                       : ListView.separated(
                           padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
                           itemCount: items.length,
-                          separatorBuilder: (_, _) => const SizedBox(height: 8),
+                          separatorBuilder: (context, separatorIndex) => const SizedBox(height: 8),
                           itemBuilder: (context, index) {
                             final item = items[index];
                             final completed = item.status == OfflineDownloadStatus.completed;
@@ -839,12 +839,12 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
                   children: [
                     ValueListenableBuilder<String>(
                       valueListenable: progressText,
-                      builder: (_, value, _) => Text(value),
+                      builder: (context, value, child) => Text(value),
                     ),
                     const SizedBox(height: 14),
                     ValueListenableBuilder<double>(
                       valueListenable: progress,
-                      builder: (_, value, _) => Column(
+                      builder: (context, value, child) => Column(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
                           LinearProgressIndicator(value: value),
@@ -877,17 +877,65 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
           final batch = await Future.wait(indexes.map((index) async {
             final track = snapshot.tracks[index];
             try {
-              // Search by title first so the existing query-aware catalogue
-              // policy does not mistake a combined "title artist" query for
-              // one artist's exact channel name. The matcher then verifies
-              // artist credit. If title search misses, retry by artist.
-              var candidates = await searchSongs(track.title);
-              var match = SpotifyYoutubeTrackMatcher.bestMatch(track, candidates);
-              if (match == null && track.primaryArtist.isNotEmpty) {
-                candidates = await searchSongs(track.primaryArtist);
-                match = SpotifyYoutubeTrackMatcher.bestMatch(track, candidates);
+              // Search by performer + title first, then title alone. YouTube
+              // may order these fields either way ("Artist - Song" or
+              // "Song - Artist"), so the query policy compares their tokens
+              // across title/channel/description and the matcher verifies the
+              // actual primary artist before accepting anything.
+              final queries = <String>{};
+              final coreTitle = track.title
+                  .replaceFirst(
+                    RegExp(r'\s+[-–—]\s*from\s+.+$', caseSensitive: false),
+                    '',
+                  )
+                  .trim();
+              if (track.primaryArtist.isNotEmpty) {
+                queries.add('${track.primaryArtist} $coreTitle'.trim());
               }
-              return match;
+              queries.add(coreTitle);
+              if (track.title.trim() != coreTitle) {
+                queries.add(track.title.trim());
+              }
+              if (track.artists.length > 1) {
+                queries.add('$coreTitle ${track.artists.join(' ')}'.trim());
+              }
+              if (track.primaryArtist.isNotEmpty) {
+                queries.add('$coreTitle ${track.primaryArtist}'.trim());
+              }
+              if (track.primaryArtist.isNotEmpty) {
+                queries.add(track.primaryArtist.trim());
+              }
+
+              final candidatesById = <String, YoutubeSearchResult>{};
+              YoutubeSearchResult? match;
+              var queryIndex = 0;
+              for (final query in queries) {
+                queryIndex++;
+                List<YoutubeSearchResult> results;
+                try {
+                  results = await searchSongs(query);
+                } catch (error) {
+                  debugPrint(
+                    'SPOTIFY SEARCH FAILED [${track.title}] '
+                    'query#$queryIndex "$query": $error',
+                  );
+                  continue;
+                }
+                for (final result in results) {
+                  if (result.videoId.isNotEmpty) {
+                    candidatesById.putIfAbsent(result.videoId, () => result);
+                  }
+                }
+                match = SpotifyYoutubeTrackMatcher.bestMatch(
+                  track,
+                  candidatesById.values.toList(growable: false),
+                );
+                if (match != null) break;
+              }
+
+              return match == null
+                  ? null
+                  : SpotifyYoutubeTrackMatcher.applySpotifyMetadata(track, match);
             } catch (error) {
               debugPrint('SPOTIFY IMPORT SEARCH FAILED [${track.title}]: $error');
               return null;
@@ -916,20 +964,19 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
           .whereType<YoutubeSearchResult>()
           .toList(growable: true);
 
+      final unmatchedTracks = <SpotifyPlaylistTrack>[
+        for (var index = 0; index < snapshot.tracks.length; index++)
+          if (resolved[index] == null) snapshot.tracks[index],
+      ];
       if (importedSongs.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Metadata ${snapshot.tracks.length} lagu terbaca, tetapi tidak ada pasangan YouTube Music yang cukup cocok. Playlist tidak dibuat.',
-            ),
-            duration: const Duration(seconds: 6),
-          ),
+        await _showSpotifyUnmatchedReport(
+          unmatchedTracks,
+          summary: 'Metadata ${snapshot.tracks.length} lagu terbaca, tetapi tidak ada pasangan YouTube Music yang cukup cocok. Playlist tidak dibuat.',
         );
         return;
       }
 
-      final unmatchedCount = snapshot.tracks.length -
-          resolved.where((song) => song != null).length;
+      final unmatchedCount = unmatchedTracks.length;
       final playlist = Playlist(
         id: DateTime.now().microsecondsSinceEpoch.toString(),
         name: snapshot.title,
@@ -951,12 +998,19 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
               ? '${snapshot.knownMissingTrackCount} lagu tidak tersedia di embed publik'
               : 'daftar Spotify mungkin belum lengkap',
       ];
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(summary.join(' · ')),
-          duration: const Duration(seconds: 7),
-        ),
-      );
+      if (unmatchedTracks.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(summary.join(' · ')),
+            duration: const Duration(seconds: 7),
+          ),
+        );
+      } else {
+        await _showSpotifyUnmatchedReport(
+          unmatchedTracks,
+          summary: summary.join(' · '),
+        );
+      }
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -968,6 +1022,80 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
     } finally {
       if (mounted) setState(() => _spotifyImporting = false);
     }
+  }
+
+  Future<void> _showSpotifyUnmatchedReport(
+    List<SpotifyPlaylistTrack> unmatchedTracks, {
+    required String summary,
+  }) async {
+    if (!mounted || unmatchedTracks.isEmpty) return;
+
+    final unmatchedReport = unmatchedTracks
+        .map((track) => '${track.title} — ${track.artists.join(', ')}')
+        .join('\n');
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Lagu Spotify belum cocok'),
+        content: SizedBox(
+          width: 420,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(summary),
+              const SizedBox(height: 10),
+              const Text(
+                'Lagu berikut belum menemukan pasangan YouTube Music yang cukup cocok. '
+                'MusikKu sengaja tidak menggantinya dengan penyanyi atau versi lain:',
+                style: TextStyle(fontSize: 12),
+              ),
+              const SizedBox(height: 8),
+              Flexible(
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: unmatchedTracks.length > 30
+                      ? 30
+                      : unmatchedTracks.length,
+                  separatorBuilder: (context, index) => const Divider(height: 8),
+                  itemBuilder: (_, index) {
+                    final track = unmatchedTracks[index];
+                    return Text(
+                      '${index + 1}. ${track.title}\n${track.artists.join(', ')}',
+                      style: const TextStyle(fontSize: 12),
+                    );
+                  },
+                ),
+              ),
+              if (unmatchedTracks.length > 30)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text('Dan ${unmatchedTracks.length - 30} lagu lainnya.'),
+                ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton.icon(
+            onPressed: () async {
+              await Clipboard.setData(ClipboardData(text: unmatchedReport));
+              if (dialogContext.mounted) Navigator.pop(dialogContext);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Daftar lagu yang terlewat disalin.')),
+                );
+              }
+            },
+            icon: const Icon(Icons.copy_rounded),
+            label: const Text('Salin daftar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Tutup'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _changePlaylistArtwork(Playlist playlist) async {

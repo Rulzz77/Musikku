@@ -461,9 +461,11 @@ class SpotifyPlaylistImportService {
     required String parentKey,
   }) {
     final name = _firstString(map, const ['name', 'title']);
-    final artists = _readArtists(
-      map['artists'] ?? map['artist'] ?? map['subtitle'],
-    );
+    // Spotify embed variants do not always populate the same field. An empty
+    // `artists: []` must not mask a valid `subtitle` credit.
+    var artists = _readArtists(map['artists']);
+    if (artists.isEmpty) artists = _readArtists(map['artist']);
+    if (artists.isEmpty) artists = _readArtists(map['subtitle']);
     final rawUri = _firstString(map, const ['uri', 'trackUri', 'track_uri']);
     final type = _firstString(map, const ['type']).toLowerCase();
     final entityType = _firstString(map, const ['entityType', 'entity_type']).toLowerCase();
@@ -498,22 +500,52 @@ class SpotifyPlaylistImportService {
 
   static List<String> _readArtists(dynamic raw) {
     final names = <String>[];
+
+    void addCredit(String value) {
+      final cleaned = value.trim();
+      if (cleaned.isEmpty) return;
+      for (final artist in _splitArtistSubtitle(cleaned)) {
+        if (artist.isNotEmpty && !names.contains(artist)) names.add(artist);
+      }
+    }
+
     if (raw is String) {
-      if (raw.trim().isNotEmpty) names.add(raw.trim());
+      addCredit(raw);
     } else if (raw is List) {
       for (final value in raw) {
-        if (value is String && value.trim().isNotEmpty) {
-          names.add(value.trim());
+        if (value is String) {
+          addCredit(value);
         } else if (value is Map) {
           final name = _firstString(Map<String, dynamic>.from(value), const ['name']);
-          if (name.isNotEmpty) names.add(name);
+          addCredit(name);
         }
       }
     } else if (raw is Map) {
       final name = _firstString(Map<String, dynamic>.from(raw), const ['name']);
-      if (name.isNotEmpty) names.add(name);
+      addCredit(name);
     }
     return names;
+  }
+
+  /// Spotify's embed subtitle is a display string rather than an artists array
+  /// (for example "OMWAWES, Guyon Waton"). Split its comma-separated credits so
+  /// [SpotifyPlaylistTrack.primaryArtist] identifies the actual first credit.
+  /// Preserve a few established stage names that contain an intrinsic comma.
+  static List<String> _splitArtistSubtitle(String value) {
+    final subtitle = value.replaceAll('\u00A0', ' ').trim();
+    const commaNames = <String>{
+      'tyler, the creator',
+      'earth, wind & fire',
+      'crosby, stills & nash',
+      'emerson, lake & palmer',
+    };
+    if (commaNames.contains(subtitle.toLowerCase())) return [subtitle];
+
+    return subtitle
+        .split(RegExp(r'\s*,\s*'))
+        .map((artist) => artist.trim())
+        .where((artist) => artist.isNotEmpty)
+        .toList(growable: false);
   }
 
   static int? _readDurationMs(Map<String, dynamic> map) {

@@ -368,7 +368,10 @@ class YoutubeMusicPolicy {
       return isMusicCandidate(video);
     }
 
-    final queryTokens = artistQuery.split(' ').where((word) => word.length > 1).toSet();
+    final queryTokens = artistQuery
+        .split(' ')
+        .where((word) => word.length > 1)
+        .toSet();
     if (queryTokens.isEmpty || queryTokens.length > 4) {
       // Query panjang berisi genre/bahasa/konteks tambahan; jangan buang semua
       // lagu hanya karena parser tidak bisa memastikan satu nama artis.
@@ -377,32 +380,35 @@ class YoutubeMusicPolicy {
 
     final channel = _normalizeArtistSearchName(video.channelTitle);
     final channelTokens = channel.split(' ').where((word) => word.length > 1).toSet();
+    final normalizedTitle = _normalizeArtistSearchName(video.title);
+    final titleTokens = normalizedTitle.split(' ').where((word) => word.length > 1).toSet();
+    final normalizedDescription = _normalizeArtistSearchName(video.description);
+    final descriptionTokens = normalizedDescription
+        .split(' ')
+        .where((word) => word.length > 1)
+        .toSet();
+    final searchableTokens = <String>{
+      ...channelTokens,
+      ...titleTokens,
+      ...descriptionTokens,
+    };
     final channelMatchesArtist = channel.isNotEmpty &&
         queryTokens.every(channelTokens.contains);
 
-    // Banyak rilisan asli diunggah oleh label/distributor, bukan channel artis.
-    // Dalam kasus itu, nama artis justru muncul pada judul video, misalnya
-    // "Fiersa Besari - Celengan Rindu" dari channel label. Filter lama hanya
-    // mencocokkan nama channel sehingga hasil seperti ini selalu dibuang.
-    bool containsArtistPhrase(String text) =>
-        text == artistQuery ||
-        text.startsWith('$artistQuery ') ||
-        text.endsWith(' $artistQuery') ||
-        text.contains(' $artistQuery ');
-
-    final normalizedTitle = _normalizeArtistSearchName(video.title);
-    final normalizedDescription = _normalizeArtistSearchName(video.description);
-    final titleCreditsArtist = containsArtistPhrase(normalizedTitle);
-    final descriptionCreditsArtist = containsArtistPhrase(normalizedDescription);
-    if (!channelMatchesArtist && !titleCreditsArtist && !descriptionCreditsArtist) {
+    // Banyak rilisan resmi diunggah oleh label/distributor. Query impor seperti
+    // "Denny Caknan Cundamani" bisa muncul terbalik di judul YouTube
+    // ("Cundamani - Denny Caknan"), jadi bandingkan token lintas judul,
+    // channel, dan deskripsi. Pencocokan penyanyi yang ketat tetap dilakukan
+    // lagi oleh SpotifyYoutubeTrackMatcher sebelum lagu masuk playlist.
+    final allQueryTokensPresent = queryTokens.isNotEmpty &&
+        queryTokens.every(searchableTokens.contains);
+    if (!channelMatchesArtist && !allQueryTokensPresent) {
       return false;
     }
 
     // An exact artist/channel or explicit artist credit is a strong signal,
     // but do not admit covers, karaoke, fan edits, AI versions, or promo snippets.
     if (isLikelyUnofficialMusicVersion(video)) return false;
-    if (titleCreditsArtist && normalizedTitle == artistQuery) return false;
-
     final seconds = video.durationSeconds;
     if (seconds != null && seconds <= 30) {
       return false;

@@ -747,7 +747,6 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
       }
       if (!mounted) return;
 
-      final supplementaryTracksController = TextEditingController();
       final preview = await showDialog<bool>(
         context: context,
         builder: (dialogContext) => AlertDialog(
@@ -762,7 +761,7 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
                   snapshot.totalTrackCount != null
                       ? '${snapshot.tracks.length} lagu terbaca dari total ${snapshot.totalTrackCount} lagu yang diiklankan metadata publik Spotify.'
                       : snapshot.tracks.length >= 100
-                          ? '≥${snapshot.tracks.length} lagu terbaca dari embed publik. Itu hanya jumlah minimum yang terlihat, BUKAN total playlist. Spotify tidak memberikan halaman lanjutan pada embed ini.'
+                          ? '≥${snapshot.tracks.length} lagu terbaca dari embed publik. Ini jumlah minimum yang terlihat, bukan total playlist. MusikKu akan memproses otomatis semua lagu yang tersedia.'
                           : snapshot.mayBePartial
                               ? '${snapshot.tracks.length} lagu terbaca dari embed publik. Jumlah total playlist belum bisa dipastikan.'
                               : '${snapshot.tracks.length} lagu terbaca dari halaman embed publik Spotify.',
@@ -771,25 +770,13 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
                   const SizedBox(height: 8),
                   Text(
                     snapshot.knownMissingTrackCount > 0
-                        ? 'Embed publik hanya menampilkan ${snapshot.tracks.length} dari ${snapshot.totalTrackCount} lagu. Sisa ${snapshot.knownMissingTrackCount} lagu tidak disediakan oleh halaman publik ini. Tanpa pagination publik/API, MusikKu tidak bisa mengambil sisanya.'
+                        ? 'Spotify hanya menyediakan ${snapshot.tracks.length} dari ${snapshot.totalTrackCount} lagu pada halaman publik ini. MusikKu akan mengimpor otomatis semua lagu yang tersedia; sisa ${snapshot.knownMissingTrackCount} lagu tidak dikirim oleh embed. Tidak perlu memasukkan lagu satu per satu.'
                         : snapshot.tracks.length == 100
-                            ? 'Embed publik pada playlist ini berhenti di 100 baris pertama. Jumlah total dan lagu setelahnya tidak disediakan oleh halaman ini. Tempel daftar lagu yang tersisa untuk melengkapinya tanpa API.'
+                            ? 'Embed publik menampilkan 100 baris. Itu bisa merupakan batas tampilan, bukan berarti total playlist tepat 100. MusikKu mengimpor semua lagu yang diterima; baris setelahnya tidak tersedia dari link publik ini.'
                             : snapshot.tracks.length > 100
-                                ? 'Embed publik mengirim ${snapshot.tracks.length} baris, tetapi tidak mengiklankan total playlist. Angka ini adalah jumlah minimum yang terbaca, bukan total akhir.'
-                                : 'Embed publik mungkin hanya menampilkan sebagian daftar. Jika Spotify tidak mengirim baris sisanya, MusikKu tidak bisa mengambilnya tanpa pagination publik/API.',
+                                ? 'Embed publik mengirim ${snapshot.tracks.length} baris. Semua baris yang tersedia akan diimpor otomatis; jumlah total playlist belum diketahui.'
+                                : 'Embed publik mungkin hanya menampilkan sebagian daftar. MusikKu akan mengimpor semua lagu yang tersedia tanpa meminta kamu memasukkan judul satu per satu.',
                     style: const TextStyle(color: Colors.orange),
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: supplementaryTracksController,
-                    minLines: 2,
-                    maxLines: 5,
-                    decoration: InputDecoration(
-                      labelText: 'Tambahkan lagu setelah ${snapshot.tracks.length} lagu yang terbaca (opsional)',
-                      hintText: 'Judul lagu<TAB>Artis\natau Judul lagu — Artis',
-                      helperText: 'Tempel lagu yang belum muncul, satu lagu per baris. Format: Judul<TAB>Artis atau Judul — Artis. Urutan dan duplikat dipertahankan.',
-                      border: OutlineInputBorder(),
-                    ),
                   ),
                 ],
                 const SizedBox(height: 12),
@@ -838,16 +825,8 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
           ],
         ),
       );
-      final supplementaryTracks =
-          SpotifyPlaylistImportService.parseSupplementaryTrackText(
-        supplementaryTracksController.text,
-      );
-      supplementaryTracksController.dispose();
       if (!mounted || preview != true) return;
-      final tracksToImport = <SpotifyPlaylistTrack>[
-        ...snapshot.tracks,
-        ...supplementaryTracks,
-      ];
+      final tracksToImport = snapshot.tracks;
 
       final progressText = ValueNotifier<String>('Menyiapkan pencarian lagu…');
       final progress = ValueNotifier<double>(0);
@@ -920,24 +899,27 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
                   )
                   .trim();
               if (track.primaryArtist.isNotEmpty) {
+                // Start broad, then query official variants explicitly. This
+                // keeps the usual single request fast when it already finds
+                // the artist/label source, while exposing official results
+                // buried below fan mirrors in YouTube relevance ranking.
                 queries.add('${track.primaryArtist} $coreTitle'.trim());
+                queries.add(
+                  '${track.primaryArtist} $coreTitle official audio'.trim(),
+                );
+                queries.add(
+                  '${track.primaryArtist} $coreTitle official music video'.trim(),
+                );
+              }
+              if (track.artists.length > 1) {
+                queries.add('$coreTitle ${track.artists.join(' ')}'.trim());
               }
               queries.add(coreTitle);
               if (track.title.trim() != coreTitle) {
                 queries.add(track.title.trim());
               }
-              if (track.artists.length > 1) {
-                queries.add('$coreTitle ${track.artists.join(' ')}'.trim());
-              }
-              if (track.primaryArtist.isNotEmpty) {
-                queries.add('$coreTitle ${track.primaryArtist}'.trim());
-              }
-              if (track.primaryArtist.isNotEmpty) {
-                queries.add(track.primaryArtist.trim());
-              }
 
               final candidatesById = <String, YoutubeSearchResult>{};
-              YoutubeSearchResult? match;
               var queryIndex = 0;
               for (final query in queries) {
                 queryIndex++;
@@ -956,13 +938,21 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
                     candidatesById.putIfAbsent(result.videoId, () => result);
                   }
                 }
-                match = SpotifyYoutubeTrackMatcher.bestMatch(
+                // Do not stop at the first plausible mirror. Continue until
+                // a strong artist/Topic/VEVO/distributor source is found, or
+                // all focused query variants have been checked.
+                if (SpotifyYoutubeTrackMatcher.hasPreferredOfficialMatch(
                   track,
                   candidatesById.values.toList(growable: false),
-                );
-                if (match != null) break;
+                )) {
+                  break;
+                }
               }
 
+              final match = SpotifyYoutubeTrackMatcher.bestMatch(
+                track,
+                candidatesById.values.toList(growable: false),
+              );
               return match == null
                   ? null
                   : SpotifyYoutubeTrackMatcher.applySpotifyMetadata(track, match);
@@ -1025,10 +1015,8 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
         if (unmatchedCount > 0) '$unmatchedCount tidak ditemukan/cocok',
         if (snapshot.mayBePartial)
           snapshot.knownMissingTrackCount > 0
-              ? '${(snapshot.knownMissingTrackCount - supplementaryTracks.length).clamp(0, snapshot.knownMissingTrackCount)} lagu dari metadata belum dilengkapi'
-              : 'jumlah asli belum diketahui; sekurangnya ${snapshot.tracks.length} baris terlihat di embed, bukan total playlist',
-        if (supplementaryTracks.isNotEmpty)
-          '${supplementaryTracks.length} lagu tambahan dibaca dari daftar tempel',
+              ? '${snapshot.knownMissingTrackCount} lagu tidak disediakan oleh embed publik Spotify'
+              : 'jumlah asli belum diketahui; ${snapshot.tracks.length} lagu yang terlihat telah diproses',
       ];
       if (unmatchedTracks.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(

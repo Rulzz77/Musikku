@@ -360,7 +360,7 @@ class AlbumArtworkService {
         _lastMusicBrainzRequest = DateTime.now();
         final response = await http.get(uri, headers: const <String, String>{
           'Accept': 'application/json',
-          'User-Agent': 'MusikKu/5.5.6+49 (https://github.com/Rulzz77/flutter_application_5)',
+          'User-Agent': 'MusikKu/5.5.6+52 (https://github.com/Rulzz77/flutter_application_5)',
         }).timeout(_requestTimeout);
         completer.complete(response);
       } catch (error, stackTrace) {
@@ -374,7 +374,7 @@ class AlbumArtworkService {
     final uri = Uri.https('coverartarchive.org', '/$entityType/$mbid');
     final response = await http.get(uri, headers: const <String, String>{
       'Accept': 'application/json',
-      'User-Agent': 'MusikKu/5.5.6+49 (https://github.com/Rulzz77/flutter_application_5)',
+      'User-Agent': 'MusikKu/5.5.6+52 (https://github.com/Rulzz77/flutter_application_5)',
     }).timeout(_requestTimeout);
     if (response.statusCode == 404 || response.statusCode == 204) return null;
     if (response.statusCode != 200) {

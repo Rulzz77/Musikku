@@ -2,7 +2,7 @@
 
 ## Fix
 - Removed `const` from the `InputDecoration` that contains a runtime-interpolated `snapshot.tracks.length` value in `lib/pages/custom_playlists_page.dart`.
-- Kept the dynamic label text and the existing supplementary-track import behavior unchanged.
+- Kept the dynamic label text. The supplementary-track entry field was later removed in Build 51 so users only need to paste one Spotify playlist link.
 - Bumped the build number to 50 and synchronized `lib/app_info.dart` with `pubspec.yaml`.
 
 ## Validation

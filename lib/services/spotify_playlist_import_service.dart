@@ -354,51 +354,6 @@ class SpotifyPlaylistImportService {
     );
   }
 
-  /// Parses supplementary rows copied/exported by the user when Spotify's
-  /// public embed stops at its first 100 tracks. Supported rows are:
-  /// `Title<TAB>Artist` and `Title — Artist` (one track per line).
-  /// It deliberately preserves ordering and duplicates.
-  static List<SpotifyPlaylistTrack> parseSupplementaryTrackText(String raw) {
-    final tracks = <SpotifyPlaylistTrack>[];
-    for (final sourceLine in raw.split(RegExp(r'\r?\n'))) {
-      var line = sourceLine.trim();
-      if (line.isEmpty) continue;
-      line = line.replaceFirst(RegExp(r'^\s*\d{1,4}[.)]?\s+'), '').trim();
-      if (line.isEmpty) continue;
-
-      String title;
-      String artistCredit;
-      if (line.contains('\t')) {
-        final columns = line.split('\t').map((part) => part.trim()).toList();
-        if (columns.length < 2) continue;
-        title = columns[0];
-        artistCredit = columns[1];
-      } else {
-        final separators = RegExp(r'\s+[—–]\s+|\s+-\s+')
-            .allMatches(line)
-            .toList(growable: false);
-        if (separators.isEmpty) continue;
-        final separator = separators.last;
-        title = line.substring(0, separator.start).trim();
-        artistCredit = line.substring(separator.end).trim();
-      }
-
-      if (title.isEmpty || artistCredit.isEmpty) continue;
-      if (title.toLowerCase() == 'title' ||
-          artistCredit.toLowerCase() == 'artist' ||
-          title.toLowerCase() == 'judul') {
-        continue;
-      }
-      final artists = _readArtists(artistCredit);
-      if (artists.isEmpty) continue;
-      tracks.add(SpotifyPlaylistTrack(
-        title: title,
-        artists: List<String>.unmodifiable(artists),
-      ));
-    }
-    return List<SpotifyPlaylistTrack>.unmodifiable(tracks);
-  }
-
   /// Reads an explicit song/track count from embed description metadata.
   /// Counts equal to the visible 100-row boundary are handled as unknown below.
   static int? _countTracksFromDescription(String description) {

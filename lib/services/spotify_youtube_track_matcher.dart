@@ -17,9 +17,11 @@ class SpotifyYoutubeTrackMatcher {
 
     YoutubeSearchResult? best;
     var bestScore = 0.0;
+    var bestOfficialRank = -1;
     for (final candidate in candidates) {
       if (candidate.isLocal ||
-          !YoutubeMusicPolicy.isMusicCandidate(candidate)) {
+          !YoutubeMusicPolicy.isMusicCandidate(candidate) ||
+          _isClearlyUnofficialChannel(candidate.channelTitle)) {
         continue;
       }
 
@@ -35,19 +37,125 @@ class SpotifyYoutubeTrackMatcher {
           durationPenalty - alternatePenalty;
 
       // Require near-complete title coverage and a strong primary-artist
-      // signal. Duration helps rank two otherwise similar candidates, but is
-      // not a hard gate because official music videos can include extra intro
-      // or outro footage compared with the Spotify master.
+      // signal before considering source authority. A fake "Official" label
+      // can never rescue a wrong title or wrong performer.
       final acceptable = titleCoverage >= 0.90 &&
           titleScore >= 0.60 &&
           artistScore >= 0.88 &&
           score >= 0.72;
-      if (acceptable && score > bestScore) {
+      if (!acceptable) continue;
+
+      // YouTube search relevance is not a source-authenticity signal. Prefer
+      // Topic/VEVO, structured distributor credits, and the artist's own
+      // channel over a fan/re-upload mirror whenever both match the same song.
+      // Score and duration are tie-breakers only within the same authority tier.
+      final officialRank = _officialSourceRank(spotifyTrack, candidate);
+      if (officialRank > bestOfficialRank ||
+          (officialRank == bestOfficialRank && score > bestScore)) {
         best = candidate;
         bestScore = score;
+        bestOfficialRank = officialRank;
       }
     }
     return best;
+  }
+
+  /// True when the collected results already contain a high-confidence
+  /// official artist, Topic/VEVO, or distributor release. The importer uses
+  /// this to avoid extra search requests once a reliable source is found.
+  static bool hasPreferredOfficialMatch(
+    SpotifyPlaylistTrack spotifyTrack,
+    List<YoutubeSearchResult> candidates,
+  ) {
+    final match = bestMatch(spotifyTrack, candidates);
+    return match != null && _officialSourceRank(spotifyTrack, match) >= 4;
+  }
+
+  static int _officialSourceRank(
+    SpotifyPlaylistTrack track,
+    YoutubeSearchResult candidate,
+  ) {
+    final primaryArtist = _normalizeArtistText(track.primaryArtist);
+    if (primaryArtist.isEmpty) return 0;
+
+    final channelRaw = candidate.channelTitle.trim();
+    final channel = _normalizeArtistText(channelRaw);
+    final title = candidate.title.toLowerCase();
+    final description = candidate.description;
+    final artistOwnChannel = _artistCreditMatches(channel, primaryArtist);
+    final topicChannel = RegExp(
+      r'\s-\s*topic\s*$',
+      caseSensitive: false,
+    ).hasMatch(channelRaw);
+    final vevoChannel = RegExp(r'\bvevo\b', caseSensitive: false)
+        .hasMatch(channelRaw);
+    final officialChannel = RegExp(
+      r'\b(?:official|resmi)(?:\s+(?:artist|music|channel)){0,2}\b',
+      caseSensitive: false,
+    ).hasMatch(channelRaw);
+    final officialTitle = RegExp(
+      r'\b(?:official\s+(?:audio|video|music\s+video|lyrics?|visualizer)|music\s+video\s+official)\b',
+      caseSensitive: false,
+    ).hasMatch(title);
+    final providedToYoutube = RegExp(
+      r'provided to youtube by',
+      caseSensitive: false,
+    ).hasMatch(description);
+    final structuredDistributorCredit = providedToYoutube &&
+        _hasExplicitDescriptionCredit(
+          description,
+          primaryArtist,
+          _normalizeTrackTitle(track.title),
+        );
+
+    // Strongest evidence: YouTube's artist Topic/VEVO channel or an official
+    // auto-generated distributor release carrying the matching track credit.
+    if ((topicChannel || vevoChannel) && artistOwnChannel) return 5;
+    if (structuredDistributorCredit) return 5;
+
+    // The artist's own channel is preferred over third-party mirrors. A known
+    // label/distributor plus an explicit official upload marker is equivalent.
+    if (artistOwnChannel && (officialChannel || channel == primaryArtist)) {
+      return 4;
+    }
+    if (_isKnownMusicLabelChannel(channelRaw) && officialTitle) return 4;
+
+    // Useful but weaker signals: an official title marker alone can be copied
+    // by fan uploads, so it must not outrank a confirmed artist/label source.
+    if (artistOwnChannel) return 3;
+    if (_isKnownMusicLabelChannel(channelRaw)) return 3;
+    if (officialTitle) return 2;
+    return 0;
+  }
+
+  static bool _isClearlyUnofficialChannel(String rawChannel) => RegExp(
+        r'\b(?:fan\s*(?:page|channel|account|club)|fans|unofficial|re-?upload)\b',
+        caseSensitive: false,
+      ).hasMatch(rawChannel);
+
+  static bool _isKnownMusicLabelChannel(String rawChannel) {
+    // Check the raw channel text: artist normalization deliberately removes
+    // generic words such as "music", which are meaningful in label names.
+    final channel = rawChannel.toLowerCase();
+    const labels = <String>[
+      'musica studios',
+      'trinity optima production',
+      'sony music',
+      'universal music',
+      'warner music',
+      'believe sas',
+      'believe music',
+      'md music',
+      'nagaswara',
+      'aquarius musikindo',
+      'gp records',
+      'ascada musik',
+      'my music records',
+      'falcon music',
+      'star media nusantara',
+      'emotion entertainment',
+    ];
+    return labels.any(channel.contains);
   }
 
   /// Keep Spotify's canonical song/artist metadata for the imported playlist.

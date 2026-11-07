@@ -281,21 +281,6 @@ void main() {
       expect(snapshot.knownMissingTrackCount, 0);
     });
 
-    test('keeps supplementary pasted track rows in order and preserves duplicates', () {
-      final tracks = SpotifyPlaylistImportService.parseSupplementaryTrackText(
-        '101. Nemen — Guyon Waton\n'
-        'Evaluasi\tHindia\tMenari Dengan Bayangan\n'
-        'Nemen — Guyon Waton\n'
-        'Judul\tArtis\n',
-      );
-      expect(tracks, hasLength(3));
-      expect(tracks[0].title, 'Nemen');
-      expect(tracks[0].artists, ['Guyon Waton']);
-      expect(tracks[1].title, 'Evaluasi');
-      expect(tracks[1].primaryArtist, 'Hindia');
-      expect(tracks[2].title, 'Nemen');
-    });
-
     test('stores primary artist separately from the upload channel after import', () {
       const spotifyTrack = SpotifyPlaylistTrack(
         title: 'Satru',
@@ -444,6 +429,121 @@ void main() {
           thumbnailUrl: '',
           durationSeconds: durationSeconds,
         );
+
+    test('prefers the artist official channel over a closer fan mirror', () {
+      final fanMirror = candidate(
+        id: 'fan-mirror',
+        title: 'Fiersa Besari - Celengan Rindu',
+        channel: 'Musik Hits Indonesia',
+      );
+      final artistOfficial = candidate(
+        id: 'artist-official',
+        title: 'Celengan Rindu (Official Music Video)',
+        channel: 'Fiersa Besari - Official Artist Channel',
+      );
+
+      expect(
+        SpotifyYoutubeTrackMatcher.bestMatch(
+          spotifyTrack,
+          [fanMirror, artistOfficial],
+        )?.videoId,
+        'artist-official',
+      );
+    });
+
+    test('only treats high-confidence official candidates as a search stop', () {
+      final titleOnlyOfficial = candidate(
+        id: 'title-only-official',
+        title: 'Fiersa Besari - Celengan Rindu (Official Audio)',
+        channel: 'Lagu Hits Terbaru',
+      );
+      final artistChannel = candidate(
+        id: 'artist-channel',
+        title: 'Celengan Rindu',
+        channel: 'Fiersa Besari - Official Artist Channel',
+      );
+
+      expect(
+        SpotifyYoutubeTrackMatcher.hasPreferredOfficialMatch(
+          spotifyTrack,
+          [titleOnlyOfficial],
+        ),
+        isFalse,
+      );
+      expect(
+        SpotifyYoutubeTrackMatcher.hasPreferredOfficialMatch(
+          spotifyTrack,
+          [titleOnlyOfficial, artistChannel],
+        ),
+        isTrue,
+      );
+    });
+
+    test('prefers Topic or VEVO sources over ordinary re-uploads', () {
+      final reupload = candidate(
+        id: 'ordinary-reupload',
+        title: 'Fiersa Besari - Celengan Rindu (Official Audio)',
+        channel: 'Lagu Hits Terbaru',
+      );
+      final topicUpload = candidate(
+        id: 'topic-upload',
+        title: 'Celengan Rindu',
+        channel: 'Fiersa Besari - Topic',
+      );
+
+      expect(
+        SpotifyYoutubeTrackMatcher.bestMatch(
+          spotifyTrack,
+          [reupload, topicUpload],
+        )?.videoId,
+        'topic-upload',
+      );
+    });
+
+    test('rejects explicit fan and re-upload channels even with official title text', () {
+      final fanChannel = candidate(
+        id: 'fan-channel',
+        title: 'Fiersa Besari - Celengan Rindu (Official Audio)',
+        channel: 'Fiersa Besari Fans Channel',
+      );
+      final reuploadChannel = candidate(
+        id: 'reupload-channel',
+        title: 'Celengan Rindu (Official Music Video)',
+        channel: 'Music Reupload Archive',
+      );
+
+      expect(
+        SpotifyYoutubeTrackMatcher.bestMatch(
+          spotifyTrack,
+          [fanChannel, reuploadChannel],
+        ),
+        isNull,
+      );
+    });
+
+    test('uses structured label credits as an official source signal', () {
+      final fanMirror = candidate(
+        id: 'fan-mirror',
+        title: 'Fiersa Besari - Celengan Rindu',
+        channel: 'Musik Hits Indonesia',
+      );
+      final labelRelease = candidate(
+        id: 'label-release',
+        title: 'Celengan Rindu (Official Audio)',
+        channel: 'Musica Studios',
+        description: 'Provided to YouTube by Musica Studios\n'
+            'Celengan Rindu · Fiersa Besari\n'
+            'Celengan Rindu · Fiersa Besari · ℗ Musica Studios',
+      );
+
+      expect(
+        SpotifyYoutubeTrackMatcher.bestMatch(
+          spotifyTrack,
+          [fanMirror, labelRelease],
+        )?.videoId,
+        'label-release',
+      );
+    });
 
     test('chooses the correct track and artist from candidates', () {
       final correct = candidate(

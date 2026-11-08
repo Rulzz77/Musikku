@@ -548,20 +548,31 @@ class MusicStyleMatcher {
 
   /// Scores candidates by musical compatibility and language preference.
   /// Language match is a strong ranking signal; cross-language penalties apply
-  /// only after the caller explicitly enables a sad/ballad context.
-  /// Popularity/view count and freshness deliberately do not affect the score:
-  /// Radio must keep relevance to the current track ahead of chart rank.
+  /// only after the caller explicitly enables a sad/ballad context. A very small
+  /// capped popularity tie-breaker can distinguish otherwise similar tracks,
+  /// but cannot override style or language compatibility.
   static double radioSimilarityScore({
     required YoutubeSearchResult video,
     required String? targetStyle,
     String? targetLanguage,
-  }) =>
-      _similarityScore(
-        candidateStyle: styleFromVideo(video),
-        candidateLanguage: languageFromVideo(video),
-        targetStyle: targetStyle,
-        targetLanguage: targetLanguage,
-      );
+  }) {
+    final musicalFit = _similarityScore(
+      candidateStyle: styleFromVideo(video),
+      candidateLanguage: languageFromVideo(video),
+      targetStyle: targetStyle,
+      targetLanguage: targetLanguage,
+    );
+    // A small popularity nudge helps surface well-known releases that are
+    // otherwise equally relevant. It is deliberately capped below one score
+    // point so view count cannot override style/language compatibility.
+    final views = (video.viewCount ?? 0).clamp(0, 1000000000).toInt();
+    final popularityTieBreak = views <= 0
+        ? 0.0
+        : (math.log(views + 1) / math.ln10 * 0.10)
+            .clamp(0.0, 0.8)
+            .toDouble();
+    return musicalFit + popularityTieBreak;
+  }
 
   /// Returns compatible tracks sorted by musical relevance and language.
   /// Ordinary track Radio locks to the current language; only the caller may

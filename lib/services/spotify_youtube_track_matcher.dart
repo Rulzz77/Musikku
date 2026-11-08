@@ -64,6 +64,39 @@ class SpotifyYoutubeTrackMatcher {
     return best;
   }
 
+  /// Picks only the most plausible title candidates for a detail lookup.
+  /// Full Video.musicData requests are intentionally capped because they are
+  /// heavier than reading the initial search page. A high view count helps a
+  /// candidate enter the shortlist, but never authenticates it by itself.
+  static List<YoutubeSearchResult> metadataLookupCandidates(
+    SpotifyPlaylistTrack spotifyTrack,
+    List<YoutubeSearchResult> candidates, {
+    int limit = 3,
+  }) {
+    final eligible = candidates.where((candidate) {
+      if (candidate.isLocal ||
+          !YoutubeMusicPolicy.isMusicCandidate(candidate) ||
+          _isClearlyUnofficialChannel(candidate.channelTitle)) {
+        return false;
+      }
+      return _tokenCoverage(spotifyTrack.title, candidate.title) >= 0.80 &&
+          _similarity(spotifyTrack.title, candidate.title) >= 0.55;
+    }).toList(growable: false);
+
+    eligible.sort((a, b) {
+      final aTitle = _similarity(spotifyTrack.title, a.title);
+      final bTitle = _similarity(spotifyTrack.title, b.title);
+      final titleOrder = bTitle.compareTo(aTitle);
+      if (titleOrder != 0) return titleOrder;
+      final artistA = _artistSimilarity(spotifyTrack, a);
+      final artistB = _artistSimilarity(spotifyTrack, b);
+      final artistOrder = artistB.compareTo(artistA);
+      if (artistOrder != 0) return artistOrder;
+      return (b.viewCount ?? 0).compareTo(a.viewCount ?? 0);
+    });
+    return eligible.take(limit.clamp(1, 5)).toList(growable: false);
+  }
+
   /// True only when an artist-owned, Topic, or VEVO result is already present.
   /// A structured distributor/label result can be a safe final fallback, but
   /// it must not stop later queries from looking for the performer's own page.
@@ -122,6 +155,31 @@ class SpotifyYoutubeTrackMatcher {
     // are available.
     if (structuredDistributorCredit) return 4;
 
+    // YouTube's Video.musicData gives a structured song + performer credit.
+    // Permit a popular third-party upload as a fallback only when that exact
+    // metadata matches the Spotify track and it has meaningful view history.
+    // Views alone never establish performer identity or source authenticity.
+    final popularThirdParty = (candidate.viewCount ?? 0) >= 100000;
+    final titleCreditsArtist = _artistCreditMatches(
+      _normalizeArtistText(candidate.title),
+      _normalizeArtistText(track.primaryArtist),
+    );
+    final titleIsNearExact =
+        _tokenCoverage(track.title, candidate.title) >= 0.98 &&
+        _similarity(track.title, candidate.title) >= 0.90;
+
+    // Some legitimate catalogue tracks are uploaded by channels that are not
+    // the artist/label account, and MusicData is not always exposed. Permit a
+    // widely-played fallback only when the title itself carries the correct
+    // performer credit and the song title is an almost exact match. A viral
+    // video with only the same song name (or the wrong singer) still fails.
+    if (popularThirdParty && titleIsNearExact && titleCreditsArtist) {
+      return 3;
+    }
+    if (_matchesStructuredMusicData(track, candidate) && popularThirdParty) {
+      return 3;
+    }
+
     // A known label with an explicit official-title marker is a fallback only.
     // It must not stop the query loop before artist-owned results are checked.
     if (_isKnownMusicLabelChannel(channelRaw) && officialTitle) return 3;
@@ -131,6 +189,26 @@ class SpotifyYoutubeTrackMatcher {
       return 2;
     }
     return 0;
+  }
+
+  static bool _matchesStructuredMusicData(
+    SpotifyPlaylistTrack track,
+    YoutubeSearchResult candidate,
+  ) {
+    final structuredTitle = candidate.musicDataTitle.trim();
+    final structuredArtist = candidate.musicDataArtist.trim();
+    if (structuredTitle.isEmpty || structuredArtist.isEmpty ||
+        track.primaryArtist.trim().isEmpty) {
+      return false;
+    }
+
+    final titleCoverage = _tokenCoverage(track.title, structuredTitle);
+    final titleSimilarity = _similarity(track.title, structuredTitle);
+    final artistMatches = _artistCreditMatches(
+      _normalizeArtistText(structuredArtist),
+      _normalizeArtistText(track.primaryArtist),
+    );
+    return titleCoverage >= 0.90 && titleSimilarity >= 0.78 && artistMatches;
   }
 
   static bool _isArtistOwnedChannel(String rawChannel, String normalizedArtist) {
@@ -161,7 +239,7 @@ class SpotifyYoutubeTrackMatcher {
       .trim();
 
   static bool _isClearlyUnofficialChannel(String rawChannel) => RegExp(
-        r'\b(?:fan(?:s|[ -]?(?:made|account|page|club|upload(?:s)?))?|unofficial|re-?upload(?:s|ed)?|mirror(?:s)?|archive(?:s)?|karaoke|cover(?:s)?|lyrics?|tribute|nightcore|slowed|sped[ -]?up|reaction(?:s)?|ai[ -]?music)\b',
+        r'\b(?:fan(?:s|[ -]?(?:made|account|page|club|upload(?:s)?))?|unofficial|re-?upload(?:s|ed)?|mirror(?:s)?|karaoke|cover(?:s)?|lyrics?|tribute|nightcore|slowed|sped[ -]?up|reaction(?:s)?|ai[ -]?music)\b',
         caseSensitive: false,
       ).hasMatch(rawChannel);
 
@@ -350,15 +428,20 @@ class SpotifyYoutubeTrackMatcher {
       primaryArtist,
       _normalizeTrackTitle(spotifyTrack.title),
     );
+    final primaryInStructuredMusicData =
+        _matchesStructuredMusicData(spotifyTrack, candidate);
 
     // Do not accept a candidate merely because the artist name occurs somewhere
-    // in its description, tags, or promotional text. Only the title, channel,
-    // or a direct "performed by / artist:" credit is considered reliable.
-    if (!primaryInTitle && !primaryInChannel && !primaryExplicitlyCredited) {
+    // in its description, tags, or promotional text. Only title/channel,
+    // direct performer credits, or YouTube's structured MusicData are trusted.
+    if (!primaryInTitle &&
+        !primaryInChannel &&
+        !primaryExplicitlyCredited &&
+        !primaryInStructuredMusicData) {
       return 0;
     }
 
-    var score = primaryInTitle
+    var score = primaryInStructuredMusicData || primaryInTitle
         ? 1.0
         : primaryInChannel
             ? 0.96

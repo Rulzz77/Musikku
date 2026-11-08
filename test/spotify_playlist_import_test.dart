@@ -424,6 +424,9 @@ void main() {
       required String channel,
       String description = '',
       double durationSeconds = 248,
+      int? viewCount,
+      String musicDataTitle = '',
+      String musicDataArtist = '',
     }) => YoutubeSearchResult(
           videoId: id,
           title: title,
@@ -431,6 +434,9 @@ void main() {
           description: description,
           thumbnailUrl: '',
           durationSeconds: durationSeconds,
+          viewCount: viewCount,
+          musicDataTitle: musicDataTitle,
+          musicDataArtist: musicDataArtist,
         );
 
     test('prefers the artist official channel over a closer fan mirror', () {
@@ -1029,6 +1035,81 @@ void main() {
         isNull,
       );
     });
+
+    test('accepts popular third-party upload only with exact structured MusicData credit', () {
+      final popularIndependentUpload = candidate(
+        id: 'popular-independent-upload',
+        title: 'Celengan Rindu',
+        channel: 'Musik Populer Nusantara',
+        viewCount: 850000,
+        musicDataTitle: 'Celengan Rindu',
+        musicDataArtist: 'Fiersa Besari',
+      );
+      expect(
+        SpotifyYoutubeTrackMatcher.bestMatch(
+          spotifyTrack,
+          [popularIndependentUpload],
+        )?.videoId,
+        'popular-independent-upload',
+      );
+    });
+
+    test('popular third-party upload is accepted only with exact title and artist in title', () {
+      final popularThirdParty = candidate(
+        id: 'popular-third-party',
+        title: 'Fiersa Besari - Celengan Rindu',
+        channel: 'Musik Viral Nusantara',
+        viewCount: 900000,
+      );
+      expect(
+        SpotifyYoutubeTrackMatcher.bestMatch(spotifyTrack, [popularThirdParty])?.videoId,
+        'popular-third-party',
+      );
+    });
+
+    test('view count alone never authenticates a third-party uploader', () {
+      final viralWrongTrack = candidate(
+        id: 'viral-wrong-track',
+        title: 'Lagu Viral Terbaru 2026',
+        channel: 'Musik Viral 2026',
+        viewCount: 9000000,
+      );
+      expect(
+        SpotifyYoutubeTrackMatcher.bestMatch(spotifyTrack, [viralWrongTrack]),
+        isNull,
+      );
+    });
+
+    test('structured MusicData for a different singer is rejected even when popular', () {
+      final wrongPerformer = candidate(
+        id: 'wrong-structured-performer',
+        title: 'Celengan Rindu',
+        channel: 'Popular Music Channel',
+        viewCount: 2000000,
+        musicDataTitle: 'Celengan Rindu',
+        musicDataArtist: 'Penyanyi Lain',
+      );
+      expect(
+        SpotifyYoutubeTrackMatcher.bestMatch(spotifyTrack, [wrongPerformer]),
+        isNull,
+      );
+    });
+
+    test('does not accept a low-view third-party mirror solely on MusicData', () {
+      final lowViewMirror = candidate(
+        id: 'low-view-mirror',
+        title: 'Celengan Rindu',
+        channel: 'Personal Music Uploads',
+        viewCount: 1200,
+        musicDataTitle: 'Celengan Rindu',
+        musicDataArtist: 'Fiersa Besari',
+      );
+      expect(
+        SpotifyYoutubeTrackMatcher.bestMatch(spotifyTrack, [lowViewMirror]),
+        isNull,
+      );
+    });
+
   });
 
   group('YouTube official music metadata parser', () {

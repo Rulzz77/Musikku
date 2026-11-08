@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:http/http.dart' as http;
@@ -11,6 +12,7 @@ import 'youtube_search_query.dart';
 import 'youtube_music_policy.dart';
 import 'youtube_music_metadata_parser.dart';
 import 'youtube_search_response_parser.dart';
+import 'youtube_search_metadata.dart';
 import 'youtube_search_api_errors.dart';
 import 'youtube_api_request_guard.dart';
 import 'music_style_matcher.dart';
@@ -82,6 +84,8 @@ class YoutubeSearchService {
   static final Map<String, dynamic> _radioExplodePageSources =
       <String, dynamic>{};
   static final Map<String, int> _radioExplodePageNumbers = <String, int>{};
+  static final Map<String, YoutubeSearchResult> _musicDetailCache =
+      <String, YoutubeSearchResult>{};
 
   // Biaya kuota per endpoint (search.list jauh lebih mahal daripada
   // videos.list) dan batas hariannya ditentukan Google dan bisa berubah.
@@ -158,41 +162,8 @@ class YoutubeSearchService {
   /// Properti dibaca defensif karena metadata video YouTube bisa tidak lengkap.
   /// "3 months ago" / "5 hari yang lalu" -> perkiraan tanggal. Perkiraan kasar
   /// (bulan = 30 hari, tahun = 365 hari), cukup untuk menilai baru atau lama.
-  static DateTime? _approximateDateFromRelative(String raw) {
-    if (raw.isEmpty) return null;
-    final match = RegExp(
-      r'(\d+)\s*(second|minute|hour|day|week|month|year|detik|menit|jam|hari|minggu|bulan|tahun)',
-      caseSensitive: false,
-    ).firstMatch(raw);
-    if (match == null) return null;
-    final amount = int.tryParse(match.group(1) ?? '');
-    if (amount == null) return null;
-    final unit = (match.group(2) ?? '').toLowerCase();
-    final Duration span;
-    switch (unit) {
-      case 'second':
-      case 'detik':
-        span = Duration(seconds: amount);
-      case 'minute':
-      case 'menit':
-        span = Duration(minutes: amount);
-      case 'hour':
-      case 'jam':
-        span = Duration(hours: amount);
-      case 'day':
-      case 'hari':
-        span = Duration(days: amount);
-      case 'week':
-      case 'minggu':
-        span = Duration(days: amount * 7);
-      case 'month':
-      case 'bulan':
-        span = Duration(days: amount * 30);
-      default:
-        span = Duration(days: amount * 365);
-    }
-    return DateTime.now().subtract(span);
-  }
+  static DateTime? _approximateDateFromRelative(String raw) =>
+      YoutubeSearchMetadata.parseRelativeUploadDate(raw);
 
   static YoutubeSearchResult _fromExplodeVideo(dynamic video) {
     String readString(dynamic Function() read, [String fallback = '']) {
@@ -227,6 +198,26 @@ class YoutubeSearchService {
     if (thumbnailUrl.isEmpty) {
       thumbnailUrl = readString(() => video.thumbnails.mediumResUrl);
     }
+    // SearchVideo exposes a List<Thumbnail>, while a full Video exposes a
+    // ThumbnailSet. Read the actual highest-resolution list item as well.
+    if (thumbnailUrl.isEmpty) {
+      try {
+        final dynamic thumbnails = video.thumbnails;
+        if (thumbnails is Iterable) {
+          var bestArea = -1;
+          for (final dynamic thumbnail in thumbnails) {
+            final candidateUrl = readString(() => thumbnail.url);
+            final width = int.tryParse(readString(() => thumbnail.width, '0')) ?? 0;
+            final height = int.tryParse(readString(() => thumbnail.height, '0')) ?? 0;
+            final area = width * height;
+            if (candidateUrl.isNotEmpty && area >= bestArea) {
+              bestArea = area;
+              thumbnailUrl = candidateUrl;
+            }
+          }
+        }
+      } catch (_) {}
+    }
     if (thumbnailUrl.isEmpty && videoId.isNotEmpty) {
       thumbnailUrl = 'https://i.ytimg.com/vi/$videoId/hqdefault.jpg';
     }
@@ -236,23 +227,34 @@ class YoutubeSearchService {
       final dynamic date = video.publishDate ?? video.uploadDate;
       if (date is DateTime) publishedAt = date;
     } catch (_) {}
-    // Hasil pencarian sering hanya punya teks relatif ("3 months ago"). Ubah ke
-    // perkiraan tanggal supaya rilisan baru dan kecepatan penonton bisa dinilai.
+    // SearchVideo.uploadDate is relative text (e.g. "3 months ago"); the full
+    // Video model instead exposes DateTime uploadDate and uploadDateRaw.
+    final rawUploadDate = readString(
+      () => video.uploadDateRaw,
+      readString(() => video.uploadDate),
+    );
     final approxPublishedAt = publishedAt == null
-        ? _approximateDateFromRelative(readString(() => video.uploadDateRaw))
+        ? _approximateDateFromRelative(rawUploadDate)
         : null;
 
+    // SearchVideo.duration is a String such as MM:SS / HH:MM:SS, not Duration.
+    // Parse both shapes so Shorts and 15-minute compilation filters work.
     double? durationSeconds;
     try {
-      final dynamic duration = video.duration;
-      if (duration is Duration) durationSeconds = duration.inMilliseconds / 1000.0;
+      durationSeconds = YoutubeSearchMetadata.parseDurationSeconds(video.duration);
     } catch (_) {}
 
+    // SearchVideo.viewCount is a direct int. Only the full Video model nests it
+    // under engagement.viewCount. Read both to avoid losing popularity data.
     int? viewCount;
     try {
-      final dynamic value = video.engagement.viewCount;
-      if (value is num) viewCount = value.toInt();
+      viewCount = YoutubeSearchMetadata.parseViewCount(video.viewCount);
     } catch (_) {}
+    if (viewCount == null) {
+      try {
+        viewCount = YoutubeSearchMetadata.parseViewCount(video.engagement.viewCount);
+      } catch (_) {}
+    }
 
     bool live = false;
     try {
@@ -277,6 +279,135 @@ class YoutubeSearchService {
       // pencarian. Filter katalog MusikKu tetap memakai metadata/judul/channel.
       categoryId: '',
     );
+  }
+
+  /// Fetches full Video details for a short candidate list. youtube_explode's
+  /// lightweight SearchVideo has direct viewCount + text duration, while the
+  /// full Video adds structured MusicData (song / artist / album). Call this
+  /// only for the best few Spotify-import candidates, not for every search hit.
+  Future<List<YoutubeSearchResult>> enrichMusicMetadata(
+    List<YoutubeSearchResult> candidates,
+  ) async {
+    return Future.wait(candidates.map((candidate) async {
+      if (candidate.isLocal || candidate.videoId.isEmpty) return candidate;
+      final cached = _musicDetailCache[candidate.videoId];
+      if (cached != null) return cached;
+
+      try {
+        final dynamic detail = await _youtubeExplode.videos
+            .get(candidate.videoId)
+            .timeout(const Duration(seconds: 12));
+        String readString(dynamic Function() read) {
+          try {
+            final value = read();
+            return value == null ? '' : value.toString().trim();
+          } catch (_) {
+            return '';
+          }
+        }
+
+        final fullTitle = readString(() => detail.title);
+        final fullDescription = readString(() => detail.description);
+        final fullDuration = YoutubeSearchMetadata.parseDurationSeconds(
+          () {
+            try {
+              return detail.duration;
+            } catch (_) {
+              return null;
+            }
+          }(),
+        );
+        int? fullViews;
+        try {
+          fullViews = YoutubeSearchMetadata.parseViewCount(
+            detail.engagement.viewCount,
+          );
+        } catch (_) {}
+
+        var musicDataTitle = '';
+        var musicDataArtist = '';
+        var musicDataAlbum = '';
+        var bestMusicTitleScore = 0.0;
+        try {
+          final dynamic musicRows = detail.musicData;
+          if (musicRows is Iterable) {
+            for (final dynamic row in musicRows) {
+              final rowTitle = readString(() => row.song);
+              final rowArtist = readString(() => row.artist);
+              final rowAlbum = readString(() => row.album);
+              if (rowTitle.isEmpty || rowArtist.isEmpty) continue;
+              final score = _simpleTitleOverlap(candidate.title, rowTitle);
+              if (score > bestMusicTitleScore) {
+                bestMusicTitleScore = score;
+                musicDataTitle = rowTitle;
+                musicDataArtist = rowArtist;
+                musicDataAlbum = rowAlbum;
+              }
+            }
+          }
+        } catch (_) {}
+
+        String fullThumbnail = '';
+        try {
+          fullThumbnail = readString(() => detail.thumbnails.maxResUrl);
+          if (fullThumbnail.isEmpty) {
+            fullThumbnail = readString(() => detail.thumbnails.highResUrl);
+          }
+        } catch (_) {}
+
+        final parsedDescription = YoutubeMusicMetadataParser.parse(
+          title: fullTitle.isEmpty ? candidate.title : fullTitle,
+          description: fullDescription.isEmpty
+              ? candidate.description
+              : fullDescription,
+        );
+        final enriched = candidate.copyWith(
+          description: fullDescription.isEmpty
+              ? candidate.description
+              : fullDescription,
+          artistName: musicDataArtist.isNotEmpty
+              ? musicDataArtist
+              : (parsedDescription.artistName.isNotEmpty
+                  ? parsedDescription.artistName
+                  : candidate.artistName),
+          album: musicDataAlbum.isNotEmpty
+              ? musicDataAlbum
+              : (parsedDescription.album.isNotEmpty
+                  ? parsedDescription.album
+                  : candidate.album),
+          musicDataTitle: musicDataTitle,
+          musicDataArtist: musicDataArtist,
+          durationSeconds: candidate.durationSeconds ?? fullDuration,
+          viewCount: (candidate.viewCount ?? 0) > 0
+              ? candidate.viewCount
+              : fullViews,
+          thumbnailUrl: fullThumbnail.isNotEmpty
+              ? fullThumbnail
+              : candidate.thumbnailUrl,
+        );
+        _musicDetailCache[candidate.videoId] = enriched;
+        if (_musicDetailCache.length > 240) {
+          _musicDetailCache.remove(_musicDetailCache.keys.first);
+        }
+        return enriched;
+      } catch (error) {
+        debugPrint('YOUTUBE MUSIC DETAIL SKIPPED [${candidate.videoId}]: $error');
+        return candidate;
+      }
+    }));
+  }
+
+  static double _simpleTitleOverlap(String first, String second) {
+    String normalize(String value) => value
+        .toLowerCase()
+        .replaceAll(RegExp(r'\b(?:official|audio|video|lyrics?|visualizer|hd|4k)\b'), ' ')
+        .replaceAll(RegExp(r'[^a-z0-9\u0080-\uFFFF]+'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    final a = normalize(first).split(' ').where((part) => part.length > 1).toSet();
+    final b = normalize(second).split(' ').where((part) => part.length > 1).toSet();
+    if (a.isEmpty || b.isEmpty) return 0;
+    return a.intersection(b).length / a.length;
   }
 
   static String _explodeChannelId(dynamic video) {
@@ -333,9 +464,117 @@ class YoutubeSearchService {
     return 0;
   }
 
-  Future<List<YoutubeSearchResult>> search(String query) async {
+  static List<YoutubeSearchResult> _rankSearchCandidates(
+    String query,
+    Iterable<YoutubeSearchResult> candidates,
+  ) {
+    String normalize(String value) => value
+        .toLowerCase()
+        .replaceAll(
+          RegExp(r'\b(?:official|audio|video|music|songs?|song|lyrics?|visualizer|channel|latest|terbaru)\b'),
+          ' ',
+        )
+        .replaceAll(RegExp(r'[^a-z0-9\u0080-\uFFFF]+'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    final queryTokens = normalize(query)
+        .split(' ')
+        .where((token) => token.length > 1)
+        .toSet();
+    if (queryTokens.isEmpty) return candidates.toList(growable: false);
+
+    double score(YoutubeSearchResult video) {
+      final titleTokens = normalize(video.title).split(' ').toSet();
+      final channelTokens = normalize(video.channelTitle).split(' ').toSet();
+      final descriptionTokens = normalize(video.description).split(' ').toSet();
+      final identityTokens = <String>{...titleTokens, ...channelTokens};
+      final identityCoverage =
+          queryTokens.intersection(identityTokens).length / queryTokens.length;
+      final titleCoverage =
+          queryTokens.intersection(titleTokens).length / queryTokens.length;
+      final channelCoverage =
+          queryTokens.intersection(channelTokens).length / queryTokens.length;
+      final descriptionCoverage = queryTokens
+              .intersection(descriptionTokens)
+              .length /
+          queryTokens.length;
+      final views = (video.viewCount ?? 0).clamp(0, 1000000000).toInt();
+      // Exact title/artist match stays far ahead; popularity only breaks close
+      // ties so a viral unrelated upload cannot outrank the requested track.
+      final popularityTieBreak = views <= 0
+          ? 0.0
+          : (math.log(views + 1) / math.ln10 * 0.55)
+              .clamp(0.0, 4.4)
+              .toDouble();
+      return identityCoverage * 75 +
+          titleCoverage * 16 +
+          channelCoverage * 8 +
+          descriptionCoverage * 1 +
+          popularityTieBreak;
+    }
+
+    final ranked = candidates.toList(growable: false)
+      ..sort((a, b) {
+        final byScore = score(b).compareTo(score(a));
+        if (byScore != 0) return byScore;
+        return (b.viewCount ?? 0).compareTo(a.viewCount ?? 0);
+      });
+    return ranked;
+  }
+
+  Future<List<YoutubeSearchResult>> search(String query) =>
+      _search(query, spotifyImportMode: false);
+
+  /// Broader candidate collection exclusively for Spotify import. The normal
+  /// manual search still uses query-scoped artist filtering; Spotify import
+  /// collects plausible music candidates so its next stage can inspect the
+  /// structured Video.musicData credit before deciding whether the performer
+  /// really matches. Karaoke, cover, AI, compilation, and duration filters
+  /// remain active in both modes.
+  Future<List<YoutubeSearchResult>> searchForSpotifyImport(String query) =>
+      _search(query, spotifyImportMode: true);
+
+  static bool _matchesStructuredMusicDataQuery(
+    String query,
+    YoutubeSearchResult video,
+  ) {
+    final structured = '${video.musicDataArtist} ${video.musicDataTitle}'
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9\u0080-\uFFFF]+'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    if (structured.isEmpty) return false;
+
+    const ignored = <String>{
+      'official', 'audio', 'video', 'music', 'song', 'songs', 'lagu',
+      'terbaru', 'latest', 'channel', 'vevo', 'topic', '2024', '2025', '2026',
+    };
+    final queryTokens = query
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9\u0080-\uFFFF]+'), ' ')
+        .split(RegExp(r'\s+'))
+        .where((token) => token.length > 1 && !ignored.contains(token))
+        .toSet();
+    if (queryTokens.isEmpty || queryTokens.length > 6) return false;
+    final structuredTokens = structured.split(' ').toSet();
+    return queryTokens.every(structuredTokens.contains) &&
+        YoutubeMusicPolicy.isMusicCandidate(video);
+  }
+
+  Future<List<YoutubeSearchResult>> _search(
+    String query, {
+    required bool spotifyImportMode,
+  }) async {
     final keyword = query.trim();
     if (keyword.isEmpty) return const [];
+
+    bool acceptsCandidate(YoutubeSearchResult video) => spotifyImportMode
+        ? YoutubeMusicPolicy.isMusicCandidate(video)
+        : (YoutubeMusicPolicy.isOfficialMusicReleaseCandidateForQuery(
+                video,
+                query: keyword,
+              ) ||
+              _matchesStructuredMusicDataQuery(keyword, video));
 
     final intent = interpretSearch(keyword);
     final effectiveQuery = intent.apiQuery;
@@ -344,7 +583,7 @@ class YoutubeSearchService {
     // terlalu ketat. Hasil mentah disimpan agar perubahan filter tidak
     // mengabadikan daftar lagu yang sudah terlanjur terpotong.
     final cacheKey =
-        'explodeSearchV5SingleTrackOnly|${keyword.toLowerCase()}|${effectiveQuery.toLowerCase()}|${intent.latest ? 'date' : 'relevance'}';
+        'explodeSearchV8TypedSearchMetadata|${spotifyImportMode ? 'spotify' : 'catalog'}|${keyword.toLowerCase()}|${effectiveQuery.toLowerCase()}|${intent.latest ? 'date' : 'relevance'}';
     final cached = _cache[cacheKey];
 
     if (cached != null) {
@@ -352,14 +591,10 @@ class YoutubeSearchService {
       final ttl = cached.results.isEmpty ? _emptyResultTtl : _cacheTtl;
       if (age < ttl && cached.results.isNotEmpty) {
         debugPrint('EXPLODE SEARCH CACHE HIT (memory): $effectiveQuery');
-        return cached.results
-            .where((video) =>
-                YoutubeMusicPolicy.isOfficialMusicReleaseCandidateForQuery(
-                  video,
-                  query: keyword,
-                ))
-            .take(30)
-            .toList(growable: false);
+        return _rankSearchCandidates(
+          keyword,
+          cached.results.where(acceptsCandidate),
+        ).take(30).toList(growable: false);
       }
     }
 
@@ -372,14 +607,10 @@ class YoutubeSearchService {
     if (diskRaw is List && diskResults.isNotEmpty) {
       debugPrint('EXPLODE SEARCH CACHE HIT (disk): $effectiveQuery');
       _putCache(cacheKey, _CacheEntry(DateTime.now(), diskResults));
-      return diskResults
-          .where((video) =>
-              YoutubeMusicPolicy.isOfficialMusicReleaseCandidateForQuery(
-                video,
-                query: keyword,
-              ))
-          .take(30)
-          .toList(growable: false);
+      return _rankSearchCandidates(
+        keyword,
+        diskResults.where(acceptsCandidate),
+      ).take(30).toList(growable: false);
     }
 
     debugPrint('EXPLODE SEARCH NETWORK REQUEST: $effectiveQuery');
@@ -410,10 +641,7 @@ class YoutubeSearchService {
           .where((video) {
             final seconds = video.durationSeconds;
             if (seconds != null && seconds <= 30) return false;
-            return YoutubeMusicPolicy.isOfficialMusicReleaseCandidateForQuery(
-              video,
-              query: keyword,
-            );
+            return acceptsCandidate(video);
           })
           .toList(growable: false);
 
@@ -429,7 +657,56 @@ class YoutubeSearchService {
         }
       }
 
-      final results = accepted()
+      // Relevance search can omit popular but valid third-party releases. If
+      // the pool is still small or contains no widely-played result, add one
+      // view-count-sorted page. Popularity is a tie-breaker, never an identity
+      // signal; title/artist filters still run below.
+      final beforePopular = accepted();
+      final hasWidelyViewed = beforePopular.any(
+        (video) => (video.viewCount ?? 0) >= 100000,
+      );
+      if (!intent.latest &&
+          (beforePopular.length < 12 || !hasWidelyViewed)) {
+        try {
+          final dynamic popularPage = await _youtubeExplode.search.search(
+            effectiveQuery,
+            filter: ytex.SortFilters.viewCount,
+          );
+          appendPage(popularPage);
+        } catch (popularError) {
+          debugPrint('EXPLODE SEARCH VIEW-COUNT FALLBACK SKIPPED: $popularError');
+        }
+      }
+
+      // If the artist/name filter leaves too few results, inspect only the
+      // three most-viewed plausible music candidates. Full Video.musicData can
+      // expose performer credits that are absent from SearchVideo.title,
+      // channel, and description. This avoids losing valid label/third-party
+      // uploads while keeping detail requests bounded for ordinary searches.
+      if (!spotifyImportMode && !intent.latest && accepted().length < 12) {
+        final acceptedIds = accepted().map((video) => video.videoId).toSet();
+        final metadataCandidates = rawResults
+            .where((video) =>
+                !acceptedIds.contains(video.videoId) &&
+                (video.viewCount ?? 0) >= 100000 &&
+                YoutubeMusicPolicy.isMusicCandidate(video))
+            .toList()
+          ..sort((a, b) =>
+              (b.viewCount ?? 0).compareTo(a.viewCount ?? 0));
+        final shortlist = metadataCandidates.take(3).toList(growable: false);
+        if (shortlist.isNotEmpty) {
+          final enriched = await enrichMusicMetadata(shortlist);
+          final enrichedById = {
+            for (final item in enriched) item.videoId: item,
+          };
+          for (var index = 0; index < rawResults.length; index++) {
+            final replacement = enrichedById[rawResults[index].videoId];
+            if (replacement != null) rawResults[index] = replacement;
+          }
+        }
+      }
+
+      final results = _rankSearchCandidates(keyword, accepted())
           .take(30)
           .toList(growable: false);
 
@@ -595,7 +872,7 @@ class YoutubeSearchService {
     // Versi cache berubah karena query Radio sekarang menjaga bahasa seed;
     // hasil lama yang mungkin sudah tercampur konteks Indonesia tidak dipakai.
     final cacheKey =
-        'radioExplodeV8SingleTrackOnly|$normalized|${pageToken ?? ''}';
+        'radioExplodeV10TypedSearchMetadata|$normalized|${pageToken ?? ''}';
     final cached = _cache[cacheKey];
     if (cached != null) {
       final age = DateTime.now().difference(cached.time);
@@ -709,20 +986,49 @@ class YoutubeSearchService {
       final rawItems = page == null
           ? <dynamic>[]
           : (page as Iterable).cast<dynamic>().toList();
-      var results = rawItems
+      final relevancePageCount = rawItems.length;
+      final seenRadioIds = <String>{
+        for (final dynamic item in rawItems)
+          _fromExplodeVideo(item).videoId,
+      };
+
+      List<YoutubeSearchResult> parseRadioItems() => rawItems
           .map(_fromExplodeVideo)
           .where((video) => video.videoId.isNotEmpty)
+          .where((video) {
+            if (video.isLive || video.isUpcoming) return false;
+            final seconds = video.durationSeconds;
+            if (seconds == null) return true;
+            return seconds >= _radioMinSeconds && seconds <= _radioMaxSeconds;
+          })
           .toList(growable: false);
 
-      // Single-track mode: compilations and long album mixes are not allowed.
-      results = results.where((video) {
-        if (video.isLive || video.isUpcoming) return false;
-        final seconds = video.durationSeconds;
-        // Durasi yang tidak disediakan hasil pencarian dipertahankan agar
-        // Radio tidak melakukan request videos.list untuk melengkapinya.
-        if (seconds == null) return true;
-        return seconds >= _radioMinSeconds && seconds <= _radioMaxSeconds;
-      }).toList(growable: false);
+      var results = parseRadioItems();
+      // Radio normally follows relatedness/relevance. If that page is mostly
+      // filtered or lacks any popular match, add a single view-sorted page as
+      // a fallback pool. Keep the relevance page's pagination cursor intact.
+      if (requestedPage == 1 &&
+          (results.where(YoutubeMusicPolicy.isMusicCandidate).length < 8 ||
+              results.every((video) => (video.viewCount ?? 0) < 100000))) {
+        try {
+          final dynamic popularPage = await _youtubeExplode.search.search(
+            radioSearchQuery,
+            filter: ytex.SortFilters.viewCount,
+          );
+          if (popularPage is Iterable) {
+            for (final dynamic item in popularPage.cast<dynamic>()) {
+              final candidate = _fromExplodeVideo(item);
+              if (candidate.videoId.isNotEmpty &&
+                  seenRadioIds.add(candidate.videoId)) {
+                rawItems.add(item);
+              }
+            }
+          }
+          results = parseRadioItems();
+        } catch (popularError) {
+          debugPrint('EXPLODE RADIO VIEW-COUNT FALLBACK SKIPPED: $popularError');
+        }
+      }
 
       results = _filterShortFormCandidates(results);
       results = await removeShorts(results);
@@ -733,7 +1039,7 @@ class YoutubeSearchService {
           .toList(growable: false);
       results = _rankRadio(results);
 
-      final nextToken = rawItems.length >= 20 && page != null
+      final nextToken = relevancePageCount >= 20 && page != null
           ? 'explode:page:${sourcePageNumber + 1}'
           : null;
       _putCache(cacheKey, _CacheEntry(DateTime.now(), results, nextToken));

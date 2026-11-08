@@ -7,6 +7,10 @@ class YoutubeSearchResult {
   /// Canonical performer credit when known (e.g. Spotify import).
   /// Kept separate from channelTitle because a label may upload the audio.
   final String artistName;
+  /// Structured YouTube Music credit from Video.musicData, when available.
+  /// Kept separate from free-form description parsing to preserve provenance.
+  final String musicDataTitle;
+  final String musicDataArtist;
   /// Actual YouTube upload channel, preserved when Spotify credits are used
   /// as the visible performer name for an imported playlist entry.
   final String sourceChannelTitle;
@@ -89,6 +93,8 @@ class YoutubeSearchResult {
     this.description = '',
     required this.channelTitle,
     this.artistName = '',
+    this.musicDataTitle = '',
+    this.musicDataArtist = '',
     this.sourceChannelTitle = '',
     required this.thumbnailUrl,
     this.viewCount,
@@ -113,6 +119,8 @@ class YoutubeSearchResult {
     String? description,
     String? channelTitle,
     String? artistName,
+    String? musicDataTitle,
+    String? musicDataArtist,
     String? sourceChannelTitle,
     String? thumbnailUrl,
     int? viewCount,
@@ -136,6 +144,8 @@ class YoutubeSearchResult {
       description: description ?? this.description,
       channelTitle: channelTitle ?? this.channelTitle,
       artistName: artistName ?? this.artistName,
+      musicDataTitle: musicDataTitle ?? this.musicDataTitle,
+      musicDataArtist: musicDataArtist ?? this.musicDataArtist,
       sourceChannelTitle: sourceChannelTitle ?? this.sourceChannelTitle,
       thumbnailUrl: thumbnailUrl ?? this.thumbnailUrl,
       viewCount: viewCount ?? this.viewCount,
@@ -162,6 +172,8 @@ class YoutubeSearchResult {
       'description': description,
       'channelTitle': channelTitle,
       'artistName': artistName,
+      'musicDataTitle': musicDataTitle,
+      'musicDataArtist': musicDataArtist,
       'sourceChannelTitle': sourceChannelTitle,
       'thumbnailUrl': thumbnailUrl,
       'viewCount': viewCount,
@@ -191,6 +203,8 @@ class YoutubeSearchResult {
       description: json['description']?.toString() ?? '',
       channelTitle: json['channelTitle']?.toString() ?? 'Unknown',
       artistName: json['artistName']?.toString() ?? '',
+      musicDataTitle: json['musicDataTitle']?.toString() ?? '',
+      musicDataArtist: json['musicDataArtist']?.toString() ?? '',
       sourceChannelTitle: json['sourceChannelTitle']?.toString() ?? '',
       thumbnailUrl: json['thumbnailUrl']?.toString() ?? '',
       viewCount: json['viewCount'] is num ? (json['viewCount'] as num).toInt() : null,

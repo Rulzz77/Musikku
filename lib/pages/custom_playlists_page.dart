@@ -33,6 +33,7 @@ class CustomPlaylistsPage extends StatefulWidget {
     required this.playerUiState,
     this.availableSongs = const [],
     this.searchSongs,
+    this.enrichSearchResults,
     required this.onChanged,
     required this.onPlayPlaylist,
     this.onPlayOfflinePlaylist,
@@ -51,6 +52,7 @@ class CustomPlaylistsPage extends StatefulWidget {
   final ValueListenable<PlayerUiState> playerUiState;
   final List<YoutubeSearchResult> availableSongs;
   final Future<List<YoutubeSearchResult>> Function(String query)? searchSongs;
+  final Future<List<YoutubeSearchResult>> Function(List<YoutubeSearchResult> candidates)? enrichSearchResults;
   final VoidCallback onChanged;
   final Future<void> Function(Playlist playlist) onPlayPlaylist;
   final Future<void> Function(Playlist playlist)? onPlayOfflinePlaylist;
@@ -949,9 +951,45 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
                 }
               }
 
+              var allCandidates = candidatesById.values.toList(growable: false);
+              // If no high-confidence artist-owned / Topic / VEVO source was
+              // found, inspect a very small shortlist for YouTube's structured
+              // MusicData. This allows a genuinely popular third-party upload
+              // to match when its performer credit is verified by metadata,
+              // while popularity alone can never admit a wrong singer.
+              if (!SpotifyYoutubeTrackMatcher.hasPreferredOfficialMatch(
+                    track,
+                    allCandidates,
+                  ) &&
+                  widget.enrichSearchResults != null) {
+                final detailCandidates =
+                    SpotifyYoutubeTrackMatcher.metadataLookupCandidates(
+                  track,
+                  allCandidates,
+                  limit: 3,
+                );
+                if (detailCandidates.isNotEmpty) {
+                  try {
+                    final enriched = await widget.enrichSearchResults!(
+                      detailCandidates,
+                    );
+                    for (final item in enriched) {
+                      candidatesById[item.videoId] = item;
+                    }
+                    allCandidates =
+                        candidatesById.values.toList(growable: false);
+                  } catch (detailError) {
+                    debugPrint(
+                      'SPOTIFY MUSIC METADATA LOOKUP FAILED '
+                      '[${track.title}]: $detailError',
+                    );
+                  }
+                }
+              }
+
               final match = SpotifyYoutubeTrackMatcher.bestMatch(
                 track,
-                candidatesById.values.toList(growable: false),
+                allCandidates,
               );
               return match == null
                   ? null

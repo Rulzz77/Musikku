@@ -57,6 +57,32 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
         channels = channels
             .where((channel) => _channelNameMatchesArtistQuery(channel.title, query))
             .toList(growable: false);
+
+        // Dotted stage names can be indexed without punctuation or spaces by
+        // YouTube (NDX A.K.A. -> NDXAKA). Retry aliases only when the first
+        // channel search returned no verified name match.
+        if (channels.isEmpty) {
+          final normalized = _normalizeArtistChannelName(query);
+          final compact = normalized.replaceAll(' ', '');
+          final aliases = <String>{normalized, compact}
+              .where((value) => value.isNotEmpty && value != query.toLowerCase())
+              .toList(growable: false);
+          for (final alias in aliases) {
+            try {
+              final aliasResults = await _searchService.searchChannels(alias);
+              if (!mounted || requestId != _searchRequestId || query != _query.trim()) return;
+              final matched = aliasResults
+                  .where((channel) => _channelNameMatchesArtistQuery(channel.title, query))
+                  .toList(growable: false);
+              if (matched.isNotEmpty) {
+                channels = matched;
+                break;
+              }
+            } catch (aliasError) {
+              debugPrint('ARTIST CHANNEL ALIAS SEARCH FAILED [$alias]: $aliasError');
+            }
+          }
+        }
       }
       setState(() {
         _searchChannels = channels.take(8).toList(growable: false);
@@ -152,7 +178,13 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
   bool _isLikelyArtistNameSearch(String query, List<YoutubeSearchResult> videos) {
     final trimmed = query.trim();
     if (trimmed.isEmpty || trimmed.length > 36) return false;
-    final words = trimmed.split(RegExp(r'\s+'));
+    final words = _normalizeArtistChannelName(trimmed)
+        .split(RegExp(r'\s+'))
+        .where((word) => word.length > 1 ||
+            !RegExp(r'^[a-z0-9]+$').hasMatch(word))
+        .toList(growable: false);
+    // Ignore dotted initials (e.g. NDX A.K.A.) when deciding whether this
+    // looks like a performer query; the compact channel comparison handles it.
     if (words.isEmpty || words.length > 2) return false;
     if (RegExp(
       r'\b(?:lagu|musik|music|song|songs|official|video|mv|lyrics?|lirik|audio|cover|remix|album|playlist|radio|mix|karaoke|soundtrack|terbaru|latest|hits|popular|populer)\b',

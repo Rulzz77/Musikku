@@ -1674,6 +1674,32 @@ void main() {
       expect(queries, contains('Satru 2 Happy Asmara'));
     });
 
+    test('provides artist-only fallback queries after title search fails', () {
+      const track = SpotifyPlaylistTrack(
+        title: 'Kelingan Mantan',
+        artists: ['NDX A.K.A.', 'Ratu Meta'],
+      );
+      final queries = SpotifyYoutubeTrackMatcher.buildArtistOnlyFallbackQueries(track);
+      expect(queries, contains('NDX A.K.A.'));
+      expect(queries, contains('NDX AKA'));
+      expect(queries, contains('NDXAKA'));
+      expect(queries, contains('Ratu Meta'));
+    });
+
+    test('provides title-only fallbacks when artist plus title search fails', () {
+      const track = SpotifyPlaylistTrack(
+        spotifyTrackId: 'spotify-sigar',
+        title: 'Sigar',
+        artists: ['Denny Caknan'],
+        durationMs: 242000,
+        album: '',
+      );
+      expect(
+        SpotifyYoutubeTrackMatcher.buildTitleOnlyFallbackQueries(track),
+        ['Sigar'],
+      );
+    });
+
     test('fast search includes punctuation-free NDX A.K.A. aliases', () {
       const track = SpotifyPlaylistTrack(
         title: 'Kelingan Mantan',

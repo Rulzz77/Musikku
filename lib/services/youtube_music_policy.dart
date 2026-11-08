@@ -407,7 +407,14 @@ class YoutubeMusicPolicy {
     }
 
     final artistQuery = _normalizeArtistSearchName(query);
-    if (artistQuery.isEmpty) return false;
+    // Preserve real one-letter song titles (for example `A` or `I`). The
+    // only one-letter sequence treated as punctuation noise is the common
+    // `A.K.A.` suffix used in stage names such as NDX A.K.A.
+    final searchableQuery = artistQuery
+        .replaceAll(RegExp(r'\ba\s+k\s+a\b'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    if (searchableQuery.isEmpty) return false;
 
     const genericMusicTerms = <String>{
       'pop', 'rock', 'jazz', 'metal', 'indie', 'dangdut', 'koplo', 'dj',
@@ -425,43 +432,61 @@ class YoutubeMusicPolicy {
       return isMusicCandidate(video);
     }
 
-    final queryTokens = artistQuery
-        .split(' ')
-        .where((word) => word.length > 1)
-        .toSet();
-    if (queryTokens.isEmpty || queryTokens.length > 4) {
-      // Query panjang berisi genre/bahasa/konteks tambahan; jangan buang semua
-      // lagu hanya karena parser tidak bisa memastikan satu nama artis.
-      return isMusicCandidate(video);
-    }
+    // Keep one-character song/title tokens in every script. The A.K.A.
+    // initialism is removed as one known sequence above, so NDX remains the
+    // meaningful artist token without breaking real titles such as `A`.
+    bool isSearchToken(String word) => word.isNotEmpty;
+    final queryTokens = searchableQuery.split(' ').where(isSearchToken).toSet();
+    if (queryTokens.isEmpty) return isMusicCandidate(video);
+    if (queryTokens.length > 8) return isMusicCandidate(video);
 
     final channel = _normalizeArtistSearchName(video.channelTitle);
-    final channelTokens = channel.split(' ').where((word) => word.length > 1).toSet();
     final normalizedTitle = _normalizeArtistSearchName(video.title);
-    final titleTokens = normalizedTitle.split(' ').where((word) => word.length > 1).toSet();
     final normalizedDescription = _normalizeArtistSearchName(video.description);
-    final descriptionTokens = normalizedDescription
-        .split(' ')
-        .where((word) => word.length > 1)
-        .toSet();
+    final normalizedArtist = _normalizeArtistSearchName(video.artistName);
+    final normalizedMusicTitle =
+        _normalizeArtistSearchName(video.musicDataTitle);
+    final normalizedMusicArtist =
+        _normalizeArtistSearchName(video.musicDataArtist);
+    Set<String> tokens(String value) =>
+        value.split(' ').where(isSearchToken).toSet();
+
+    final channelTokens = tokens(channel);
+    final titleTokens = <String>{
+      ...tokens(normalizedTitle),
+      ...tokens(normalizedMusicTitle),
+    };
+    final descriptionTokens = tokens(normalizedDescription);
+    final artistTokens = <String>{
+      ...tokens(normalizedArtist),
+      ...tokens(normalizedMusicArtist),
+    };
     final searchableTokens = <String>{
       ...channelTokens,
       ...titleTokens,
       ...descriptionTokens,
+      ...artistTokens,
     };
-    final channelMatchesArtist = channel.isNotEmpty &&
-        queryTokens.every(channelTokens.contains);
+    double coverage(Set<String> field) =>
+        queryTokens.intersection(field).length / queryTokens.length;
 
-    // Banyak rilisan resmi diunggah oleh label/distributor. Query impor seperti
-    // "Denny Caknan Cundamani" bisa muncul terbalik di judul YouTube
-    // ("Cundamani - Denny Caknan"), jadi bandingkan token lintas judul,
-    // channel, dan deskripsi. Pencocokan penyanyi yang ketat tetap dilakukan
-    // lagi oleh SpotifyYoutubeTrackMatcher sebelum lagu masuk playlist.
-    final allQueryTokensPresent = queryTokens.isNotEmpty &&
-        queryTokens.every(searchableTokens.contains);
-    if (!channelMatchesArtist && !allQueryTokensPresent) {
-      return false;
-    }
+    final titleCoverage = coverage(titleTokens);
+    final channelCoverage = coverage(channelTokens);
+    final descriptionCoverage = coverage(descriptionTokens);
+    final artistCoverage = coverage(artistTokens);
+    final combinedCoverage = coverage(searchableTokens);
+
+    // Title-only searches match the visible or structured song title. Artist-
+    // only searches match the uploader, parsed credit, or structured MusicData.
+    // A mixed query can distribute its words across those metadata fields.
+    final titleThreshold = queryTokens.length == 1 ? 1.0 : 0.67;
+    final artistThreshold = queryTokens.length == 1 ? 1.0 : 0.75;
+    final titleMatch = titleCoverage >= titleThreshold;
+    final artistMatch = channelCoverage >= artistThreshold ||
+        descriptionCoverage >= artistThreshold ||
+        artistCoverage >= artistThreshold;
+    final mixedQueryMatch = combinedCoverage >= 0.80;
+    if (!titleMatch && !artistMatch && !mixedQueryMatch) return false;
 
     // An exact artist/channel or explicit artist credit is a strong signal,
     // but do not admit covers, karaoke, fan edits, AI versions, or promo snippets.

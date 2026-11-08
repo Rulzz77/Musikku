@@ -795,5 +795,30 @@ void main() {
         isTrue,
       );
     });
+    test('splits explicit artist-title search into two validated intents', () {
+      expect(
+        YoutubeSearchQueryParser.splitExplicitArtistTitleQuery('Denny Caknan - Sigar'),
+        ['Denny Caknan', 'Sigar'],
+      );
+      expect(
+        YoutubeSearchQueryParser.splitExplicitArtistTitleQuery('NDX A.K.A. — Kelingan Mantan'),
+        ['NDX A.K.A.', 'Kelingan Mantan'],
+      );
+    });
+
+    test('does not split a normal title without an explicit separator', () {
+      expect(
+        YoutubeSearchQueryParser.splitExplicitArtistTitleQuery('Kartonyono Medot Janji'),
+        isEmpty,
+      );
+    });
+
+    test('keeps one-character title when artist and title are explicitly separated', () {
+      expect(
+        YoutubeSearchQueryParser.splitExplicitArtistTitleQuery('A - Alicia Keys'),
+        ['A', 'Alicia Keys'],
+      );
+    });
+
   });
 }

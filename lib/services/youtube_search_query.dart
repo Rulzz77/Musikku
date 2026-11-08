@@ -101,6 +101,32 @@ class YoutubeSearchQueryParser {
         caseSensitive: false,
       ).hasMatch(query);
 
+  /// Split an explicitly combined `artist - title` / `title - artist` query.
+  /// The caller must validate a candidate against BOTH parts; this is not a
+  /// general token split and must never broaden a normal one-part query.
+  static List<String> splitExplicitArtistTitleQuery(String query) {
+    final parts = query
+        .trim()
+        .split(RegExp(r'\s+(?:[-–—|])\s+'))
+        .map((part) => part.trim())
+        .where((part) => part.isNotEmpty)
+        .toList(growable: false);
+    if (parts.length != 2) return const <String>[];
+
+    const genericTerms = <String>{
+      'official', 'audio', 'video', 'music', 'song', 'songs', 'lagu',
+      'lyrics', 'lyric', 'lirik', 'mv', 'vevo', 'topic', 'latest', 'terbaru',
+    };
+    bool hasMeaningfulToken(String value) => value
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9\u0080-\uFFFF]+'), ' ')
+        .split(RegExp(r'\s+'))
+        .any((token) => token.isNotEmpty && !genericTerms.contains(token));
+
+    if (!parts.every(hasMeaningfulToken)) return const <String>[];
+    return parts;
+  }
+
   static SmartSearchIntent interpret(String query) {
     // Rapikan spasi ganda agar query yang sama berbagi kunci cache.
     final original = query.trim().replaceAll(_whitespace, ' ');

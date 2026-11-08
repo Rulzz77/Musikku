@@ -327,7 +327,7 @@ class YoutubeSearchService {
         var musicDataTitle = '';
         var musicDataArtist = '';
         var musicDataAlbum = '';
-        var bestMusicTitleScore = 0.0;
+        var bestMusicTitleScore = -1.0;
         try {
           final dynamic musicRows = detail.musicData;
           if (musicRows is Iterable) {
@@ -336,6 +336,9 @@ class YoutubeSearchService {
               final rowArtist = readString(() => row.artist);
               final rowAlbum = readString(() => row.album);
               if (rowTitle.isEmpty || rowArtist.isEmpty) continue;
+              // Use lexical overlap to choose among multiple structured rows,
+              // but still retain the first complete row when the visible video
+              // title is only `Provided to YouTube by ...` and overlap is zero.
               final score = _simpleTitleOverlap(candidate.title, rowTitle);
               if (score > bestMusicTitleScore) {
                 bestMusicTitleScore = score;
@@ -487,7 +490,16 @@ class YoutubeSearchService {
       final titleTokens = normalize(video.title).split(' ').toSet();
       final channelTokens = normalize(video.channelTitle).split(' ').toSet();
       final descriptionTokens = normalize(video.description).split(' ').toSet();
-      final identityTokens = <String>{...titleTokens, ...channelTokens};
+      final structuredTitleTokens = normalize(video.musicDataTitle).split(' ').toSet();
+      final structuredArtistTokens = normalize(video.musicDataArtist).split(' ').toSet();
+      final artistNameTokens = normalize(video.artistName).split(' ').toSet();
+      final identityTokens = <String>{
+        ...titleTokens,
+        ...channelTokens,
+        ...structuredTitleTokens,
+        ...structuredArtistTokens,
+        ...artistNameTokens,
+      };
       final identityCoverage =
           queryTokens.intersection(identityTokens).length / queryTokens.length;
       final titleCoverage =
@@ -506,10 +518,22 @@ class YoutubeSearchService {
           : (math.log(views + 1) / math.ln10 * 0.55)
               .clamp(0.0, 4.4)
               .toDouble();
+      // Prefer independently identifiable original releases over generic
+      // mirrors when the title/artist fit is otherwise close. This is a rank
+      // bonus only; the query matcher still decides whether a result is valid.
+      final alternateTitle = RegExp(
+        r'\b(?:live|remix|acoustic|instrumental|slowed|sped[ -]?up|nightcore|reverb)\b',
+        caseSensitive: false,
+      ).hasMatch(video.title);
+      final officialReleaseBonus =
+          YoutubeMusicPolicy.isOfficialMusicReleaseCandidate(video)
+              ? (alternateTitle ? 3.0 : 8.0)
+              : 0.0;
       return identityCoverage * 75 +
           titleCoverage * 16 +
           channelCoverage * 8 +
-          descriptionCoverage * 1 +
+          descriptionCoverage * 5 +
+          officialReleaseBonus +
           popularityTieBreak;
     }
 
@@ -522,8 +546,63 @@ class YoutubeSearchService {
     return ranked;
   }
 
-  Future<List<YoutubeSearchResult>> search(String query) =>
-      _search(query, spotifyImportMode: false);
+  Future<List<YoutubeSearchResult>> search(String query) async {
+    final primary = await _search(query, spotifyImportMode: false);
+    final parts = YoutubeSearchQueryParser.splitExplicitArtistTitleQuery(query);
+    // Most searches finish on the primary query. Only a sparse explicitly
+    // combined artist-title query gets two focused retries, so title and artist
+    // can each be indexed independently without penalizing ordinary searches.
+    // The explicit split is only a rescue path. If the normal mixed query
+    // already returned a healthy page, do not pay for two extra searches.
+    if (parts.isEmpty || primary.length >= 8) return primary;
+
+    final partResults = await Future.wait(parts.map((part) async {
+      try {
+        return await _search(
+          part,
+          spotifyImportMode: false,
+          manualAssistMode: true,
+        );
+      } catch (error) {
+        debugPrint('DUAL-INTENT SEARCH PART FAILED [$part]: $error');
+        return const <YoutubeSearchResult>[];
+      }
+    }));
+
+    final pool = <String, YoutubeSearchResult>{
+      for (final item in primary)
+        if (item.videoId.isNotEmpty) item.videoId: item,
+      for (final resultList in partResults)
+        for (final item in resultList)
+          if (item.videoId.isNotEmpty) item.videoId: item,
+    };
+    bool matchesIntent(YoutubeSearchResult video, String part) =>
+        YoutubeMusicPolicy.isOfficialMusicReleaseCandidateForQuery(
+          video,
+          query: part,
+        ) ||
+        _matchesStructuredMusicDataQuery(part, video);
+
+    final validatedParts = pool.values
+        .where((video) => parts.every((part) => matchesIntent(video, part)))
+        .toList(growable: false);
+    if (validatedParts.isEmpty) return primary;
+
+    final merged = <String, YoutubeSearchResult>{
+      for (final item in primary)
+        if (item.videoId.isNotEmpty) item.videoId: item,
+      for (final item in validatedParts)
+        if (item.videoId.isNotEmpty) item.videoId: item,
+    };
+    debugPrint(
+      'DUAL-INTENT SEARCH [$query]: primary=${primary.length}, '
+      'partResults=${pool.length - primary.length}, '
+      'verifiedBoth=${validatedParts.length}',
+    );
+    return _rankSearchCandidates(query, merged.values)
+        .take(30)
+        .toList(growable: false);
+  }
 
   /// Broader candidate collection exclusively for Spotify import. The normal
   /// manual search still uses query-scoped artist filtering; Spotify import
@@ -548,26 +627,42 @@ class YoutubeSearchService {
     String query,
     YoutubeSearchResult video,
   ) {
-    final structured = '${video.musicDataArtist} ${video.musicDataTitle}'
-        .toLowerCase()
+    final title = video.musicDataTitle.toLowerCase()
         .replaceAll(RegExp(r'[^a-z0-9\u0080-\uFFFF]+'), ' ')
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .trim();
-    if (structured.isEmpty) return false;
+        .replaceAll(RegExp(r'\s+'), ' ').trim();
+    final artist = video.musicDataArtist.toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9\u0080-\uFFFF]+'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (title.isEmpty && artist.isEmpty) return false;
 
     const ignored = <String>{
       'official', 'audio', 'video', 'music', 'song', 'songs', 'lagu',
       'terbaru', 'latest', 'channel', 'vevo', 'topic', '2024', '2025', '2026',
     };
-    final queryTokens = query
-        .toLowerCase()
+    bool keepToken(String token) =>
+        token.isNotEmpty && !ignored.contains(token);
+    final normalizedQuery = query.toLowerCase()
         .replaceAll(RegExp(r'[^a-z0-9\u0080-\uFFFF]+'), ' ')
-        .split(RegExp(r'\s+'))
-        .where((token) => token.length > 1 && !ignored.contains(token))
+        .replaceAll(RegExp(r'\ba\s+k\s+a\b'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    // Keep one-character titles such as `A`; only ignore the A.K.A. initialism.
+    bool keepQueryToken(String token) => token.isNotEmpty && !ignored.contains(token);
+    final queryTokens = normalizedQuery
+        .split(' ')
+        .where(keepQueryToken)
         .toSet();
-    if (queryTokens.isEmpty || queryTokens.length > 6) return false;
-    final structuredTokens = structured.split(' ').toSet();
-    return queryTokens.every(structuredTokens.contains) &&
+    if (queryTokens.isEmpty || queryTokens.length > 8) return false;
+    Set<String> tokens(String value) => value.split(' ').where(keepToken).toSet();
+    final titleTokens = tokens(title);
+    final artistTokens = tokens(artist);
+    final combinedTokens = <String>{...titleTokens, ...artistTokens};
+    double coverage(Set<String> field) =>
+        queryTokens.intersection(field).length / queryTokens.length;
+    final threshold = queryTokens.length == 1 ? 1.0 : 0.67;
+    return (coverage(titleTokens) >= threshold ||
+            coverage(artistTokens) >= threshold ||
+            coverage(combinedTokens) >= 0.80) &&
         YoutubeMusicPolicy.isMusicCandidate(video);
   }
 
@@ -575,6 +670,7 @@ class YoutubeSearchService {
     String query, {
     required bool spotifyImportMode,
     bool spotifyFastMode = false,
+    bool manualAssistMode = false,
   }) async {
     final keyword = query.trim();
     if (keyword.isEmpty) return const [];
@@ -592,11 +688,13 @@ class YoutubeSearchService {
     // Versioned cache separates Spotify's deeper candidate collection from
     // older, shorter/filtered result sets. Raw results are retained so a later
     // matcher improvement does not inherit an already-truncated candidate list.
-    final modeKey = spotifyFastMode
-        ? 'spotify-fast'
-        : (spotifyImportMode ? 'spotify-deep' : 'catalog');
+    final modeKey = manualAssistMode
+        ? 'manual-assist'
+        : (spotifyFastMode
+            ? 'spotify-fast'
+            : (spotifyImportMode ? 'spotify-deep' : 'catalog'));
     final cacheKey =
-        'explodeSearchV13StagedSpotifyImport|$modeKey|${keyword.toLowerCase()}|${effectiveQuery.toLowerCase()}|${intent.latest ? 'date' : 'relevance'}';
+        'explodeSearchV18BidirectionalMetadataSearch|$modeKey|${keyword.toLowerCase()}|${effectiveQuery.toLowerCase()}|${intent.latest ? 'date' : 'relevance'}';
     final resultLimit = spotifyImportMode ? 60 : 30;
     final cached = _cache[cacheKey];
 
@@ -658,19 +756,29 @@ class YoutubeSearchService {
             return acceptsCandidate(video);
           })
           .toList(growable: false);
+      bool hasRecognizedStudioOriginal(List<YoutubeSearchResult> videos) =>
+          videos.any((video) =>
+              YoutubeMusicPolicy.isOfficialMusicReleaseCandidate(video) &&
+              !RegExp(
+                r'\b(?:live|remix|acoustic|instrumental|slowed|sped[ -]?up|nightcore|reverb)\b',
+                caseSensitive: false,
+              ).hasMatch(video.title));
 
       // The first relevance page can be dominated by remixes, fan mirrors, or
       // similarly named songs. Spotify import inspects up to three relevance
       // pages; ordinary search keeps its lighter one-page fallback behavior.
       dynamic pageCursor = firstPage;
-      final maxRelevancePages = spotifyFastMode
+      final maxRelevancePages = (spotifyFastMode || manualAssistMode)
           ? 1
           : (spotifyImportMode ? 3 : 2);
       for (var pageNumber = 1; pageNumber < maxRelevancePages; pageNumber++) {
-        final acceptedCount = accepted().length;
+        final acceptedCandidates = accepted();
+        final acceptedCount = acceptedCandidates.length;
+        final hasRecognizedOriginal = !spotifyImportMode &&
+            hasRecognizedStudioOriginal(acceptedCandidates);
         final enoughCandidates = spotifyImportMode
             ? acceptedCount >= 45
-            : acceptedCount >= 12;
+            : acceptedCount >= 12 && hasRecognizedOriginal;
         if (enoughCandidates) break;
         try {
           final beforeCount = rawResults.length;
@@ -693,6 +801,7 @@ class YoutubeSearchService {
         (video) => (video.viewCount ?? 0) >= 100000,
       );
       if (!spotifyFastMode &&
+          !manualAssistMode &&
           !intent.latest &&
           (spotifyImportMode || beforePopular.length < 12 || !hasWidelyViewed)) {
         try {
@@ -706,23 +815,72 @@ class YoutubeSearchService {
         }
       }
 
-      // Ordinary search can enrich a tiny popular shortlist. Spotify import
-      // performs a track-aware detail lookup after combining its query variants.
-      if (!spotifyImportMode && !intent.latest && accepted().length < 12) {
-        final acceptedIds = accepted().map((video) => video.videoId).toSet();
+      // A sparse manual search gets one bounded retry using common release
+      // wording. Keep the original user query intact and merge by video ID.
+      if (!spotifyImportMode &&
+          !manualAssistMode &&
+          !intent.latest &&
+          accepted().length < 6 &&
+          keyword.split(RegExp(r'\s+')).length <= 6 &&
+          !RegExp(r'\b(?:official\s+audio|official\s+music\s+video|live\s+performance)\b', caseSensitive: false).hasMatch(keyword)) {
+        final lowerKeyword = keyword.toLowerCase();
+        final fallbackQueries = <String>[
+          if (!RegExp(r'\baudio\b', caseSensitive: false).hasMatch(lowerKeyword))
+            '$keyword official audio',
+          if (!RegExp(r'\b(?:video|mv)\b', caseSensitive: false).hasMatch(lowerKeyword))
+            '$keyword official music video',
+        ];
+        for (final fallbackQuery in fallbackQueries.take(2)) {
+          try {
+            final dynamic fallbackPage = await _youtubeExplode.search.search(
+              fallbackQuery,
+              filter: ytex.SortFilters.relevance,
+            );
+            final beforeCount = rawResults.length;
+            appendPage(fallbackPage);
+            debugPrint(
+              'EXPLODE SEARCH FALLBACK: query=$fallbackQuery, '
+              'new=${rawResults.length - beforeCount}, accepted=${accepted().length}',
+            );
+            if (accepted().length >= 10) break;
+          } catch (fallbackError) {
+            debugPrint('EXPLODE SEARCH FALLBACK SKIPPED: $fallbackError');
+          }
+        }
+      }
+
+      // Enrich a small relevant shortlist even when view counts are modest:
+      // regional releases and new songs can have authoritative MusicData credits.
+      final acceptedBeforeMetadata = accepted();
+      final hasRecognizedOriginal =
+          hasRecognizedStudioOriginal(acceptedBeforeMetadata);
+      if (!spotifyImportMode &&
+          !intent.latest &&
+          (manualAssistMode
+              ? acceptedBeforeMetadata.length < 12
+              : (acceptedBeforeMetadata.length < 12 || !hasRecognizedOriginal))) {
+        // Some Topic/label uploads expose their real song and performer only
+        // in Video.musicData, not in the lightweight search title/description.
+        // Inspect a tiny shortlist even when the page is crowded. Include both
+        // query-ranked candidates and the first relevance results because a
+        // `Provided to YouTube by ...` title cannot rank by the hidden song name.
         final metadataCandidates = rawResults
             .where((video) =>
-                !acceptedIds.contains(video.videoId) &&
-                (video.viewCount ?? 0) >= 100000 &&
-                YoutubeMusicPolicy.isMusicCandidate(video))
+                YoutubeMusicPolicy.isMusicCandidate(video) &&
+                video.musicDataTitle.trim().isEmpty &&
+                video.musicDataArtist.trim().isEmpty)
             .toList(growable: false);
-        // Relevance decides which popular candidates deserve a detail lookup;
-        // view count is only a tie-breaker. Otherwise unrelated viral uploads
-        // can consume all three metadata slots before the matching track is
-        // inspected for its structured YouTube Music artist/title credit.
-        final shortlist = _rankSearchCandidates(keyword, metadataCandidates)
-            .take(3)
-            .toList(growable: false);
+        final shortlistById = <String, YoutubeSearchResult>{};
+        final metadataLimit = manualAssistMode ? 2 : 4;
+        for (final video in _rankSearchCandidates(keyword, metadataCandidates)
+            .take(metadataLimit)) {
+          shortlistById[video.videoId] = video;
+        }
+        for (final video in metadataCandidates.take(metadataLimit)) {
+          shortlistById.putIfAbsent(video.videoId, () => video);
+          if (shortlistById.length >= metadataLimit) break;
+        }
+        final shortlist = shortlistById.values.toList(growable: false);
         if (shortlist.isNotEmpty) {
           final enriched = await enrichMusicMetadata(shortlist);
           final enrichedById = {

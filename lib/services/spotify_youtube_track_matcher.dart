@@ -72,6 +72,36 @@ class SpotifyYoutubeTrackMatcher {
         .toList(growable: false);
   }
 
+  /// Title-only fallbacks run after focused artist+title queries. YouTube
+  /// sometimes indexes a song under its title while keeping the performer only
+  /// in structured credits; the final matcher still verifies title, artist and
+  /// duration before importing anything.
+  static List<String> buildTitleOnlyFallbackQueries(SpotifyPlaylistTrack track) {
+    final queries = <String>{};
+    final coreTitle = _searchCoreTitle(track.title);
+    if (coreTitle.isNotEmpty) queries.add(coreTitle);
+    final fullTitle = track.title.trim();
+    if (fullTitle.isNotEmpty) queries.add(fullTitle);
+    return queries.toList(growable: false);
+  }
+
+  /// Artist-only fallback queries run only after focused artist+title search.
+  /// Every returned video still passes the strict title/artist/duration matcher.
+  static List<String> buildArtistOnlyFallbackQueries(SpotifyPlaylistTrack track) {
+    final queries = <String>{};
+    for (var index = 0; index < track.artists.length && index < 4; index++) {
+      final artist = track.artists[index];
+      // The primary artist gets all three useful forms (e.g. NDX A.K.A.,
+      // NDX AKA, NDXAKA); collaborator fallbacks stay bounded to two forms.
+      final variants = _artistQueryVariants(artist).take(index == 0 ? 3 : 2);
+      for (final variant in variants) {
+        final normalized = variant.replaceAll(RegExp(r'\s+'), ' ').trim();
+        if (normalized.isNotEmpty) queries.add(normalized);
+      }
+    }
+    return queries.toList(growable: false);
+  }
+
   static List<String> _artistQueryVariants(String rawArtist) {
     final artist = rawArtist.trim();
     if (artist.isEmpty) return const <String>[];

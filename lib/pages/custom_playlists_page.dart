@@ -975,15 +975,24 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
           // most focused artist/title query; do not repeat every query variant.
           if (!hasConfidentMatch() && widget.searchSpotifyFast != null) {
             deepFallbackUsed = true;
-            final deepQuery = queries.first;
-            try {
-              final results = await searchSongs(deepQuery);
-              mergeCandidates(results);
-            } catch (error) {
-              debugPrint(
-                'SPOTIFY DEEP FALLBACK FAILED [${track.title}] '
-                '"$deepQuery": $error',
-              );
+            final deepQueries = <String>{
+              queries.first,
+              ...SpotifyYoutubeTrackMatcher.buildTitleOnlyFallbackQueries(track),
+              ...SpotifyYoutubeTrackMatcher.buildArtistOnlyFallbackQueries(track),
+            };
+            for (final deepQuery in deepQueries) {
+              if (deepQuery.trim().isEmpty) continue;
+              try {
+                mergeCandidates(await searchSongs(deepQuery));
+              } catch (error) {
+                debugPrint(
+                  'SPOTIFY DEEP FALLBACK FAILED [${track.title}] '
+                  '"$deepQuery": $error',
+                );
+              }
+              // The artist-only result pool is broad; stop after a corroborated
+              // original is found, while cover candidates never stop the search.
+              if (hasConfidentMatch()) break;
             }
           }
 

@@ -136,6 +136,88 @@ void main() {
       expect(playlist.containsTrack(second), isFalse);
     });
 
+
+    test('does not mark a solo upload as the same Spotify collaboration', () {
+      final importedDuet = track(
+        id: 'spotify-duet-youtube',
+        title: 'Satru 2',
+        channel: 'Denny Caknan, Happy Asmara',
+        artist: 'Denny Caknan',
+        spotifyTrackId: 'spotify-satru-2-duet',
+        spotifyDurationMs: 242000,
+        durationSeconds: 242,
+      );
+      final soloUpload = track(
+        id: 'youtube-solo',
+        title: 'Satru 2 (Official Audio)',
+        channel: 'Denny Caknan - Topic',
+        artist: 'Denny Caknan',
+        durationSeconds: 242,
+      );
+      final playlist = Playlist(
+        id: 'duet',
+        name: 'Spotify duet',
+        songs: [importedDuet],
+      );
+
+      expect(playlist.containsTrack(soloUpload), isFalse);
+    });
+
+    test('marks a Spotify collaboration only when all performers are present', () {
+      final importedDuet = track(
+        id: 'spotify-duet-youtube',
+        title: 'Satru 2',
+        channel: 'Denny Caknan, Happy Asmara',
+        artist: 'Denny Caknan',
+        spotifyTrackId: 'spotify-satru-2-duet',
+        spotifyDurationMs: 242000,
+        durationSeconds: 242,
+      );
+      final duetUpload = track(
+        id: 'youtube-duet',
+        title: 'Satru 2 (Official Audio)',
+        channel: 'Denny Caknan - Topic',
+        artist: 'Denny Caknan, Happy Asmara',
+        durationSeconds: 242,
+      );
+      final playlist = Playlist(
+        id: 'duet',
+        name: 'Spotify duet',
+        songs: [importedDuet],
+      );
+
+      expect(playlist.containsTrack(duetUpload), isTrue);
+    });
+
+
+    test('uses structured YouTube Music title and artist for playlist identity', () {
+      final imported = track(
+        id: 'spotify-sigar',
+        title: 'Sigar',
+        channel: 'Denny Caknan',
+        artist: 'Denny Caknan',
+        spotifyTrackId: 'spotify-sigar-id',
+        spotifyDurationMs: 242000,
+        durationSeconds: 242,
+      );
+      final structuredYoutube = YoutubeSearchResult(
+        videoId: 'youtube-sigar',
+        title: 'Provided to YouTube by Musica Studios',
+        channelTitle: 'Musica Studios',
+        musicDataTitle: 'Sigar',
+        musicDataArtist: 'Denny Caknan',
+        durationSeconds: 242,
+        thumbnailUrl: '',
+      );
+      final playlist = Playlist(
+        id: 'structured',
+        name: 'Spotify',
+        songs: [imported],
+      );
+
+      expect(playlist.containsTrack(structuredYoutube), isTrue);
+    });
+
     test('does not mark a same-title song from a different artist as added', () {
       final imported = track(
         id: 'imported-id',

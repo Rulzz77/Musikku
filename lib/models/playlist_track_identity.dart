@@ -43,13 +43,49 @@ class PlaylistTrackIdentity {
       ..._artistNames(first),
       ..._artistNames(second),
     };
-    final firstTitle = _canonicalTitle(first.title, artistNames);
-    final secondTitle = _canonicalTitle(second.title, artistNames);
+    final firstTitle = _canonicalTitle(_identityTitle(first), artistNames);
+    final secondTitle = _canonicalTitle(_identityTitle(second), artistNames);
     if (firstTitle.isEmpty || secondTitle.isEmpty || firstTitle != secondTitle) {
       return false;
     }
 
+    // One shared performer is not enough to identify a Spotify duet. Require
+    // the YouTube result to expose every Spotify collaborator before showing
+    // the "already added" checkmark.
+    if (!_spotifyCollaborationCreditsMatch(first, second)) return false;
+
     return _artistEvidenceMatches(first, second);
+  }
+
+  static bool _spotifyCollaborationCreditsMatch(
+    YoutubeSearchResult first,
+    YoutubeSearchResult second,
+  ) {
+    final firstIsSpotify = first.spotifyTrackId.trim().isNotEmpty ||
+        first.spotifyDurationMs != null;
+    final secondIsSpotify = second.spotifyTrackId.trim().isNotEmpty ||
+        second.spotifyDurationMs != null;
+    if (firstIsSpotify == secondIsSpotify) return true;
+
+    final imported = firstIsSpotify ? first : second;
+    final youtube = firstIsSpotify ? second : first;
+    final importedArtists = _explicitArtists(imported);
+    if (importedArtists.length <= 1) return true;
+
+    final youtubeArtists = _explicitArtists(youtube);
+    if (youtubeArtists.isEmpty) return false;
+    return importedArtists.every((expected) => youtubeArtists.any(
+          (actual) => _sameArtist(expected, actual),
+        ));
+  }
+
+  static String _identityTitle(YoutubeSearchResult song) {
+    // Spotify imports retain Spotify's canonical visible title. For ordinary
+    // YouTube results prefer structured MusicData, which remains reliable even
+    // when the visible upload title is only "Provided to YouTube by ...".
+    if (song.spotifyTrackId.trim().isNotEmpty) return song.title;
+    final musicTitle = song.musicDataTitle.trim();
+    return musicTitle.isNotEmpty ? musicTitle : song.title;
   }
 
   static int? _durationMilliseconds(YoutubeSearchResult song) {
@@ -186,6 +222,7 @@ class PlaylistTrackIdentity {
     }
 
     addCredits(song.artistName);
+    addCredits(song.musicDataArtist);
     final metadata = YoutubeMusicMetadataParser.parse(
       title: song.title,
       description: song.description,
@@ -283,6 +320,7 @@ class PlaylistTrackIdentity {
     }
 
     add(song.artistName);
+    add(song.musicDataArtist);
     final metadata = YoutubeMusicMetadataParser.parse(
       title: song.title,
       description: song.description,

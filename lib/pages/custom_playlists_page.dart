@@ -14,6 +14,7 @@ import '../models/youtube_search_result.dart';
 import '../services/offline_download_service.dart';
 import '../services/spotify_playlist_import_service.dart';
 import '../services/spotify_youtube_track_matcher.dart';
+import '../services/youtube_music_policy.dart';
 import '../services/audio_download_estimator.dart';
 import '../widgets/playlist_widgets.dart' show showPlaylistNameDialog;
 import '../widgets/unified_artwork.dart';
@@ -968,12 +969,29 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
                 track,
                 allCandidates,
               );
+              final coverCandidates = allCandidates
+                  .where(YoutubeMusicPolicy.isExplicitCoverVersion)
+                  .length;
               debugPrint(
                 'SPOTIFY IMPORT MATCH [${track.title} - ${track.primaryArtist}]: '
                 'queries=${queries.length}, candidates=${allCandidates.length}, '
+                'covers=$coverCandidates, '
                 'metadata=${allCandidates.where((item) => item.musicDataTitle.isNotEmpty && item.musicDataArtist.isNotEmpty).length}, '
                 'selected=${match?.videoId ?? 'NONE'}',
               );
+              if (match == null && allCandidates.isNotEmpty) {
+                final diagnosticCandidates = allCandidates.take(12).map((item) {
+                  final duration =
+                      item.durationSeconds?.round().toString() ?? '?';
+                  final views = item.viewCount?.toString() ?? '?';
+                  return '${item.title} '
+                      '[${item.channelTitle}; ${duration}s; $views views]';
+                }).join(' || ');
+                debugPrint(
+                  'SPOTIFY IMPORT UNMATCHED CANDIDATES [${track.title}]: '
+                  '$diagnosticCandidates',
+                );
+              }
               return match == null
                   ? null
                   : SpotifyYoutubeTrackMatcher.applySpotifyMetadata(track, match);

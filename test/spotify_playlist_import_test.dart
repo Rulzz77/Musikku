@@ -1196,6 +1196,152 @@ void main() {
       );
     });
 
+    test('finds Dian Anic - Kecewa from the Musik Proaktif official video', () {
+      const track = SpotifyPlaylistTrack(
+        title: 'Kecewa',
+        artists: ['Dian Anic'],
+        durationMs: 386000,
+      );
+      const officialLabelUpload = YoutubeSearchResult(
+        videoId: 'dian-anic-kecewa-official',
+        title: 'Dian Anic - Kecewa (Official Music Video)',
+        channelTitle: 'Musik Proaktif',
+        description: 'Video klip terbaru Dian Anic yang berjudul Kecewa.\n'
+            'Title: Kecewa\nArtist : Dian Anic\n'
+            'Label : PT. Media Musik Proaktif',
+        thumbnailUrl: '',
+        durationSeconds: 386,
+        viewCount: 6218578,
+      );
+
+      expect(YoutubeMusicPolicy.isSpotifyImportCandidate(officialLabelUpload), isTrue);
+      expect(
+        SpotifyYoutubeTrackMatcher.bestMatch(track, [officialLabelUpload])?.videoId,
+        'dian-anic-kecewa-official',
+      );
+    });
+
+    test('uses a clearly attributed cover only when the original is unavailable', () {
+      const track = SpotifyPlaylistTrack(
+        title: 'Kecewa',
+        artists: ['Dian Anic'],
+        durationMs: 386000,
+      );
+      const coverUpload = YoutubeSearchResult(
+        videoId: 'kecewa-fanny-sabila-cover',
+        title: 'KECEWA - DIAN ANIC [SOSOK] | COVER BY FANNY SABILA',
+        channelTitle: 'fannysabila official',
+        description: 'DIAN ANIC - KECEWA\nVOCAL COVER: FANNY SABILA',
+        thumbnailUrl: '',
+        durationSeconds: 353,
+        viewCount: 5983261,
+      );
+
+      expect(YoutubeMusicPolicy.isSpotifyImportCandidate(coverUpload), isTrue);
+      expect(
+        SpotifyYoutubeTrackMatcher.bestMatch(track, [coverUpload])?.videoId,
+        'kecewa-fanny-sabila-cover',
+      );
+    });
+
+    test('prefers original label upload over a popular cover', () {
+      const track = SpotifyPlaylistTrack(
+        title: 'Kecewa',
+        artists: ['Dian Anic'],
+        durationMs: 386000,
+      );
+      const original = YoutubeSearchResult(
+        videoId: 'kecewa-original',
+        title: 'Dian Anic - Kecewa (Official Music Video)',
+        channelTitle: 'Musik Proaktif',
+        description: 'Title: Kecewa\nArtist: Dian Anic',
+        thumbnailUrl: '',
+        durationSeconds: 386,
+        viewCount: 2000,
+      );
+      const cover = YoutubeSearchResult(
+        videoId: 'kecewa-cover',
+        title: 'KECEWA - DIAN ANIC | COVER BY FANNY SABILA',
+        channelTitle: 'fannysabila official',
+        description: 'VOCAL COVER: FANNY SABILA',
+        thumbnailUrl: '',
+        durationSeconds: 353,
+        viewCount: 5983261,
+      );
+
+      expect(
+        SpotifyYoutubeTrackMatcher.bestMatch(track, [cover, original])?.videoId,
+        'kecewa-original',
+      );
+    });
+
+    test('finds Keloas from Global Musik Era Digital official live music upload', () {
+      const track = SpotifyPlaylistTrack(
+        title: 'Keloas',
+        artists: ['Rena Movies', 'Ageng Music'],
+        durationMs: 393000,
+      );
+      const officialLiveUpload = YoutubeSearchResult(
+        videoId: 'keloas-rena-movies-ageng-music',
+        title: 'Rena Movies ft Ageng Music - Keloas (Official Live Music)',
+        channelTitle: 'Global Musik Era Digital',
+        description: 'Official Live Music : Rena Movies ft Ageng Music - Keloas\n'
+            'Artist : Rena Movies ft Ageng Music\nSongwriter : Yahya',
+        thumbnailUrl: '',
+        durationSeconds: 393,
+        viewCount: 7431245,
+      );
+
+      expect(YoutubeMusicPolicy.isSpotifyImportCandidate(officialLiveUpload), isTrue);
+      expect(
+        SpotifyYoutubeTrackMatcher.bestMatch(track, [officialLiveUpload])?.videoId,
+        'keloas-rena-movies-ageng-music',
+      );
+    });
+
+    test('allows a Keloas cover as fallback when Spotify performer is not on the upload', () {
+      const track = SpotifyPlaylistTrack(
+        title: 'Keloas',
+        artists: ['Dewi Kirana'],
+        durationMs: 300000,
+      );
+      const coverUpload = YoutubeSearchResult(
+        videoId: 'keloas-susi-ngapak-cover',
+        title: 'KELOAS - SUSI NGAPAK (Live Cover x oQinawa)',
+        channelTitle: 'Susi Ngapak Official',
+        description: 'Original Song: Keloas. Vocal cover by Susi Ngapak.',
+        thumbnailUrl: '',
+        durationSeconds: 300,
+        viewCount: 20000,
+      );
+
+      expect(YoutubeMusicPolicy.isSpotifyImportCandidate(coverUpload), isTrue);
+      expect(
+        SpotifyYoutubeTrackMatcher.bestMatch(track, [coverUpload])?.videoId,
+        'keloas-susi-ngapak-cover',
+      );
+    });
+
+    test('cover fallback does not make karaoke or AI uploads importable', () {
+      const karaoke = YoutubeSearchResult(
+        videoId: 'keloas-karaoke',
+        title: 'Keloas Karaoke Cover',
+        channelTitle: 'Karaoke Channel',
+        thumbnailUrl: '',
+        durationSeconds: 300,
+      );
+      const aiCover = YoutubeSearchResult(
+        videoId: 'keloas-ai-cover',
+        title: 'Keloas AI Cover by Singer',
+        channelTitle: 'AI Music',
+        thumbnailUrl: '',
+        durationSeconds: 300,
+      );
+
+      expect(YoutubeMusicPolicy.isSpotifyImportCandidate(karaoke), isFalse);
+      expect(YoutubeMusicPolicy.isSpotifyImportCandidate(aiCover), isFalse);
+    });
+
     test('view count alone never authenticates a third-party uploader', () {
       final viralWrongTrack = candidate(
         id: 'viral-wrong-track',

@@ -66,12 +66,13 @@ class SpotifyYoutubeTrackMatcher {
     }
 
     YoutubeSearchResult? best;
-    var bestScore = 0.0;
+    var bestScore = double.negativeInfinity;
     var bestOfficialRank = -1;
     for (final candidate in candidates) {
+      final isCover = YoutubeMusicPolicy.isExplicitCoverVersion(candidate);
       if (candidate.isLocal ||
-          !YoutubeMusicPolicy.isMusicCandidate(candidate) ||
-          _isClearlyUnofficialChannel(candidate.channelTitle)) {
+          !YoutubeMusicPolicy.isSpotifyImportCandidate(candidate) ||
+          (_isClearlyUnofficialChannel(candidate.channelTitle) && !isCover)) {
         continue;
       }
 
@@ -83,27 +84,52 @@ class SpotifyYoutubeTrackMatcher {
         candidate.title,
         spotifyTrack.title,
       );
-      final score = (titleScore * 0.64) + (artistScore * 0.36) -
-          durationPenalty - alternatePenalty;
 
-      // Require near-complete title coverage and a strong primary-artist
-      // signal before considering source authority. A fake "Official" label
-      // can never rescue a wrong title or wrong performer.
-      final acceptable = titleCoverage >= 0.85 &&
-          titleScore >= 0.62 &&
-          artistScore >= 0.82 &&
-          score >= 0.70;
-      if (!acceptable) continue;
+      int officialRank;
+      double score;
+      if (isCover) {
+        // A cover is a deliberate fallback for Spotify import only. The
+        // original/artist-owned/label candidate always outranks it. Require a
+        // near-exact song title plus corroboration from duration or popularity
+        // so a different song with a generic title is not selected by accident.
+        final expectedSeconds = spotifyTrack.durationMs == null
+            ? null
+            : spotifyTrack.durationMs! / 1000.0;
+        final actualSeconds = candidate.durationSeconds;
+        final durationClose = expectedSeconds != null &&
+            actualSeconds != null &&
+            (expectedSeconds - actualSeconds).abs() <= 90;
+        final establishedCover = (candidate.viewCount ?? 0) >= 1000;
+        final titleMatchesStrongly = titleCoverage >= 0.95 && titleScore >= 0.76;
+        if (!titleMatchesStrongly || (!durationClose && !establishedCover)) {
+          continue;
+        }
+        officialRank = 1; // lower priority than every verified original source
+        score = (titleScore * 0.82) +
+            (durationClose ? 0.12 : 0) +
+            ((candidate.viewCount ?? 0) >= 10000 ? 0.06 : 0) -
+            durationPenalty;
+      } else {
+        score = (titleScore * 0.64) + (artistScore * 0.36) -
+            durationPenalty - alternatePenalty;
 
-      // YouTube search relevance is not a source-authenticity signal. Prefer
-      // Topic/VEVO, structured distributor credits, and the artist's own
-      // channel over a fan/re-upload mirror whenever both match the same song.
-      // Score and duration are tie-breakers only within the same authority tier.
-      final officialRank = _officialSourceRank(spotifyTrack, candidate);
-      // Unknown uploaders need independent verification: exact YouTube Music
-      // credits, an explicit distributor block, or a popular near-exact title
-      // carrying the expected artist. A copied song title alone is not enough.
-      if (officialRank < 3) continue;
+        // Require near-complete title coverage and a strong primary-artist
+        // signal before considering source authority. A fake "Official" label
+        // can never rescue a wrong title or wrong performer.
+        final acceptable = titleCoverage >= 0.85 &&
+            titleScore >= 0.62 &&
+            artistScore >= 0.82 &&
+            score >= 0.70;
+        if (!acceptable) continue;
+
+        // YouTube search relevance is not a source-authenticity signal. Prefer
+        // Topic/VEVO, structured distributor credits, and artist/label uploads.
+        officialRank = _officialSourceRank(spotifyTrack, candidate);
+        if (officialRank < 3) continue;
+      }
+
+      // Verified official/original uploads outrank covers regardless of views.
+      // Among equal source tiers, prefer the stronger title/artist/duration fit.
       if (officialRank > bestOfficialRank ||
           (officialRank == bestOfficialRank && score > bestScore)) {
         best = candidate;
@@ -124,9 +150,10 @@ class SpotifyYoutubeTrackMatcher {
     int limit = 8,
   }) {
     final eligible = candidates.where((candidate) {
+      final isCover = YoutubeMusicPolicy.isExplicitCoverVersion(candidate);
       if (candidate.isLocal ||
-          !YoutubeMusicPolicy.isMusicCandidate(candidate) ||
-          _isClearlyUnofficialChannel(candidate.channelTitle)) {
+          !YoutubeMusicPolicy.isSpotifyImportCandidate(candidate) ||
+          (_isClearlyUnofficialChannel(candidate.channelTitle) && !isCover)) {
         return false;
       }
       return _tokenCoverage(spotifyTrack.title, candidate.title) >= 0.80 &&
@@ -180,7 +207,7 @@ class SpotifyYoutubeTrackMatcher {
       caseSensitive: false,
     ).hasMatch(channelRaw);
     final officialTitle = RegExp(
-      r'\b(?:official\s+(?:audio|video|music\s+video|lyrics?|visualizer)|music\s+video\s+official)\b',
+      r'\b(?:official\s+(?:audio|video|music\s+video|live\s+music|live\s+performance|lyrics?|visualizer)|music\s+video\s+official)\b',
       caseSensitive: false,
     ).hasMatch(title);
     final providedToYoutube = RegExp(
@@ -193,6 +220,10 @@ class SpotifyYoutubeTrackMatcher {
           primaryArtist,
           _normalizeTrackTitle(track.title),
         );
+    final directLabelArtistCredit = _hasDirectDescriptionArtistCredit(
+      description,
+      primaryArtist,
+    );
 
     // Rank artist-owned Topic/VEVO channels above label fallbacks. This is
     // important because a label's result may say "Official Audio" and appear
@@ -203,7 +234,12 @@ class SpotifyYoutubeTrackMatcher {
     // A structured distributor delivery is strong evidence, but remains below
     // the artist's own channel so the original performer upload wins when both
     // are available.
-    if (structuredDistributorCredit) return 4;
+    if (structuredDistributorCredit ||
+        (directLabelArtistCredit &&
+            (officialTitle || officialChannel ||
+                _isKnownMusicLabelChannel(channelRaw)))) {
+      return 4;
+    }
 
     // Structured YouTube Music song/artist credits are stronger evidence than
     // uploader identity or popularity. Do not require an arbitrary view-count
@@ -322,6 +358,12 @@ class SpotifyYoutubeTrackMatcher {
     final channel = _normalizeChannelIdentity(rawChannel);
     const labels = <String>[
       'musica studios',
+      'musik proaktif',
+      'proaktif',
+      'global musik era digital',
+      'pelita utama',
+      'henny adella',
+      'milady record official',
       'trinity optima production',
       'sony music',
       'sony music india',
@@ -446,7 +488,16 @@ class SpotifyYoutubeTrackMatcher {
     // Otherwise guest names become mandatory title tokens and valid single
     // uploads are incorrectly reported as missing.
     final withoutFeature = _searchCoreTitle(withoutSourceAttribution);
-    return _normalize(withoutFeature);
+    final withoutCoverAttribution = withoutFeature
+        .replaceFirst(
+          RegExp(r'\s*[|–—-]\s*(?:cover(?:ed)?\s+by|cover)\b.*$', caseSensitive: false),
+          '',
+        )
+        .replaceFirst(
+          RegExp(r'\s*\((?:[^)]{0,50}\bcover\b[^)]*)\)\s*$', caseSensitive: false),
+          '',
+        );
+    return _normalize(withoutCoverAttribution);
   }
 
   static Set<String> _tokens(String value) => _normalizeTrackTitle(value)
@@ -503,6 +554,10 @@ class SpotifyYoutubeTrackMatcher {
       primaryArtist,
       _normalizeTrackTitle(spotifyTrack.title),
     );
+    final primaryDirectlyCredited = _hasDirectDescriptionArtistCredit(
+      candidate.description,
+      primaryArtist,
+    );
     final structuredArtist = _normalizeArtistText(candidate.musicDataArtist);
     final parsedOfficialArtist = _normalizeArtistText(candidate.artistName);
     final primaryInStructuredMusicData =
@@ -519,6 +574,7 @@ class SpotifyYoutubeTrackMatcher {
     if (!primaryInTitle &&
         !primaryInChannel &&
         !primaryExplicitlyCredited &&
+        !primaryDirectlyCredited &&
         !primaryInStructuredMusicData &&
         !primaryInParsedOfficialCredit) {
       return 0;
@@ -530,7 +586,9 @@ class SpotifyYoutubeTrackMatcher {
         ? 1.0
         : primaryInChannel
             ? 0.96
-            : 0.90;
+            : (primaryExplicitlyCredited || primaryDirectlyCredited)
+                ? 0.94
+                : 0.90;
 
     // Additional Spotify collaborators strengthen a match when the upload
     // names them too, but they never replace a missing primary-artist credit.
@@ -575,6 +633,26 @@ class SpotifyYoutubeTrackMatcher {
         significantTokens.single.length >= 4;
     if (significantTokens.length < 2 && !isSingleInitialPrefix) return false;
     return _containsPhrase(normalizedText, significantTokens.join(' '));
+  }
+
+  static bool _hasDirectDescriptionArtistCredit(
+    String rawDescription,
+    String normalizedArtist,
+  ) {
+    if (rawDescription.trim().isEmpty || normalizedArtist.isEmpty) return false;
+    final lines = rawDescription.split(RegExp(r'[\r\n]+'));
+    final creditLine = RegExp(
+      r'^\s*(?:artist|artist name|singer|vocal(?:s)?|performer|penyanyi|'
+      r'dinyanyikan oleh|dibawakan oleh)\s*[:\-]\s*(.+?)\s*$',
+      caseSensitive: false,
+    );
+    for (final line in lines) {
+      final match = creditLine.firstMatch(line);
+      if (match == null) continue;
+      final creditedArtist = _normalizeArtistText(match.group(1) ?? '');
+      if (_artistCreditMatches(creditedArtist, normalizedArtist)) return true;
+    }
+    return false;
   }
 
   static bool _hasExplicitDescriptionCredit(
@@ -645,8 +723,6 @@ class SpotifyYoutubeTrackMatcher {
     String expectedTitle,
   ) {
     const alternateMarkers = <String>[
-      r'\blive\b',
-      r'\bconcert\b',
       r'\bacoustic\b',
       r'\binstrumental\b',
       r'\bremix\b',

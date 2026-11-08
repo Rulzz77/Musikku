@@ -66,6 +66,63 @@ class YoutubeMusicPolicy {
 
   /// Menolak versi yang jelas bukan rilisan original. Pola cover sengaja
   /// spesifik: judul lagu sah seperti "Cover Me in Sunshine" tidak dibuang.
+  /// True only for an explicit song-cover marker. This is separate from the
+  /// general unofficial-version filter so Spotify import can use a cover as a
+  /// last-resort audio match without admitting karaoke, AI, nightcore, or fan edits.
+  static bool isExplicitCoverVersion(YoutubeSearchResult video) {
+    final title = video.title;
+    final description = video.description;
+    final channel = video.channelTitle;
+    final titleOrDescription = RegExp(
+      r'\b(?:cover(?:ed)?\s+(?:by|version|song|lagu|music|musik|of)|'
+      r'(?:song|track|music|lagu)\s+covers?|'
+      r'(?:vocal|acoustic|piano|guitar|gitar|live)\s+cover|'
+      r'versi\s+cover|kover)\b',
+      caseSensitive: false,
+    ).hasMatch('$title\n$description');
+    final coverChannel = RegExp(
+      r'\bcover(?:s|\s+(?:song|music|channel|songs))?\b',
+      caseSensitive: false,
+    ).hasMatch(channel);
+    return titleOrDescription || coverChannel;
+  }
+
+  /// Spotify playlist import may accept explicit covers as a fallback. The
+  /// normal MusikKu catalogue remains strict and continues excluding covers.
+  /// Non-music, AI, karaoke, Shorts, live streams, collections, and very short
+  /// clips remain blocked in both paths.
+  static bool isSpotifyImportCandidate(YoutubeSearchResult video) {
+    if (video.isLocal) return false;
+    if (video.videoId.trim().isEmpty ||
+        video.title.trim().isEmpty ||
+        video.isLive ||
+        video.isUpcoming ||
+        isLikelyShortForm(video) ||
+        isLikelyNonMusicVideo(video) ||
+        _hasExplicitNonMusicShortLabel(video) ||
+        isLikelyAiGeneratedMusic(video) ||
+        isLikelyAlbumOrPlaylist(video)) {
+      return false;
+    }
+
+    final seconds = video.durationSeconds;
+    if (seconds != null &&
+        (seconds <= 30 || seconds > maxStandaloneTrackDurationSeconds)) {
+      return false;
+    }
+
+    if (!isExplicitCoverVersion(video)) return isMusicCandidate(video);
+
+    // Covers are allowed only as actual-length songs. Explicit low-quality
+    // variants stay excluded even when their title also contains "cover".
+    final blockedVariant = RegExp(
+      r'\b(?:karaoke|nightcore|slowed|sped[ -]?up|8d\s+audio|8d\s+music|'
+      r'mash[ -]?up|bootleg|fan[ -]?made|unofficial|tribute|ai\s+(?:cover|music))\b',
+      caseSensitive: false,
+    ).hasMatch('${video.title} ${video.channelTitle} ${video.description}');
+    return !blockedVariant;
+  }
+
   static bool isLikelyUnofficialMusicVersion(YoutubeSearchResult video) {
     const rejected =
         r'''\bkaraoke\b|\b(?:fan[ -]?made|unofficial|tribute|nightcore|sped[ -]?up|slowed(?:\s*(?:and|&|\+)\s*reverb)?|reverb\s+version|8d\s+audio|8d\s+music|mash[ -]?up|bootleg|fan[ -]?edit)\b|\bcover(?:ed)?\s+(?:by|version|song|lagu|music|musik|of)\b|\b(?:song|track|music|lagu)\s+covers?\b|\b(?:acoustic|piano|guitar|gitar|live|instrumental|singing|vocal)\s+cover\b|\b(?:my|our)\s+cover\b|\bversi\s+cover\b|\bkover\b|(?:\(|\[|[-–—|])\s*cover(?:\s+by\s+[^)\]]+)?\s*(?:\)|\])?$''';

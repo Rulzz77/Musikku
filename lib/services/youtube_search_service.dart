@@ -569,7 +569,7 @@ class YoutubeSearchService {
     if (keyword.isEmpty) return const [];
 
     bool acceptsCandidate(YoutubeSearchResult video) => spotifyImportMode
-        ? YoutubeMusicPolicy.isMusicCandidate(video)
+        ? YoutubeMusicPolicy.isSpotifyImportCandidate(video)
         : (YoutubeMusicPolicy.isOfficialMusicReleaseCandidateForQuery(
                 video,
                 query: keyword,
@@ -582,7 +582,7 @@ class YoutubeSearchService {
     // older, shorter/filtered result sets. Raw results are retained so a later
     // matcher improvement does not inherit an already-truncated candidate list.
     final cacheKey =
-        'explodeSearchV9SpotifyDeepSearch|${spotifyImportMode ? 'spotify' : 'catalog'}|${keyword.toLowerCase()}|${effectiveQuery.toLowerCase()}|${intent.latest ? 'date' : 'relevance'}';
+        'explodeSearchV10SpotifyCoverFallback|${spotifyImportMode ? 'spotify' : 'catalog'}|${keyword.toLowerCase()}|${effectiveQuery.toLowerCase()}|${intent.latest ? 'date' : 'relevance'}';
     final resultLimit = spotifyImportMode ? 60 : 30;
     final cached = _cache[cacheKey];
 

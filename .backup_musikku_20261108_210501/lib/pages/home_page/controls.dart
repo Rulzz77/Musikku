@@ -1,0 +1,468 @@
+part of '../home_page.dart';
+
+// Extension ini bagian dari _HomePageState; setState aman dipakai di sini.
+// ignore_for_file: invalid_use_of_protected_member
+
+/// Kontrol pemutar: play/pause, previous, next, stop, shuffle, repeat.
+extension _HomeControls on _HomePageState {
+  /// Sumber ini harus tetap berada dalam daftar yang sedang diputar.
+  /// Collection hanya dikunci bila lagu aktif benar-benar berasal dari daftar
+  /// yang dimulai pengguna; tap satu lagu tunggal tetap boleh masuk Radio.
+  bool get _isFixedPlaybackList {
+    if (_activeSource == _ListSource.playlist ||
+        _activeSource == _ListSource.favorites ||
+        _activeSource == _ListSource.local) {
+      return true;
+    }
+    if (_activeSource == _ListSource.collection) {
+      final currentId = _currentVideo?.videoId;
+      return currentId != null &&
+          _activeList.any((song) => song.videoId == currentId);
+    }
+    return false;
+  }
+  Future<void> _persistPlaybackModes() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_shufflePrefKey, _playerUiState.value.isShuffle);
+      await prefs.setBool(_smartShufflePrefKey, _playerUiState.value.isSmartShuffle);
+      await prefs.setInt(_loopModePrefKey, _playerUiState.value.loopMode.index);
+    } catch (_) {}
+  }
+
+  void _toggleShuffle() {
+    final next = !_playerUiState.value.isShuffle;
+    final smart = next && _playerUiState.value.isSmartShuffle;
+
+    _playerUiState.value = _playerUiState.value.copyWith(
+      isShuffle: next,
+      isSmartShuffle: smart,
+    );
+
+    if (next) {
+      unawaited(_youtubeController.clearNativeGaplessQueue());
+      _prepareShufflePool(excludeCurrent: true);
+    } else {
+      _shufflePool = [];
+    }
+
+    unawaited(_persistPlaybackModes());
+    _toast(next ? 'Shuffle aktif · sumber musik tetap terpisah' : 'Shuffle dimatikan');
+    if (mounted) setState(() {});
+  }
+
+  void _toggleSmartShuffle() {
+    final next = !_playerUiState.value.isSmartShuffle;
+    final shuffle = next || _playerUiState.value.isShuffle;
+
+    _playerUiState.value = _playerUiState.value.copyWith(
+      isShuffle: shuffle,
+      isSmartShuffle: next,
+    );
+
+    if (next) {
+      unawaited(_youtubeController.clearNativeGaplessQueue());
+    }
+    if (shuffle) {
+      _prepareShufflePool(excludeCurrent: true);
+    }
+
+    unawaited(_persistPlaybackModes());
+    _toast(next ? 'Smart Shuffle aktif · sumber musik tetap terpisah' : 'Smart Shuffle dimatikan');
+    if (mounted) setState(() {});
+  }
+
+  void _cycleLoopMode() {
+    final current = _playerUiState.value.loopMode;
+    final next = switch (current) {
+      LoopModeCustom.off => LoopModeCustom.all,
+      LoopModeCustom.all => LoopModeCustom.one,
+      LoopModeCustom.one => LoopModeCustom.off,
+    };
+
+    _playerUiState.value = _playerUiState.value.copyWith(loopMode: next);
+    unawaited(_youtubeController.clearNativeGaplessQueue());
+    unawaited(_persistPlaybackModes());
+
+    final label = switch (next) {
+      LoopModeCustom.off => 'Repeat dimatikan',
+      LoopModeCustom.all => 'Repeat semua aktif',
+      LoopModeCustom.one => 'Repeat satu aktif',
+    };
+    _toast(label);
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _recordManualSkipIfNeeded() async {
+    final video = _currentVideo;
+    if (video == null || _nativeState.isEnded) return;
+
+    final seconds = _nativeState.position.inMilliseconds / 1000.0;
+    if (seconds > 20.0) return;
+
+    final existing = _listeningStatsById[video.videoId];
+    _listeningStatsById[video.videoId] = ListeningStat(
+      videoId: video.videoId,
+      title: video.title,
+      artist: video.channelTitle,
+      artistName: video.artistName,
+      thumbnailUrl: video.coverUrl,
+      playCount: existing?.playCount ?? 0,
+      skipCount: (existing?.skipCount ?? 0) + 1,
+      listenedSeconds: existing?.listenedSeconds ?? 0.0,
+      lastPlayedAt: existing?.lastPlayedAt ?? DateTime.now(),
+    );
+    await _storage.recordSkip(video);
+  }
+
+  /// Posisi terbaik untuk melanjutkan [video] setelah pemutaran gagal/terputus.
+  /// 0 berarti mulai dari awal (belum sempat terdengar, hampir habis, atau
+  /// sudah selesai).
+  double _resumePositionFor(YoutubeSearchResult video) {
+    final nativeBelongs =
+        _nativeState.videoId.isEmpty || _nativeState.videoId == video.videoId;
+    final nativeSeconds =
+        nativeBelongs ? _nativeState.position.inMilliseconds / 1000.0 : 0.0;
+    final goodSeconds =
+        _lastGoodPositionVideoId == video.videoId ? _lastGoodPositionSeconds : 0.0;
+    final best = nativeSeconds > goodSeconds ? nativeSeconds : goodSeconds;
+    if (!best.isFinite || best < 2.0) return 0.0;
+    final duration = video.durationSeconds?.toDouble() ??
+        _nativeState.duration.inMilliseconds / 1000.0;
+    if (duration > 0 && best >= duration - 3.0) return 0.0;
+    return best;
+  }
+
+  Future<void> _togglePlayPause() async {
+    // Perangkat tamu mengikuti state host, termasuk dari tombol headset/
+    // notifikasi. Jangan biarkan kontrol lokal memecah sinkronisasi.
+    if (_listenTogether.isGuest) return;
+    if (_playPauseBusy) {
+      return;
+    }
+
+    final video = _currentVideo;
+
+    if (video == null) {
+      return;
+    }
+
+    _playPauseBusy = true;
+
+    try {
+      // Setelah startup, player native sengaja belum di-load. Tombol Play
+      // menjadi titik pertama yang benar-benar memuat lagu dan melanjutkan
+      // dari posisi terakhir.
+      if (_restoredNeedsLoad) {
+        _restoredNeedsLoad = false;
+        _isRestoringLastPlayback = true;
+
+        try {
+          await _playVideo(
+            video,
+            recordHistory: false,
+            restorePosition: _pendingSavedPosition,
+            restoreDurationSeconds:
+                _nativeState.duration.inMilliseconds / 1000.0,
+            autoPlay: true,
+          );
+
+          // Beri waktu event native yang tertunda agar tidak menimpa snapshot
+          // hasil seek yang baru saja dipasang.
+          await Future<void>.delayed(const Duration(milliseconds: 500));
+        } finally {
+          _isRestoringLastPlayback = false;
+        }
+
+        return;
+      }
+
+      final stateBelongsToTrack = _nativeState.videoId.isEmpty ||
+          _nativeState.videoId == video.videoId;
+      final remoteAudioUnavailable = !video.isLocal &&
+          (!_youtubeController.isUsingYoutubeAudio ||
+              !stateBelongsToTrack ||
+              _nativeState.playbackState == NativePlaybackState.error);
+
+      // A failed resolver can leave the previous Media3 item paused in the
+      // service. Never call native Play against that stale item; reload the
+      // selected song and resolve a fresh URL instead.
+      if (remoteAudioUnavailable || _nativeState.playbackState == NativePlaybackState.error) {
+        // Koneksi putus lalu pulih: lanjutkan dari menit terakhir, bukan dari
+        // awal lagu. Posisi native sudah 0 pada state error.
+        final resumeAt = _resumePositionFor(video);
+        await _playVideo(
+          video,
+          recordHistory: false,
+          restorePosition: resumeAt > 0 ? resumeAt : null,
+          restoreDurationSeconds: _nativeState.duration.inMilliseconds / 1000.0,
+        );
+        return;
+      }
+
+      final shouldPause = _nativeState.isEffectivelyPlaying;
+      if (shouldPause) {
+        await _youtubeController.pauseVideo();
+      } else {
+        await _setPlayerVolume(_playerVolumePercent);
+        _crossfadeFadingVideoId = '';
+        await _youtubeController.playVideo();
+      }
+    } catch (e) {
+      debugPrint('PLAY/PAUSE ERROR: $e');
+    } finally {
+      _playPauseBusy = false;
+    }
+  }
+
+  Future<void> _previous() async {
+    if (_listenTogether.isGuest) return;
+    final current = _currentVideo;
+
+    if (current == null) {
+      return;
+    }
+
+    // Lagu hasil restore belum di-load ke native: seek tidak ada efeknya.
+    // Cukup reset posisi tersimpan ke awal.
+    if (_restoredNeedsLoad) {
+      _pendingSavedPosition = 0.0;
+      _nativeStateNotifier.value = NativeYoutubeState(
+        playbackState: NativePlaybackState.paused,
+        videoId: current.videoId,
+      );
+      unawaited(_saveCurrentPlaybackSnapshot());
+
+      return;
+    }
+
+    // Sudah lewat 3 detik → ulang lagu ini dari awal.
+    if (_nativeState.position > const Duration(seconds: 3)) {
+      try {
+        await _youtubeController.seekTo(seconds: 0);
+      } catch (e) {
+        debugPrint('PREVIOUS SEEK ERROR: $e');
+      }
+
+      return;
+    }
+
+    // Dalam daftar aktif, Previous tidak boleh kembali ke lagu dari sumber lain
+    // (misalnya lagu YouTube yang diputar sebelum playlist dibuka).
+    if (_isFixedPlaybackList) {
+      while (_playHistory.isNotEmpty &&
+          !_activeList.any((song) => song.videoId == _playHistory.last.videoId)) {
+        _playHistory.removeLast();
+      }
+    } else if (_playerUiState.value.isShuffle) {
+      // Di luar playlist, tetap pisahkan riwayat lokal dan YouTube.
+      while (_playHistory.isNotEmpty &&
+          _playHistory.last.isLocal != current.isLocal) {
+        _playHistory.removeLast();
+      }
+    }
+
+    // Kembali ke lagu yang tadi diputar (berlaku juga untuk shuffle).
+    if (_playHistory.isNotEmpty) {
+      final previous = _playHistory.removeLast();
+
+      await _playVideo(previous, recordHistory: false);
+
+      return;
+    }
+
+    // Belum ada riwayat: mundur satu lagu di playlist.
+    if (!_playerUiState.value.isShuffle && _activeList.isNotEmpty) {
+      final index = _activeList.indexWhere(
+        (video) => video.videoId == current.videoId,
+      );
+
+      if (index > 0) {
+        await _playVideo(_activeList[index - 1], recordHistory: false);
+
+        return;
+      }
+
+      if (index == 0 && _playerUiState.value.loopMode == LoopModeCustom.all) {
+        await _playVideo(_activeList.last, recordHistory: false);
+
+        return;
+      }
+    }
+
+    // Tidak ada lagu sebelumnya → ulang dari awal.
+    try {
+      await _youtubeController.seekTo(seconds: 0);
+    } catch (e) {
+      debugPrint('PREVIOUS SEEK ERROR: $e');
+    }
+  }
+
+  Future<void> _next({bool fromAutoNext = false}) async {
+    if (_listenTogether.isGuest) return;
+    if (_nextActionInProgress) return;
+    _nextActionInProgress = true;
+    try {
+      await _performNext(fromAutoNext: fromAutoNext);
+    } finally {
+      _nextActionInProgress = false;
+    }
+  }
+
+  Future<void> _performNext({bool fromAutoNext = false}) async {
+    final current = _currentVideo;
+
+    if (current == null) {
+      return;
+    }
+
+    if (!fromAutoNext) {
+      unawaited(_recordManualSkipIfNeeded());
+      _playbackSessionGuard.resetEndedEvent();
+    }
+
+    final isShuffle = _playerUiState.value.isShuffle;
+
+    final loopMode = _playerUiState.value.loopMode;
+
+    // Saat playlist/favorit/daftar koleksi sedang diputar, Next tetap berada
+    // di daftar itu. Item global dari queue tidak boleh menyela playlist.
+    // Queue tetap tersimpan dan bisa dipakai setelah pengguna pindah sumber.
+    if (!fromAutoNext && !_isFixedPlaybackList && _queueManager.isNotEmpty) {
+      final nextItem = _takeQueueItemForCurrentMode(shuffle: isShuffle);
+
+      if (nextItem != null) {
+        unawaited(_storage.saveQueue(_queueManager.items));
+        await _playVideo(nextItem.video);
+        _prepareRadioForTrack(nextItem.video);
+
+        if (mounted) {
+          setState(() {});
+        }
+
+        return;
+      }
+    }
+
+    // Lagu dari pencarian: lanjut ke upload terbaru yang masih sesuai konteks
+    // pencarian (DJ -> DJ, pop -> pop, jadul -> jadul). Bukan urutan populer.
+    // Favorit & "Terakhir diputar" tetap playlist.
+    if (!current.isLocal &&
+        (_activeSource == _ListSource.search ||
+            _activeSource == _ListSource.radio) &&
+        _radio.hasSeed) {
+      // Pengguna bisa pindah lagu lewat jalur yang tidak me-reset Radio.
+      // Kalau lagu aktif bukan asal/pilihan Radio, ikuti lagu aktif.
+      if (_isRadioContextStale(current)) {
+        _activeSource = _ListSource.radio;
+        _activePlaylistId = null;
+        _activeList = <YoutubeSearchResult>[];
+        _shufflePool = <YoutubeSearchResult>[];
+        _prepareRadioForTrack(current);
+      }
+      await _nextFromRadio(fromAutoNext: fromAutoNext);
+
+      return;
+    }
+
+    if (_activeList.isEmpty) {
+      if (_isFixedPlaybackList) {
+        await _stopPlayback();
+        if (!fromAutoNext) _toast('Daftar yang diputar sudah selesai.');
+        return;
+      }
+      // Lagu tunggal / pencarian tanpa daftar aktif boleh lanjut ke Radio.
+      await _continueWithRadio(current, fromAutoNext: fromAutoNext);
+      return;
+    }
+
+    // ==========================================================
+    // SHUFFLE
+    // ==========================================================
+
+    if (isShuffle) {
+      if (_shufflePool.isEmpty) {
+        if (loopMode != LoopModeCustom.all) {
+          if (_isFixedPlaybackList) {
+            await _stopPlayback();
+            if (!fromAutoNext) {
+              _toast(_activeSource == _ListSource.local
+                  ? 'Daftar musik lokal selesai.'
+                  : 'Playlist selesai. Aktifkan Repeat Semua untuk mengulang.');
+            }
+          } else {
+            await _continueWithRadio(current, fromAutoNext: fromAutoNext);
+          }
+          return;
+        }
+
+        // Repeat all: mulai siklus shuffle baru.
+        _prepareShufflePool(excludeCurrent: true);
+
+        // Playlist cuma satu lagu → putar ulang lagu itu.
+        if (_shufflePool.isEmpty) {
+          await _playVideo(current);
+
+          return;
+        }
+      }
+
+      final randomVideo = _takeShuffleVideo();
+
+      if (randomVideo != null) {
+        await _playVideo(randomVideo);
+      }
+
+      return;
+    }
+
+    // ==========================================================
+    // NORMAL
+    // ==========================================================
+
+    final nextVideo = PlaybackSourcePolicy.nextAllowedInOrder(
+      _activeList,
+      currentVideoId: current.videoId,
+      repeatAll: loopMode == LoopModeCustom.all,
+    );
+
+    if (nextVideo != null) {
+      // Invalid collection uploads are skipped without mutating/reordering the
+      // user's saved playlist. Explicit taps and manual queue items still play
+      // exactly what the user selected.
+      await _playVideo(nextVideo);
+      return;
+    }
+
+    if (_isFixedPlaybackList) {
+      await _stopPlayback();
+      if (!fromAutoNext) {
+        _toast(_activeSource == _ListSource.local
+            ? 'Daftar musik lokal selesai.'
+            : 'Tidak ada lagu berikutnya yang memenuhi filter. Playlist selesai.');
+      }
+      return;
+    }
+
+    await _continueWithRadio(current, fromAutoNext: fromAutoNext);
+  }
+
+  Future<void> _stopPlayback() async {
+    try {
+      await _youtubeController.pauseVideo();
+    } catch (e) {
+      debugPrint('STOP ERROR: $e');
+    }
+
+    try {
+      _notificationStarted = false;
+      _lastNotificationKey = '';
+      _lastNotificationProgressAt =
+          DateTime.fromMillisecondsSinceEpoch(0);
+
+      await _youtubeController.stopNotification();
+    } catch (e) {
+      debugPrint('STOP NOTIFICATION ERROR: $e');
+    }
+  }
+}

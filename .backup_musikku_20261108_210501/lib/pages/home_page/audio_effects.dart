@@ -1,0 +1,1290 @@
+part of '../home_page.dart';
+
+// Extension ini bagian dari _HomePageState; setState aman dipakai di sini.
+// ignore_for_file: invalid_use_of_protected_member
+
+/// Crossfade, volume fade, pengaturan audio, dan sleep timer.
+extension _HomeAudioEffects on _HomePageState {
+  void _maybeStartAutoCrossfade(NativeYoutubeState state) {
+    if (_crossfadeSeconds <= 0 ||
+        !state.isPlaying ||
+        state.duration <= Duration.zero ||
+        state.videoId.isEmpty ||
+        _crossfadeFadingVideoId == state.videoId) {
+      return;
+    }
+
+    final remaining = state.duration - state.position;
+    final lead = Duration(milliseconds: _crossfadeSeconds * 500);
+
+    if (remaining <= lead && remaining > Duration.zero) {
+      _crossfadeFadingVideoId = state.videoId;
+      unawaited(
+        _fadeVolume(
+          from: _playerVolumePercent,
+          to: 0,
+          duration: remaining < lead ? remaining : lead,
+        ),
+      );
+    }
+  }
+
+  void _cancelVolumeFade() {
+    _volumeFadeGeneration++;
+  }
+
+  Future<void> _setPlayerVolume(int percent, {bool persist = false}) async {
+    _cancelVolumeFade();
+    final safe = percent.clamp(0, 100).toInt();
+    _playerVolumePercent = safe;
+    await _youtubeController.setVolume(safe);
+    if (persist) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setInt(_playerVolumePrefKey, safe);
+      } catch (_) {}
+    }
+  }
+
+  Future<void> _fadeVolume({
+    required int from,
+    required int to,
+    required Duration duration,
+  }) async {
+    final generation = ++_volumeFadeGeneration;
+
+    if (duration <= Duration.zero) {
+      if (generation != _volumeFadeGeneration) {
+        return;
+      }
+      await _youtubeController.setVolume(to.clamp(0, 100).toInt());
+      return;
+    }
+
+    final steps = (duration.inMilliseconds / 90).round().clamp(5, 24);
+    for (var i = 1; i <= steps; i++) {
+      if (generation != _volumeFadeGeneration) {
+        return;
+      }
+
+      final value = (from + ((to - from) * i / steps).round())
+          .clamp(0, 100)
+          .toInt();
+      try {
+        await _youtubeController.setVolume(value);
+      } catch (e) {
+        debugPrint('FADE VOLUME ERROR: $e');
+        return;
+      }
+
+      if (i != steps) {
+        await Future<void>.delayed(
+          Duration(milliseconds: (duration.inMilliseconds / steps).round()),
+        );
+      }
+    }
+  }
+
+  void _clearSleepTimer() {
+    _sleepTimer?.cancel();
+
+    _sleepTimer = null;
+
+    _stopAfterCurrent = false;
+
+    _sleepActive.value = false;
+  }
+}
+
+extension _HomeAudioSettingsUi on _HomePageState {
+  void _showAudioOutputPicker() {
+    var snapshotFuture = NativePlaybackDiagnostics.getAudioOutputs();
+    int? selectedId;
+    bool saving = false;
+    String? feedback;
+
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      useSafeArea: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
+      ),
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) => FutureBuilder<AudioOutputSnapshot>(
+          future: snapshotFuture,
+          builder: (context, snapshot) {
+            final scheme = Theme.of(context).colorScheme;
+            final data = snapshot.data;
+            if (data != null && selectedId == null) {
+              selectedId = data.preferredDeviceId;
+            }
+
+            Future<void> choose(int id) async {
+              if (saving) return;
+              setSheetState(() {
+                saving = true;
+                feedback = null;
+              });
+              final result = await NativePlaybackDiagnostics.setPreferredAudioOutput(id);
+              if (!context.mounted) return;
+              setSheetState(() {
+                saving = false;
+                if (result['saved'] == true) {
+                  selectedId = id;
+                  feedback = result['message']?.toString() ?? 'Pilihan output disimpan.';
+                } else {
+                  feedback = result['message']?.toString() ?? 'Gagal menyimpan output audio.';
+                }
+                snapshotFuture = NativePlaybackDiagnostics.getAudioOutputs();
+              });
+            }
+
+            Widget deviceTile({required int id, required String title, required String subtitle, required IconData icon}) {
+              final selected = selectedId == id;
+              return ListTile(
+                enabled: !saving,
+                leading: CircleAvatar(
+                  backgroundColor: selected ? scheme.primaryContainer : scheme.surfaceContainerHighest,
+                  child: Icon(icon, color: selected ? scheme.primary : scheme.onSurfaceVariant),
+                ),
+                title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
+                subtitle: Text(subtitle, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11)),
+                trailing: selected
+                    ? Icon(Icons.check_circle_rounded, color: scheme.primary)
+                    : const Icon(Icons.radio_button_unchecked_rounded),
+                onTap: () => choose(id),
+              );
+            }
+
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 22),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Perangkat audio', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900)),
+                  const SizedBox(height: 5),
+                  Text(
+                    'Pilih rute untuk pemutar native Media3. Fallback video YouTube tetap mengikuti rute audio Android.',
+                    style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11, height: 1.4),
+                  ),
+                  const SizedBox(height: 12),
+                  if (snapshot.connectionState == ConnectionState.waiting && data == null)
+                    const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator()))
+                  else if (data == null || !data.supported)
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Text(data?.error ?? 'Pemilihan output audio memerlukan Android 6.0 atau lebih baru.', style: TextStyle(color: scheme.onSurfaceVariant)),
+                    )
+                  else ...[
+                    deviceTile(id: -1, title: 'Otomatis / Default Android', subtitle: 'Biarkan Android menentukan perangkat keluaran', icon: Icons.auto_awesome_rounded),
+                    if (data.devices.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        child: Text('Belum ada perangkat output tambahan yang terdeteksi.', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11)),
+                      ),
+                    for (final device in data.devices)
+                      deviceTile(
+                        id: device.id,
+                        title: device.displayName,
+                        subtitle: device.type,
+                        icon: device.type.toLowerCase().contains('bluetooth') ? Icons.bluetooth_audio_rounded : device.type.toLowerCase().contains('usb') ? Icons.usb_rounded : Icons.speaker_rounded,
+                      ),
+                    if (data.nativePlayerActive)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(14, 6, 14, 0),
+                        child: Text('Pemutar Media3 aktif. Perubahan rute diterapkan ke lagu yang sedang diputar.', style: TextStyle(color: scheme.primary, fontSize: 10)),
+                      ),
+                  ],
+                  if (saving) const LinearProgressIndicator(),
+                  if (feedback != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 10, left: 12, right: 12),
+                      child: Text(feedback!, style: TextStyle(color: scheme.primary, fontSize: 11, height: 1.4)),
+                    ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Future<void> _setSpeakerEnhancerEnabled(bool enabled) async {
+    if (!Platform.isAndroid) {
+      _toast('MusikKu Soundstage saat ini hanya didukung pada Android.');
+      return;
+    }
+
+    _speakerEnhancerEnabled = enabled;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_speakerEnhancerPrefKey, enabled);
+    } catch (error) {
+      debugPrint('SAVE SOUNDSTAGE ERROR: $error');
+    }
+
+    var presetToApply = 'Speaker Clarity';
+    if (!enabled) {
+      final current = _currentVideo;
+      presetToApply = current == null
+          ? await _storage.loadEqualizerPreset()
+          : await _storage.loadEqualizerPresetForTrack(current.videoId);
+      if (presetToApply.trim().toLowerCase() == 'speaker clarity') {
+        presetToApply = 'Flat';
+      }
+      _equalizerPreset = presetToApply;
+    }
+
+    Map<String, dynamic> dspResult = const <String, dynamic>{'saved': false};
+    try {
+      dspResult = await NativeAudioFeatures.setSpeakerSoundstage(
+        enabled: enabled,
+        strength: _speakerEnhancerStrength,
+      );
+      if (dspResult['saved'] == true) {
+        // Keep the older output-mix EQ neutral while our PCM DSP is active.
+        // This prevents the system Equalizer and Soundstage from stacking.
+        if (enabled) {
+          await _youtubeController.setEqualizerPreset('Flat');
+          _equalizerPreset = 'Flat';
+        } else {
+          await _youtubeController.setEqualizerPreset(presetToApply);
+        }
+      } else if (enabled) {
+        _speakerEnhancerEnabled = false;
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool(_speakerEnhancerPrefKey, false);
+      }
+    } catch (error) {
+      debugPrint('APPLY SOUNDSTAGE ERROR: $error');
+    }
+
+    if (mounted) setState(() {});
+    final media3Active = dspResult['media3Active'] == true;
+    _toast(enabled
+        ? (dspResult['saved'] == true
+            ? (media3Active
+                ? 'MusikKu Soundstage sedang memproses audio Media3.'
+                : 'Soundstage tersimpan; aktif saat lagu diputar melalui Media3.')
+            : 'Soundstage gagal diterapkan: ${dspResult['error'] ?? 'bridge native tidak tersedia'}.')
+        : 'MusikKu Soundstage dimatikan. EQ sebelumnya dipulihkan.');
+  }
+
+  Future<void> _setSpeakerEnhancerStrength(int strength) async {
+    _speakerEnhancerStrength = strength.clamp(0, 100).toInt();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_speakerSoundstageStrengthPrefKey, _speakerEnhancerStrength);
+    } catch (error) {
+      debugPrint('SAVE SOUNDSTAGE STRENGTH ERROR: $error');
+    }
+
+    if (Platform.isAndroid) {
+      final result = await NativeAudioFeatures.setSpeakerSoundstage(
+        enabled: _speakerEnhancerEnabled,
+        strength: _speakerEnhancerStrength,
+      );
+      if (result['saved'] != true && mounted) {
+        _toast('Kekuatan efek tersimpan, tetapi bridge audio native gagal diperbarui.');
+      }
+    }
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _applyEqualizerPreset(String preset) async {
+    // A manually selected tone preset takes precedence over the global speaker
+    // profile, so turn the latter off before applying the selected preset.
+    _speakerEnhancerEnabled = false;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_speakerEnhancerPrefKey, false);
+      if (Platform.isAndroid) {
+        await NativeAudioFeatures.setSpeakerSoundstage(
+          enabled: false,
+          strength: _speakerEnhancerStrength,
+        );
+      }
+    } catch (_) {}
+
+    _equalizerPreset = preset;
+    var applied = false;
+    try {
+      applied = await _youtubeController.setEqualizerPreset(preset);
+    } catch (_) {}
+    await _storage.saveEqualizerPreset(preset);
+    final current = _currentVideo;
+    if (current != null) {
+      await _storage.saveEqualizerPresetForTrack(current.videoId, preset);
+    }
+    if (mounted) setState(() {});
+    _toast(applied
+        ? 'Equalizer: $preset'
+        : 'Preset $preset disimpan. Efek EQ bergantung dukungan perangkat.');
+  }
+
+  void _showAudioSettingsSheet() {
+    var crossfadePreview = _crossfadeSeconds;
+    var volumePreview = _playerVolumePercent;
+    final customBands = <double>[0, 0, 0, 0, 0];
+    var customBandsLoaded = false;
+    const customBandsPrefKey = 'equalizer_manual_bands_v1';
+    const bandLabels = <String>['60 Hz', '230 Hz', '910 Hz', '3.6 kHz', '14 kHz'];
+    const presets = <({String name, String detail})>[
+      (name: 'Flat', detail: 'Suara netral'),
+      (name: 'Bass Boost', detail: 'Bass lebih terasa'),
+      (name: 'Pop', detail: 'Vokal dan detail cerah'),
+      (name: 'Dangdut', detail: 'Kendang, bass, dan vokal lebih terasa'),
+      (name: 'Rock', detail: 'Gitar dan drum lebih tegas'),
+      (name: 'Vocal', detail: 'Fokus pada suara vokal'),
+      (name: 'Electronic', detail: 'Bass dan treble untuk EDM'),
+    ];
+    var dolbyCapabilitiesFuture = Platform.isAndroid
+        ? NativeAudioFeatures.getDolbyAtmosCapabilities()
+        : Future<Map<String, dynamic>>.value(const <String, dynamic>{});
+    var soundstageStatusFuture = NativeAudioFeatures.getSpeakerSoundstageStatus();
+
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      useSafeArea: true,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      elevation: 0,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+      ),
+      constraints: const BoxConstraints(maxWidth: 600),
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          final scheme = Theme.of(context).colorScheme;
+          if (!customBandsLoaded) {
+            customBandsLoaded = true;
+            unawaited(() async {
+              try {
+                final prefs = await SharedPreferences.getInstance();
+                final saved = prefs.getStringList(customBandsPrefKey);
+                if (saved != null && saved.length == 5 && context.mounted) {
+                  setSheetState(() {
+                    for (var i = 0; i < 5; i++) {
+                      customBands[i] = (double.tryParse(saved[i]) ?? 0).clamp(-12, 12).toDouble();
+                    }
+                  });
+                }
+              } catch (_) {}
+            }());
+          }
+          return SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.fromLTRB(17, 17, 17, 16),
+                  decoration: BoxDecoration(
+                    color: scheme.primary,
+                    borderRadius: BorderRadius.circular(22),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.graphic_eq_rounded, color: scheme.onPrimary, size: 21),
+                          const SizedBox(width: 8),
+                          Text('AUDIO WORKSHOP', style: TextStyle(color: scheme.onPrimary.withValues(alpha: 0.78), fontSize: 9, letterSpacing: 1.7, fontWeight: FontWeight.w900)),
+                          const Spacer(),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                            decoration: BoxDecoration(color: scheme.onPrimary.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(20)),
+                            child: Text('STUDIO', style: TextStyle(color: scheme.onPrimary, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 1)),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Text('Bentuk suara kamu.', style: TextStyle(color: scheme.onPrimary, fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: -0.7)),
+                      const SizedBox(height: 4),
+                      Text('Atur karakter audio, volume, dan perpindahan lagu tanpa mengubah antrean.', style: TextStyle(color: scheme.onPrimary.withValues(alpha: 0.82), fontSize: 11.5, height: 1.35)),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Material(
+                  color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(16),
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 13, vertical: 2),
+                    leading: Icon(Icons.speaker_group_rounded, color: scheme.primary),
+                    title: const Text('Perangkat audio', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
+                    subtitle: const Text('Pilih speaker, headset, Bluetooth, atau output default', style: TextStyle(fontSize: 10)),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: _showAudioOutputPicker,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.fromLTRB(14, 13, 14, 12),
+                  decoration: BoxDecoration(
+                    color: scheme.primaryContainer.withValues(alpha: 0.30),
+                    borderRadius: BorderRadius.circular(17),
+                    border: Border.all(color: scheme.primary.withValues(alpha: 0.16)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            width: 38,
+                            height: 38,
+                            decoration: BoxDecoration(
+                              color: scheme.primary.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Icon(Icons.surround_sound_rounded, color: scheme.primary),
+                          ),
+                          const SizedBox(width: 11),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('MusikKu Speaker DSP', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900)),
+                                const SizedBox(height: 3),
+                                Text(
+                                  'Otomatis aktif pada speaker bawaan. Saat headset / output eksternal tersambung, DSP MusikKu bypass agar Dolby bawaan perangkat dapat bekerja tanpa efek bertumpuk.',
+                                  style: TextStyle(fontSize: 10.5, height: 1.35, color: scheme.onSurfaceVariant),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Switch.adaptive(
+                            value: _speakerEnhancerEnabled,
+                            onChanged: (enabled) async {
+                              await _setSpeakerEnhancerEnabled(enabled);
+                              if (context.mounted) {
+                                setSheetState(() {
+                                  soundstageStatusFuture = NativeAudioFeatures.getSpeakerSoundstageStatus();
+                                });
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Text('Intensitas', style: TextStyle(fontSize: 10.5, color: scheme.onSurfaceVariant, fontWeight: FontWeight.w700)),
+                          const Spacer(),
+                          Text('$_speakerEnhancerStrength%', style: TextStyle(fontSize: 10.5, color: scheme.primary, fontWeight: FontWeight.w900)),
+                        ],
+                      ),
+                      Slider(
+                        value: _speakerEnhancerStrength.toDouble(),
+                        min: 0,
+                        max: 100,
+                        divisions: 20,
+                        label: '$_speakerEnhancerStrength%',
+                        onChanged: (value) => setSheetState(() => _speakerEnhancerStrength = value.round()),
+                        onChangeEnd: (value) async {
+                          await _setSpeakerEnhancerStrength(value.round());
+                          if (context.mounted) {
+                            setSheetState(() {
+                              soundstageStatusFuture = NativeAudioFeatures.getSpeakerSoundstageStatus();
+                            });
+                          }
+                        },
+                      ),
+                      Text(
+                        'Untuk speaker mono, mulai dari 85–90%. DSP memperkuat body bass dan presence vokal. Bukan Dolby Atmos atau surround fisik.',
+                        style: TextStyle(fontSize: 9.5, height: 1.35, color: scheme.onSurfaceVariant.withValues(alpha: 0.9)),
+                      ),
+                      const SizedBox(height: 10),
+                      FutureBuilder<Map<String, dynamic>>(
+                        future: soundstageStatusFuture,
+                        builder: (context, snapshot) {
+                          final status = snapshot.data ?? const <String, dynamic>{};
+                          final configured = status['pcmConfigured'] == true;
+                          final serviceAttached = status['serviceAttached'] == true;
+                          final requestedEnabled = _speakerEnhancerEnabled &&
+                              (status['soundStageRequestedEnabled'] == true || !serviceAttached);
+                          final outputProfile = status['outputProfile']?.toString() ?? 'unknown';
+                          final outputDeviceName = status['outputDeviceName']?.toString() ?? 'Belum terdeteksi';
+                          final routeReason = status['routeDetectionReason']?.toString() ?? '';
+                          final enabled = requestedEnabled &&
+                              (status['soundStageApplied'] == true || status['enabled'] == true);
+                          final playing = status['playerIsPlaying'] == true;
+                          final pcmBuffers = (status['pcmBuffersProcessed'] as num?)?.toInt() ?? 0;
+                          final dspBuffers = (status['soundStageBuffersProcessed'] as num?)?.toInt() ?? 0;
+                          final delta = (status['lastEffectDeltaRms'] as num?)?.toDouble() ?? 0.0;
+                          final pcmAgeMs = (status['pcmAgeMs'] as num?)?.toInt() ?? -1;
+                          final pcmFlowing = status['pcmFlowing'] == true ||
+                              (pcmAgeMs >= 0 && pcmAgeMs <= 1500);
+                          final format = status['configuredFormat']?.toString() ?? 'Format belum tersedia';
+                          final source = status['sourceType']?.toString() ?? 'idle';
+                          final reason = status['unsupportedFormatReason']?.toString() ?? '';
+                          final actuallyProcessing = enabled && playing && configured &&
+                              pcmFlowing && pcmBuffers > 0 && dspBuffers > 0 && delta > 0.000001;
+                          final isExternalOutput = outputProfile == 'external_output';
+                          final routeUnknown = outputProfile == 'unknown';
+                          final isMedia3Source = source == 'local' || source == 'youtube_audio';
+                          final title = !requestedEnabled
+                              ? 'MusikKu Soundstage sedang OFF'
+                              : isExternalOutput
+                                  ? 'Headset / output eksternal terdeteksi — DSP bypass'
+                                  : routeUnknown
+                                      ? 'Rute output belum pasti — DSP standby'
+                                      : actuallyProcessing
+                                          ? 'DSP benar-benar mengubah sampel audio'
+                                          : !serviceAttached
+                                              ? 'Layanan audio belum aktif'
+                                              : !isMedia3Source
+                                                  ? 'Sumber audio tidak melewati Media3'
+                                                  : !playing
+                                                      ? 'Putar lagu untuk menguji DSP speaker'
+                                                      : !configured
+                                                          ? 'PCM belum masuk ke DSP'
+                                                          : !pcmFlowing
+                                                              ? 'PCM tidak sedang mengalir. Pastikan audio native Media3 sedang diputar.'
+                                                              : 'PCM masuk, tetapi perubahan sampel belum terdeteksi.';
+                          final profileLabel = outputProfile == 'speaker_internal'
+                              ? 'Speaker bawaan'
+                              : isExternalOutput
+                                  ? 'Headset / perangkat eksternal'
+                                  : 'Output belum diketahui';
+                          final routeDetail = '$profileLabel · $outputDeviceName';
+                          final detail = isExternalOutput
+                              ? '$routeDetail. DSP MusikKu dilewati agar efek audio sistem seperti Dolby (jika aktif) tidak bertumpuk. $routeReason'
+                              : routeUnknown
+                                  ? '$routeDetail. DSP dimatikan sementara agar tidak salah memproses headset. $routeReason'
+                                  : actuallyProcessing
+                                      ? '$routeDetail · $format · $dspBuffers blok PCM diproses · perubahan RMS ${delta.toStringAsFixed(5)} · aliran aktif'
+                                      : !isMedia3Source
+                                          ? 'Sumber $source bukan jalur Media3. Soundstage tidak menerima audio ini. $routeDetail'
+                                          : reason.isNotEmpty
+                                              ? '$routeDetail · $reason'
+                                              : '$routeDetail · PCM: $pcmBuffers blok · sumber: $source. Putar lagu dari awal lalu periksa kembali.';
+                          return Container(
+                            padding: const EdgeInsets.all(11),
+                            decoration: BoxDecoration(
+                              color: (actuallyProcessing ? Colors.green : scheme.surfaceContainerHighest)
+                                  .withValues(alpha: actuallyProcessing ? 0.10 : 0.65),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: actuallyProcessing
+                                    ? Colors.green.withValues(alpha: 0.35)
+                                    : scheme.outlineVariant.withValues(alpha: 0.55),
+                              ),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Icon(
+                                  actuallyProcessing ? Icons.check_circle_rounded : Icons.info_outline_rounded,
+                                  size: 18,
+                                  color: actuallyProcessing ? Colors.green : scheme.onSurfaceVariant,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(title, style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w900)),
+                                      const SizedBox(height: 3),
+                                      Text(detail, style: TextStyle(fontSize: 9.5, height: 1.35, color: scheme.onSurfaceVariant)),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton.icon(
+                          onPressed: () {
+                            setSheetState(() {
+                              soundstageStatusFuture = NativeAudioFeatures.getSpeakerSoundstageStatus();
+                            });
+                          },
+                          icon: const Icon(Icons.refresh_rounded, size: 16),
+                          label: const Text('Periksa jalur audio'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (Platform.isAndroid) ...[
+                  const SizedBox(height: 10),
+                  FutureBuilder<Map<String, dynamic>>(
+                    future: dolbyCapabilitiesFuture,
+                    builder: (context, snapshot) {
+                      final report = snapshot.data ?? const <String, dynamic>{};
+                      final eac3 = report['eac3DecoderAvailable'] == true;
+                      final ac4 = report['ac4DecoderAvailable'] == true;
+                      final spatialRaw = report['spatializer'];
+                      final spatial = spatialRaw is Map
+                          ? Map<String, dynamic>.from(spatialRaw)
+                          : const <String, dynamic>{};
+                      final spatialSupported = spatial['supported'] == true;
+                      final spatialAvailable = spatial['available'] == true;
+                      final spatialEnabled = spatial['enabled'] == true;
+                      final spatial51 = spatial['canSpatialize51'] == true;
+                      final codecsDetected = eac3 || ac4;
+                      final oemDolbyEffectDetected = report['oemDolbyEffectCandidateDetected'] == true;
+                      final loading = snapshot.connectionState == ConnectionState.waiting;
+                      final error = report['error']?.toString();
+
+                      Color statusColor(bool active) => active
+                          ? scheme.primary
+                          : scheme.onSurfaceVariant;
+
+                      Widget statusChip(String label, bool active) => Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: active
+                                  ? scheme.primary.withValues(alpha: 0.10)
+                                  : scheme.surfaceContainerHighest.withValues(alpha: 0.65),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: active
+                                    ? scheme.primary.withValues(alpha: 0.22)
+                                    : scheme.outlineVariant.withValues(alpha: 0.5),
+                              ),
+                            ),
+                            child: Text(
+                              label,
+                              style: TextStyle(
+                                color: statusColor(active),
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          );
+
+                      return Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: scheme.surfaceContainerHighest.withValues(alpha: 0.42),
+                          borderRadius: BorderRadius.circular(17),
+                          border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.55)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(Icons.surround_sound_rounded, color: scheme.primary, size: 21),
+                                const SizedBox(width: 9),
+                                const Expanded(
+                                  child: Text(
+                                    'Dolby Atmos bawaan perangkat',
+                                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900),
+                                  ),
+                                ),
+                                if (loading)
+                                  const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  )
+                                else
+                                  Icon(
+                                    codecsDetected ? Icons.info_rounded : Icons.help_outline_rounded,
+                                    color: scheme.onSurfaceVariant,
+                                    size: 18,
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 7),
+                            Text(
+                              loading
+                                  ? 'Memeriksa decoder Dolby dan kemampuan output Android…'
+                                  : error != null
+                                      ? 'Pemeriksaan perangkat gagal: $error'
+                                      : codecsDetected
+                                          ? 'Perangkat melaporkan decoder format Dolby yang dapat dipakai Media3. Ini belum membuktikan lisensi OEM atau bahwa lagu aktif berisi Atmos.'
+                                          : 'Decoder E-AC-3 / AC-4 tidak terdeteksi melalui API Android pada perangkat ini. Mode Dolby OEM, bila ada, tetap bisa dikelola oleh pengaturan sistem.',
+                              style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10.5, height: 1.4),
+                            ),
+                            const SizedBox(height: 10),
+                            Wrap(
+                              spacing: 6,
+                              runSpacing: 6,
+                              children: [
+                                statusChip('E-AC-3 ${eac3 ? 'tersedia' : 'tidak terdeteksi'}', eac3),
+                                statusChip('AC-4 ${ac4 ? 'tersedia' : 'tidak terdeteksi'}', ac4),
+                                statusChip(
+                                  'Efek OEM Dolby ${oemDolbyEffectDetected ? 'terdeteksi' : 'tidak terdeteksi'}',
+                                  oemDolbyEffectDetected,
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            Divider(height: 1, color: scheme.outlineVariant.withValues(alpha: 0.65)),
+                            const SizedBox(height: 10),
+                            Row(
+                              children: [
+                                Icon(Icons.surround_sound_rounded, color: scheme.primary, size: 18),
+                                const SizedBox(width: 8),
+                                const Expanded(
+                                  child: Text('Android Spatializer · output aktif', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800)),
+                                ),
+                                Text(
+                                  spatialSupported && spatialAvailable && spatialEnabled && spatial51
+                                      ? 'Siap untuk 5.1'
+                                      : spatialSupported
+                                          ? 'Terbatas / nonaktif'
+                                          : 'Tidak didukung',
+                                  style: TextStyle(
+                                    color: statusColor(spatialSupported && spatialAvailable && spatialEnabled && spatial51),
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if ((spatial['reason'] ?? '').toString().isNotEmpty) ...[
+                              const SizedBox(height: 5),
+                              Text(
+                                spatial['reason'].toString(),
+                                style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 9.5, height: 1.35),
+                              ),
+                            ],
+                            const SizedBox(height: 10),
+                            Text(
+                              'Atmos asli hanya aktif jika sumber membawa metadata Atmos (misalnya E-AC-3 JOC / format AC-4 yang sesuai) dan decoder serta jalur output perangkat mendukungnya. Lagu YouTube AAC/Opus biasa tidak berubah menjadi Atmos.',
+                              style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 9.5, height: 1.4),
+                            ),
+                            const SizedBox(height: 5),
+                            Text(
+                              'MusikKu tidak memaksa sakelar Dolby OEM. Jika merek HP menyediakan Dolby Atmos untuk speaker, aktifkan dari pengaturan suara sistem.',
+                              style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 9.5, height: 1.4),
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                TextButton.icon(
+                                  onPressed: loading
+                                      ? null
+                                      : () => setSheetState(() {
+                                            dolbyCapabilitiesFuture = NativeAudioFeatures.getDolbyAtmosCapabilities();
+                                          }),
+                                  icon: const Icon(Icons.refresh_rounded, size: 15),
+                                  label: const Text('Periksa ulang'),
+                                ),
+                                const SizedBox(width: 4),
+                                TextButton.icon(
+                                  onPressed: loading
+                                      ? null
+                                      : () async {
+                                          final opened = await NativeAudioFeatures.openSystemSoundSettings();
+                                          if (!opened && context.mounted) {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              const SnackBar(content: Text('Pengaturan suara Android tidak dapat dibuka pada perangkat ini.')),
+                                            );
+                                          }
+                                        },
+                                  icon: const Icon(Icons.settings_rounded, size: 15),
+                                  label: const Text('Pengaturan HP'),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ],
+                const SizedBox(height: 20),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('TONE PROFILE', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+                          const SizedBox(height: 4),
+                          Text('Equalizer', style: TextStyle(color: scheme.onSurface, fontSize: 19, fontWeight: FontWeight.w900, letterSpacing: -0.4)),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+                      decoration: BoxDecoration(color: scheme.primary.withValues(alpha: 0.10), borderRadius: BorderRadius.circular(10)),
+                      child: Text(_equalizerPreset.toUpperCase(), style: TextStyle(color: scheme.primary, fontSize: 9.5, fontWeight: FontWeight.w900, letterSpacing: 0.7)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  height: 43,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: presets.length,
+                    separatorBuilder: (_, _) => const SizedBox(width: 8),
+                    itemBuilder: (context, index) {
+                      final preset = presets[index];
+                      return ChoiceChip(
+                        label: Text(preset.name),
+                        selected: _equalizerPreset == preset.name,
+                        avatar: _equalizerPreset == preset.name ? const Icon(Icons.check_rounded, size: 16) : null,
+                        side: BorderSide(
+                          color: _equalizerPreset == preset.name
+                              ? scheme.primary.withValues(alpha: 0.45)
+                              : scheme.outlineVariant.withValues(alpha: 0.55),
+                        ),
+                        shape: const StadiumBorder(),
+                        onSelected: (_) async {
+                          await _applyEqualizerPreset(preset.name);
+                          if (context.mounted) setSheetState(() {});
+                        },
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  presets.firstWhere((item) => item.name == _equalizerPreset, orElse: () => presets.first).detail,
+                  style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11.5),
+                ),
+                const SizedBox(height: 18),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.fromLTRB(13, 14, 13, 12),
+                  decoration: BoxDecoration(
+                    color: scheme.surfaceContainerHighest.withValues(alpha: 0.48),
+                    borderRadius: BorderRadius.circular(15),
+                    border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.55)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            width: 34,
+                            height: 34,
+                            decoration: BoxDecoration(
+                              color: scheme.primary.withValues(alpha: 0.13),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Icon(Icons.tune_rounded, color: scheme.primary, size: 19),
+                          ),
+                          const SizedBox(width: 10),
+                          const Expanded(child: Text('EQ manual', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900))),
+                          Text('5 band • ±12 dB', style: TextStyle(fontSize: 10.5, color: scheme.onSurfaceVariant, fontWeight: FontWeight.w700)),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text('Geser tiap band untuk membentuk karakter suara.', style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        height: 174,
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            for (var band = 0; band < customBands.length; band++)
+                              Expanded(
+                                child: Column(
+                                  children: [
+                                    AnimatedContainer(
+                                      duration: MediaQuery.of(context).disableAnimations ? Duration.zero : const Duration(milliseconds: 140),
+                                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: scheme.primary.withValues(alpha: 0.10),
+                                        borderRadius: BorderRadius.circular(9),
+                                      ),
+                                      child: Text(
+                                        '${customBands[band] > 0 ? '+' : ''}${customBands[band].toStringAsFixed(0)}',
+                                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: scheme.primary),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Expanded(
+                                      child: Center(
+                                        child: RotatedBox(
+                                          quarterTurns: 3,
+                                          child: SizedBox(
+                                            width: 118,
+                                            child: SliderTheme(
+                                              data: SliderTheme.of(context).copyWith(
+                                                trackHeight: 3.5,
+                                                activeTrackColor: scheme.primary,
+                                                inactiveTrackColor: scheme.outlineVariant.withValues(alpha: 0.8),
+                                                thumbColor: scheme.primary,
+                                                overlayColor: scheme.primary.withValues(alpha: 0.12),
+                                                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                                                overlayShape: const RoundSliderOverlayShape(overlayRadius: 13),
+                                              ),
+                                              child: Slider(
+                                                value: customBands[band],
+                                                min: -12,
+                                                max: 12,
+                                                divisions: 24,
+                                                label: '${customBands[band].toStringAsFixed(0)} dB',
+                                                onChanged: (value) => setSheetState(() => customBands[band] = value),
+                                                onChangeEnd: (_) async {
+                                                  var applied = false;
+                                                  try {
+                                                    if (_speakerEnhancerEnabled) {
+                                                      _speakerEnhancerEnabled = false;
+                                                      final prefs = await SharedPreferences.getInstance();
+                                                      await prefs.setBool(_speakerEnhancerPrefKey, false);
+                                                      await NativeAudioFeatures.setSpeakerSoundstage(
+                                                        enabled: false,
+                                                        strength: _speakerEnhancerStrength,
+                                                      );
+                                                    }
+                                                    applied = await _youtubeController.setEqualizerBands(customBands);
+                                                    final prefs = await SharedPreferences.getInstance();
+                                                    await prefs.setStringList(customBandsPrefKey, customBands.map((v) => v.toString()).toList());
+                                                  } catch (_) {}
+                                                  if (context.mounted) {
+                                                    setSheetState(() {});
+                                                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                                      content: Text(applied ? 'Equalizer manual diterapkan' : 'Efek manual bergantung dukungan audio perangkat'),
+                                                      duration: const Duration(seconds: 2),
+                                                    ));
+                                                  }
+                                                },
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 3),
+                                    Text(bandLabels[band], maxLines: 1, style: TextStyle(fontSize: 9, color: scheme.onSurfaceVariant, fontWeight: FontWeight.w700)),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton.icon(
+                          onPressed: () async {
+                            setSheetState(() { for (var i = 0; i < customBands.length; i++) { customBands[i] = 0; } });
+                            var applied = false;
+                            try {
+                              if (_speakerEnhancerEnabled) {
+                                _speakerEnhancerEnabled = false;
+                                final prefs = await SharedPreferences.getInstance();
+                                await prefs.setBool(_speakerEnhancerPrefKey, false);
+                                await NativeAudioFeatures.setSpeakerSoundstage(
+                                  enabled: false,
+                                  strength: _speakerEnhancerStrength,
+                                );
+                              }
+                              applied = await _youtubeController.setEqualizerBands(customBands);
+                              final prefs = await SharedPreferences.getInstance();
+                              await prefs.setStringList(customBandsPrefKey, customBands.map((v) => v.toString()).toList());
+                            } catch (_) {}
+                            if (context.mounted) {
+                              setSheetState(() {});
+                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(applied ? 'Equalizer direset' : 'Nilai EQ direset; efek bergantung dukungan perangkat')));
+                            }
+                          },
+                          icon: const Icon(Icons.restart_alt_rounded, size: 17),
+                          label: const Text('Reset band'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 22),
+                Row(
+                  children: [
+                    Icon(Icons.swap_horiz_rounded, color: scheme.primary),
+                    const SizedBox(width: 9),
+                    const Expanded(child: Text('Crossfade antar lagu', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900))),
+                    Text(crossfadePreview == 0 ? 'Mati' : '$crossfadePreview dtk', style: TextStyle(color: scheme.primary, fontWeight: FontWeight.w900)),
+                  ],
+                ),
+                Slider(
+                  value: crossfadePreview.toDouble(),
+                  min: 0,
+                  max: 6,
+                  divisions: 6,
+                  label: crossfadePreview == 0 ? 'Mati' : '$crossfadePreview detik',
+                  onChanged: (value) => setSheetState(() => crossfadePreview = value.round()),
+                  onChangeEnd: (value) async {
+                    final seconds = value.round().clamp(0, 6).toInt();
+                    _crossfadeSeconds = seconds;
+                    if (seconds > 0) {
+                      unawaited(_youtubeController.clearNativeGaplessQueue());
+                    }
+                    await _storage.saveCrossfadeSeconds(seconds);
+                    if (mounted) setState(() {});
+                    setSheetState(() => crossfadePreview = seconds);
+                  },
+                ),
+                Text(
+                  crossfadePreview == 0
+                      ? 'Lagu berganti langsung saat track berikutnya mulai.'
+                      : 'Volume lagu saat ini turun perlahan selama sekitar $crossfadePreview detik terakhir.',
+                  style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11.5, height: 1.35),
+                ),
+                const SizedBox(height: 22),
+                Row(
+                  children: [
+                    Icon(Icons.volume_up_rounded, color: scheme.primary),
+                    const SizedBox(width: 9),
+                    const Expanded(child: Text('Volume pemutar', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900))),
+                    Text('$volumePreview%', style: TextStyle(color: scheme.primary, fontWeight: FontWeight.w900)),
+                  ],
+                ),
+                Slider(
+                  value: volumePreview.toDouble(),
+                  min: 0,
+                  max: 100,
+                  divisions: 20,
+                  label: '$volumePreview%',
+                  onChanged: (value) {
+                    final next = (value / 5).round() * 5;
+                    setSheetState(() => volumePreview = next);
+                    unawaited(_setPlayerVolume(next));
+                  },
+                  onChangeEnd: (value) => unawaited(_setPlayerVolume(value.round(), persist: true)),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: scheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(14)),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.info_outline_rounded, size: 18, color: scheme.onSurfaceVariant),
+                      const SizedBox(width: 9),
+                      Expanded(
+                        child: Text(
+                          'Efek equalizer adalah best-effort: keberhasilannya bergantung pada dukungan output audio perangkat Android. Crossfade memudarkan lagu aktif, bukan melakukan mixing dua stream secara penuh.',
+                          style: TextStyle(fontSize: 11, height: 1.35, color: scheme.onSurfaceVariant),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _showSleepTimerSheet() {
+    var selectedMinutes = 30;
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      useSafeArea: true,
+      isScrollControlled: true,
+      constraints: const BoxConstraints(maxWidth: 520),
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) => ValueListenableBuilder<bool>(
+          valueListenable: _sleepActive,
+          builder: (context, active, _) {
+            final scheme = Theme.of(context).colorScheme;
+
+            void startTimer(Duration duration) {
+              _clearSleepTimer();
+              _stopAfterCurrent = false;
+              _sleepActive.value = true;
+              _sleepTimer = Timer(duration, () {
+                if (!mounted) return;
+                _clearSleepTimer();
+                unawaited(_stopPlayback());
+                _toast('Timer tidur selesai. Pemutaran dijeda.');
+              });
+              Navigator.of(sheetContext).pop();
+              _toast('MusikKu akan berhenti dalam ${duration.inMinutes} menit.');
+            }
+
+            void stopAfterTrack() {
+              _sleepTimer?.cancel();
+              _sleepTimer = null;
+              _stopAfterCurrent = true;
+              unawaited(_youtubeController.clearNativeGaplessQueue());
+              _sleepActive.value = true;
+              Navigator.of(sheetContext).pop();
+              _toast('Musik akan berhenti setelah lagu ini selesai.');
+            }
+
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 22),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: MusicSheetHeading(
+                          icon: Icons.bedtime_rounded,
+                          title: 'Timer tidur',
+                          subtitle: 'Musik berhenti otomatis saat waktunya tiba.',
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Tutup',
+                        onPressed: () => Navigator.of(sheetContext).pop(),
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(18, 16, 18, 12),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(18),
+                      color: scheme.surfaceContainerLow,
+                      border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.72)),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 76,
+                          height: 76,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: scheme.surface.withValues(alpha: 0.70),
+                            border: Border.all(color: scheme.primary.withValues(alpha: 0.26), width: 1.5),
+                          ),
+                          child: Icon(Icons.hourglass_bottom_rounded, size: 34, color: scheme.primary),
+                        ),
+                        const SizedBox(width: 18),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                active ? 'Timer sudah aktif' : 'Musik berhenti dalam',
+                                style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant, fontWeight: FontWeight.w700),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                active
+                                    ? (_stopAfterCurrent ? 'Lagu ini selesai' : 'Waktu berjalan')
+                                    : '$selectedMinutes menit',
+                                style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w900, letterSpacing: -0.7),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                active ? 'Timer akan mem-pause pemutar.' : 'Geser untuk mengatur durasi.',
+                                style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (!active) ...[
+                    const SizedBox(height: 12),
+                    SliderTheme(
+                      data: SliderTheme.of(context).copyWith(
+                        trackHeight: 5,
+                        activeTrackColor: scheme.primary,
+                        inactiveTrackColor: scheme.outlineVariant,
+                        thumbColor: scheme.primary,
+                        overlayColor: scheme.primary.withValues(alpha: 0.13),
+                      ),
+                      child: Slider(
+                        value: selectedMinutes.toDouble(),
+                        min: 5,
+                        max: 180,
+                        divisions: 35,
+                        label: '$selectedMinutes menit',
+                        onChanged: (value) {
+                          setSheetState(() => selectedMinutes = (value / 5).round() * 5);
+                        },
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('5 mnt', style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
+                          Text('3 jam', style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final minutes in const [15, 30, 45, 60, 90, 120])
+                          ChoiceChip(
+                            label: Text('$minutes mnt'),
+                            selected: selectedMinutes == minutes,
+                            onSelected: (_) => setSheetState(() => selectedMinutes = minutes),
+                            showCheckmark: false,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    FilledButton.icon(
+                      onPressed: () => startTimer(Duration(minutes: selectedMinutes)),
+                      icon: const Icon(Icons.play_arrow_rounded),
+                      label: Text('Mulai timer · $selectedMinutes menit'),
+                      style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(50)),
+                    ),
+                  ],
+                  const SizedBox(height: 10),
+                  OutlinedButton.icon(
+                    onPressed: _currentVideo == null ? null : stopAfterTrack,
+                    icon: const Icon(Icons.skip_next_rounded),
+                    label: const Text('Berhenti setelah lagu ini'),
+                    style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(46)),
+                  ),
+                  if (active)
+                    TextButton.icon(
+                      onPressed: () {
+                        _clearSleepTimer();
+                        Navigator.of(sheetContext).pop();
+                        _toast('Timer tidur dibatalkan.');
+                      },
+                      icon: const Icon(Icons.timer_off_rounded),
+                      label: const Text('Batalkan timer'),
+                    ),
+                  const SizedBox(height: 6),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.info_outline_rounded, size: 16, color: scheme.onSurfaceVariant),
+                      const SizedBox(width: 7),
+                      Expanded(
+                        child: Text(
+                          'Timer berlaku selama proses MusikKu tetap berjalan. Mode “setelah lagu ini” mengikuti event selesai dari pemutar.',
+                          style: TextStyle(fontSize: 11, height: 1.35, color: scheme.onSurfaceVariant),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}

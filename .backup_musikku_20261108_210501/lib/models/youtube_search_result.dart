@@ -1,0 +1,361 @@
+class YoutubeSearchResult {
+  final String videoId;
+  final String title;
+  /// Deskripsi video YouTube; berguna untuk membedakan cover dari upload nonmusik.
+  final String description;
+  final String channelTitle;
+  /// Canonical performer credit when known (e.g. Spotify import).
+  /// Kept separate from channelTitle because a label may upload the audio.
+  final String artistName;
+  /// Structured YouTube Music credit from Video.musicData, when available.
+  /// Kept separate from free-form description parsing to preserve provenance.
+  final String musicDataTitle;
+  final String musicDataArtist;
+  /// Actual YouTube upload channel, preserved when Spotify credits are used
+  /// as the visible performer name for an imported playlist entry.
+  final String sourceChannelTitle;
+  /// Original YouTube title before Spotify display metadata is applied.
+  /// Used to distinguish studio, live, remix, and cover recordings.
+  final String sourceVideoTitle;
+  /// Spotify recording identity attached only to tracks resolved from Spotify.
+  final String spotifyTrackId;
+  /// Canonical Spotify duration in milliseconds for stable playlist identity.
+  final int? spotifyDurationMs;
+  final String thumbnailUrl;
+  final int? viewCount;
+  final DateTime? publishedAt;
+  /// Perkiraan tanggal rilis dari teks relatif YouTube ("3 months ago"). Kasar
+  /// (bisa meleset sampai setahun), hanya untuk menilai baru/lama; jangan
+  /// ditampilkan sebagai tanggal.
+  final DateTime? approxPublishedAt;
+
+  /// 'youtube' atau 'local'. Local track tetap memakai model yang sama supaya
+  /// Queue/Favorite/History/Playlist dan UI bisa berbagi satu tipe.
+  final String sourceType;
+
+  /// Untuk lagu lokal, URI MediaStore/file yang diputar native.
+  final String mediaUri;
+
+  /// Durasi sumber lokal dalam detik. YouTube tetap boleh null.
+  final double? durationSeconds;
+
+  /// Metadata tambahan lokal.
+  final String album;
+  final String localMediaId;
+
+  /// App-private file path for an explicitly downloaded offline copy.
+  /// The original YouTube videoId remains unchanged for playlist identity.
+  final String offlinePath;
+
+  /// Status siaran langsung: '' (video biasa), 'live' (sedang live),
+  /// 'upcoming' (dijadwalkan), 'recording' (rekaman live yang sudah selesai).
+  final String liveStatus;
+
+  /// Jumlah penonton live saat ini (hanya untuk liveStatus == 'live').
+  final int? concurrentViewers;
+
+  /// Waktu mulai live (nyata kalau sudah mulai, jadwal kalau belum).
+  final DateTime? liveStartTime;
+
+  /// ID channel pemilik video (untuk foto profil dan membuka channel).
+  final String channelId;
+
+  /// Kategori YouTube (`10` = Music). Ini adalah salah satu sinyal katalog;
+  /// filter subscription/halaman channel juga menerima cover non-official
+  /// meskipun YouTube mengategorikannya sebagai Entertainment/People & Blogs.
+  final String categoryId;
+
+  bool get isLive => liveStatus == 'live';
+  bool get isUpcoming => liveStatus == 'upcoming';
+  bool get isLiveRecording => liveStatus == 'recording';
+
+  bool get isLocal =>
+      sourceType == 'local' || videoId.startsWith('local:');
+
+  bool get isOfflineDownloaded => offlinePath.trim().isNotEmpty;
+
+  /// URL cover YouTube. Lagu lokal menggunakan artwork native melalui
+  /// UnifiedArtwork widget dan tidak mengandalkan Image.network.
+  String get coverUrl {
+    final direct = thumbnailUrl.trim();
+
+    if (direct.isNotEmpty) {
+      return direct;
+    }
+
+    if (isLocal) {
+      return '';
+    }
+
+    if (videoId.isNotEmpty) {
+      return 'https://i.ytimg.com/vi/$videoId/hqdefault.jpg';
+    }
+
+    return '';
+  }
+
+  const YoutubeSearchResult({
+    required this.videoId,
+    required this.title,
+    this.description = '',
+    required this.channelTitle,
+    this.artistName = '',
+    this.musicDataTitle = '',
+    this.musicDataArtist = '',
+    this.sourceChannelTitle = '',
+    this.sourceVideoTitle = '',
+    this.spotifyTrackId = '',
+    this.spotifyDurationMs,
+    required this.thumbnailUrl,
+    this.viewCount,
+    this.publishedAt,
+    this.approxPublishedAt,
+    this.sourceType = 'youtube',
+    this.mediaUri = '',
+    this.durationSeconds,
+    this.album = '',
+    this.localMediaId = '',
+    this.offlinePath = '',
+    this.liveStatus = '',
+    this.concurrentViewers,
+    this.liveStartTime,
+    this.channelId = '',
+    this.categoryId = '',
+  });
+
+  YoutubeSearchResult copyWith({
+    String? videoId,
+    String? title,
+    String? description,
+    String? channelTitle,
+    String? artistName,
+    String? musicDataTitle,
+    String? musicDataArtist,
+    String? sourceChannelTitle,
+    String? sourceVideoTitle,
+    String? spotifyTrackId,
+    int? spotifyDurationMs,
+    String? thumbnailUrl,
+    int? viewCount,
+    DateTime? publishedAt,
+    DateTime? approxPublishedAt,
+    String? sourceType,
+    String? mediaUri,
+    double? durationSeconds,
+    String? album,
+    String? localMediaId,
+    String? offlinePath,
+    String? liveStatus,
+    int? concurrentViewers,
+    DateTime? liveStartTime,
+    String? channelId,
+    String? categoryId,
+  }) {
+    return YoutubeSearchResult(
+      videoId: videoId ?? this.videoId,
+      title: title ?? this.title,
+      description: description ?? this.description,
+      channelTitle: channelTitle ?? this.channelTitle,
+      artistName: artistName ?? this.artistName,
+      musicDataTitle: musicDataTitle ?? this.musicDataTitle,
+      musicDataArtist: musicDataArtist ?? this.musicDataArtist,
+      sourceChannelTitle: sourceChannelTitle ?? this.sourceChannelTitle,
+      sourceVideoTitle: sourceVideoTitle ?? this.sourceVideoTitle,
+      spotifyTrackId: spotifyTrackId ?? this.spotifyTrackId,
+      spotifyDurationMs: spotifyDurationMs ?? this.spotifyDurationMs,
+      thumbnailUrl: thumbnailUrl ?? this.thumbnailUrl,
+      viewCount: viewCount ?? this.viewCount,
+      publishedAt: publishedAt ?? this.publishedAt,
+      approxPublishedAt: approxPublishedAt ?? this.approxPublishedAt,
+      sourceType: sourceType ?? this.sourceType,
+      mediaUri: mediaUri ?? this.mediaUri,
+      durationSeconds: durationSeconds ?? this.durationSeconds,
+      album: album ?? this.album,
+      localMediaId: localMediaId ?? this.localMediaId,
+      offlinePath: offlinePath ?? this.offlinePath,
+      liveStatus: liveStatus ?? this.liveStatus,
+      concurrentViewers: concurrentViewers ?? this.concurrentViewers,
+      liveStartTime: liveStartTime ?? this.liveStartTime,
+      channelId: channelId ?? this.channelId,
+      categoryId: categoryId ?? this.categoryId,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'videoId': videoId,
+      'title': title,
+      'description': description,
+      'channelTitle': channelTitle,
+      'artistName': artistName,
+      'musicDataTitle': musicDataTitle,
+      'musicDataArtist': musicDataArtist,
+      'sourceChannelTitle': sourceChannelTitle,
+      'sourceVideoTitle': sourceVideoTitle,
+      'spotifyTrackId': spotifyTrackId,
+      'spotifyDurationMs': spotifyDurationMs,
+      'thumbnailUrl': thumbnailUrl,
+      'viewCount': viewCount,
+      'publishedAt': publishedAt?.toIso8601String(),
+      'approxPublishedAt': approxPublishedAt?.toIso8601String(),
+      'sourceType': sourceType,
+      'mediaUri': mediaUri,
+      'durationSeconds': durationSeconds,
+      'album': album,
+      'localMediaId': localMediaId,
+      'offlinePath': offlinePath,
+      'liveStatus': liveStatus,
+      'concurrentViewers': concurrentViewers,
+      'liveStartTime': liveStartTime?.toIso8601String(),
+      'channelId': channelId,
+      'categoryId': categoryId,
+    };
+  }
+
+  factory YoutubeSearchResult.fromJson(Map<String, dynamic> json) {
+    final source = json['sourceType']?.toString() ?? 'youtube';
+    final videoId = json['videoId']?.toString() ?? '';
+
+    return YoutubeSearchResult(
+      videoId: videoId,
+      title: json['title']?.toString() ?? 'Tanpa judul',
+      description: json['description']?.toString() ?? '',
+      channelTitle: json['channelTitle']?.toString() ?? 'Unknown',
+      artistName: json['artistName']?.toString() ?? '',
+      musicDataTitle: json['musicDataTitle']?.toString() ?? '',
+      musicDataArtist: json['musicDataArtist']?.toString() ?? '',
+      sourceChannelTitle: json['sourceChannelTitle']?.toString() ?? '',
+      sourceVideoTitle: json['sourceVideoTitle']?.toString() ?? '',
+      spotifyTrackId: json['spotifyTrackId']?.toString() ?? '',
+      spotifyDurationMs: json['spotifyDurationMs'] is num
+          ? (json['spotifyDurationMs'] as num).toInt()
+          : null,
+      thumbnailUrl: json['thumbnailUrl']?.toString() ?? '',
+      viewCount: json['viewCount'] is num ? (json['viewCount'] as num).toInt() : null,
+      publishedAt: DateTime.tryParse(json['publishedAt']?.toString() ?? ''),
+      approxPublishedAt:
+          DateTime.tryParse(json['approxPublishedAt']?.toString() ?? ''),
+      sourceType: source,
+      mediaUri: json['mediaUri']?.toString() ?? '',
+      durationSeconds: json['durationSeconds'] is num
+          ? (json['durationSeconds'] as num).toDouble()
+          : null,
+      album: json['album']?.toString() ?? '',
+      localMediaId: json['localMediaId']?.toString() ??
+          (source == 'local' && videoId.startsWith('local:')
+              ? videoId.substring('local:'.length)
+              : ''),
+      offlinePath: json['offlinePath']?.toString() ?? '',
+      liveStatus: json['liveStatus']?.toString() ?? '',
+      concurrentViewers: json['concurrentViewers'] is num
+          ? (json['concurrentViewers'] as num).toInt()
+          : null,
+      liveStartTime: DateTime.tryParse(json['liveStartTime']?.toString() ?? ''),
+      channelId: json['channelId']?.toString() ?? '',
+      categoryId: json['categoryId']?.toString() ?? '',
+    );
+  }
+
+  /// Mengubah resource `videos` dari YouTube Data API (part snippet,
+  /// statistics, contentDetails, liveStreamingDetails) menjadi model ini.
+  /// Mengembalikan null kalau resource tidak punya id video.
+  static YoutubeSearchResult? fromVideoResource(
+    Map<String, dynamic> item, {
+    String Function(dynamic thumbnails)? pickThumbnail,
+    String Function(String text)? decode,
+  }) {
+    final id = item['id']?.toString() ?? '';
+    if (id.isEmpty) return null;
+    final snippet = item['snippet'] is Map
+        ? Map<String, dynamic>.from(item['snippet'] as Map)
+        : const <String, dynamic>{};
+    final stats = item['statistics'] is Map
+        ? Map<String, dynamic>.from(item['statistics'] as Map)
+        : const <String, dynamic>{};
+    final content = item['contentDetails'] is Map
+        ? Map<String, dynamic>.from(item['contentDetails'] as Map)
+        : const <String, dynamic>{};
+    final liveDetails = item['liveStreamingDetails'] is Map
+        ? Map<String, dynamic>.from(item['liveStreamingDetails'] as Map)
+        : const <String, dynamic>{};
+
+    final broadcast = snippet['liveBroadcastContent']?.toString() ?? 'none';
+    var status = '';
+    if (broadcast == 'live') {
+      status = 'live';
+    } else if (broadcast == 'upcoming') {
+      status = 'upcoming';
+    } else if (liveDetails['actualStartTime'] != null) {
+      // Pernah live dan sudah selesai: ini rekaman live.
+      status = 'recording';
+    }
+
+    final startRaw = status == 'upcoming'
+        ? liveDetails['scheduledStartTime']
+        : liveDetails['actualStartTime'];
+
+    String thumb(dynamic raw) {
+      if (pickThumbnail != null) return pickThumbnail(raw);
+      if (raw is! Map) return '';
+      for (final key in const ['maxres', 'high', 'standard', 'medium', 'default']) {
+        final entry = raw[key];
+        if (entry is Map) {
+          final url = entry['url']?.toString() ?? '';
+          if (url.isNotEmpty) return url;
+        }
+      }
+      return '';
+    }
+
+    String text(String value) => decode == null ? value : decode(value);
+
+    final duration = parseIsoDuration(content['duration']?.toString());
+
+    return YoutubeSearchResult(
+      videoId: id,
+      title: text(snippet['title']?.toString() ?? 'Tanpa judul'),
+      description: text(snippet['description']?.toString() ?? ''),
+      channelTitle: text(snippet['channelTitle']?.toString() ?? 'Channel'),
+      thumbnailUrl: thumb(snippet['thumbnails']),
+      viewCount: int.tryParse(stats['viewCount']?.toString() ?? ''),
+      publishedAt: DateTime.tryParse(snippet['publishedAt']?.toString() ?? ''),
+      durationSeconds: (status == 'live' || status == 'upcoming') ? null : duration,
+      liveStatus: status,
+      concurrentViewers: int.tryParse(liveDetails['concurrentViewers']?.toString() ?? ''),
+      liveStartTime: DateTime.tryParse(startRaw?.toString() ?? ''),
+      channelId: snippet['channelId']?.toString() ?? '',
+      categoryId: snippet['categoryId']?.toString() ?? '',
+    );
+  }
+
+  /// "PT1H2M3S" -> 3723 detik. null kalau tidak valid.
+  static double? parseIsoDuration(String? iso) {
+    if (iso == null || iso.isEmpty) return null;
+    final match = RegExp(r'^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$').firstMatch(iso);
+    if (match == null) return null;
+    int part(int i) => int.tryParse(match.group(i) ?? '') ?? 0;
+    return (part(1) * 86400 + part(2) * 3600 + part(3) * 60 + part(4)).toDouble();
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is YoutubeSearchResult && other.videoId == videoId;
+
+  @override
+  int get hashCode => videoId.hashCode;
+}
+
+
+class YoutubeChannelSearchResult {
+  final String channelId;
+  final String title;
+  final String description;
+  final String thumbnailUrl;
+
+  const YoutubeChannelSearchResult({
+    required this.channelId,
+    required this.title,
+    required this.description,
+    required this.thumbnailUrl,
+  });
+}

@@ -1,0 +1,671 @@
+import 'package:flutter/material.dart';
+
+import '../models/listening_stat.dart';
+import '../models/youtube_search_result.dart';
+import '../services/storage_service.dart';
+import '../widgets/flow_components.dart';
+import '../widgets/music_design.dart';
+import '../widgets/unified_artwork.dart';
+
+class StatsPage extends StatefulWidget {
+  const StatsPage({super.key, required this.storage});
+
+  final StorageService storage;
+
+  @override
+  State<StatsPage> createState() => _StatsPageState();
+}
+
+class _StatsPageState extends State<StatsPage> {
+  late Future<List<ListeningStat>> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _load();
+  }
+
+  Future<List<ListeningStat>> _load() async {
+    await widget.storage.flushPendingWrites();
+    return widget.storage.loadListeningStats();
+  }
+
+  String _formatMinutes(double seconds) {
+    final minutes = (seconds / 60).round();
+    if (minutes < 60) return '$minutes menit';
+    final hours = minutes ~/ 60;
+    final rest = minutes % 60;
+    return rest == 0 ? '$hours jam' : '$hours jam ${rest}m';
+  }
+
+  String _formatDay(DateTime? date) {
+    if (date == null) return 'Belum pernah';
+    final now = DateTime.now();
+    final difference = now.difference(date);
+    if (difference.inDays == 0) return 'Hari ini';
+    if (difference.inDays == 1) return 'Kemarin';
+    if (difference.inDays < 7) return '${difference.inDays} hari lalu';
+    return '${date.day}/${date.month}/${date.year}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Statistik'),
+      ),
+      body: MusicBackdrop(child: FutureBuilder<List<ListeningStat>>(
+        future: _future,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return _CenteredMessage(
+              icon: Icons.error_outline_rounded,
+              message: 'Statistik gagal dimuat.',
+            );
+          }
+
+          final stats = snapshot.data ?? const <ListeningStat>[];
+          final byListen = [...stats]
+            ..sort((a, b) => b.listenedSeconds.compareTo(a.listenedSeconds));
+          final bySkip = [...stats]
+            ..sort((a, b) => b.skipCount.compareTo(a.skipCount));
+
+          final totalSeconds = stats.fold<double>(
+            0,
+            (sum, item) => sum + item.listenedSeconds,
+          );
+          final totalPlays = stats.fold<int>(
+            0,
+            (sum, item) => sum + item.playCount,
+          );
+          final totalSkips = stats.fold<int>(
+            0,
+            (sum, item) => sum + item.skipCount,
+          );
+
+          final artistCounts = <String, int>{};
+          final artistSeconds = <String, double>{};
+          for (final stat in stats) {
+            artistCounts[stat.artist] =
+                (artistCounts[stat.artist] ?? 0) + stat.playCount;
+            artistSeconds[stat.artist] =
+                (artistSeconds[stat.artist] ?? 0) + stat.listenedSeconds;
+          }
+          final topArtists = artistCounts.entries.toList()
+            ..sort((a, b) => b.value.compareTo(a.value));
+
+          final topArtist = topArtists.isEmpty ? null : topArtists.first;
+          final topArtistMinutes = topArtist == null
+              ? 0.0
+              : artistSeconds[topArtist.key] ?? 0.0;
+
+          return RefreshIndicator(
+            onRefresh: () async {
+              setState(() => _future = _load());
+              await _future;
+            },
+            child: MusicPageEntrance(
+              child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 44),
+              children: [
+                _StatsHero(
+                  totalSeconds: totalSeconds,
+                  totalPlays: totalPlays,
+                  topArtist: topArtist?.key,
+                  topArtistMinutes: topArtistMinutes,
+                  formatMinutes: _formatMinutes,
+                ),
+                const SizedBox(height: 14),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final columns = constraints.maxWidth >= 820 ? 4 : (constraints.maxWidth >= 560 ? 3 : 2);
+                    final cardWidth = (constraints.maxWidth - (10 * (columns - 1))) / columns;
+                    return Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: [
+                        _MetricCard(
+                          width: cardWidth,
+                          icon: Icons.headphones_rounded,
+                          label: 'Waktu dengar',
+                          value: _formatMinutes(totalSeconds),
+                        ),
+                        _MetricCard(
+                          width: cardWidth,
+                          icon: Icons.play_circle_filled_rounded,
+                          label: 'Total putar',
+                          value: '$totalPlays',
+                        ),
+                        _MetricCard(
+                          width: cardWidth,
+                          icon: Icons.skip_next_rounded,
+                          label: 'Dilewati',
+                          value: '$totalSkips',
+                        ),
+                        _MetricCard(
+                          width: cardWidth,
+                          icon: Icons.mic_external_on_rounded,
+                          label: 'Artis unik',
+                          value: '${artistCounts.length}',
+                        ),
+                      ],
+                    );
+                  },
+                ),
+                const SizedBox(height: 24),
+                _SectionHeader(
+                  title: 'Artis paling sering diputar',
+                  icon: Icons.mic_external_on_outlined,
+                ),
+                const SizedBox(height: 10),
+                if (topArtists.isEmpty)
+                  const _EmptyState(
+                    message: 'Belum ada data artis. Putar beberapa lagu dulu.',
+                  )
+                else
+                  ...topArtists.take(5).toList().asMap().entries.map(
+                    (entry) {
+                      final rank = entry.key + 1;
+                      final item = entry.value;
+                      return _RankTile(
+                        rank: rank,
+                        title: item.key,
+                        subtitle: '${item.value}× diputar',
+                        trailing: _formatMinutes(artistSeconds[item.key] ?? 0),
+                        progress: topArtists.isEmpty ? 0 : item.value / topArtists.first.value,
+                      );
+                    },
+                  ),
+                const SizedBox(height: 24),
+                _SectionHeader(
+                  title: 'Paling sering didengar',
+                  icon: Icons.local_fire_department_outlined,
+                ),
+                const SizedBox(height: 10),
+                if (byListen.isEmpty)
+                  const _EmptyState(
+                    message: 'Belum ada statistik. Putar beberapa lagu dulu.',
+                  )
+                else
+                  ...byListen.take(10).toList().asMap().entries.map(
+                    (entry) {
+                      return _StatSongTile(
+                        stat: entry.value,
+                        rank: entry.key + 1,
+                        formatMinutes: _formatMinutes,
+                        formatDay: _formatDay,
+                      );
+                    },
+                  ),
+                if (bySkip.any((stat) => stat.skipCount > 0)) ...[
+                  const SizedBox(height: 24),
+                  _SectionHeader(
+                    title: 'Sering dilewati',
+                    icon: Icons.swipe_right_alt_outlined,
+                  ),
+                  const SizedBox(height: 10),
+                  ...bySkip.where((stat) => stat.skipCount > 0).take(8).map(
+                    (stat) => _SkipTile(stat: stat),
+                  ),
+                ],
+                const SizedBox(height: 12),
+                Text(
+                  'Statistik dirangkum dari pemutaran, durasi dengar, like, dan skip di perangkat ini.',
+                  style: TextStyle(
+                    color: scheme.onSurfaceVariant,
+                    fontSize: 12,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            )),
+          );
+        },
+      )),
+    );
+  }
+}
+
+class _StatsHero extends StatelessWidget {
+  const _StatsHero({
+    required this.totalSeconds,
+    required this.totalPlays,
+    required this.topArtist,
+    required this.topArtistMinutes,
+    required this.formatMinutes,
+  });
+
+  final double totalSeconds;
+  final int totalPlays;
+  final String? topArtist;
+  final double topArtistMinutes;
+  final String Function(double) formatMinutes;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(17, 17, 17, 15),
+      decoration: BoxDecoration(
+        color: scheme.primaryContainer,
+        borderRadius: const BorderRadius.only(topLeft: Radius.circular(23), topRight: Radius.circular(23), bottomRight: Radius.circular(23), bottomLeft: Radius.circular(7)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.graphic_eq_rounded, color: scheme.onPrimaryContainer, size: 17),
+              const SizedBox(width: 8),
+              Text('YOUR LISTENING RECAP', style: TextStyle(color: scheme.onPrimaryContainer.withValues(alpha: 0.78), fontSize: 9, letterSpacing: 1.35, fontWeight: FontWeight.w900)),
+              const Spacer(),
+              Icon(Icons.auto_awesome_rounded, color: scheme.onPrimaryContainer.withValues(alpha: 0.70), size: 18),
+            ],
+          ),
+          const SizedBox(height: 13),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(formatMinutes(totalSeconds), style: TextStyle(color: scheme.onPrimaryContainer, fontSize: 38, height: 0.98, letterSpacing: -1.5, fontWeight: FontWeight.w900)),
+                    const SizedBox(height: 5),
+                    Text('total waktu mendengarkan', style: TextStyle(color: scheme.onPrimaryContainer.withValues(alpha: 0.78), fontSize: 11, fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ),
+              Container(
+                width: 76,
+                height: 76,
+                decoration: BoxDecoration(color: scheme.onPrimaryContainer.withValues(alpha: 0.08), shape: BoxShape.circle, border: Border.all(color: scheme.onPrimaryContainer.withValues(alpha: 0.18), width: 5)),
+                child: Center(child: Icon(Icons.headphones_rounded, color: scheme.onPrimaryContainer, size: 31)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Container(height: 1, color: scheme.onPrimaryContainer.withValues(alpha: 0.16)),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(child: _SummaryDatum(label: 'LAGU DIPUTAR', value: '$totalPlays')),
+              if (topArtist != null) ...[
+                Container(width: 1, height: 32, color: scheme.onPrimaryContainer.withValues(alpha: 0.18)),
+                const SizedBox(width: 13),
+                Expanded(child: _SummaryDatum(label: 'ARTIS TERATAS', value: topArtist!, detail: formatMinutes(topArtistMinutes))),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+}
+
+class _SummaryDatum extends StatelessWidget {
+  const _SummaryDatum({required this.label, required this.value, this.detail});
+  final String label;
+  final String value;
+  final String? detail;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(label, style: TextStyle(color: scheme.onPrimaryContainer.withValues(alpha: 0.68), fontSize: 8.5, fontWeight: FontWeight.w800, letterSpacing: 0.6)),
+        const SizedBox(height: 3),
+        Text(value, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onPrimaryContainer, fontSize: 13, fontWeight: FontWeight.w900)),
+        if (detail != null) ...[
+          const SizedBox(height: 2),
+          Text(detail!, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onPrimaryContainer.withValues(alpha: 0.74), fontSize: 9.5, fontWeight: FontWeight.w600)),
+        ],
+      ],
+    );
+  }
+}
+
+class _MetricCard extends StatelessWidget {
+  const _MetricCard({
+    required this.width,
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final double width;
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return TweenAnimationBuilder<double>(
+      key: ValueKey<String>('stats-metric-$label'),
+      tween: Tween<double>(begin: 0.94, end: 1.0),
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOutCubic,
+      builder: (context, scale, child) => Opacity(
+        opacity: scale.clamp(0.0, 1.0).toDouble(),
+        child: Transform.scale(scale: scale, child: child),
+      ),
+      child: SizedBox(
+        width: width,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(13, 13, 11, 13),
+          decoration: BoxDecoration(
+            color: scheme.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(15),
+            border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.52)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(color: scheme.primary, borderRadius: BorderRadius.circular(10)),
+                child: Icon(icon, color: scheme.onPrimary, size: 18),
+              ),
+              const SizedBox(width: 9),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 3),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(value, style: const TextStyle(fontSize: 18, letterSpacing: -0.5, fontWeight: FontWeight.w900)),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({required this.title, required this.icon});
+
+  final String title;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) => FlowSectionHeader(icon: icon, title: title);
+}
+
+class _RankTile extends StatelessWidget {
+  const _RankTile({
+    required this.rank,
+    required this.title,
+    required this.subtitle,
+    required this.trailing,
+    this.progress = 0,
+  });
+
+  final int rank;
+  final String title;
+  final String subtitle;
+  final String trailing;
+  final double progress;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.68),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 28,
+            child: Text(
+              '$rank',
+              style: TextStyle(
+                color: scheme.onSurfaceVariant,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: scheme.primary.withValues(alpha: 0.13),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(Icons.person_outline_rounded, color: scheme.primary, size: 20),
+          ),
+          const SizedBox(width: 11),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11),
+                ),
+                const SizedBox(height: 7),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(5),
+                  child: LinearProgressIndicator(value: progress.clamp(0.0, 1.0).toDouble(), minHeight: 4, backgroundColor: scheme.outlineVariant.withValues(alpha: 0.5)),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            trailing,
+            maxLines: 1,
+            style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatSongTile extends StatelessWidget {
+  const _StatSongTile({
+    required this.stat,
+    required this.rank,
+    required this.formatMinutes,
+    required this.formatDay,
+  });
+
+  final ListeningStat stat;
+  final int rank;
+  final String Function(double) formatMinutes;
+  final String Function(DateTime?) formatDay;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final artworkTrack = YoutubeSearchResult(
+      videoId: stat.videoId,
+      title: stat.title,
+      channelTitle: stat.artist,
+      artistName: stat.artistName.isNotEmpty
+          ? stat.artistName
+          : stat.artist.split(',').first.trim(),
+      thumbnailUrl: stat.thumbnailUrl,
+    );
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 22,
+            child: Text(
+              '$rank',
+              style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11),
+            ),
+          ),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: UnifiedArtwork(
+              track: artworkTrack,
+              width: 52,
+              height: 52,
+              fit: BoxFit.cover,
+              cacheWidth: 156,
+              iconSize: 24,
+            ),
+          ),
+          const SizedBox(width: 11),
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  stat.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${stat.artist} • ${stat.playCount}× • ${formatMinutes(stat.listenedSeconds)}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  formatDay(stat.lastPlayedAt),
+                  maxLines: 1,
+                  style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SkipTile extends StatelessWidget {
+  const _SkipTile({required this.stat});
+
+  final ListeningStat stat;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.skip_next_rounded, color: scheme.primary, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(stat.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                const SizedBox(height: 2),
+                Text(
+                  stat.artist,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+          Text(
+            '${stat.skipCount}×',
+            style: TextStyle(color: scheme.onSurfaceVariant, fontWeight: FontWeight.w700),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmptyState extends StatelessWidget {
+  const _EmptyState({required this.message});
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18),
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.52),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.insights_outlined, color: scheme.primary),
+          const SizedBox(width: 12),
+          Expanded(child: Text(message)),
+        ],
+      ),
+    );
+  }
+}
+
+class _CenteredMessage extends StatelessWidget {
+  const _CenteredMessage({required this.icon, required this.message});
+
+  final IconData icon;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 36, color: scheme.onSurfaceVariant),
+            const SizedBox(height: 10),
+            Text(message, textAlign: TextAlign.center),
+          ],
+        ),
+      ),
+    );
+  }
+}

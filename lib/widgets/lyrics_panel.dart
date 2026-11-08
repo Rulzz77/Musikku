@@ -121,7 +121,7 @@ class _LyricsPanelState extends State<LyricsPanel> {
         .toDouble();
   }
 
-  void _ensureVisible(int index) {
+  void _ensureVisible(BuildContext context, int index) {
     if (index < 0 || index >= widget.lyrics.length || index == _lastIndex) return;
     _lastIndex = index;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -130,7 +130,7 @@ class _LyricsPanelState extends State<LyricsPanel> {
       final target = (index * 60.0) - (viewport / 2) + 28.0;
       _scroll.animateTo(
         target.clamp(0.0, _scroll.position.maxScrollExtent).toDouble(),
-        duration: const Duration(milliseconds: 300),
+        duration: MediaQuery.of(context).disableAnimations ? Duration.zero : const Duration(milliseconds: 300),
         curve: Curves.easeOutCubic,
       );
     });
@@ -143,7 +143,7 @@ class _LyricsPanelState extends State<LyricsPanel> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(18, 10, 18, 12),
       child: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 230),
+        duration: MediaQuery.of(context).disableAnimations ? Duration.zero : const Duration(milliseconds: 230),
         switchInCurve: Curves.easeOutCubic,
         transitionBuilder: (child, animation) => FadeTransition(
           opacity: animation,
@@ -192,7 +192,7 @@ class _LyricsPanelState extends State<LyricsPanel> {
     }
 
     final current = widget.synced ? _currentIndex(position) : -1;
-    if (current >= 0) _ensureVisible(current);
+    if (current >= 0) _ensureVisible(context, current);
     return ListView.builder(
       controller: _scroll,
       padding: const EdgeInsets.fromLTRB(14, 8, 14, 28),
@@ -202,7 +202,7 @@ class _LyricsPanelState extends State<LyricsPanel> {
         final active = index == current;
         final passed = current > index;
         return AnimatedContainer(
-          duration: const Duration(milliseconds: 220),
+          duration: MediaQuery.of(context).disableAnimations ? Duration.zero : const Duration(milliseconds: 220),
           curve: Curves.easeOutCubic,
           margin: const EdgeInsets.symmetric(vertical: 3),
           decoration: const BoxDecoration(),
@@ -213,7 +213,7 @@ class _LyricsPanelState extends State<LyricsPanel> {
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
               child: AnimatedDefaultTextStyle(
-                duration: const Duration(milliseconds: 220),
+                duration: MediaQuery.of(context).disableAnimations ? Duration.zero : const Duration(milliseconds: 220),
                 curve: Curves.easeOutCubic,
                 style: TextStyle(
                   fontSize: active ? 23 : 17,
@@ -368,6 +368,11 @@ class _KaraokeWordState extends State<_KaraokeWord> with SingleTickerProviderSta
     final current = _displayProgress;
     _from = current;
     _to = next;
+    if (MediaQuery.of(context).disableAnimations) {
+      _controller.stop();
+      _controller.value = 1;
+      return;
+    }
     // Smaller duration when seeking backwards, but don't restart every frame
     // from zero. This interpolates from the most recent rendered fill amount.
     _controller.duration = next < current

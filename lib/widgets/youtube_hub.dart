@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math';
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
@@ -10,6 +11,7 @@ import '../models/native_youtube_state.dart';
 import '../models/playlist.dart';
 import '../models/youtube_search_result.dart';
 import '../pages/app_settings_page.dart';
+import '../pages/album_detail_page.dart';
 import '../pages/artist_page.dart';
 import '../pages/local_music_page.dart';
 import '../pages/music_studio_page.dart';
@@ -23,6 +25,7 @@ import '../services/smart_playlist_service.dart';
 import '../services/storage_service.dart';
 import '../services/youtube_search_service.dart';
 import 'app_update_sheet.dart';
+import 'album_artwork_image.dart';
 import 'channel_avatar.dart';
 import 'live_badge.dart';
 import 'unified_artwork.dart';
@@ -137,6 +140,7 @@ class YoutubeHub extends StatefulWidget {
 }
 
 enum _YoutubeSection { home, explore, samples, library }
+enum _SearchResultsTab { all, songs, artists, albums, videos }
 
 class _YoutubeHubState extends State<YoutubeHub> {
   // ---------------------------------------------------------------------------
@@ -172,6 +176,7 @@ class _YoutubeHubState extends State<YoutubeHub> {
   List<YoutubeChannelSearchResult> _searchChannels = const [];
   bool _channelSearchLoading = false;
   bool _artistChannelMode = false;
+  _SearchResultsTab _searchResultsTab = _SearchResultsTab.all;
 
   /// true selama tarik-untuk-refresh: RefreshIndicator sudah punya spinner
   /// sendiri, jadi spinner inline disembunyikan supaya tidak muncul dobel.
@@ -212,6 +217,11 @@ class _YoutubeHubState extends State<YoutubeHub> {
   bool _exploreLoading = false;
   String _exploreError = '';
 
+  // One-at-a-time mood station lookup keeps the Radio page responsive and
+  // prevents several rapid taps from starting overlapping searches.
+  bool _radioMoodLoading = false;
+  String _radioMoodLoadingName = '';
+
   static const List<String> _exploreCategories = [
     'Sedang tren',
     'Pop Indonesia',
@@ -224,6 +234,12 @@ class _YoutubeHubState extends State<YoutubeHub> {
     'Lo-fi',
     'Musik religi',
     'Soundtrack',
+    'Chill',
+    'Sad',
+    'Happy',
+    'Energetic',
+    'Focus',
+    'Relax',
   ];
 
   static const Map<String, String> _exploreQueries = {
@@ -239,6 +255,12 @@ class _YoutubeHubState extends State<YoutubeHub> {
     'Lo-fi': 'lofi hip hop music mix',
     'Musik religi': 'lagu religi Indonesia',
     'Soundtrack': 'soundtrack film Indonesia',
+    'Chill': 'lagu chill Indonesia santai',
+    'Sad': 'lagu galau Indonesia sedih',
+    'Happy': 'lagu ceria Indonesia happy',
+    'Energetic': 'lagu semangat Indonesia upbeat',
+    'Focus': 'instrumental focus music',
+    'Relax': 'lagu santai Indonesia akustik',
   };
 
   // ---------------------------------------------------------------------------
@@ -363,32 +385,28 @@ class _YoutubeHubState extends State<YoutubeHub> {
   Widget build(BuildContext context) {
     final channel = _openedChannel;
     final screenWidth = MediaQuery.sizeOf(context).width;
+    final isTablet = screenWidth >= 900;
     final dockInset = screenWidth >= 700
         ? ((screenWidth - 820) / 2).clamp(14.0, 180.0).toDouble()
         : 14.0;
 
-    return Stack(
-      children: [
-        Center(
-          child: ConstrainedBox(
-            // Keep reading widths comfortable on tablets and desktop-sized windows.
-            constraints: const BoxConstraints(maxWidth: 1200),
-            child: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 430),
-          reverseDuration: const Duration(milliseconds: 300),
+    final reduceMotion = MediaQuery.of(context).disableAnimations;
+    final content = Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 1200),
+        child: AnimatedSwitcher(
+          duration: reduceMotion ? Duration.zero : const Duration(milliseconds: 260),
+          reverseDuration: reduceMotion ? Duration.zero : const Duration(milliseconds: 190),
           switchInCurve: Curves.easeOutCubic,
           switchOutCurve: Curves.easeInCubic,
           transitionBuilder: (child, animation) {
             final slide = Tween<Offset>(
-              begin: const Offset(0, 0.035),
+              begin: const Offset(0, 0.025),
               end: Offset.zero,
             ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic));
-            final scale = Tween<double>(begin: 0.985, end: 1).animate(
-              CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
-            );
             return FadeTransition(
               opacity: animation,
-              child: SlideTransition(position: slide, child: ScaleTransition(scale: scale, child: child)),
+              child: SlideTransition(position: slide, child: child),
             );
           },
           child: RefreshIndicator(
@@ -401,9 +419,64 @@ class _YoutubeHubState extends State<YoutubeHub> {
               slivers: _hubSlivers(),
             ),
           ),
+        ),
+      ),
+    );
+
+    if (isTablet) {
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SizedBox(width: 8),
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              child: NavigationRail(
+                selectedIndex: _section.index,
+                onDestinationSelected: _selectDockDestination,
+                labelType: NavigationRailLabelType.all,
+                minWidth: 78,
+                groupAlignment: -0.55,
+                backgroundColor: Colors.transparent,
+                selectedIconTheme: IconThemeData(color: Theme.of(context).colorScheme.primary, size: 23),
+                unselectedIconTheme: IconThemeData(color: Theme.of(context).colorScheme.onSurfaceVariant, size: 22),
+                selectedLabelTextStyle: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 10, fontWeight: FontWeight.w800),
+                unselectedLabelTextStyle: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 10, fontWeight: FontWeight.w600),
+                destinations: const [
+                  NavigationRailDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home_rounded), label: Text('Beranda')),
+                  NavigationRailDestination(icon: Icon(Icons.explore_outlined), selectedIcon: Icon(Icons.explore_rounded), label: Text('Jelajah')),
+                  NavigationRailDestination(icon: Icon(Icons.radio_outlined), selectedIcon: Icon(Icons.radio_rounded), label: Text('Radio')),
+                  NavigationRailDestination(icon: Icon(Icons.library_music_outlined), selectedIcon: Icon(Icons.library_music_rounded), label: Text('Koleksi')),
+                ],
+              ),
             ),
           ),
-        ),
+          VerticalDivider(width: 1, thickness: 1, color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.5)),
+          Expanded(
+            child: Stack(
+              children: [
+                Positioned.fill(child: content),
+                if (channel != null)
+                  Positioned.fill(
+                    child: YoutubeChannelPage(
+                      key: ValueKey('channel-${channel.id}'),
+                      channelId: channel.id,
+                      title: channel.title,
+                      thumbnailUrl: channel.thumbnailUrl,
+                      onPlay: widget.onPlay,
+                      onClose: () => setState(() => _openedChannel = null),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+
+    return Stack(
+      children: [
+        Positioned.fill(child: content),
         Positioned(
           left: dockInset,
           right: dockInset,
@@ -413,9 +486,6 @@ class _YoutubeHubState extends State<YoutubeHub> {
             onSelect: _selectDockDestination,
           ),
         ),
-        // Halaman channel sebagai lapisan di atas hub (termasuk bar navigasi).
-        // Halaman tonton / PiP milik HomePage berada di atas hub ini, jadi
-        // setelah Back dari video kita kembali ke channel yang sama.
         if (channel != null)
           Positioned.fill(
             child: YoutubeChannelPage(
@@ -484,8 +554,9 @@ class _YoutubeHubState extends State<YoutubeHub> {
         ),
       SliverToBoxAdapter(
         child: SizedBox(
-          // Extra clearance for the floating, inset navigation dock.
-          height: 14 + 72 + widget.bottomInset + MediaQuery.paddingOf(context).bottom,
+          // Phones reserve space for the floating dock; tablets use a sidebar.
+          height: 14 + (MediaQuery.sizeOf(context).width >= 900 ? 10 : 72) +
+              widget.bottomInset + MediaQuery.paddingOf(context).bottom,
         ),
       ),
     ];
@@ -504,15 +575,59 @@ class _YoutubeHubState extends State<YoutubeHub> {
     }
   }
 
-  /// Hasil pencarian di Beranda: channel terkait, lalu daftar lagu.
+  /// Hasil pencarian bersih dengan filter Semua, Lagu, Artis, Album, dan Video.
+  /// Album hanya ditampilkan bila metadata album memang tersedia; tidak dibuat
+  /// dari tebakan judul video.
   List<Widget> _hubSearchSlivers() {
+    final songs = _searchResults
+        .where(YoutubeSearchService.isMusicCandidate)
+        .toList(growable: false);
+    final albums = <String, List<YoutubeSearchResult>>{};
+    for (final video in _searchResults) {
+      final album = video.album.trim();
+      if (album.isNotEmpty) albums.putIfAbsent(album, () => []).add(video);
+    }
+
+    final showArtists = _searchResultsTab == _SearchResultsTab.all ||
+        _searchResultsTab == _SearchResultsTab.artists;
+    final showSongs = _searchResultsTab == _SearchResultsTab.all ||
+        _searchResultsTab == _SearchResultsTab.songs;
+    final showVideos = _searchResultsTab == _SearchResultsTab.videos;
+    final showAlbums = _searchResultsTab == _SearchResultsTab.albums;
+
     return [
-      if (_searchChannels.isNotEmpty) ...[
-        _sectionHeader(_artistChannelMode ? 'Artis' : 'Channel musik'),
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 1, 14, 8),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                for (final entry in <(_SearchResultsTab, String)>[
+                  (_SearchResultsTab.all, 'Semua'),
+                  (_SearchResultsTab.songs, 'Lagu'),
+                  (_SearchResultsTab.artists, 'Artis'),
+                  (_SearchResultsTab.albums, 'Album'),
+                  (_SearchResultsTab.videos, 'Video'),
+                ]) ...[
+                  if (entry != (_SearchResultsTab.all, 'Semua')) const SizedBox(width: 7),
+                  ChoiceChip(
+                    label: Text(entry.$2),
+                    selected: _searchResultsTab == entry.$1,
+                    onSelected: (_) => setState(() => _searchResultsTab = entry.$1),
+                    showCheckmark: false,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+      if (showArtists && _searchChannels.isNotEmpty) ...[
+        _sectionHeader('Artis'),
         SliverToBoxAdapter(
           child: SizedBox(
-            // Tinggi cukup untuk avatar + nama + label channel bahkan saat
-            // ukuran font sistem dibesarkan (sebelumnya overflow 10 px).
             height: 136,
             child: ListView.separated(
               padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
@@ -524,44 +639,91 @@ class _YoutubeHubState extends State<YoutubeHub> {
           ),
         ),
       ],
-      if (_searchChannels.isEmpty && !_inlineLoading)
+      if (showArtists && _searchChannels.isEmpty && !_channelSearchLoading &&
+          _searchResultsTab == _SearchResultsTab.artists)
         SliverToBoxAdapter(
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
-              child: TextButton.icon(
-                onPressed: _channelSearchLoading ? null : () => _searchChannelsForCurrentQuery(),
-                icon: _channelSearchLoading
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.person_search_rounded),
-                label: Text(_channelSearchLoading ? 'Mencari channel…' : 'Cari channel terkait'),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 20, 14, 20),
+            child: Center(
+              child: OutlinedButton.icon(
+                onPressed: () => _searchChannelsForCurrentQuery(artistMode: true),
+                icon: const Icon(Icons.person_search_rounded),
+                label: const Text('Cari artis terkait'),
               ),
             ),
           ),
         ),
-      _sectionHeader('Lagu untuk “$_query”'),
-      if (_inlineLoading && _searchResults.isEmpty)
+      if (showArtists && _channelSearchLoading && _searchChannels.isEmpty)
         const SliverToBoxAdapter(
           child: Padding(
-            padding: EdgeInsets.all(24),
+            padding: EdgeInsets.all(18),
             child: Center(child: CircularProgressIndicator()),
           ),
-        )
-      else if (_searchResults.isEmpty)
-        const SliverToBoxAdapter(
-          child: Padding(padding: EdgeInsets.all(24), child: Text('Tidak ada lagu.')),
-        )
-      else
-        SliverList.builder(
-          itemCount: _searchResults.length,
-          itemBuilder: (context, index) => _videoCard(_searchResults[index]),
         ),
+      if (showSongs || showVideos) ...[
+        _sectionHeader(showVideos ? 'Video terkait' : 'Lagu'),
+        if (_inlineLoading && _searchResults.isEmpty)
+          const SliverToBoxAdapter(
+            child: Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator())),
+          )
+        else if ((showSongs ? songs : _searchResults).isEmpty)
+          SliverToBoxAdapter(
+            child: _searchEmptyState(showVideos ? 'Video belum ditemukan' : 'Lagu belum ditemukan'),
+          )
+        else
+          SliverList.builder(
+            itemCount: (showSongs ? songs : _searchResults).length,
+            itemBuilder: (context, index) => _videoCard((showSongs ? songs : _searchResults)[index]),
+          ),
+      ],
+      if (showAlbums) ...[
+        _sectionHeader('Album'),
+        if (albums.isEmpty)
+          SliverToBoxAdapter(
+            child: _searchEmptyState('Metadata album belum tersedia untuk hasil ini'),
+          )
+        else
+          SliverList.builder(
+            itemCount: albums.length,
+            itemBuilder: (context, index) {
+              final entry = albums.entries.elementAt(index);
+              final first = entry.value.first;
+              return ListTile(
+                leading: ClipRRect(
+                  borderRadius: BorderRadius.circular(9),
+                  child: UnifiedArtwork(track: first, width: 48, height: 48, fit: BoxFit.cover),
+                ),
+                title: Text(entry.key, maxLines: 1, overflow: TextOverflow.ellipsis),
+                subtitle: Text('${entry.value.length} lagu · ${first.artistName.isNotEmpty ? first.artistName : first.channelTitle}'),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: () => _openAlbumDetail(entry.key, entry.value),
+              );
+            },
+          ),
+      ],
+      if (_searchResultsTab == _SearchResultsTab.all &&
+          _searchResults.isEmpty && _searchChannels.isEmpty && !_inlineLoading)
+        SliverToBoxAdapter(child: _searchEmptyState('Tidak ada hasil yang cocok')),
+      if (_searchResultsTab == _SearchResultsTab.artists &&
+          _searchChannels.isEmpty && !_channelSearchLoading)
+        const SliverToBoxAdapter(child: SizedBox(height: 1)),
     ];
+  }
+
+  Widget _searchEmptyState(String message) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(28, 28, 28, 32),
+      child: Column(
+        children: [
+          Icon(Icons.search_off_rounded, size: 34, color: scheme.onSurfaceVariant),
+          const SizedBox(height: 10),
+          Text(message, textAlign: TextAlign.center, style: TextStyle(color: scheme.onSurface, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 5),
+          Text('Coba judul saja, nama artis saja, atau ubah kata pencarian.', textAlign: TextAlign.center, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12)),
+        ],
+      ),
+    );
   }
 
   Widget _hubChannelCard(YoutubeChannelSearchResult channel) {
@@ -688,6 +850,7 @@ class _EditorialFloatingDockState extends State<_EditorialFloatingDock> {
               : activeIndex.toDouble();
           final activeLeft = (visualIndex * cellWidth + 4).clamp(0.0, maxWidth - cellWidth + 4).toDouble();
           final scheme = Theme.of(context).colorScheme;
+          final reduceMotion = MediaQuery.of(context).disableAnimations;
 
           return GestureDetector(
             behavior: HitTestBehavior.opaque,
@@ -703,17 +866,28 @@ class _EditorialFloatingDockState extends State<_EditorialFloatingDock> {
               if (target != widget.selectedIndex) widget.onSelect(target);
             },
             onHorizontalDragCancel: () => setState(() => _dragX = null),
-            child: Container(
-              decoration: BoxDecoration(
-                color: scheme.surfaceContainerLowest,
-                borderRadius: BorderRadius.circular(17),
-                border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.72)),
-              ),
-              child: Stack(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(19),
+              child: BackdropFilter(
+                filter: ui.ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: scheme.surface.withValues(alpha: Theme.of(context).brightness == Brightness.dark ? 0.76 : 0.86),
+                    borderRadius: BorderRadius.circular(19),
+                    border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.72)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: Theme.of(context).brightness == Brightness.dark ? 0.16 : 0.045),
+                        blurRadius: 22,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: Stack(
                 fit: StackFit.expand,
                 children: [
                   AnimatedPositioned(
-                    duration: dragging ? Duration.zero : const Duration(milliseconds: 220),
+                    duration: dragging || reduceMotion ? Duration.zero : const Duration(milliseconds: 220),
                     curve: Curves.easeOutCubic,
                     left: activeLeft,
                     top: 5,
@@ -741,6 +915,8 @@ class _EditorialFloatingDockState extends State<_EditorialFloatingDock> {
                     ],
                   ),
                 ],
+                  ),
+                ),
               ),
             ),
           );
@@ -773,6 +949,9 @@ class _FlowDockDestination extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final animationDuration = MediaQuery.of(context).disableAnimations
+        ? Duration.zero
+        : const Duration(milliseconds: 130);
     return Semantics(
       button: true,
       selected: selected,
@@ -792,7 +971,7 @@ class _FlowDockDestination extends StatelessWidget {
                 children: [
                   AnimatedScale(
                     scale: 1.0 + magnification * 0.18,
-                    duration: const Duration(milliseconds: 130),
+                    duration: animationDuration,
                     curve: Curves.easeOutCubic,
                     child: Icon(
                       selected ? selectedIcon : icon,
@@ -802,7 +981,7 @@ class _FlowDockDestination extends StatelessWidget {
                   ),
                   const SizedBox(height: 3),
                   AnimatedDefaultTextStyle(
-                    duration: const Duration(milliseconds: 130),
+                    duration: animationDuration,
                     curve: Curves.easeOut,
                     style: TextStyle(
                       fontSize: selected ? 9.7 : 9.2,

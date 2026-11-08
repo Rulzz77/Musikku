@@ -119,7 +119,7 @@ class _DataUsageCardState extends State<DataUsageCard> {
             Text('TOTAL HARI INI', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.3)),
             const SizedBox(height: 4),
             AnimatedSwitcher(
-              duration: const Duration(milliseconds: 220),
+              duration: MediaQuery.of(context).disableAnimations ? Duration.zero : const Duration(milliseconds: 220),
               child: Text(
                 DataUsageService.formatBytes(snapshot.todayTotalBytes),
                 key: ValueKey<int>(snapshot.todayTotalBytes),

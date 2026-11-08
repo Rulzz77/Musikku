@@ -14,6 +14,7 @@ import android.app.PictureInPictureParams
 import android.app.RemoteAction
 import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.ComponentName
 import android.content.IntentFilter
 import android.graphics.drawable.Icon
 import android.os.Handler
@@ -220,6 +221,55 @@ class MainActivity : AudioServiceActivity() {
         super.configureFlutterEngine(
             flutterEngine
         )
+
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "musikku/app_icon",
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "setLauncherIcon" -> {
+                    val variant = call.argument<String>("variant")?.lowercase(Locale.ROOT).orEmpty()
+                    val suffix = when (variant) {
+                        "blue" -> "Blue"
+                        "black" -> "Black"
+                        "purple" -> "Purple"
+                        "green" -> "Green"
+                        "pink" -> "Pink"
+                        "orange" -> "Orange"
+                        "teal" -> "Teal"
+                        "silver" -> "Silver"
+                        else -> null
+                    }
+                    if (suffix == null) {
+                        result.error("INVALID_ICON_VARIANT", "Varian ikon tidak dikenal.", null)
+                    } else {
+                        runCatching {
+                            val aliases = listOf("Blue", "Black", "Purple", "Green", "Pink", "Orange", "Teal", "Silver")
+                            val selected = ComponentName(this, "$packageName.Launcher$suffix")
+                            // Enable the new alias first so the launcher never has zero entry points.
+                            packageManager.setComponentEnabledSetting(
+                                selected,
+                                PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                                PackageManager.DONT_KILL_APP,
+                            )
+                            aliases.filter { it != suffix }.forEach { alias ->
+                                packageManager.setComponentEnabledSetting(
+                                    ComponentName(this, "$packageName.Launcher$alias"),
+                                    PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                                    PackageManager.DONT_KILL_APP,
+                                )
+                            }
+                            true
+                        }.onSuccess { result.success(it) }
+                            .onFailure { error ->
+                                MusikKuLogger.e(TAG, "Mengganti ikon launcher gagal", error)
+                                result.error("ICON_SWITCH_FAILED", error.message, null)
+                            }
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
 
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,

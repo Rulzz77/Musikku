@@ -898,7 +898,7 @@ extension _HomeAudioSettingsUi on _HomePageState {
                                 child: Column(
                                   children: [
                                     AnimatedContainer(
-                                      duration: const Duration(milliseconds: 140),
+                                      duration: MediaQuery.of(context).disableAnimations ? Duration.zero : const Duration(milliseconds: 140),
                                       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
                                       decoration: BoxDecoration(
                                         color: scheme.primary.withValues(alpha: 0.10),

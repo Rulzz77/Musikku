@@ -143,6 +143,75 @@ extension _YoutubeHubLibraryViews on _YoutubeHubState {
           _libraryCard('Playlist saya', '${widget.customPlaylistCount} playlist · buat, susun, dan putar lagu', Icons.queue_music_rounded, widget.onOpenCustomPlaylists ?? () {}),
         ]),
       ),
+      if (widget.customPlaylists.isNotEmpty) ...[
+        SliverToBoxAdapter(child: _librarySectionLabel('Playlist terbarumu')),
+        SliverToBoxAdapter(
+          child: SizedBox(
+            height: 190,
+            child: ListView.separated(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              scrollDirection: Axis.horizontal,
+              itemCount: widget.customPlaylists.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 12),
+              itemBuilder: (context, index) {
+                final playlist = widget.customPlaylists[index];
+                return SizedBox(
+                  width: 142,
+                  child: Material(
+                    color: scheme.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(17),
+                    clipBehavior: Clip.antiAlias,
+                    child: InkWell(
+                      onTap: () {
+                        final open = widget.onOpenCustomPlaylist;
+                        if (open != null) {
+                          open(playlist);
+                        } else {
+                          widget.onOpenCustomPlaylists?.call();
+                        }
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.all(9),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: PlaylistArtwork(playlist: playlist, fit: BoxFit.cover, iconSize: 30),
+                                  ),
+                                  Positioned(
+                                    right: 6,
+                                    bottom: 6,
+                                    child: DecoratedBox(
+                                      decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.68), borderRadius: BorderRadius.circular(7)),
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                                        child: Text('${playlist.songs.length} lagu', style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w800)),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(playlist.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurface, fontSize: 11.5, fontWeight: FontWeight.w900)),
+                            const SizedBox(height: 2),
+                            Text('${playlist.offlineSongCount} offline · ${playlist.folderName}', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 9)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      ],
       SliverToBoxAdapter(child: _librarySectionLabel('Lagu & aktivitas')),
       SliverToBoxAdapter(
         child: Padding(
@@ -167,7 +236,9 @@ extension _YoutubeHubLibraryViews on _YoutubeHubState {
                 TweenAnimationBuilder<double>(
                   key: ValueKey<String>('library-shortcut-${tile.$1}'),
                   tween: Tween<double>(begin: 0, end: 1),
-                  duration: Duration(milliseconds: 240 + tile.$1 * 55),
+                  duration: MediaQuery.of(context).disableAnimations
+                      ? Duration.zero
+                      : Duration(milliseconds: 240 + tile.$1 * 55),
                   curve: Curves.easeOutCubic,
                   builder: (context, value, child) => Opacity(
                     opacity: value,
@@ -271,6 +342,27 @@ extension _YoutubeHubLibraryViews on _YoutubeHubState {
         onOpenAudioSettings: widget.onOpenAudioSettings,
       ),
     ));
+  }
+
+  void _openAlbumDetail(String title, List<YoutubeSearchResult> songs) {
+    final validTracks = songs
+        .where((track) => track.videoId.isNotEmpty && YoutubeSearchService.isMusicCandidate(track))
+        .toList(growable: false);
+    if (validTracks.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Track album belum tersedia untuk diputar.')),
+      );
+      return;
+    }
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => AlbumDetailPage(
+          albumTitle: title,
+          tracks: validTracks,
+          onPlayFromList: widget.onPlayFromList,
+        ),
+      ),
+    );
   }
 
   void _showSongList(String title, List<YoutubeSearchResult> songs) {

@@ -159,7 +159,6 @@ extension _YoutubeHubVideoComponents on _YoutubeHubState {
     );
   }
 
-
   Widget _videoCard(YoutubeSearchResult video) {
     final scheme = Theme.of(context).colorScheme;
     final progress = (widget.watchProgress[video.videoId] ?? 0).clamp(0.0, 1.0).toDouble();
@@ -223,49 +222,6 @@ extension _YoutubeHubVideoComponents on _YoutubeHubState {
                 ],
               ),
             ),
-          ),
-        ),
-      ),
-    );
-  }
-
-
-  Widget _quickPickCard(YoutubeSearchResult video) {
-    final scheme = Theme.of(context).colorScheme;
-    final isCurrent = widget.currentVideoId == video.videoId;
-    return SizedBox(
-      width: 148,
-      child: Material(
-        color: scheme.surfaceContainerLow,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15), side: BorderSide(color: isCurrent ? scheme.primary.withValues(alpha: 0.5) : scheme.outlineVariant.withValues(alpha: 0.55))),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: () => unawaited(widget.onPlay(video)),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    UnifiedArtwork(track: video, fit: BoxFit.cover, iconSize: 30),
-                    Positioned(left: 8, top: 8, child: Container(padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4), decoration: BoxDecoration(color: scheme.surface.withValues(alpha: 0.9), borderRadius: BorderRadius.circular(6)), child: Text('PILIHAN', style: TextStyle(color: scheme.onSurface, fontSize: 7, fontWeight: FontWeight.w900, letterSpacing: 0.6)))),
-                    Positioned(right: 8, bottom: 8, child: Container(padding: const EdgeInsets.all(7), decoration: BoxDecoration(color: scheme.primary, borderRadius: BorderRadius.circular(9)), child: Icon(isCurrent ? Icons.graphic_eq_rounded : Icons.play_arrow_rounded, color: scheme.onPrimary, size: 17))),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(9, 8, 9, 10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(MusicTitleFormatter.clean(video.title), maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurface, fontSize: 10.5, fontWeight: FontWeight.w800, height: 1.16)),
-                    const SizedBox(height: 4),
-                    Text(video.channelTitle.isEmpty ? 'Musik' : video.channelTitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 9, fontWeight: FontWeight.w600)),
-                  ],
-                ),
-              ),
-            ],
           ),
         ),
       ),

@@ -403,39 +403,49 @@ class _ArtistPageState extends State<ArtistPage> {
             ? const Center(child: CircularProgressIndicator())
             : _error != null && _songs.isEmpty
                 ? _ErrorState(message: _error.toString(), onRetry: _load)
-                : MusicPageEntrance(
-                    child: Column(
-                      children: [
-                        _header(scheme),
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(20, 2, 20, 8),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              const Expanded(
-                                child: Text(
-                                  'Lagu populer',
-                                  style: TextStyle(
-                                    fontSize: 19,
-                                    fontWeight: FontWeight.w900,
-                                    letterSpacing: -0.4,
+                : LayoutBuilder(
+                    builder: (context, constraints) {
+                      final wide = constraints.maxWidth >= 760;
+                      final header = _header(scheme);
+                      final songs = Column(
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(20, 2, 20, 8),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                const Expanded(
+                                  child: Text(
+                                    'Lagu populer',
+                                    style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900, letterSpacing: -0.4),
                                   ),
                                 ),
-                              ),
-                              Text(
-                                '${_songs.length} lagu',
-                                style: TextStyle(
-                                  color: scheme.onSurfaceVariant,
-                                  fontSize: 11.5,
-                                  fontWeight: FontWeight.w600,
+                                Text(
+                                  '${_songs.length} lagu',
+                                  style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11.5, fontWeight: FontWeight.w600),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
-                        ),
-                        Expanded(child: _buildSongList()),
-                      ],
-                    ),
+                          Expanded(child: _buildSongList()),
+                        ],
+                      );
+                      return MusicPageEntrance(
+                        child: wide
+                            ? Row(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  SizedBox(
+                                    width: (constraints.maxWidth * 0.40).clamp(340.0, 470.0).toDouble(),
+                                    child: SingleChildScrollView(child: header),
+                                  ),
+                                  VerticalDivider(width: 1, color: scheme.outlineVariant.withValues(alpha: 0.55)),
+                                  Expanded(child: songs),
+                                ],
+                              )
+                            : Column(children: [header, Expanded(child: songs)]),
+                      );
+                    },
                   ),
       ),
     );
@@ -443,6 +453,7 @@ class _ArtistPageState extends State<ArtistPage> {
 
   Widget _header(ColorScheme scheme) {
     final imageUrl = _artistImageUrl;
+    final heroHeight = MediaQuery.sizeOf(context).width >= 760 ? 286.0 : 224.0;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
       child: Column(
@@ -451,7 +462,7 @@ class _ArtistPageState extends State<ArtistPage> {
           ClipRRect(
             borderRadius: BorderRadius.circular(23),
             child: SizedBox(
-              height: 224,
+              height: heroHeight,
               width: double.infinity,
               child: Stack(
                 fit: StackFit.expand,

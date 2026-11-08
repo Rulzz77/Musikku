@@ -4,12 +4,6 @@ part of '../youtube_hub.dart';
 // ignore_for_file: invalid_use_of_protected_member
 
 extension _YoutubeHubHomeViews on _YoutubeHubState {
-  double _homePlaylistCardWidth() {
-    final width = MediaQuery.sizeOf(context).width;
-    if (width >= 900) return 204;
-    if (width >= 600) return 190;
-    return (width * 0.52).clamp(158.0, 184.0).toDouble();
-  }
 
   /// Beranda musik: lagu populer kategori Music di Indonesia.
   /// Trending memakai API key, jadi TIDAK perlu login.
@@ -138,7 +132,6 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
   }
 
   List<Widget> _homeSections() {
-    // Filter views reuse the same search and feed pipeline as before.
     if (_activeChip >= 1 && _activeChip <= 3) {
       return [
         SliverToBoxAdapter(child: _modernWelcomeHeader()),
@@ -147,7 +140,6 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
       ];
     }
 
-    // Music-only public feed; no signed-in subscription uploads are used.
     final feed = <YoutubeSearchResult>[];
     final seenFeedIds = <String>{};
     for (final video in _trending) {
@@ -161,152 +153,343 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
       feed.add(video);
     }
 
-    final recentlyPlayed = widget.recentlyPlayed
-        .where((video) => YoutubeSearchService.isMusicCandidate(video))
-        .take(12)
+    final recent = widget.recentlyPlayed
+        .where(YoutubeSearchService.isMusicCandidate)
+        .take(8)
         .toList(growable: false);
     final smartPlaylists = _buildSmartPlaylists();
-    final frequentMix = _findFrequentMix(smartPlaylists);
-    final openListeningRoom = widget.onOpenListeningRoom;
-    final actions = <({String title, String subtitle, IconData icon, VoidCallback onTap})>[
-      if (frequentMix != null)
-        (
-          title: 'Mix untukmu',
-          subtitle: '${frequentMix.songs.length} lagu dari kebiasaanmu',
-          icon: Icons.auto_awesome_rounded,
-          onTap: () => _playFrequentMix(frequentMix),
-        ),
-      if (openListeningRoom != null)
-        (
-          title: 'Dengar bareng',
-          subtitle: 'Buat ruang atau gabung teman',
-          icon: Icons.headphones_rounded,
-          onTap: openListeningRoom,
-        ),
-    ];
-    final isFirstTime = recentlyPlayed.isEmpty &&
-        widget.favorites.isEmpty &&
-        widget.customPlaylists.isEmpty;
+    final firstFeatured = smartPlaylists.isNotEmpty
+        ? smartPlaylists.first
+        : null;
 
-    // Beranda hanya berisi jalur utama: cari musik, mulai mendengarkan,
-    // kelola playlist, lanjutkan lagu, lalu rekomendasi. Fitur sekunder
-    // dipindahkan ke Koleksi atau Pengaturan agar tidak tersebar.
     return [
       SliverToBoxAdapter(child: _modernWelcomeHeader()),
-      _chipRow(),
-      if (isFirstTime)
-        SliverToBoxAdapter(child: _firstTimeGuide()),
-      if (actions.isNotEmpty)
-        SliverToBoxAdapter(child: _homeShortcutRow(actions)),
-      ..._customPlaylistSection(),
-      if (smartPlaylists.isNotEmpty) ...[
-        _sectionHeader('Playlist pintar', action: 'Lihat semua', onAction: _showSmartPlaylistPicker),
-        SliverToBoxAdapter(
-          child: SizedBox(
-            height: 148,
-            child: ListView.separated(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-              scrollDirection: Axis.horizontal,
-              itemCount: smartPlaylists.length,
-              separatorBuilder: (_, _) => const SizedBox(width: 10),
-              itemBuilder: (context, index) => _smartPlaylistCard(smartPlaylists[index]),
-            ),
-          ),
-        ),
-      ],
-      if (recentlyPlayed.isNotEmpty) ...[
-        _sectionHeader(
-          'Lanjutkan mendengarkan',
-          action: recentlyPlayed.length > 1 ? 'Putar semua' : null,
-          onAction: recentlyPlayed.length > 1
-              ? () => unawaited(widget.onPlayFromList(recentlyPlayed.first, recentlyPlayed))
-              : null,
-        ),
-        SliverToBoxAdapter(
-          child: SizedBox(
-            height: 204,
-            child: ListView.separated(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-              scrollDirection: Axis.horizontal,
-              itemCount: recentlyPlayed.length,
-              separatorBuilder: (_, _) => const SizedBox(width: 12),
-              itemBuilder: (context, index) => _quickPickCard(recentlyPlayed[index]),
-            ),
-          ),
-        ),
-      ],
-      if (feed.isNotEmpty) ...[
-        _sectionHeader('Pilihan musik untukmu'),
+      _sectionHeader('Quick Picks', action: 'Koleksi', onAction: () => _selectDockDestination(_YoutubeSection.library.index)),
+      SliverToBoxAdapter(child: _quickPicksGrid(recent)),
+      _sectionHeader(
+        'Made For You',
+        action: smartPlaylists.isNotEmpty ? 'Lihat semua' : null,
+        onAction: smartPlaylists.isNotEmpty ? _showSmartPlaylistPicker : null,
+      ),
+      if (firstFeatured != null)
+        SliverToBoxAdapter(child: _madeForYouCards(smartPlaylists))
+      else if (feed.isNotEmpty)
+        SliverToBoxAdapter(child: _featuredDiscoveryCard(feed.first, label: 'Pilihan untukmu'))
+      else if (_feedLoading || _inlineLoading)
+        const SliverToBoxAdapter(child: _HomeSectionSkeleton(height: 174)),
+      if (recent.isNotEmpty) ...[
+        _sectionHeader('Recently Played', action: 'Lihat semua', onAction: _openRecentHistory),
         SliverList.builder(
-          itemCount: feed.length,
-          itemBuilder: (context, index) => _videoCard(feed[index]),
+          itemCount: min(recent.length, 5),
+          itemBuilder: (context, index) => _videoCard(recent[index]),
         ),
-      ] else if (_feedLoading || _inlineLoading)
-        const SliverToBoxAdapter(
-          child: Padding(
-            padding: EdgeInsets.all(28),
-            child: Center(child: CircularProgressIndicator()),
+      ],
+      _sectionHeader('Your Mixes'),
+      SliverToBoxAdapter(child: _moodGrid()),
+      if (recent.isNotEmpty) ...[
+        _sectionHeader('Continue Listening', action: 'Lihat semua', onAction: _openRecentHistory),
+        SliverList.builder(
+          itemCount: min(recent.length, 4),
+          itemBuilder: (context, index) => _continueListeningRow(recent[index]),
+        ),
+      ],
+      _sectionHeader('Discover Something New'),
+      if (feed.isNotEmpty) ...[
+        if (feed.length > (firstFeatured == null ? 1 : 0))
+          SliverToBoxAdapter(
+            child: _featuredDiscoveryCard(
+              feed[firstFeatured == null ? 1 : 0],
+              label: 'Featured discovery',
+            ),
           ),
-        )
+        if (feed.length > (firstFeatured == null ? 2 : 1))
+          SliverList.builder(
+            itemCount: min(feed.length - (firstFeatured == null ? 2 : 1), 5),
+            itemBuilder: (context, index) => _videoCard(feed[index + (firstFeatured == null ? 2 : 1)]),
+          ),
+      ] else if (_feedLoading || _inlineLoading)
+        const SliverToBoxAdapter(child: _HomeSectionSkeleton(height: 220))
       else
         _homeEmptyState(retry: () => _loadHome(force: true)),
-      const SliverToBoxAdapter(child: SizedBox(height: 16)),
+      const SliverToBoxAdapter(child: SizedBox(height: 24)),
     ];
   }
 
-  /// Playlist buatan sendiri, tampil langsung di beranda supaya mudah diputar.
-  List<Widget> _customPlaylistSection() {
-    final playlists = widget.customPlaylists;
-    final open = widget.onOpenCustomPlaylists;
-    if (playlists.isEmpty && open == null) return const <Widget>[];
-    final shown = playlists.take(12).toList(growable: false);
-    return [
-      _sectionHeader(
-        'Playlist kamu',
-        action: open == null ? null : (playlists.isEmpty ? 'Buat' : 'Lihat semua'),
-        onAction: open,
+  Widget _quickPicksGrid(List<YoutubeSearchResult> recent) {
+    final firstFavorite = widget.favorites.isEmpty ? null : widget.favorites.first;
+    final firstRecent = recent.isEmpty ? null : recent.first;
+    final firstPlaylist = widget.customPlaylists.isEmpty || widget.customPlaylists.first.songs.isEmpty
+        ? null
+        : widget.customPlaylists.first.songs.first;
+    final tiles = <({String title, String subtitle, IconData icon, YoutubeSearchResult? artwork, VoidCallback onTap})>[
+      (
+        title: 'Lagu Disukai',
+        subtitle: '${widget.favorites.length} lagu',
+        icon: Icons.favorite_rounded,
+        artwork: firstFavorite,
+        onTap: _openFavoritesList,
       ),
-      SliverToBoxAdapter(
-        child: SizedBox(
-          height: 148,
-          child: ListView.separated(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-            scrollDirection: Axis.horizontal,
-            itemCount: playlists.isEmpty ? 1 : shown.length,
-            separatorBuilder: (_, _) => const SizedBox(width: 10),
-            itemBuilder: (context, index) => playlists.isEmpty
-                ? _createPlaylistCard(open!)
-                : _customPlaylistCard(shown[index]),
-          ),
-        ),
+      (
+        title: 'Recently Played',
+        subtitle: '${widget.recentlyPlayed.length} lagu terakhir',
+        icon: Icons.history_rounded,
+        artwork: firstRecent,
+        onTap: _openRecentHistory,
+      ),
+      (
+        title: 'Playlist Saya',
+        subtitle: '${widget.customPlaylistCount} playlist',
+        icon: Icons.queue_music_rounded,
+        artwork: firstPlaylist,
+        onTap: widget.onOpenCustomPlaylists ?? () => _selectDockDestination(_YoutubeSection.library.index),
+      ),
+      (
+        title: 'Dengar Bareng',
+        subtitle: 'Buat ruang atau gabung',
+        icon: Icons.headphones_rounded,
+        artwork: null,
+        onTap: widget.onOpenListeningRoom ?? () {},
       ),
     ];
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 2),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final columns = constraints.maxWidth >= 680 ? 4 : 2;
+          return GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            padding: EdgeInsets.zero,
+            itemCount: tiles.length,
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: columns,
+              crossAxisSpacing: 9,
+              mainAxisSpacing: 9,
+              mainAxisExtent: 62,
+            ),
+            itemBuilder: (context, index) {
+              final tile = tiles[index];
+              return _quickPickTile(
+                title: tile.title,
+                subtitle: tile.subtitle,
+                icon: tile.icon,
+                artwork: tile.artwork,
+                onTap: tile.onTap,
+              );
+            },
+          );
+        },
+      ),
+    );
   }
 
-  Widget _createPlaylistCard(VoidCallback onTap) {
+  Widget _quickPickTile({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required YoutubeSearchResult? artwork,
+    required VoidCallback onTap,
+  }) {
     final scheme = Theme.of(context).colorScheme;
-    return SizedBox(
-      width: _homePlaylistCardWidth(),
-      child: Material(
-        color: scheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(19),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onTap,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.add_circle_outline_rounded, size: 30, color: scheme.primary),
-              const SizedBox(height: 8),
-              Text(
-                'Buat playlist pertamamu',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: scheme.onSurface,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
+    return Material(
+      color: scheme.surfaceContainerLow,
+      borderRadius: BorderRadius.circular(13),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Row(
+          children: [
+            SizedBox(
+              width: 58,
+              height: double.infinity,
+              child: artwork == null
+                  ? DecoratedBox(
+                      decoration: BoxDecoration(color: scheme.primaryContainer),
+                      child: Icon(icon, color: scheme.onPrimaryContainer, size: 23),
+                    )
+                  : UnifiedArtwork(track: artwork, fit: BoxFit.cover, iconSize: 21),
+            ),
+            const SizedBox(width: 9),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.only(right: 7),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurface, fontSize: 11.5, fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 3),
+                    Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 9.5, fontWeight: FontWeight.w600)),
+                  ],
                 ),
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _madeForYouCards(List<SmartPlaylist> playlists) {
+    final scheme = Theme.of(context).colorScheme;
+    final first = playlists.first;
+    final primarySong = first.songs.first;
+    return SizedBox(
+      height: 186,
+      child: ListView.separated(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        scrollDirection: Axis.horizontal,
+        itemCount: min(playlists.length, 6),
+        separatorBuilder: (_, _) => const SizedBox(width: 11),
+        itemBuilder: (context, index) {
+          final playlist = playlists[index];
+          final featured = index == 0;
+          return SizedBox(
+            width: featured ? MediaQuery.sizeOf(context).width * 0.76 : 164,
+            child: Material(
+              color: scheme.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(19),
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                onTap: () => _showSongList(playlist.title, playlist.songs),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    UnifiedArtwork(track: featured ? primarySong : playlist.songs.first, fit: BoxFit.cover, iconSize: 34),
+                    const DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [Color(0x12000000), Color(0xE0000000)],
+                          stops: [0.12, 1],
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      left: 14,
+                      right: 12,
+                      bottom: 13,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(featured ? 'MADE FOR YOU' : 'YOUR MIX', style: const TextStyle(color: Colors.white70, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 1.35)),
+                          const SizedBox(height: 5),
+                          Text(playlist.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w900, letterSpacing: -0.4)),
+                          const SizedBox(height: 3),
+                          Text('${playlist.songs.length} lagu · ${playlist.subtitle}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                    ),
+                    Positioned(
+                      right: 12,
+                      top: 12,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(color: scheme.surface.withValues(alpha: 0.90), shape: BoxShape.circle),
+                        child: Padding(padding: const EdgeInsets.all(9), child: Icon(Icons.play_arrow_rounded, color: scheme.onSurface, size: 20)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _moodGrid() {
+    const moods = <({String name, String query, IconData icon, Color color})>[
+      (name: 'Chill', query: 'Chill', icon: Icons.nightlight_round, color: Color(0xFF426A86)),
+      (name: 'Sad', query: 'Sad', icon: Icons.cloud_rounded, color: Color(0xFF5B5D80)),
+      (name: 'Happy', query: 'Happy', icon: Icons.wb_sunny_rounded, color: Color(0xFF9B7542)),
+      (name: 'Energetic', query: 'Energetic', icon: Icons.bolt_rounded, color: Color(0xFF9B5144)),
+      (name: 'Focus', query: 'Focus', icon: Icons.center_focus_strong_rounded, color: Color(0xFF3F7770)),
+      (name: 'Relax', query: 'Relax', icon: Icons.spa_rounded, color: Color(0xFF6B7950)),
+    ];
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 2),
+      child: LayoutBuilder(
+        builder: (context, constraints) => GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          padding: EdgeInsets.zero,
+          itemCount: moods.length,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: constraints.maxWidth >= 680 ? 3 : 2,
+            crossAxisSpacing: 9,
+            mainAxisSpacing: 9,
+            mainAxisExtent: 76,
+          ),
+          itemBuilder: (context, index) {
+            final mood = moods[index];
+            return Material(
+              color: mood.color,
+              borderRadius: BorderRadius.circular(15),
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                onTap: () {
+                  setState(() {
+                    _section = _YoutubeSection.explore;
+                    _exploreCategory = 'Sedang tren';
+                    _exploreResults = const [];
+                  });
+                  unawaited(_loadExploreCategory(mood.query));
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
+                  child: Row(
+                    children: [
+                      Expanded(child: Text(mood.name, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w900, letterSpacing: -0.3))),
+                      Icon(mood.icon, color: Colors.white.withValues(alpha: 0.88), size: 29),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _continueListeningRow(YoutubeSearchResult video) {
+    final scheme = Theme.of(context).colorScheme;
+    final progress = (widget.watchProgress[video.videoId] ?? 0).clamp(0.0, 1.0).toDouble();
+    final title = MusicTitleFormatter.clean(video.title);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 3),
+      child: Material(
+        color: scheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(13),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => unawaited(widget.onPlay(video)),
+          child: Row(
+            children: [
+              SizedBox(width: 54, height: 58, child: UnifiedArtwork(track: video, fit: BoxFit.cover)),
+              const SizedBox(width: 11),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurface, fontSize: 11.5, fontWeight: FontWeight.w800)),
+                      const SizedBox(height: 3),
+                      Text(video.channelTitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 9.5)),
+                      const SizedBox(height: 7),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(value: progress, minHeight: 3, backgroundColor: scheme.outlineVariant.withValues(alpha: 0.35), valueColor: AlwaysStoppedAnimation<Color>(scheme.primary)),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              IconButton(onPressed: () => unawaited(widget.onPlay(video)), icon: Icon(Icons.play_arrow_rounded, color: scheme.primary)),
             ],
           ),
         ),
@@ -314,93 +497,57 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
     );
   }
 
-  Widget _customPlaylistCard(Playlist playlist) {
+  Widget _featuredDiscoveryCard(YoutubeSearchResult video, {required String label}) {
     final scheme = Theme.of(context).colorScheme;
-    final first = playlist.songs.isEmpty ? null : playlist.songs.first;
-    final openDetail = widget.onOpenCustomPlaylist;
-    final openLibrary = widget.onOpenCustomPlaylists;
-    return SizedBox(
-      width: _homePlaylistCardWidth(),
-      child: Material(
-        color: scheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(19),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          // Ketuk kartu hanya membuka detail playlist. Pemutaran harus menjadi
-          // aksi eksplisit dari halaman detail atau saat pengguna memilih lagu.
-          onTap: openDetail != null
-              ? () => openDetail(playlist)
-              : openLibrary,
-          onLongPress: openLibrary,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              if (first != null)
-                PlaylistArtwork(playlist: playlist, fit: BoxFit.cover, iconSize: 30)
-              else
-                ColoredBox(
-                  color: scheme.surfaceContainerHighest,
-                  child: Center(
-                    child: Icon(Icons.queue_music_rounded, size: 34, color: scheme.onSurfaceVariant),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+      child: SizedBox(
+        height: 218,
+        child: Material(
+          color: scheme.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(20),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: () => unawaited(widget.onPlay(video)),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                UnifiedArtwork(track: video, fit: BoxFit.cover, iconSize: 42),
+                const DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Color(0x08000000), Color(0xD9000000)],
+                    ),
                   ),
                 ),
-              const DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [Color(0x12000000), Color(0xD9000000)],
-                    stops: [0.05, 1],
+                Positioned(
+                  left: 16,
+                  right: 16,
+                  bottom: 16,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(label.toUpperCase(), style: const TextStyle(color: Colors.white70, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 1.45)),
+                            const SizedBox(height: 6),
+                            Text(MusicTitleFormatter.clean(video.title), maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 18, height: 1.05, fontWeight: FontWeight.w900, letterSpacing: -0.45)),
+                            const SizedBox(height: 4),
+                            Text(video.channelTitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.w600)),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Container(width: 45, height: 45, decoration: BoxDecoration(color: scheme.primary, shape: BoxShape.circle), child: Icon(Icons.play_arrow_rounded, color: scheme.onPrimary, size: 28)),
+                    ],
                   ),
                 ),
-              ),
-              Positioned(
-                left: 12,
-                right: 10,
-                bottom: 11,
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            playlist.name.toUpperCase(),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: 0.6,
-                            ),
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            playlist.songs.isEmpty ? 'Kosong' : '${playlist.songs.length} lagu',
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.78),
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        color: scheme.surface.withValues(alpha: 0.88),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(Icons.chevron_right_rounded, color: scheme.onSurface, size: 22),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -489,107 +636,6 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
     };
   }
 
-  Widget _smartPlaylistCard(SmartPlaylist playlist) {
-    final scheme = Theme.of(context).colorScheme;
-    final first = playlist.songs.first;
-    return SizedBox(
-      width: _homePlaylistCardWidth(),
-      child: Material(
-        color: scheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(19),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: () => _showSongList(playlist.title, playlist.songs),
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              UnifiedArtwork(track: first, fit: BoxFit.cover, iconSize: 30),
-              const DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [Color(0x12000000), Color(0xD9000000)],
-                    stops: [0.05, 1],
-                  ),
-                ),
-              ),
-              Positioned(
-                left: 12,
-                right: 10,
-                bottom: 11,
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            playlist.title.toUpperCase(),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: 0.6,
-                            ),
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            '${playlist.songs.length} lagu',
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.78),
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Container(
-                      width: 34,
-                      height: 34,
-                      decoration: BoxDecoration(
-                        color: scheme.surface.withValues(alpha: 0.88),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(Icons.chevron_right_rounded, color: scheme.onSurface, size: 22),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-
-  SmartPlaylist? _findFrequentMix(List<SmartPlaylist> playlists) {
-    for (final playlist in playlists) {
-      if (playlist.id == 'smart_most_played' && playlist.songs.isNotEmpty) {
-        return playlist;
-      }
-    }
-    return null;
-  }
-
-  void _playFrequentMix(SmartPlaylist? playlist) {
-    if (playlist == null || playlist.songs.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Mix kamu akan muncul setelah beberapa lagu diputar berulang kali.'),
-        ),
-      );
-      return;
-    }
-    // Keep the listening-frequency ranking; do not shuffle it into a random mix.
-    unawaited(widget.onPlayFromList(playlist.songs.first, playlist.songs));
-  }
-
   void _openRecentHistory() {
     final songs = widget.recentlyPlayed
         .where(YoutubeSearchService.isMusicCandidate)
@@ -617,278 +663,71 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
   }
 
   /// Dua pintasan utama Beranda memakai kartu yang lebih lega dan seimbang.
-  Widget _homeShortcutRow(
-    List<({String title, String subtitle, IconData icon, VoidCallback onTap})> actions,
-  ) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 2, 16, 10),
-      child: SizedBox(
-        height: 104,
-        child: Row(
-          children: [
-            for (var index = 0; index < actions.length; index++) ...[
-              if (index > 0) const SizedBox(width: 12),
-              Expanded(
-                child: _homeShortcutItem(
-                  title: actions[index].title,
-                  subtitle: actions[index].subtitle,
-                  icon: actions[index].icon,
-                  onTap: actions[index].onTap,
-                  highlighted: actions[index].title == 'Dengar bareng',
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _homeShortcutItem({
-    required String title,
-    required String subtitle,
-    required IconData icon,
-    required VoidCallback onTap,
-    bool highlighted = false,
-  }) {
-    final scheme = Theme.of(context).colorScheme;
-    final accent = highlighted ? scheme.secondary : scheme.primary;
-    return Tooltip(
-      message: subtitle,
-      child: SizedBox.expand(
-        child: Material(
-          color: scheme.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(19),
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            onTap: onTap,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(13, 11, 12, 11),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: accent.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Icon(icon, size: 20, color: accent),
-                      ),
-                      const Spacer(),
-                      Icon(
-                        Icons.arrow_outward_rounded,
-                        size: 15,
-                        color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
-                      ),
-                    ],
-                  ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: scheme.onSurface,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: -0.15,
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        subtitle,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: scheme.onSurfaceVariant,
-                          fontSize: 10.5,
-                          height: 1.15,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 
   Widget _modernWelcomeHeader() {
     final scheme = Theme.of(context).colorScheme;
     final topInset = MediaQuery.paddingOf(context).top;
 
-    return Padding(
-      padding: EdgeInsets.fromLTRB(18, topInset + 10, 18, 10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(11),
-                child: Image.asset(
-                  'assets/icon/app_icon.png',
-                  width: 38,
-                  height: 38,
-                  fit: BoxFit.cover,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'SELAMAT DATANG',
-                      style: TextStyle(
-                        color: scheme.onSurfaceVariant,
-                        fontSize: 8.5,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.0,
-                      ),
-                    ),
-                    Text(
-                      'MusikKu',
-                      style: TextStyle(
-                        color: scheme.onSurface,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: -0.5,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              IconButton.filledTonal(
-                tooltip: 'Pengaturan',
-                onPressed: _showAppSettings,
-                style: IconButton.styleFrom(
-                  fixedSize: const Size(42, 42),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(13),
-                  ),
-                ),
-                icon: const Icon(Icons.settings_outlined, size: 20),
-              ),
-            ],
-          ),
-          const SizedBox(height: 13),
-          Text(
-            'Mau dengar apa hari ini?',
-            style: TextStyle(
-              color: scheme.onSurface,
-              fontSize: 22,
-              height: 1.08,
-              fontWeight: FontWeight.w900,
-              letterSpacing: -0.65,
+    Widget action({required String tooltip, required IconData icon, required VoidCallback onTap}) {
+      return Padding(
+        padding: const EdgeInsets.only(left: 7),
+        child: Material(
+          color: scheme.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(13),
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(13),
+            child: SizedBox(
+              width: 41,
+              height: 41,
+              child: Tooltip(message: tooltip, child: Icon(icon, color: scheme.onSurface, size: 20)),
             ),
-          ),
-          const SizedBox(height: 9),
-          Material(
-            color: scheme.surfaceContainerLow,
-            borderRadius: BorderRadius.circular(14),
-            child: InkWell(
-              onTap: _openSearch,
-              borderRadius: BorderRadius.circular(14),
-              child: SizedBox(
-                height: 52,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 14),
-                  child: Row(
-                    children: [
-                      Icon(Icons.search_rounded, color: scheme.primary, size: 21),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          'Cari lagu, artis, atau album',
-                          style: TextStyle(
-                            color: scheme.onSurfaceVariant,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                      Icon(
-                        Icons.arrow_forward_rounded,
-                        color: scheme.onSurfaceVariant,
-                        size: 17,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _firstTimeGuide() {
-    final scheme = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-      child: Material(
-        color: scheme.primaryContainer.withValues(alpha: 0.52),
-        borderRadius: BorderRadius.circular(18),
-        child: Padding(
-          padding: const EdgeInsets.all(15),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(Icons.waving_hand_rounded, color: scheme.primary, size: 20),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Baru pertama kali di MusikKu?',
-                      style: TextStyle(
-                        color: scheme.onSurface,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                '1. Cari lagu lewat kolom di atas.  2. Ketuk lagu untuk memutar.  3. Tekan ikon hati untuk menyimpan favorit.',
-                style: TextStyle(
-                  color: scheme.onSurfaceVariant,
-                  fontSize: 11,
-                  height: 1.45,
-                ),
-              ),
-              const SizedBox(height: 11),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: FilledButton.tonalIcon(
-                  onPressed: () => _selectDockDestination(_YoutubeSection.explore.index),
-                  icon: const Icon(Icons.explore_outlined, size: 17),
-                  label: const Text('Jelajahi genre musik'),
-                  style: FilledButton.styleFrom(
-                    visualDensity: VisualDensity.compact,
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-                  ),
-                ),
-              ),
-            ],
           ),
         ),
+      );
+    }
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(18, topInset + 10, 18, 12),
+      child: Row(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Image.asset(
+              'assets/icon/app_icon.png',
+              width: 39,
+              height: 39,
+              fit: BoxFit.cover,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('MusikKu', style: TextStyle(color: scheme.onSurface, fontSize: 19, fontWeight: FontWeight.w900, letterSpacing: -0.55, height: 1.0)),
+                const SizedBox(height: 4),
+                Text('YOUR MUSIC EXPERIENCE', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 8, fontWeight: FontWeight.w800, letterSpacing: 1.15)),
+              ],
+            ),
+          ),
+          action(
+            tooltip: 'Listening Together',
+            icon: Icons.headphones_rounded,
+            onTap: widget.onOpenListeningRoom ?? () {},
+          ),
+          action(
+            tooltip: 'Cari lagu atau artis',
+            icon: Icons.search_rounded,
+            onTap: _openSearch,
+          ),
+          action(
+            tooltip: 'Pengaturan',
+            icon: Icons.settings_outlined,
+            onTap: _showAppSettings,
+          ),
+        ],
       ),
     );
   }
@@ -933,6 +772,47 @@ extension _YoutubeHubHomeViews on _YoutubeHubState {
                   label: const Text('Telusuri'),
                 ),
               ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _HomeSectionSkeleton extends StatelessWidget {
+  const _HomeSectionSkeleton({required this.height});
+
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: SizedBox(
+        height: height,
+        child: Row(
+          children: [
+            Expanded(
+              flex: 3,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerHigh,
+                  borderRadius: BorderRadius.circular(18),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              flex: 2,
+              child: Column(
+                children: [
+                  Expanded(child: Container(decoration: BoxDecoration(color: scheme.surfaceContainerLow, borderRadius: BorderRadius.circular(15)))),
+                  const SizedBox(height: 10),
+                  Expanded(child: Container(decoration: BoxDecoration(color: scheme.surfaceContainerLow, borderRadius: BorderRadius.circular(15)))),
+                ],
+              ),
             ),
           ],
         ),

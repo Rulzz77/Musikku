@@ -2,8 +2,72 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'native_audio_features.dart';
+import 'app_icon_service.dart';
 
 enum AppThemeChoice { system, dark, amoled, light, pink }
+
+enum AppMotionChoice { premium, reduced }
+
+enum AccentColorChoice {
+  oceanBlue,
+  purple,
+  green,
+  teal,
+  pink,
+  orange,
+  monochrome,
+}
+
+extension AccentColorChoiceX on AccentColorChoice {
+  String get label => switch (this) {
+        AccentColorChoice.oceanBlue => 'Ocean Blue',
+        AccentColorChoice.purple => 'Purple',
+        AccentColorChoice.green => 'Green',
+        AccentColorChoice.teal => 'Teal',
+        AccentColorChoice.pink => 'Pink',
+        AccentColorChoice.orange => 'Orange',
+        AccentColorChoice.monochrome => 'Monochrome',
+      };
+
+  Color get color => switch (this) {
+        AccentColorChoice.oceanBlue => const Color(0xFF3985E8),
+        AccentColorChoice.purple => const Color(0xFF8265D8),
+        AccentColorChoice.green => const Color(0xFF399767),
+        AccentColorChoice.teal => const Color(0xFF19A99A),
+        AccentColorChoice.pink => const Color(0xFFD96AA5),
+        AccentColorChoice.orange => const Color(0xFFD58B36),
+        AccentColorChoice.monochrome => const Color(0xFF788493),
+      };
+}
+
+enum AppIconChoice { blue, black, purple, green, pink, orange, teal, silver }
+
+extension AppIconChoiceX on AppIconChoice {
+  String get label => switch (this) {
+        AppIconChoice.blue => 'Blue',
+        AppIconChoice.black => 'Black',
+        AppIconChoice.purple => 'Purple',
+        AppIconChoice.green => 'Green',
+        AppIconChoice.pink => 'Pink',
+        AppIconChoice.orange => 'Orange',
+        AppIconChoice.teal => 'Teal',
+        AppIconChoice.silver => 'Silver',
+      };
+
+  Color get color => switch (this) {
+        AppIconChoice.blue => const Color(0xFF3985E8),
+        AppIconChoice.black => const Color(0xFF20242C),
+        AppIconChoice.purple => const Color(0xFF8265D8),
+        AppIconChoice.green => const Color(0xFF399767),
+        AppIconChoice.pink => const Color(0xFFD96AA5),
+        AppIconChoice.orange => const Color(0xFFD58B36),
+        AppIconChoice.teal => const Color(0xFF19A99A),
+        AppIconChoice.silver => const Color(0xFF929BAA),
+      };
+
+  String get assetPath => 'assets/icon/launcher/ic_launcher_$name.png';
+}
+
 
 enum DataSaverMode { off, saver, superSaver }
 
@@ -37,6 +101,9 @@ class AppSettingsController {
   static final AppSettingsController instance = AppSettingsController._();
 
   static const _themeKey = 'app_theme_choice_v1';
+  static const _accentColorKey = 'app_accent_color_v1';
+  static const _appIconKey = 'app_launcher_icon_v1';
+  static const _motionKey = 'app_motion_choice_v1';
   static const _dataSaverKey = 'data_saver_v1';
   static const _dataSaverModeKey = 'data_saver_mode_v1';
   static const _prefetchWifiOnlyKey = 'prefetch_wifi_only_v1';
@@ -50,7 +117,13 @@ class AppSettingsController {
   static const _backgroundDownloadUpdatesKey = 'app_background_download_updates_v1';
 
   final ValueNotifier<AppThemeChoice> theme =
-      ValueNotifier(AppThemeChoice.dark);
+      ValueNotifier(AppThemeChoice.system);
+  final ValueNotifier<AccentColorChoice> accentColor =
+      ValueNotifier(AccentColorChoice.oceanBlue);
+  final ValueNotifier<AppIconChoice> appIcon =
+      ValueNotifier(AppIconChoice.blue);
+  final ValueNotifier<AppMotionChoice> motion =
+      ValueNotifier(AppMotionChoice.premium);
   final ValueNotifier<bool> dataSaver = ValueNotifier(false);
   final ValueNotifier<DataSaverMode> dataSaverMode =
       ValueNotifier(DataSaverMode.off);
@@ -87,11 +160,35 @@ class AppSettingsController {
   Future<void> load() async {
     try {
       final prefs = await _prefsFuture;
-      final rawTheme = prefs.getString(_themeKey) ?? AppThemeChoice.dark.name;
+      final rawTheme = prefs.getString(_themeKey) ?? AppThemeChoice.system.name;
+      final legacyPinkTheme = rawTheme == AppThemeChoice.pink.name;
       theme.value = AppThemeChoice.values.firstWhere(
-        (value) => value.name == rawTheme,
-        orElse: () => AppThemeChoice.dark,
+        (value) => value.name == rawTheme && value != AppThemeChoice.pink,
+        orElse: () => AppThemeChoice.system,
       );
+      final rawAccent = prefs.getString(_accentColorKey);
+      accentColor.value = AccentColorChoice.values.firstWhere(
+        (value) => value.name == rawAccent,
+        orElse: () => legacyPinkTheme ? AccentColorChoice.pink : AccentColorChoice.oceanBlue,
+      );
+      final rawIcon = prefs.getString(_appIconKey) ?? AppIconChoice.blue.name;
+      appIcon.value = AppIconChoice.values.firstWhere(
+        (value) => value.name == rawIcon,
+        orElse: () => AppIconChoice.blue,
+      );
+      final rawMotion = prefs.getString(_motionKey);
+      motion.value = AppMotionChoice.values.firstWhere(
+        (value) => value.name == rawMotion,
+        orElse: () => AppMotionChoice.premium,
+      );
+      // Migrate the former combined pink theme into system brightness + pink accent.
+      if (legacyPinkTheme) {
+        await prefs.setString(_themeKey, AppThemeChoice.system.name);
+        await prefs.setString(_accentColorKey, AccentColorChoice.pink.name);
+      }
+      // Apply the saved launcher icon after Flutter starts. Unsupported platforms
+      // keep the preference but don't fail app startup.
+      await AppIconService.setLauncherIcon(appIcon.value.name);
       final rawMode = prefs.getString(_dataSaverModeKey);
       final legacySaver = prefs.getBool(_dataSaverKey) ?? false;
       dataSaverMode.value = DataSaverMode.values.firstWhere(
@@ -119,14 +216,39 @@ class AppSettingsController {
         await prefs.setBool(_backgroundDownloadUpdatesKey, false);
       }
     } catch (_) {
-      // Default aman: dark + data saver mati.
+      // Default aman: tema perangkat + aksen Ocean Blue + data saver mati.
     }
   }
 
   Future<void> setTheme(AppThemeChoice value) async {
+    if (value == AppThemeChoice.pink) {
+      await setAccentColor(AccentColorChoice.pink);
+      value = AppThemeChoice.system;
+    }
     theme.value = value;
     final prefs = await _prefsFuture;
     await prefs.setString(_themeKey, value.name);
+  }
+
+  Future<void> setAccentColor(AccentColorChoice value) async {
+    accentColor.value = value;
+    final prefs = await _prefsFuture;
+    await prefs.setString(_accentColorKey, value.name);
+  }
+
+  Future<void> setMotionChoice(AppMotionChoice value) async {
+    motion.value = value;
+    final prefs = await _prefsFuture;
+    await prefs.setString(_motionKey, value.name);
+  }
+
+  Future<bool> setAppIcon(AppIconChoice value) async {
+    final applied = await AppIconService.setLauncherIcon(value.name);
+    if (!applied) return false;
+    appIcon.value = value;
+    final prefs = await _prefsFuture;
+    await prefs.setString(_appIconKey, value.name);
+    return true;
   }
 
   Future<void> setDataSaver(bool value) async {
@@ -223,7 +345,7 @@ class AppSettingsController {
         return ThemeMode.system;
       case AppThemeChoice.light:
       case AppThemeChoice.pink:
-        return ThemeMode.light;
+        return ThemeMode.system;
       case AppThemeChoice.dark:
       case AppThemeChoice.amoled:
         return ThemeMode.dark;
@@ -232,5 +354,5 @@ class AppSettingsController {
 
   bool get isAmoled => theme.value == AppThemeChoice.amoled;
 
-  bool get isPink => theme.value == AppThemeChoice.pink;
+  bool get isPink => accentColor.value == AccentColorChoice.pink;
 }

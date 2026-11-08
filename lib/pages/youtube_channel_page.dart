@@ -442,7 +442,7 @@ class _YoutubeChannelPageState extends State<YoutubeChannelPage> {
                     children: [
                       DefaultTextStyle(style: TextStyle(color: _tab == i ? scheme.primary : scheme.onSurfaceVariant, fontWeight: _tab == i ? FontWeight.w900 : FontWeight.w600, fontSize: 11.5), child: labels[i]),
                       const SizedBox(height: 7),
-                      AnimatedContainer(duration: const Duration(milliseconds: 180), width: _tab == i ? 26 : 6, height: 3, decoration: BoxDecoration(color: _tab == i ? scheme.primary : scheme.outlineVariant, borderRadius: BorderRadius.circular(3))),
+                      AnimatedContainer(duration: MediaQuery.of(context).disableAnimations ? Duration.zero : const Duration(milliseconds: 180), width: _tab == i ? 26 : 6, height: 3, decoration: BoxDecoration(color: _tab == i ? scheme.primary : scheme.outlineVariant, borderRadius: BorderRadius.circular(3))),
                     ],
                   ),
                 ),

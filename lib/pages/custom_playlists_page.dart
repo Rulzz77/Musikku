@@ -495,6 +495,42 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
                   ),
                 ),
                 Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _downloadSummaryCard(
+                          context,
+                          icon: Icons.downloading_rounded,
+                          label: 'Aktif',
+                          value: items.where((item) => item.status == OfflineDownloadStatus.queued || item.status == OfflineDownloadStatus.downloading).length.toString(),
+                          color: scheme.primary,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _downloadSummaryCard(
+                          context,
+                          icon: Icons.check_circle_outline_rounded,
+                          label: 'Offline',
+                          value: items.where((item) => item.status == OfflineDownloadStatus.completed).length.toString(),
+                          color: scheme.tertiary,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _downloadSummaryCard(
+                          context,
+                          icon: Icons.error_outline_rounded,
+                          label: 'Gagal',
+                          value: items.where((item) => item.status == OfflineDownloadStatus.failed).length.toString(),
+                          color: scheme.error,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Row(
                     children: [
@@ -607,6 +643,39 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
             ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _downloadSummaryCard(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color color,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 17),
+          const SizedBox(width: 7),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(value, style: TextStyle(color: scheme.onSurface, fontSize: 15, fontWeight: FontWeight.w900)),
+                Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 9, fontWeight: FontWeight.w700)),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -839,39 +908,139 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
 
       final progressText = ValueNotifier<String>('Menyiapkan pencarian lagu…');
       final progress = ValueNotifier<double>(0);
+      final trackStatuses = ValueNotifier<List<String>>(
+        List<String>.filled(tracksToImport.length, 'Menunggu'),
+      );
+      void updateTrackStatus(int index, String status) {
+        final next = List<String>.from(trackStatuses.value);
+        if (index < 0 || index >= next.length) return;
+        next[index] = status;
+        trackStatuses.value = next;
+      }
+
       BuildContext? progressDialogContext;
       final progressDialog = showDialog<void>(
         context: context,
         barrierDismissible: false,
         builder: (dialogContext) {
           progressDialogContext = dialogContext;
+          final scheme = Theme.of(dialogContext).colorScheme;
           return PopScope(
             canPop: false,
-            child: AlertDialog(
-              title: const Text('Mengimpor playlist'),
-              content: SizedBox(
-                width: 320,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    ValueListenableBuilder<String>(
-                      valueListenable: progressText,
-                      builder: (context, value, child) => Text(value),
-                    ),
-                    const SizedBox(height: 14),
-                    ValueListenableBuilder<double>(
-                      valueListenable: progress,
-                      builder: (context, value, child) => Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
+            child: Dialog(
+              insetPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 24),
+              child: SizedBox(
+                width: 520,
+                height: MediaQuery.sizeOf(dialogContext).height * 0.70,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
                         children: [
-                          LinearProgressIndicator(value: value),
-                          const SizedBox(height: 6),
-                          Text('${(value * 100).round()}%'),
+                          Container(
+                            width: 42,
+                            height: 42,
+                            decoration: BoxDecoration(
+                              color: scheme.primaryContainer,
+                              borderRadius: BorderRadius.circular(13),
+                            ),
+                            child: Icon(Icons.library_music_rounded, color: scheme.onPrimaryContainer),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('Mengimpor playlist', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+                                Text('${tracksToImport.length} lagu · pencocokan YouTube Music', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11)),
+                              ],
+                            ),
+                          ),
                         ],
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 16),
+                      ValueListenableBuilder<String>(
+                        valueListenable: progressText,
+                        builder: (context, value, child) => Text(value, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12, fontWeight: FontWeight.w700)),
+                      ),
+                      const SizedBox(height: 8),
+                      ValueListenableBuilder<double>(
+                        valueListenable: progress,
+                        builder: (context, value, child) => Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(20),
+                              child: LinearProgressIndicator(value: value, minHeight: 7),
+                            ),
+                            const SizedBox(height: 5),
+                            Text('${(value * 100).round()}%', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10, fontWeight: FontWeight.w800)),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          _importStatusLegend(scheme.primary, 'Ditemukan'),
+                          const SizedBox(width: 12),
+                          _importStatusLegend(scheme.tertiary, 'Alternatif'),
+                          const SizedBox(width: 12),
+                          _importStatusLegend(scheme.error, 'Belum cocok'),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Expanded(
+                        child: ValueListenableBuilder<List<String>>(
+                          valueListenable: trackStatuses,
+                          builder: (context, statuses, child) => ListView.separated(
+                            itemCount: tracksToImport.length,
+                            separatorBuilder: (_, _) => Divider(height: 1, color: scheme.outlineVariant.withValues(alpha: 0.35)),
+                            itemBuilder: (context, index) {
+                              final track = tracksToImport[index];
+                              final status = statuses[index];
+                              final isFound = status == 'Ditemukan';
+                              final isAlternative = status == 'Alternatif';
+                              final isSearching = status == 'Mencari';
+                              final isMissing = status == 'Belum cocok';
+                              final color = isFound
+                                  ? scheme.primary
+                                  : isAlternative
+                                      ? scheme.tertiary
+                                      : isMissing
+                                          ? scheme.error
+                                          : scheme.onSurfaceVariant;
+                              return ListTile(
+                                dense: true,
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
+                                leading: SizedBox(
+                                  width: 34,
+                                  height: 34,
+                                  child: DecoratedBox(
+                                    decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(10)),
+                                    child: Icon(
+                                      isSearching ? Icons.more_horiz_rounded : isFound ? Icons.check_rounded : isAlternative ? Icons.library_music_rounded : isMissing ? Icons.close_rounded : Icons.music_note_rounded,
+                                      color: color,
+                                      size: 18,
+                                    ),
+                                  ),
+                                ),
+                                title: Text(track.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
+                                subtitle: Text(track.artists.join(', '), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 10, color: scheme.onSurfaceVariant)),
+                                trailing: Text(status, style: TextStyle(fontSize: 10, color: color, fontWeight: FontWeight.w800)),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Versi original diprioritaskan. Versi alternatif ditandai terpisah dan lagu yang belum cocok tidak diganti diam-diam.',
+                        style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10, height: 1.35),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -1086,6 +1255,9 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
               'Mencocokkan lagu ${start + 1}–$end dari ${tracksToImport.length}…';
           final indexes =
               List<int>.generate(end - start, (offset) => start + offset);
+          for (final index in indexes) {
+            updateTrackStatus(index, 'Mencari');
+          }
           final batch = await Future.wait(indexes.map((index) {
             final track = tracksToImport[index];
             final key = trackIdentity(track);
@@ -1095,7 +1267,17 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
             );
           }));
           for (var offset = 0; offset < indexes.length; offset++) {
-            resolved[indexes[offset]] = batch[offset];
+            final index = indexes[offset];
+            final match = batch[offset];
+            resolved[index] = match;
+            updateTrackStatus(
+              index,
+              match == null
+                  ? 'Belum cocok'
+                  : YoutubeMusicPolicy.isExplicitCoverVersion(match)
+                      ? 'Alternatif'
+                      : 'Ditemukan',
+            );
           }
           progress.value = end / tracksToImport.length;
         }
@@ -1107,6 +1289,7 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
         await progressDialog;
         progressText.dispose();
         progress.dispose();
+        trackStatuses.dispose();
       }
 
       if (!mounted) return;
@@ -1175,6 +1358,19 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
     } finally {
       if (mounted) setState(() => _spotifyImporting = false);
     }
+  }
+
+  Widget _importStatusLegend(Color color, String label) {
+    return Expanded(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(width: 7, height: 7, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+          const SizedBox(width: 5),
+          Flexible(child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 9, fontWeight: FontWeight.w700))),
+        ],
+      ),
+    );
   }
 
   Future<void> _showSpotifyUnmatchedReport(
@@ -1541,7 +1737,9 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
                         ),
                         const SizedBox(width: 8),
                         AnimatedContainer(
-                          duration: const Duration(milliseconds: 180),
+                          duration: MediaQuery.of(context).disableAnimations
+                              ? Duration.zero
+                              : const Duration(milliseconds: 180),
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
                           decoration: BoxDecoration(
                             color: scheme.primaryContainer,
@@ -1809,7 +2007,9 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
             Positioned.fill(
               child: MusicPageEntrance(
                 child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 260),
+            duration: MediaQuery.of(context).disableAnimations
+                ? Duration.zero
+                : const Duration(milliseconds: 260),
             switchInCurve: Curves.easeOutCubic,
             switchOutCurve: Curves.easeInCubic,
             transitionBuilder: (child, animation) => FadeTransition(
@@ -2007,79 +2207,126 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
   }
 
   Widget _playlistDetailArtwork(Playlist playlist, ColorScheme scheme) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-      child: Container(
-        padding: const EdgeInsets.all(13),
-        decoration: BoxDecoration(
-          color: scheme.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(22),
-          border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.62)),
-        ),
-        child: Row(
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(15),
-              child: SizedBox(
-                width: 116,
-                height: 116,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    PlaylistArtwork(playlist: playlist, fit: BoxFit.cover, iconSize: 42),
-                    Positioned(
-                      right: 6,
-                      bottom: 6,
-                      child: Material(
-                        color: Colors.black.withValues(alpha: 0.62),
-                        shape: const CircleBorder(),
-                        child: InkWell(
-                          customBorder: const CircleBorder(),
-                          onTap: _changingArtwork ? null : () => unawaited(_changePlaylistArtwork(playlist)),
-                          child: SizedBox(
-                            width: 36,
-                            height: 36,
-                            child: _changingArtwork
-                                ? const Padding(padding: EdgeInsets.all(10), child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                                : const Icon(Icons.edit_rounded, color: Colors.white, size: 18),
-                          ),
-                        ),
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final wide = screenWidth >= 760;
+    final artworkSize = wide
+        ? 188.0
+        : (screenWidth - 88).clamp(176.0, 248.0).toDouble();
+
+    Widget artwork() => ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: SizedBox(
+            width: artworkSize,
+            height: artworkSize,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                PlaylistArtwork(playlist: playlist, fit: BoxFit.cover, iconSize: 48),
+                Positioned(
+                  right: 8,
+                  bottom: 8,
+                  child: Material(
+                    color: Colors.black.withValues(alpha: 0.68),
+                    shape: const CircleBorder(),
+                    child: InkWell(
+                      customBorder: const CircleBorder(),
+                      onTap: _changingArtwork ? null : () => unawaited(_changePlaylistArtwork(playlist)),
+                      child: SizedBox(
+                        width: 40,
+                        height: 40,
+                        child: _changingArtwork
+                            ? const Padding(
+                                padding: EdgeInsets.all(11),
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              )
+                            : const Icon(Icons.edit_rounded, color: Colors.white, size: 19),
                       ),
                     ),
-                  ],
+                  ),
                 ),
-              ),
+              ],
             ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text('PLAYLIST PRIBADI', style: TextStyle(color: scheme.primary, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 1.15)),
-                  const SizedBox(height: 7),
-                  Text(playlist.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurface, fontSize: 21, height: 1.05, fontWeight: FontWeight.w900, letterSpacing: -0.65)),
-                  const SizedBox(height: 7),
-                  Text(
-                    '${playlist.songs.length} lagu · ${playlist.offlineSongCount} tersedia offline · ${playlist.folderName}',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10.5, fontWeight: FontWeight.w600),
-                  ),
-                  if (playlist.description.trim().isNotEmpty) ...[const SizedBox(height: 4), Text(playlist.description, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10))],
-                  const SizedBox(height: 9),
-                  Row(
-                    children: [
-                      Icon(Icons.photo_camera_back_outlined, size: 14, color: scheme.primary),
-                      const SizedBox(width: 5),
-                      Text('Ubah foto cover', style: TextStyle(color: scheme.primary, fontSize: 9.5, fontWeight: FontWeight.w800)),
-                    ],
-                  ),
-                ],
+          ),
+        );
+
+    Widget details() => Column(
+          crossAxisAlignment: wide ? CrossAxisAlignment.start : CrossAxisAlignment.center,
+          children: [
+            Text(
+              'PLAYLIST PRIBADI',
+              textAlign: wide ? TextAlign.start : TextAlign.center,
+              style: TextStyle(color: scheme.primary, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.35),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              playlist.name,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              textAlign: wide ? TextAlign.start : TextAlign.center,
+              style: TextStyle(color: scheme.onSurface, fontSize: wide ? 26 : 25, height: 1.02, fontWeight: FontWeight.w900, letterSpacing: -0.9),
+            ),
+            const SizedBox(height: 9),
+            Text(
+              '${playlist.songs.length} lagu · ${playlist.offlineSongCount} tersedia offline · ${playlist.folderName}',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              textAlign: wide ? TextAlign.start : TextAlign.center,
+              style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10.5, fontWeight: FontWeight.w600, height: 1.35),
+            ),
+            if (playlist.description.trim().isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(
+                playlist.description,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                textAlign: wide ? TextAlign.start : TextAlign.center,
+                style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10.5, height: 1.4),
               ),
+            ],
+            const SizedBox(height: 11),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.photo_camera_back_outlined, size: 14, color: scheme.primary),
+                const SizedBox(width: 6),
+                Text('Ubah foto cover', style: TextStyle(color: scheme.primary, fontSize: 10, fontWeight: FontWeight.w800)),
+              ],
+            ),
+          ],
+        );
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: scheme.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(25),
+          border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.55)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: Theme.of(context).brightness == Brightness.dark ? 0.10 : 0.025),
+              blurRadius: 20,
+              offset: const Offset(0, 7),
             ),
           ],
         ),
+        child: wide
+            ? Row(
+                children: [
+                  artwork(),
+                  const SizedBox(width: 22),
+                  Expanded(child: details()),
+                ],
+              )
+            : Column(
+                children: [
+                  Center(child: artwork()),
+                  const SizedBox(height: 17),
+                  details(),
+                ],
+              ),
       ),
     );
   }

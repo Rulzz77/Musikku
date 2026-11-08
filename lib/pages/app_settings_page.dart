@@ -116,10 +116,10 @@ class AppSettingsPage extends StatelessWidget {
 
   String _themeLabel(AppThemeChoice choice) => switch (choice) {
         AppThemeChoice.system => 'Ikuti perangkat',
-        AppThemeChoice.dark => 'Midnight Slate',
-        AppThemeChoice.amoled => 'AMOLED hitam',
-        AppThemeChoice.light => 'Terang',
-        AppThemeChoice.pink => 'Pink pastel aesthetic',
+        AppThemeChoice.dark => 'Dark',
+        AppThemeChoice.amoled => 'AMOLED',
+        AppThemeChoice.light => 'Light',
+        AppThemeChoice.pink => 'Ikuti perangkat',
       };
 
   @override
@@ -130,7 +130,12 @@ class AppSettingsPage extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Pengaturan'),
       ),
-      body: MusicBackdrop(child: MusicPageEntrance(child: ListView(
+      body: MusicBackdrop(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 920),
+            child: MusicPageEntrance(
+              child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 10, 16, 40),
         children: [
           const FlowPageHero(
@@ -169,7 +174,7 @@ class AppSettingsPage extends StatelessWidget {
                             spacing: 8,
                             runSpacing: 10,
                             children: [
-                              for (final choice in AppThemeChoice.values)
+                              for (final choice in const <AppThemeChoice>[AppThemeChoice.system, AppThemeChoice.dark, AppThemeChoice.amoled, AppThemeChoice.light])
                                 SizedBox(
                                   width: itemWidth,
                                   child: InkWell(
@@ -178,7 +183,7 @@ class AppSettingsPage extends StatelessWidget {
                                     child: Column(
                                       children: [
                                         AnimatedContainer(
-                                          duration: const Duration(milliseconds: 180),
+                                          duration: MediaQuery.of(context).disableAnimations ? Duration.zero : const Duration(milliseconds: 180),
                                           width: double.infinity,
                                           height: 48,
                                           decoration: BoxDecoration(
@@ -187,7 +192,7 @@ class AppSettingsPage extends StatelessWidget {
                                               AppThemeChoice.dark => const Color(0xFF151F30),
                                               AppThemeChoice.amoled => Colors.black,
                                               AppThemeChoice.light => const Color(0xFFF3F0E6),
-                                              AppThemeChoice.pink => const Color(0xFFFFE2EC),
+                                              AppThemeChoice.pink => scheme.surfaceContainerHighest,
                                             },
                                             borderRadius: BorderRadius.circular(11),
                                             border: Border.all(color: selected == choice ? scheme.primary : scheme.outlineVariant, width: selected == choice ? 2 : 1),
@@ -202,10 +207,8 @@ class AppSettingsPage extends StatelessWidget {
                                                   height: 21,
                                                   decoration: BoxDecoration(
                                                     color: switch (choice) {
-                                                      AppThemeChoice.pink => const Color(0xFFCE5C8B),
-                                                      AppThemeChoice.light => const Color(0xFF657F2F),
-                                                      AppThemeChoice.system => scheme.primary,
-                                                      _ => const Color(0xFF91D9CF),
+                                                      AppThemeChoice.light => const Color(0xFF3985E8),
+                                                      _ => scheme.primary,
                                                     },
                                                     shape: BoxShape.circle,
                                                   ),
@@ -227,6 +230,169 @@ class AppSettingsPage extends StatelessWidget {
                                         ),
                                         const SizedBox(height: 6),
                                         Text(_themeLabel(choice), maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: TextStyle(color: selected == choice ? scheme.primary : scheme.onSurfaceVariant, fontSize: 9.5, fontWeight: selected == choice ? FontWeight.w900 : FontWeight.w600)),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          const _SectionLabel(icon: Icons.color_lens_outlined, title: 'Warna aksen'),
+          _Group(
+            children: [
+              ValueListenableBuilder<AccentColorChoice>(
+                valueListenable: settings.accentColor,
+                builder: (context, selected, _) => Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 14, 14, 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Expanded(child: Text('Warna utama aplikasi', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800))),
+                          Text(selected.label, style: TextStyle(color: scheme.primary, fontSize: 11, fontWeight: FontWeight.w800)),
+                        ],
+                      ),
+                      const SizedBox(height: 13),
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final columns = constraints.maxWidth >= 420 ? 7 : 4;
+                          final itemWidth = (constraints.maxWidth - ((columns - 1) * 9)) / columns;
+                          return Wrap(
+                            spacing: 9,
+                            runSpacing: 12,
+                            children: [
+                              for (final color in AccentColorChoice.values)
+                                SizedBox(
+                                  width: itemWidth,
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(12),
+                                    onTap: () => unawaited(settings.setAccentColor(color)),
+                                    child: Column(
+                                      children: [
+                                        AnimatedContainer(
+                                          duration: MediaQuery.of(context).disableAnimations ? Duration.zero : const Duration(milliseconds: 180),
+                                          width: 38,
+                                          height: 38,
+                                          decoration: BoxDecoration(
+                                            color: color.color,
+                                            shape: BoxShape.circle,
+                                            border: Border.all(color: selected == color ? scheme.onSurface : Colors.transparent, width: 2.5),
+                                            boxShadow: selected == color ? [BoxShadow(color: color.color.withValues(alpha: 0.28), blurRadius: 10, spreadRadius: 1)] : null,
+                                          ),
+                                          child: selected == color ? const Icon(Icons.check_rounded, color: Colors.white, size: 19) : null,
+                                        ),
+                                        const SizedBox(height: 5),
+                                        Text(color.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 9.5, fontWeight: selected == color ? FontWeight.w900 : FontWeight.w600, color: selected == color ? scheme.primary : scheme.onSurfaceVariant)),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                      Text('Warna ini mengubah tombol, indikator aktif, slider, dan highlight. Artwork album tetap memakai warna aslinya.', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11, height: 1.4)),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          _Group(
+            children: [
+              ValueListenableBuilder<AppMotionChoice>(
+                valueListenable: settings.motion,
+                builder: (context, motion, _) => SwitchListTile(
+                  secondary: const Icon(Icons.motion_photos_on_outlined),
+                  title: const Text('Kurangi animasi', style: TextStyle(fontWeight: FontWeight.w800)),
+                  subtitle: const Text('Gunakan transisi lebih singkat dan minim efek gerak.'),
+                  value: motion == AppMotionChoice.reduced,
+                  onChanged: (reduced) => unawaited(settings.setMotionChoice(
+                    reduced ? AppMotionChoice.reduced : AppMotionChoice.premium,
+                  )),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          const _SectionLabel(icon: Icons.apps_rounded, title: 'Ikon home screen'),
+          _Group(
+            children: [
+              ValueListenableBuilder<AppIconChoice>(
+                valueListenable: settings.appIcon,
+                builder: (context, selected, _) => Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 14, 14, 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Pilih warna ikon MusikKu', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800)),
+                      const SizedBox(height: 5),
+                      Text('Bentuk dan simbol ikon tetap sama. Hanya palet warnanya yang berubah.', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11, height: 1.4)),
+                      const SizedBox(height: 13),
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          const columns = 4;
+                          final itemWidth = (constraints.maxWidth - ((columns - 1) * 10)) / columns;
+                          return Wrap(
+                            spacing: 10,
+                            runSpacing: 12,
+                            children: [
+                              for (final iconChoice in AppIconChoice.values)
+                                SizedBox(
+                                  width: itemWidth,
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(13),
+                                    onTap: () async {
+                                      final applied = await settings.setAppIcon(iconChoice);
+                                      if (!context.mounted) return;
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text(applied
+                                              ? 'Ikon home screen diubah ke ${iconChoice.label}.'
+                                              : 'Penggantian ikon belum didukung di perangkat ini.'),
+                                        ),
+                                      );
+                                    },
+                                    child: Column(
+                                      children: [
+                                        AnimatedContainer(
+                                          duration: MediaQuery.of(context).disableAnimations ? Duration.zero : const Duration(milliseconds: 180),
+                                          padding: const EdgeInsets.all(3),
+                                          decoration: BoxDecoration(
+                                            borderRadius: BorderRadius.circular(17),
+                                            border: Border.all(color: selected == iconChoice ? scheme.primary : scheme.outlineVariant, width: selected == iconChoice ? 2 : 1),
+                                          ),
+                                          child: ClipRRect(
+                                            borderRadius: BorderRadius.circular(13),
+                                            child: Image.asset(
+                                              iconChoice.assetPath,
+                                              width: 48,
+                                              height: 48,
+                                              fit: BoxFit.cover,
+                                              errorBuilder: (_, _, _) => Container(width: 48, height: 48, color: iconChoice.color, child: const Icon(Icons.music_note_rounded, color: Colors.white, size: 28)),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 5),
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          children: [
+                                            if (selected == iconChoice) Icon(Icons.check_circle_rounded, color: scheme.primary, size: 11),
+                                            if (selected == iconChoice) const SizedBox(width: 3),
+                                            Flexible(child: Text(iconChoice.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 10, fontWeight: selected == iconChoice ? FontWeight.w900 : FontWeight.w600, color: selected == iconChoice ? scheme.primary : scheme.onSurfaceVariant))),
+                                          ],
+                                        ),
                                       ],
                                     ),
                                   ),
@@ -538,7 +704,11 @@ class AppSettingsPage extends StatelessWidget {
             ),
           ),
         ],
-      ))),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

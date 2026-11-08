@@ -74,7 +74,7 @@
     <application
         android:name="${applicationName}"
         android:label="MusikKu"
-        android:icon="@mipmap/ic_launcher"
+        android:icon="@mipmap/ic_launcher_blue"
         android:allowBackup="false"
         android:usesCleartextTraffic="false"
         android:networkSecurityConfig="@xml/network_security_config"
@@ -119,21 +119,106 @@
                 android:name="io.flutter.embedding.android.NormalTheme"
                 android:resource="@style/NormalTheme" />
 
-            <!-- ================================================= -->
-            <!-- LAUNCHER -->
-            <!-- ================================================= -->
-
-            <intent-filter>
-
-                <action
-                    android:name="android.intent.action.MAIN" />
-
-                <category
-                    android:name="android.intent.category.LAUNCHER" />
-
-            </intent-filter>
 
         </activity>
+
+            <!-- Launcher aliases keep one exact MusikKu mark and swap only its color palette. -->
+            <activity-alias
+                android:name=".LauncherBlue"
+                android:targetActivity=".MainActivity"
+                android:label="MusikKu"
+                android:icon="@mipmap/ic_launcher_blue"
+                android:enabled="true"
+                android:exported="true">
+                <intent-filter>
+                    <action android:name="android.intent.action.MAIN" />
+                    <category android:name="android.intent.category.LAUNCHER" />
+                </intent-filter>
+            </activity-alias>
+            <activity-alias
+                android:name=".LauncherBlack"
+                android:targetActivity=".MainActivity"
+                android:label="MusikKu"
+                android:icon="@mipmap/ic_launcher_black"
+                android:enabled="false"
+                android:exported="true">
+                <intent-filter>
+                    <action android:name="android.intent.action.MAIN" />
+                    <category android:name="android.intent.category.LAUNCHER" />
+                </intent-filter>
+            </activity-alias>
+            <activity-alias
+                android:name=".LauncherPurple"
+                android:targetActivity=".MainActivity"
+                android:label="MusikKu"
+                android:icon="@mipmap/ic_launcher_purple"
+                android:enabled="false"
+                android:exported="true">
+                <intent-filter>
+                    <action android:name="android.intent.action.MAIN" />
+                    <category android:name="android.intent.category.LAUNCHER" />
+                </intent-filter>
+            </activity-alias>
+            <activity-alias
+                android:name=".LauncherGreen"
+                android:targetActivity=".MainActivity"
+                android:label="MusikKu"
+                android:icon="@mipmap/ic_launcher_green"
+                android:enabled="false"
+                android:exported="true">
+                <intent-filter>
+                    <action android:name="android.intent.action.MAIN" />
+                    <category android:name="android.intent.category.LAUNCHER" />
+                </intent-filter>
+            </activity-alias>
+            <activity-alias
+                android:name=".LauncherPink"
+                android:targetActivity=".MainActivity"
+                android:label="MusikKu"
+                android:icon="@mipmap/ic_launcher_pink"
+                android:enabled="false"
+                android:exported="true">
+                <intent-filter>
+                    <action android:name="android.intent.action.MAIN" />
+                    <category android:name="android.intent.category.LAUNCHER" />
+                </intent-filter>
+            </activity-alias>
+            <activity-alias
+                android:name=".LauncherOrange"
+                android:targetActivity=".MainActivity"
+                android:label="MusikKu"
+                android:icon="@mipmap/ic_launcher_orange"
+                android:enabled="false"
+                android:exported="true">
+                <intent-filter>
+                    <action android:name="android.intent.action.MAIN" />
+                    <category android:name="android.intent.category.LAUNCHER" />
+                </intent-filter>
+            </activity-alias>
+            <activity-alias
+                android:name=".LauncherTeal"
+                android:targetActivity=".MainActivity"
+                android:label="MusikKu"
+                android:icon="@mipmap/ic_launcher_teal"
+                android:enabled="false"
+                android:exported="true">
+                <intent-filter>
+                    <action android:name="android.intent.action.MAIN" />
+                    <category android:name="android.intent.category.LAUNCHER" />
+                </intent-filter>
+            </activity-alias>
+            <activity-alias
+                android:name=".LauncherSilver"
+                android:targetActivity=".MainActivity"
+                android:label="MusikKu"
+                android:icon="@mipmap/ic_launcher_silver"
+                android:enabled="false"
+                android:exported="true">
+                <intent-filter>
+                    <action android:name="android.intent.action.MAIN" />
+                    <category android:name="android.intent.category.LAUNCHER" />
+                </intent-filter>
+            </activity-alias>
 
 
         <!-- ================================================= -->

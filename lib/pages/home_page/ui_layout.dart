@@ -7,7 +7,11 @@ extension _HomeUiLayout on _HomePageState {
     final watch = _youtubeWatchVideo;
     final current = _currentVideo;
     final showMiniPlayer = watch == null && current != null;
-    final safeBottom = MediaQuery.paddingOf(context).bottom;
+    final media = MediaQuery.of(context);
+    final safeBottom = media.padding.bottom;
+    final wideLayout = media.size.width >= 900;
+    final miniWidth = wideLayout ? (media.size.width - 132).clamp(420.0, 760.0).toDouble() : media.size.width - 24;
+    final miniLeft = (media.size.width - miniWidth) / 2 + (wideLayout ? 42 : 0);
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -27,7 +31,7 @@ extension _HomeUiLayout on _HomePageState {
                     onPlay: _openYoutubeVideo,
                     onClose: _closeYoutubeWatch,
                     // Reserve room above navigation for the persistent mini-player.
-                    bottomInset: showMiniPlayer ? 90 : 0,
+                    bottomInset: showMiniPlayer ? (wideLayout ? 92 : 90) : 0,
                     watchProgress: _watchProgress,
                     watchDuration: _watchDuration,
                     recentlyPlayed: _recentlyPlayed,
@@ -62,11 +66,11 @@ extension _HomeUiLayout on _HomePageState {
             ),
             if (showMiniPlayer)
               Positioned(
-                left: 12,
-                right: 12,
-                // Keep a real 14dp gap above the 66dp floating dock. Include the
-                // Android gesture/system inset so the mini-player never touches it.
-                bottom: safeBottom + 66 + 8 + 12,
+                left: miniLeft,
+                width: miniWidth,
+                // Phones float above the bottom dock; tablets use a sidebar and
+                // keep the player centered over the content area.
+                bottom: safeBottom + (wideLayout ? 12 : 66 + 8 + 12),
                 child: MiniMusicPlayer(
                   key: ValueKey<String>('mini-music-player-${current.videoId}'),
                   video: current,
@@ -74,6 +78,8 @@ extension _HomeUiLayout on _HomePageState {
                   onOpen: _openYoutubeWatchFromPlayer,
                   onPlayPause: () => _routeListenTogetherAction('play_pause', _togglePlayPause),
                   onNext: () => _routeListenTogetherAction('next', () => _next()),
+                  onPrevious: () => _routeListenTogetherAction('previous', _previous),
+                  onOpenQueue: _showQueueSheet,
                 ),
               ),
             Positioned.fill(

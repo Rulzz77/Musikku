@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 
@@ -16,6 +17,8 @@ class MiniMusicPlayer extends StatelessWidget {
     required this.onOpen,
     required this.onPlayPause,
     required this.onNext,
+    this.onOpenQueue,
+    this.onPrevious,
   });
 
   final YoutubeSearchResult video;
@@ -23,6 +26,8 @@ class MiniMusicPlayer extends StatelessWidget {
   final VoidCallback onOpen;
   final Future<void> Function() onPlayPause;
   final Future<void> Function() onNext;
+  final VoidCallback? onOpenQueue;
+  final Future<void> Function()? onPrevious;
 
   @override
   Widget build(BuildContext context) {
@@ -38,13 +43,26 @@ class MiniMusicPlayer extends StatelessWidget {
         final positionMs = matchesTrack ? state.position.inMilliseconds : 0;
         final progress = durationMs > 0 ? (positionMs / durationMs).clamp(0.0, 1.0).toDouble() : 0.0;
         final buffered = math.max(progress, matchesTrack ? state.safeBufferedFraction : progress).clamp(0.0, 1.0).toDouble();
-        final artist = video.channelTitle.trim().isEmpty ? 'Artis tidak diketahui' : video.channelTitle.trim();
+        final artist = [video.artistName, video.musicDataArtist, video.channelTitle]
+            .map((value) => value.trim())
+            .firstWhere((value) => value.isNotEmpty, orElse: () => 'Artis tidak diketahui');
 
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(17),
-          child: Container(
+        return GestureDetector(
+          onHorizontalDragEnd: (details) {
+            final velocity = details.primaryVelocity ?? 0;
+            if (velocity < -360) {
+              unawaited(onNext());
+            } else if (velocity > 360 && onPrevious != null) {
+              unawaited(onPrevious!());
+            }
+          },
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(19),
+          child: BackdropFilter(
+            filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+            child: Container(
               decoration: BoxDecoration(
-                color: scheme.surfaceContainerHigh,
+                color: scheme.surface.withValues(alpha: theme.brightness == Brightness.dark ? 0.78 : 0.88),
                 borderRadius: BorderRadius.circular(17),
                 border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.78), width: 1),
                 boxShadow: [
@@ -66,7 +84,7 @@ class MiniMusicPlayer extends StatelessWidget {
                         child: Row(
                           children: [
                             AnimatedSwitcher(
-                              duration: const Duration(milliseconds: 360),
+                              duration: MediaQuery.of(context).disableAnimations ? Duration.zero : const Duration(milliseconds: 280),
                               switchInCurve: Curves.easeOutBack,
                               transitionBuilder: (child, animation) => ScaleTransition(scale: animation, child: FadeTransition(opacity: animation, child: child)),
                               child: ClipRRect(
@@ -79,7 +97,7 @@ class MiniMusicPlayer extends StatelessWidget {
                                     fit: StackFit.expand,
                                     children: [
                                       AlbumArtworkImage(track: video, width: 54, height: 54, fit: BoxFit.cover, iconSize: 24),
-                                      if (isPlaying)
+                                      if (isPlaying && !MediaQuery.of(context).disableAnimations)
                                         DecoratedBox(
                                           decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.17)),
                                           child: const Center(child: _MiniEqualizer()),
@@ -111,7 +129,7 @@ class MiniMusicPlayer extends StatelessWidget {
                             ),
                             const SizedBox(width: 5),
                             AnimatedContainer(
-                              duration: const Duration(milliseconds: 220),
+                              duration: MediaQuery.of(context).disableAnimations ? Duration.zero : const Duration(milliseconds: 180),
                               width: 40,
                               height: 40,
                               decoration: BoxDecoration(
@@ -124,7 +142,9 @@ class MiniMusicPlayer extends StatelessWidget {
                                 padding: EdgeInsets.zero,
                                 onPressed: () => unawaited(onPlayPause()),
                                 icon: AnimatedSwitcher(
-                                  duration: const Duration(milliseconds: 170),
+                                  duration: MediaQuery.of(context).disableAnimations
+                                      ? Duration.zero
+                                      : const Duration(milliseconds: 170),
                                   transitionBuilder: (child, animation) => ScaleTransition(scale: animation, child: child),
                                   child: Icon(
                                     isBuffering ? Icons.more_horiz_rounded : (isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded),
@@ -135,6 +155,15 @@ class MiniMusicPlayer extends StatelessWidget {
                                 ),
                               ),
                             ),
+                            if (onOpenQueue != null)
+                              IconButton(
+                                tooltip: 'Antrean lagu',
+                                visualDensity: VisualDensity.compact,
+                                constraints: const BoxConstraints.tightFor(width: 36, height: 44),
+                                padding: EdgeInsets.zero,
+                                onPressed: onOpenQueue,
+                                icon: Icon(Icons.queue_music_rounded, size: 21, color: scheme.onSurface),
+                              ),
                             IconButton(
                               tooltip: 'Lagu berikutnya',
                               visualDensity: VisualDensity.compact,
@@ -170,7 +199,9 @@ class MiniMusicPlayer extends StatelessWidget {
               ],
                 ),
               ),
+            ),
           ),
+        ),
         );
       },
     );

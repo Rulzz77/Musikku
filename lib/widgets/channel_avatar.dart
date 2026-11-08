@@ -84,7 +84,9 @@ class _ChannelAvatarState extends State<ChannelAvatar> {
                       if (wasSynchronouslyLoaded) return child;
                       return AnimatedOpacity(
                         opacity: frame == null ? 0 : 1,
-                        duration: const Duration(milliseconds: 200),
+                        duration: MediaQuery.of(context).disableAnimations
+                            ? Duration.zero
+                            : const Duration(milliseconds: 200),
                         child: child,
                       );
                     },

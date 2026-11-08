@@ -210,7 +210,9 @@ class _UnifiedArtworkState extends State<UnifiedArtwork> {
       );
     }
     return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 220),
+      duration: MediaQuery.of(context).disableAnimations
+          ? Duration.zero
+          : const Duration(milliseconds: 220),
       switchInCurve: Curves.easeOutCubic,
       switchOutCurve: Curves.easeInCubic,
       transitionBuilder: (child, animation) => FadeTransition(

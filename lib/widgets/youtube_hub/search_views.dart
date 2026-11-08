@@ -20,6 +20,7 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
     setState(() {
       _activeChip = -1;
       _activeSearchFilters = picked.filters;
+      _searchResultsTab = _SearchResultsTab.all;
     });
     _searchController.text = picked.query.trim();
     await _search();
@@ -253,6 +254,7 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
       _searchChannels = const [];
       _channelSearchLoading = false;
       _artistChannelMode = false;
+      _searchResultsTab = _SearchResultsTab.all;
     });
     unawaited(_loadHome());
   }
@@ -273,6 +275,7 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
         _searchChannels = const [];
         _channelSearchLoading = false;
         _artistChannelMode = false;
+        _searchResultsTab = _SearchResultsTab.all;
         _section = _YoutubeSection.home;
         _loading = false;
       });
@@ -290,6 +293,7 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
       _searchChannels = const [];
       _channelSearchLoading = false;
       _artistChannelMode = false;
+      _searchResultsTab = _SearchResultsTab.all;
       _section = _YoutubeSection.home;
       _loading = true;
       _error = '';
@@ -467,8 +471,138 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
     }
   }
 
+  Future<void> _startMoodRadio(String mood) async {
+    if (_radioMoodLoading || widget.onStartRadio == null) return;
+    const queries = <String, String>{
+      'Chill': 'lagu chill Indonesia santai',
+      'Sad': 'lagu galau Indonesia sedih',
+      'Happy': 'lagu ceria Indonesia happy',
+      'Energetic': 'lagu semangat Indonesia upbeat',
+      'Focus': 'instrumental focus music',
+      'Relax': 'lagu santai Indonesia akustik',
+    };
+    final query = queries[mood];
+    if (query == null) return;
+    setState(() {
+      _radioMoodLoading = true;
+      _radioMoodLoadingName = mood;
+    });
+    try {
+      final results = await _searchService.search(query);
+      if (!mounted) return;
+      final candidates = results
+          .where((video) =>
+              video.videoId.isNotEmpty &&
+              !video.isLocal &&
+              !video.isLive &&
+              !video.isUpcoming &&
+              YoutubeSearchService.isMusicCandidate(video))
+          .toList(growable: false);
+      if (candidates.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Radio $mood belum menemukan lagu. Coba lagi.')),
+        );
+        return;
+      }
+      await widget.onStartRadio!(candidates.first);
+    } catch (error) {
+      if (!mounted) return;
+      final message = error is YoutubeSearchException
+          ? error.message
+          : 'Radio $mood belum bisa dimulai. Periksa koneksi lalu coba lagi.';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _radioMoodLoading = false;
+          _radioMoodLoadingName = '';
+        });
+      }
+    }
+  }
+
+  Widget _radioMoodGrid(ColorScheme scheme) {
+    const moods = <({String name, String subtitle, IconData icon})>[
+      (name: 'Chill', subtitle: 'Santai dan tenang', icon: Icons.nightlight_round),
+      (name: 'Sad', subtitle: 'Lagu penuh rasa', icon: Icons.cloud_outlined),
+      (name: 'Happy', subtitle: 'Bikin suasana cerah', icon: Icons.wb_sunny_outlined),
+      (name: 'Energetic', subtitle: 'Musik penuh energi', icon: Icons.bolt_rounded),
+      (name: 'Focus', subtitle: 'Temani konsentrasi', icon: Icons.center_focus_strong),
+      (name: 'Relax', subtitle: 'Lepaskan penat', icon: Icons.spa_outlined),
+    ];
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 18),
+      child: GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: moods.length,
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          crossAxisSpacing: 10,
+          mainAxisSpacing: 10,
+          mainAxisExtent: 84,
+        ),
+        itemBuilder: (context, index) {
+          final mood = moods[index];
+          final loading = _radioMoodLoading && _radioMoodLoadingName == mood.name;
+          return Material(
+            color: scheme.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(17),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: _radioMoodLoading ? null : () => unawaited(_startMoodRadio(mood.name)),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 42,
+                      height: 42,
+                      decoration: BoxDecoration(
+                        color: scheme.primaryContainer,
+                        borderRadius: BorderRadius.circular(13),
+                      ),
+                      child: loading
+                          ? Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: CircularProgressIndicator(strokeWidth: 2, color: scheme.onPrimaryContainer),
+                            )
+                          : Icon(mood.icon, color: scheme.onPrimaryContainer, size: 21),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(mood.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurface, fontSize: 13, fontWeight: FontWeight.w900)),
+                          const SizedBox(height: 3),
+                          Text(mood.subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 9.5)),
+                        ],
+                      ),
+                    ),
+                    Icon(Icons.arrow_forward_ios_rounded, size: 13, color: scheme.onSurfaceVariant),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   List<Widget> _samplesView() {
     final videos = _sampleVideos();
+    final recentRadioSeeds = widget.recentlyPlayed
+        .where((video) =>
+            video.videoId.isNotEmpty &&
+            !video.isLocal &&
+            !video.isLive &&
+            !video.isUpcoming &&
+            YoutubeSearchService.isMusicCandidate(video))
+        .take(8)
+        .toList(growable: false);
     YoutubeSearchResult? seedVideo;
     for (final video in videos) {
       if (video.videoId == widget.currentVideoId) {
@@ -542,6 +676,64 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
           ),
         ),
       ),
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 2, 18, 10),
+          child: Row(
+            children: [
+              Expanded(child: Text('Radio berdasarkan mood', style: TextStyle(color: scheme.onSurface, fontSize: 17, fontWeight: FontWeight.w900, letterSpacing: -0.35))),
+              Text('Pilih suasana', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10, fontWeight: FontWeight.w600)),
+            ],
+          ),
+        ),
+      ),
+      SliverToBoxAdapter(child: _radioMoodGrid(scheme)),
+      if (recentRadioSeeds.isNotEmpty)
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.only(top: 18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 0, 18, 9),
+                  child: Text('Mulai dari riwayatmu', style: TextStyle(color: scheme.onSurface, fontSize: 17, fontWeight: FontWeight.w900, letterSpacing: -0.35)),
+                ),
+                SizedBox(
+                  height: 142,
+                  child: ListView.separated(
+                    padding: const EdgeInsets.symmetric(horizontal: 18),
+                    scrollDirection: Axis.horizontal,
+                    itemCount: recentRadioSeeds.length,
+                    separatorBuilder: (_, _) => const SizedBox(width: 11),
+                    itemBuilder: (context, index) {
+                      final track = recentRadioSeeds[index];
+                      return SizedBox(
+                        width: 104,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(13),
+                          onTap: widget.onStartRadio == null ? null : () => unawaited(widget.onStartRadio!(track)),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: AlbumArtworkImage(track: track, width: 104, height: 104, fit: BoxFit.cover),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(track.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurface, fontSize: 10.5, fontWeight: FontWeight.w800)),
+                              Text(track.channelTitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 9)),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       if (videos.isEmpty && _feedLoading)
         const SliverToBoxAdapter(child: Padding(padding: EdgeInsets.all(28), child: Center(child: CircularProgressIndicator())))
       else if (videos.isEmpty)

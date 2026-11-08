@@ -222,9 +222,12 @@ class MusicPageEntrance extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final effectiveDuration = MediaQuery.of(context).disableAnimations
+        ? Duration.zero
+        : duration;
     return TweenAnimationBuilder<double>(
       tween: Tween<double>(begin: 0, end: 1),
-      duration: duration,
+      duration: effectiveDuration,
       curve: Curves.easeOutCubic,
       builder: (context, progress, child) {
         final value = progress.clamp(0.0, 1.0).toDouble();

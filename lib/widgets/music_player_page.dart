@@ -10,7 +10,6 @@ import '../models/native_youtube_state.dart';
 import '../models/player_ui_state.dart';
 import '../models/youtube_search_result.dart';
 import '../services/music_title_formatter.dart';
-import '../theme/app_colors.dart';
 import 'album_artwork_image.dart';
 
 /// Full-screen MusikKu player. Native playback ownership and every callback
@@ -72,11 +71,24 @@ class MusicPlayerPage extends StatefulWidget {
 }
 
 class _MusicPlayerPageState extends State<MusicPlayerPage> {
-  static const Color _canvas = appInk;
-  static const Color _playerBackground = Color(0xFF3B5554);
-  static const Color _muted = Color(0xFFAAB7C8);
-  static const Color _citrus = appGold;
-  static const Color _coral = appSecondary;
+  bool get _isDark => Theme.of(context).brightness == Brightness.dark;
+  Color get _canvas => Theme.of(context).colorScheme.onPrimary;
+  Color get _playerBackground => _isDark
+      ? const Color(0xFF111419)
+      : const Color(0xFFF2F5F8);
+  Color get _muted => _isDark
+      ? const Color(0xFFAAB7C8)
+      : const Color(0xFF687482);
+  Color get _mainText => _isDark
+      ? const Color(0xFFF1F4F8)
+      : const Color(0xFF1B222B);
+  Color get _controlInk => _isDark
+      ? const Color(0xFFEEF3FA)
+      : const Color(0xFF283442);
+  Color get _controlSurface => _controlInk.withValues(alpha: _isDark ? 0.07 : 0.055);
+  Color get _controlBorder => _controlInk.withValues(alpha: _isDark ? 0.075 : 0.09);
+  Color get _citrus => Theme.of(context).colorScheme.primary;
+  Color get _coral => Theme.of(context).colorScheme.secondary;
 
   double? _dragPositionMs;
   double? _seekHoldMs;
@@ -117,13 +129,14 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
   Widget build(BuildContext context) {
     // Keep the Android status bar visible and readable above the artwork.
     // The artwork itself is laid out inside SafeArea, never behind the clock/icons.
+    final isDark = _isDark;
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: const SystemUiOverlayStyle(
+      value: SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.light,
-        statusBarBrightness: Brightness.dark,
+        statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+        statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
         systemNavigationBarColor: _playerBackground,
-        systemNavigationBarIconBrightness: Brightness.light,
+        systemNavigationBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
         systemNavigationBarDividerColor: Colors.transparent,
       ),
       child: Material(
@@ -135,23 +148,30 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
               child: ImageFiltered(
                 imageFilter: ui.ImageFilter.blur(sigmaX: 52, sigmaY: 52),
                 child: Opacity(
-                  opacity: 0.34,
+                  opacity: isDark ? 0.34 : 0.20,
                   child: AlbumArtworkImage(track: widget.video, fit: BoxFit.cover),
                 ),
               ),
             ),
-            const Positioned.fill(
+            Positioned.fill(
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [
-                      Color(0x300D1422),
-                      Color(0x554B6764),
-                      Color(0xAA405B59),
-                      _playerBackground,
-                    ],
+                    colors: isDark
+                        ? [
+                            const Color(0x300D1422),
+                            const Color(0x55343E4C),
+                            const Color(0xAA1A2029),
+                            _playerBackground,
+                          ]
+                        : [
+                            const Color(0x18FFFFFF),
+                            const Color(0x66FFFFFF),
+                            const Color(0xDDF2F5F8),
+                            _playerBackground,
+                          ],
                     stops: [0, 0.42, 0.76, 1],
                   ),
                 ),
@@ -188,14 +208,14 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
           Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text(
+              Text(
                 'SEDANG DIPUTAR',
                 style: TextStyle(color: _citrus, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 2.0),
               ),
               const SizedBox(height: 4),
               Text(
                 widget.followingRoom ? 'LISTENING ROOM' : 'NOW PLAYING',
-                style: const TextStyle(color: _muted, fontSize: 8.5, fontWeight: FontWeight.w700, letterSpacing: 1.15),
+                style: TextStyle(color: _muted, fontSize: 8.5, fontWeight: FontWeight.w700, letterSpacing: 1.15),
               ),
             ],
           ),
@@ -214,12 +234,12 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
     return Tooltip(
       message: tooltip,
       child: Material(
-        color: const Color(0xFFEEF3FA).withValues(alpha: 0.07),
+        color: _controlSurface,
         shape: const CircleBorder(),
         child: InkWell(
           customBorder: const CircleBorder(),
           onTap: onPressed,
-          child: SizedBox(width: 43, height: 43, child: Icon(icon, color: const Color(0xFFEEF3FA), size: 23)),
+          child: SizedBox(width: 43, height: 43, child: Icon(icon, color: _controlInk, size: 23)),
         ),
       ),
     );
@@ -264,37 +284,59 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
           height * (compact ? 0.46 : 0.54),
         ).toDouble();
 
+        final controls = Padding(
+          padding: EdgeInsets.fromLTRB(side, compact ? 0 : 3, side, compact ? 0 : 5),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _buildTrackInfo(busy),
+              _buildSeekBar(
+                context: context,
+                duration: duration,
+                maxMs: maxMs,
+                sliderValue: sliderValue,
+                bufferedTrackValue: bufferedTrackValue,
+              ),
+              _buildControlDeck(busy: busy, playing: playing, compact: compact),
+              if (matchesTrack && state.playbackState == NativePlaybackState.error)
+                const Text(
+                  'Audio gagal dimuat. Coba putar ulang atau pilih lagu berikutnya.',
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: Color(0xFFFF9A91), fontSize: 10.5),
+                ),
+              _buildBottomActions(context),
+            ],
+          ),
+        );
+
+        // Tablet / landscape gets a true two-column player: large artwork on
+        // the left, playback information and controls on the right. Phones keep
+        // the familiar vertical composition so all controls stay reachable.
+        if (width >= 760 && height >= 520) {
+          final artworkWidth = width * 0.53;
+          return Row(
+            children: [
+              SizedBox(
+                width: artworkWidth,
+                height: height,
+                child: _buildArtworkHero(
+                  width: artworkWidth,
+                  height: height,
+                ),
+              ),
+              Expanded(
+                child: controls,
+              ),
+            ],
+          );
+        }
+
         return Column(
           children: [
             _buildArtworkHero(width: width, height: artworkHeight),
-            Expanded(
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(side, compact ? 0 : 3, side, compact ? 0 : 5),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    _buildTrackInfo(busy),
-                    _buildSeekBar(
-                      context: context,
-                      duration: duration,
-                      maxMs: maxMs,
-                      sliderValue: sliderValue,
-                      bufferedTrackValue: bufferedTrackValue,
-                    ),
-                    _buildControlDeck(busy: busy, playing: playing, compact: compact),
-                    if (matchesTrack && state.playbackState == NativePlaybackState.error)
-                      const Text(
-                        'Audio gagal dimuat. Coba putar ulang atau pilih lagu berikutnya.',
-                        textAlign: TextAlign.center,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(color: Color(0xFFFF9A91), fontSize: 10.5),
-                      ),
-                    _buildBottomActions(context),
-                  ],
-                ),
-              ),
-            ),
+            Expanded(child: controls),
           ],
         );
       },
@@ -375,21 +417,21 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                 MusicTitleFormatter.clean(widget.video.title),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Color(0xFFF1F1E8), fontSize: 22, height: 1.04, fontWeight: FontWeight.w900, letterSpacing: -0.7),
+                style: TextStyle(color: _mainText, fontSize: 22, height: 1.04, fontWeight: FontWeight.w900, letterSpacing: -0.7),
               ),
               const SizedBox(height: 5),
               Text(
                 widget.video.channelTitle.trim().isEmpty ? 'Artis tidak diketahui' : widget.video.channelTitle.trim(),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: _muted, fontSize: 14, fontWeight: FontWeight.w600),
+                style: TextStyle(color: _muted, fontSize: 14, fontWeight: FontWeight.w600),
               ),
             ],
           ),
         ),
         if (busy)
-          const Padding(
-            padding: EdgeInsets.only(left: 5),
+          Padding(
+            padding: const EdgeInsets.only(left: 5),
             child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: _citrus)),
           ),
         ValueListenableBuilder<PlayerUiState>(
@@ -397,7 +439,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
           builder: (context, ui, _) => IconButton(
             tooltip: ui.isFavorite ? 'Hapus dari favorit' : 'Tambah ke favorit',
             onPressed: widget.onToggleFavorite,
-            icon: Icon(ui.isFavorite ? Icons.favorite_rounded : Icons.favorite_border_rounded, color: ui.isFavorite ? _coral : const Color(0xFFAAB7C8), size: 25),
+            icon: Icon(ui.isFavorite ? Icons.favorite_rounded : Icons.favorite_border_rounded, color: ui.isFavorite ? _coral : _muted, size: 25),
           ),
         ),
       ],
@@ -418,10 +460,10 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
           data: SliderTheme.of(context).copyWith(
             trackHeight: 4,
             activeTrackColor: _citrus,
-            secondaryActiveTrackColor: const Color(0xFFEEF3FA).withValues(alpha: 0.34),
-            inactiveTrackColor: const Color(0xFFEEF3FA).withValues(alpha: 0.15),
+            secondaryActiveTrackColor: _controlInk.withValues(alpha: 0.34),
+            inactiveTrackColor: _controlInk.withValues(alpha: 0.15),
             thumbColor: _citrus,
-            overlayColor: const Color(0xFFEEF3FA).withValues(alpha: 0.12),
+            overlayColor: _controlInk.withValues(alpha: 0.12),
             thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
             overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
           ),
@@ -448,8 +490,8 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(_time(Duration(milliseconds: sliderValue.round())), style: const TextStyle(color: _muted, fontSize: 10, fontWeight: FontWeight.w700)),
-              Text(_time(duration), style: const TextStyle(color: _muted, fontSize: 10, fontWeight: FontWeight.w700)),
+              Text(_time(Duration(milliseconds: sliderValue.round())), style: TextStyle(color: _muted, fontSize: 10, fontWeight: FontWeight.w700)),
+              Text(_time(duration), style: TextStyle(color: _muted, fontSize: 10, fontWeight: FontWeight.w700)),
             ],
           ),
         ),
@@ -495,7 +537,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
               tooltip: 'Lagu sebelumnya',
               visualDensity: VisualDensity.compact,
               onPressed: () => widget.onPrevious(),
-              icon: Icon(Icons.skip_previous_rounded, size: transportSize, color: const Color(0xFFEEF3FA)),
+              icon: Icon(Icons.skip_previous_rounded, size: transportSize, color: _controlInk),
             ),
             SizedBox(
               width: playSize,
@@ -523,7 +565,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
               tooltip: 'Lagu berikutnya',
               visualDensity: VisualDensity.compact,
               onPressed: () => widget.onNext(),
-              icon: Icon(Icons.skip_next_rounded, size: transportSize, color: const Color(0xFFEEF3FA)),
+              icon: Icon(Icons.skip_next_rounded, size: transportSize, color: _controlInk),
             ),
             SizedBox(width: gap),
             SizedBox(
@@ -560,11 +602,13 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
         onTap: onPressed,
         onLongPress: onLongPress,
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
+          duration: MediaQuery.of(context).disableAnimations
+              ? Duration.zero
+              : const Duration(milliseconds: 180),
           width: 40,
           height: 40,
           decoration: BoxDecoration(shape: BoxShape.circle, color: selected ? _citrus.withValues(alpha: 0.16) : Colors.transparent),
-          child: Icon(icon, color: selected ? _citrus : const Color(0xFFAAB7C8), size: 20),
+          child: Icon(icon, color: selected ? _citrus : _muted, size: 20),
         ),
       ),
     );
@@ -574,9 +618,9 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 5),
       decoration: BoxDecoration(
-        color: const Color(0xFFEEF3FA).withValues(alpha: 0.055),
+        color: _controlSurface,
         borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: const Color(0xFFEEF3FA).withValues(alpha: 0.075)),
+        border: Border.all(color: _controlBorder),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -627,7 +671,9 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
             ],
           ),
           AnimatedSize(
-            duration: const Duration(milliseconds: 220),
+            duration: MediaQuery.of(context).disableAnimations
+                ? Duration.zero
+                : const Duration(milliseconds: 220),
             curve: Curves.easeOutCubic,
             alignment: Alignment.topCenter,
             child: _showVolumeControl
@@ -635,14 +681,14 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                     padding: const EdgeInsets.fromLTRB(9, 5, 9, 1),
                     child: Row(
                       children: [
-                        const Icon(Icons.volume_down_rounded, color: _muted, size: 17),
+                        Icon(Icons.volume_down_rounded, color: _muted, size: 17),
                         const SizedBox(width: 5),
                         Expanded(
                           child: SliderTheme(
                             data: SliderTheme.of(context).copyWith(
                               trackHeight: 3,
                               activeTrackColor: _citrus,
-                              inactiveTrackColor: const Color(0xFFEEF3FA).withValues(alpha: 0.16),
+                              inactiveTrackColor: _controlInk.withValues(alpha: 0.16),
                               thumbColor: _citrus,
                               overlayColor: _citrus.withValues(alpha: 0.12),
                               thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
@@ -663,7 +709,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                           child: Text(
                             '$_volumePreview%',
                             textAlign: TextAlign.end,
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: _muted,
                               fontSize: 10,
                               fontWeight: FontWeight.w800,
@@ -671,7 +717,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                           ),
                         ),
                         const SizedBox(width: 5),
-                        const Icon(Icons.volume_up_rounded, color: _muted, size: 17),
+                        Icon(Icons.volume_up_rounded, color: _muted, size: 17),
                       ],
                     ),
                   )
@@ -693,7 +739,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, color: selected ? _citrus : const Color(0xFFAAB7C8), size: 19),
+              Icon(icon, color: selected ? _citrus : _muted, size: 19),
               const SizedBox(height: 3),
               Text(label, style: TextStyle(color: selected ? _citrus : _muted, fontSize: 9, fontWeight: FontWeight.w700)),
             ],

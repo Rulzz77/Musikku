@@ -91,69 +91,48 @@ class MusikKuApp extends StatelessWidget {
 
   final AppSettingsController settings;
 
-  ThemeData _buildTheme(Brightness brightness, {required bool amoled, bool pink = false}) {
+  ThemeData _buildTheme(
+    Brightness brightness, {
+    required bool amoled,
+    required Color accent,
+  }) {
     final isDark = brightness == Brightness.dark;
-    final background = pink ? const Color(0xFFFFF5F8) : (isDark ? (amoled ? Colors.black : appInk) : appLightBackground);
-    final surface = pink ? const Color(0xFFFFFBFC) : (isDark ? (amoled ? Colors.black : appPanel) : appLightPanel);
+    final background = isDark
+        ? (amoled ? Colors.black : const Color(0xFF111419))
+        : const Color(0xFFF4F6F8);
+    final surface = isDark
+        ? (amoled ? const Color(0xFF050505) : const Color(0xFF191E25))
+        : const Color(0xFFFFFFFF);
 
     final base = ColorScheme.fromSeed(
-      seedColor: pink ? const Color(0xFFE879A6) : const Color(0xFF91D9CF),
+      seedColor: accent,
       brightness: brightness,
       surface: surface,
     );
-
-    final scheme = pink
-        ? base.copyWith(
-            primary: const Color(0xFFCE5C8B),
-            onPrimary: Colors.white,
-            primaryContainer: const Color(0xFFFFDCE9),
-            onPrimaryContainer: const Color(0xFF6D2443),
-            secondary: const Color(0xFFB86B8D),
-            onSecondary: Colors.white,
-            secondaryContainer: const Color(0xFFFFE8F0),
-            onSecondaryContainer: const Color(0xFF71334E),
-            tertiary: const Color(0xFFB77B9D),
-            tertiaryContainer: const Color(0xFFF8DFEA),
-            onTertiary: Colors.white,
-            onTertiaryContainer: const Color(0xFF593348),
-            surface: surface,
-            surfaceContainerLowest: Colors.white,
-            surfaceContainerLow: const Color(0xFFFFF8FA),
-            surfaceContainer: const Color(0xFFFFEEF4),
-            surfaceContainerHigh: const Color(0xFFFBE4ED),
-            surfaceContainerHighest: const Color(0xFFF4D7E2),
-            onSurface: const Color(0xFF35242C),
-            onSurfaceVariant: const Color(0xFF806773),
-            outline: const Color(0xFFD9B8C7),
-            outlineVariant: const Color(0xFFEEDCE4),
-            error: const Color(0xFFD94A5C),
-          )
-        : base.copyWith(
-            // MusikKu identity: warm paper in light mode, Midnight Slate in dark mode.
-            primary: isDark ? const Color(0xFF91D9CF) : const Color(0xFF657F2F),
-            onPrimary: isDark ? const Color(0xFF10231F) : Colors.white,
-            primaryContainer: isDark ? const Color(0xFF25413F) : const Color(0xFFE5EDC8),
-            onPrimaryContainer: isDark ? const Color(0xFFD3F6F0) : const Color(0xFF35451D),
-            secondary: isDark ? const Color(0xFFB8B8EE) : const Color(0xFFB75B42),
-            onSecondary: isDark ? const Color(0xFF211F3B) : Colors.white,
-            secondaryContainer: isDark ? const Color(0xFF343250) : const Color(0xFFF8DED4),
-            onSecondaryContainer: isDark ? const Color(0xFFE1DFFF) : const Color(0xFF6D3021),
-            tertiary: isDark ? const Color(0xFFE6BE98) : const Color(0xFF9A6B23),
-            tertiaryContainer: isDark ? const Color(0xFF49382B) : const Color(0xFFF4E6C8),
-            onTertiary: isDark ? const Color(0xFF24180F) : Colors.white,
-            onTertiaryContainer: isDark ? const Color(0xFFFBE6D3) : const Color(0xFF62400D),
-            surface: surface,
-            surfaceContainerLowest: isDark ? const Color(0xFF101827) : const Color(0xFFFFFEFA),
-            surfaceContainerLow: isDark ? const Color(0xFF182337) : const Color(0xFFF9F7EF),
-            surfaceContainer: isDark ? const Color(0xFF1E2A3D) : const Color(0xFFECEBDD),
-            surfaceContainerHigh: isDark ? const Color(0xFF26354B) : const Color(0xFFE3E5D5),
-            surfaceContainerHighest: isDark ? const Color(0xFF34445C) : const Color(0xFFD8DEC7),
-            onSurface: isDark ? const Color(0xFFEEF3FA) : const Color(0xFF202B23),
-            onSurfaceVariant: isDark ? const Color(0xFFAAB7C8) : const Color(0xFF687469),
-            outline: isDark ? const Color(0xFF53647A) : const Color(0xFFB8C1AD),
-            outlineVariant: isDark ? const Color(0xFF394A61) : const Color(0xFFDDE1D2),
-            error: const Color(0xFFE45B66),
-          );
+    final primaryContainer = Color.lerp(
+      surface,
+      accent,
+      isDark ? 0.30 : 0.15,
+    )!;
+    final scheme = base.copyWith(
+      primary: accent,
+      onPrimary: ThemeData.estimateBrightnessForColor(accent) == Brightness.dark
+          ? Colors.white
+          : const Color(0xFF101318),
+      primaryContainer: primaryContainer,
+      onPrimaryContainer: isDark ? Colors.white : const Color(0xFF17202B),
+      surface: surface,
+      surfaceContainerLowest: isDark ? const Color(0xFF0D1015) : const Color(0xFFFFFFFF),
+      surfaceContainerLow: isDark ? const Color(0xFF171C23) : const Color(0xFFF8F9FB),
+      surfaceContainer: isDark ? const Color(0xFF1D242D) : const Color(0xFFF0F2F5),
+      surfaceContainerHigh: isDark ? const Color(0xFF252D38) : const Color(0xFFE9EDF2),
+      surfaceContainerHighest: isDark ? const Color(0xFF303A47) : const Color(0xFFDFE5EC),
+      onSurface: isDark ? const Color(0xFFF1F4F8) : const Color(0xFF1B222B),
+      onSurfaceVariant: isDark ? const Color(0xFFADB7C4) : const Color(0xFF687482),
+      outline: isDark ? const Color(0xFF566271) : const Color(0xFFB6C0CB),
+      outlineVariant: isDark ? const Color(0xFF39434F) : const Color(0xFFDCE2E9),
+      error: const Color(0xFFE45B66),
+    );
 
     final baseTextTheme = ThemeData(
       brightness: brightness,
@@ -430,18 +409,29 @@ class MusikKuApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<AppThemeChoice>(
-      valueListenable: settings.theme,
-      builder: (context, choice, _) {
+    return ListenableBuilder(
+      listenable: Listenable.merge([settings.theme, settings.accentColor, settings.motion]),
+      builder: (context, _) {
+        final choice = settings.theme.value;
+        final accent = settings.accentColor.value.color;
         return MaterialApp(
           debugShowCheckedModeBanner: false,
           title: appName,
-          theme: _buildTheme(Brightness.light, amoled: false, pink: choice == AppThemeChoice.pink),
+          theme: _buildTheme(Brightness.light, amoled: false, accent: accent),
           darkTheme: _buildTheme(
             Brightness.dark,
             amoled: choice == AppThemeChoice.amoled,
+            accent: accent,
           ),
           themeMode: settings.themeMode,
+          builder: (context, child) {
+            final media = MediaQuery.of(context);
+            final reduceMotion = settings.motion.value == AppMotionChoice.reduced;
+            return MediaQuery(
+              data: media.copyWith(disableAnimations: media.disableAnimations || reduceMotion),
+              child: child ?? const SizedBox.shrink(),
+            );
+          },
           home: StartupPage(settings: settings),
         );
       },

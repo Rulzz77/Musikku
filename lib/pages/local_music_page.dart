@@ -502,7 +502,7 @@ class _LocalMusicPageState extends State<LocalMusicPage> with WidgetsBindingObse
                                   return Padding(
                                     padding: const EdgeInsets.only(bottom: 8),
                                     child: AnimatedContainer(
-                                      duration: const Duration(milliseconds: 180),
+                                      duration: MediaQuery.of(context).disableAnimations ? Duration.zero : const Duration(milliseconds: 180),
                                       decoration: BoxDecoration(
                                         color: isCurrent
                                             ? scheme.primaryContainer.withValues(alpha: 0.48)

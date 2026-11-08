@@ -553,9 +553,13 @@ extension _HomeQueueSheet on _HomePageState {
             );
           }
 
-          return SizedBox(
-            height: maxHeight,
-            child: Column(
+          return Material(
+            color: scheme.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+            clipBehavior: Clip.antiAlias,
+            child: SizedBox(
+              height: maxHeight,
+              child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Padding(
@@ -663,6 +667,17 @@ extension _HomeQueueSheet on _HomePageState {
                       ),
                     ),
                   ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                  child: Row(
+                    children: [
+                      Text('NEXT UP', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.35)),
+                      const Spacer(),
+                      if (items.isNotEmpty)
+                        Text('Geser untuk atur urutan', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 9)),
+                    ],
+                  ),
+                ),
                 Expanded(
                   child: items.isEmpty
                       ? Center(
@@ -690,6 +705,10 @@ extension _HomeQueueSheet on _HomePageState {
                           itemBuilder: (context, index) {
                             final item = items[index];
                             final video = item.video;
+                            final durationSeconds = video.durationSeconds?.round();
+                            final durationLabel = durationSeconds == null || durationSeconds <= 0
+                                ? ''
+                                : '${durationSeconds ~/ 60}:${(durationSeconds % 60).toString().padLeft(2, '0')}';
                             return Padding(
                               key: ValueKey<String>(item.id),
                               padding: const EdgeInsets.symmetric(vertical: 4),
@@ -729,7 +748,10 @@ extension _HomeQueueSheet on _HomePageState {
                                               const SizedBox(height: 4),
                                               Text(video.channelTitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
                                               const SizedBox(height: 5),
-                                              Text('MENUNGGU DIPUTAR', style: TextStyle(fontSize: 8.5, letterSpacing: 0.8, fontWeight: FontWeight.w900, color: scheme.primary)),
+                                              Text(
+                                                durationLabel.isEmpty ? 'NEXT UP' : 'NEXT UP · $durationLabel',
+                                                style: TextStyle(fontSize: 8.5, letterSpacing: 0.8, fontWeight: FontWeight.w900, color: scheme.primary),
+                                              ),
                                             ],
                                           ),
                                         ),
@@ -756,6 +778,7 @@ extension _HomeQueueSheet on _HomePageState {
                         ),
                 ),
               ],
+              ),
             ),
           );
         },

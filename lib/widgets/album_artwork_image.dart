@@ -144,7 +144,9 @@ class _AlbumArtworkImageState extends State<AlbumArtworkImage> {
   Widget _resolvedArtwork(BuildContext context) {
     final thumbnail = widget.track.coverUrl;
     return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 240),
+      duration: MediaQuery.of(context).disableAnimations
+          ? Duration.zero
+          : const Duration(milliseconds: 240),
       switchInCurve: Curves.easeOutCubic,
       switchOutCurve: Curves.easeInCubic,
       transitionBuilder: (child, animation) => FadeTransition(

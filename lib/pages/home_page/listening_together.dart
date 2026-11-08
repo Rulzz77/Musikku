@@ -97,7 +97,9 @@ extension _HomeListeningTogether on _HomePageState {
       isScrollControlled: true,
       constraints: const BoxConstraints(maxWidth: 540),
       builder: (sheetContext) => AnimatedPadding(
-        duration: const Duration(milliseconds: 180),
+        duration: MediaQuery.of(sheetContext).disableAnimations
+            ? Duration.zero
+            : const Duration(milliseconds: 180),
         padding: EdgeInsets.only(
           bottom: MediaQuery.viewInsetsOf(sheetContext).bottom,
         ),
@@ -230,6 +232,88 @@ extension _HomeListeningTogether on _HomePageState {
                       ],
                     ),
                   ),
+                  if (connected && _currentVideo != null) ...[
+                    const SizedBox(height: 12),
+                    MusicGlassPanel(
+                      padding: const EdgeInsets.all(12),
+                      radius: 17,
+                      accent: scheme.primary,
+                      child: Row(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(11),
+                            child: AlbumArtworkImage(
+                              track: _currentVideo!,
+                              width: 54,
+                              height: 54,
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                          const SizedBox(width: 11),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'SEDANG DIDENGARKAN BERSAMA',
+                                  style: TextStyle(
+                                    color: scheme.primary,
+                                    fontSize: 8.5,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: 1.0,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  _currentVideo!.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: scheme.onSurface,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  _currentVideo!.artistName.trim().isNotEmpty
+                                      ? _currentVideo!.artistName
+                                      : _currentVideo!.channelTitle,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: scheme.onSurfaceVariant,
+                                    fontSize: 10.5,
+                                  ),
+                                ),
+                                if (_nativeState.duration.inMilliseconds > 0) ...[
+                                  const SizedBox(height: 7),
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: LinearProgressIndicator(
+                                      value: (_nativeState.position.inMilliseconds /
+                                              _nativeState.duration.inMilliseconds)
+                                          .clamp(0.0, 1.0)
+                                          .toDouble(),
+                                      minHeight: 3,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Icon(
+                            _nativeState.isEffectivelyPlaying
+                                ? Icons.graphic_eq_rounded
+                                : Icons.pause_circle_outline_rounded,
+                            color: scheme.primary,
+                            size: 23,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   if (isHost) ...[
                     const SizedBox(height: 12),
                     ValueListenableBuilder<String>(

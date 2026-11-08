@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
@@ -37,8 +38,23 @@ class _LyricsPageState extends State<LyricsPage> {
   int _syncOffsetMs = 0;
   double _lyricsFontSize = 25;
   String _settingsVideoId = '';
+  String _pendingSettingsVideoId = '';
 
   String _offsetKey(String videoId) => 'lyrics_sync_offset_${videoId.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_')}_v1';
+
+  void _scheduleTrackPreferencesLoad(String videoId) {
+    if (videoId.isEmpty ||
+        _settingsVideoId == videoId ||
+        _pendingSettingsVideoId == videoId) {
+      return;
+    }
+    _pendingSettingsVideoId = videoId;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _pendingSettingsVideoId != videoId) return;
+      _pendingSettingsVideoId = '';
+      unawaited(_loadTrackPreferences(videoId));
+    });
+  }
 
   Future<void> _loadTrackPreferences(String videoId) async {
     if (videoId.isEmpty || _settingsVideoId == videoId) return;
@@ -142,7 +158,9 @@ class _LyricsPageState extends State<LyricsPage> {
       Scrollable.ensureVisible(
         lineContext,
         alignment: 0.47,
-        duration: const Duration(milliseconds: 460),
+        duration: MediaQuery.of(context).disableAnimations
+            ? Duration.zero
+            : const Duration(milliseconds: 460),
         curve: Curves.easeOutCubic,
       );
     });
@@ -168,7 +186,7 @@ class _LyricsPageState extends State<LyricsPage> {
       valueListenable: widget.playerUiState,
       builder: (context, player, _) {
         final activeVideo = player.video ?? widget.video;
-        unawaited(_loadTrackPreferences(activeVideo.videoId));
+        _scheduleTrackPreferencesLoad(activeVideo.videoId);
         final lyrics = player.lyrics;
         if (_trackedVideoId != activeVideo.videoId || _lineKeys.length != lyrics.length) {
           final changedTrack = _trackedVideoId != activeVideo.videoId;
@@ -184,12 +202,40 @@ class _LyricsPageState extends State<LyricsPage> {
           }
         }
 
+        final isDark = Theme.of(context).brightness == Brightness.dark;
         return Scaffold(
-          backgroundColor: scheme.surface,
-          body: SafeArea(
-            child: ValueListenableBuilder<NativeYoutubeState>(
-              valueListenable: widget.nativeState,
-              builder: (context, native, _) {
+          backgroundColor: Colors.transparent,
+          body: Stack(
+            fit: StackFit.expand,
+            children: [
+              // Ambient artwork keeps lyrics visually connected to the player
+              // without competing with the active lyric line.
+              Positioned.fill(
+                child: ImageFiltered(
+                  imageFilter: ui.ImageFilter.blur(sigmaX: 46, sigmaY: 46),
+                  child: Opacity(
+                    opacity: isDark ? 0.30 : 0.16,
+                    child: AlbumArtworkImage(track: activeVideo, fit: BoxFit.cover),
+                  ),
+                ),
+              ),
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: isDark
+                          ? const [Color(0xD910141B), Color(0xE91A2029), Color(0xF5111419)]
+                          : const [Color(0xDDF5F7FA), Color(0xEAF5F7FA), Color(0xF7F5F7FA)],
+                    ),
+                  ),
+                ),
+              ),
+              SafeArea(
+                child: ValueListenableBuilder<NativeYoutubeState>(
+                  valueListenable: widget.nativeState,
+                  builder: (context, native, _) {
                 final position = native.videoId.isEmpty || native.videoId == activeVideo.videoId
                     ? native.position
                     : Duration.zero;
@@ -311,8 +357,10 @@ class _LyricsPageState extends State<LyricsPage> {
                     ),
                   ],
                 );
-              },
-            ),
+                  },
+                ),
+              ),
+            ],
           ),
         );
       },
@@ -359,48 +407,64 @@ class _LyricsPageState extends State<LyricsPage> {
       );
     }
 
-    return ListView.builder(
-      controller: _scrollController,
-      padding: const EdgeInsets.fromLTRB(24, 30, 24, 38),
-      itemCount: lyrics.length,
-      itemBuilder: (context, index) {
-        final line = lyrics[index];
-        final active = index == currentIndex;
-        final past = currentIndex >= 0 && index < currentIndex;
-        return Padding(
-          key: _lineKeys[index],
-          padding: const EdgeInsets.symmetric(vertical: 11),
-          child: InkWell(
-            onTap: player.lyricsSynced
-                ? () {
-                    final target = line.time - Duration(milliseconds: syncOffsetMs);
-                    widget.onSeek(target.isNegative ? Duration.zero : target);
-                  }
-                : null,
-            borderRadius: BorderRadius.circular(10),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 260),
-              curve: Curves.easeOutCubic,
-              padding: EdgeInsets.only(left: active ? 14 : 0, top: 3, bottom: 3),
-              decoration: BoxDecoration(
-                border: Border(left: BorderSide(color: active ? scheme.primary : Colors.transparent, width: 3.5)),
-              ),
-              child: AnimatedDefaultTextStyle(
-                duration: const Duration(milliseconds: 260),
-                curve: Curves.easeOutCubic,
-                style: TextStyle(
-                  color: active ? scheme.primary : scheme.onSurface.withValues(alpha: past ? 0.28 : 0.66),
-                  fontSize: active ? fontSize : fontSize * 0.72,
-                  height: 1.28,
-                  fontWeight: active ? FontWeight.w900 : FontWeight.w600,
-                  letterSpacing: active ? -0.65 : -0.25,
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 900),
+        child: ListView.builder(
+          controller: _scrollController,
+          padding: const EdgeInsets.fromLTRB(24, 30, 24, 38),
+          itemCount: lyrics.length,
+          itemBuilder: (context, index) {
+            final line = lyrics[index];
+            final active = index == currentIndex;
+            final past = currentIndex >= 0 && index < currentIndex;
+            return Padding(
+              key: _lineKeys[index],
+              padding: const EdgeInsets.symmetric(vertical: 11),
+              child: InkWell(
+                onTap: player.lyricsSynced
+                    ? () {
+                        final target = line.time - Duration(milliseconds: syncOffsetMs);
+                        widget.onSeek(target.isNegative ? Duration.zero : target);
+                      }
+                    : null,
+                borderRadius: BorderRadius.circular(10),
+                child: AnimatedContainer(
+                  duration: MediaQuery.of(context).disableAnimations
+                      ? Duration.zero
+                      : const Duration(milliseconds: 260),
+                  curve: Curves.easeOutCubic,
+                  padding: EdgeInsets.only(left: active ? 14 : 0, top: 3, bottom: 3),
+                  decoration: BoxDecoration(
+                    border: Border(
+                      left: BorderSide(
+                        color: active ? scheme.primary : Colors.transparent,
+                        width: 3.5,
+                      ),
+                    ),
+                  ),
+                  child: AnimatedDefaultTextStyle(
+                    duration: MediaQuery.of(context).disableAnimations
+                        ? Duration.zero
+                        : const Duration(milliseconds: 260),
+                    curve: Curves.easeOutCubic,
+                    style: TextStyle(
+                      color: active
+                          ? scheme.primary
+                          : scheme.onSurface.withValues(alpha: past ? 0.28 : 0.66),
+                      fontSize: active ? fontSize : fontSize * 0.72,
+                      height: 1.28,
+                      fontWeight: active ? FontWeight.w900 : FontWeight.w600,
+                      letterSpacing: active ? -0.65 : -0.25,
+                    ),
+                    child: Text(line.text, textAlign: TextAlign.left),
+                  ),
                 ),
-                child: Text(line.text, textAlign: TextAlign.left),
               ),
-            ),
-          ),
-        );
-      },
+            );
+          },
+        ),
+      ),
     );
   }
 }

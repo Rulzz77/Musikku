@@ -46,6 +46,30 @@ class SpotifyYoutubeTrackMatcher {
         .toList(growable: false);
   }
 
+  /// A small first-pass query set for low-latency imports. The first query
+  /// targets the primary artist, the second targets a collaborator when one
+  /// exists, and the last is title-only for channel/label indexing differences.
+  /// Deeper variants remain available through [buildSearchQueries].
+  static List<String> buildFastSearchQueries(SpotifyPlaylistTrack track) {
+    final coreTitle = _searchCoreTitle(track.title);
+    if (coreTitle.isEmpty) return const <String>[];
+
+    final queries = <String>{};
+    final primary = track.primaryArtist.trim();
+    if (primary.isNotEmpty) queries.add('$primary $coreTitle');
+
+    if (track.artists.length > 1) {
+      final collaborator = track.artists[1].trim();
+      if (collaborator.isNotEmpty) queries.add('$collaborator $coreTitle');
+    }
+
+    queries.add(coreTitle);
+    return queries
+        .map((query) => query.replaceAll(RegExp(r'\s+'), ' ').trim())
+        .where((query) => query.isNotEmpty)
+        .toList(growable: false);
+  }
+
   static String _searchCoreTitle(String value) {
     var result = value.replaceFirst(
       RegExp(r'\s+[-–—]\s*from\s+.+$', caseSensitive: false),
@@ -227,6 +251,18 @@ class SpotifyYoutubeTrackMatcher {
   ) {
     final match = bestMatch(spotifyTrack, candidates);
     return match != null && _officialSourceRank(spotifyTrack, match) >= 5;
+  }
+
+  /// True when a first-page result is already supported by an artist-owned
+  /// channel, verified label/distributor credit, or corroborated exact match.
+  /// Explicit covers intentionally never satisfy this shortcut: the importer
+  /// should keep looking for the original before accepting a cover fallback.
+  static bool hasHighConfidenceMatch(
+    SpotifyPlaylistTrack spotifyTrack,
+    List<YoutubeSearchResult> candidates,
+  ) {
+    final match = bestMatch(spotifyTrack, candidates);
+    return match != null && _officialSourceRank(spotifyTrack, match) >= 3;
   }
 
   static int _officialSourceRank(

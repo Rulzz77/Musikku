@@ -965,6 +965,48 @@ void main() {
       expect(queries.any((query) => query == 'Song Name Guest Artist'), isFalse);
     });
 
+    test('builds a compact first-pass query set for fast Spotify imports', () {
+      const track = SpotifyPlaylistTrack(
+        title: 'Satru 2 (feat. Happy Asmara)',
+        artists: ['Denny Caknan', 'Happy Asmara'],
+      );
+
+      expect(
+        SpotifyYoutubeTrackMatcher.buildFastSearchQueries(track),
+        ['Denny Caknan Satru 2', 'Happy Asmara Satru 2', 'Satru 2'],
+      );
+    });
+
+    test('only stops the fast pass for a corroborated original, not a cover', () {
+      const track = SpotifyPlaylistTrack(
+        title: 'Nemen',
+        artists: ['Guyon Waton'],
+        durationMs: 260000,
+      );
+      final official = candidate(
+        id: 'nemen-fast-official',
+        title: 'Nemen (Official Music Video)',
+        channel: 'GUYONWATON OFFICIAL',
+        durationSeconds: 260,
+      );
+      final cover = candidate(
+        id: 'nemen-fast-cover',
+        title: 'Nemen',
+        channel: 'Independent Cover Channel',
+        durationSeconds: 260,
+        viewCount: 20000,
+      );
+
+      expect(
+        SpotifyYoutubeTrackMatcher.hasHighConfidenceMatch(track, [official]),
+        isTrue,
+      );
+      expect(
+        SpotifyYoutubeTrackMatcher.hasHighConfidenceMatch(track, [cover]),
+        isFalse,
+      );
+    });
+
     test('matches a one-character song title when artist identity is verified', () {
       const track = SpotifyPlaylistTrack(
         title: 'A',

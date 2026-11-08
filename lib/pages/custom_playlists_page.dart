@@ -34,6 +34,7 @@ class CustomPlaylistsPage extends StatefulWidget {
     required this.playerUiState,
     this.availableSongs = const [],
     this.searchSongs,
+    this.searchSpotifyFast,
     this.enrichSearchResults,
     required this.onChanged,
     required this.onPlayPlaylist,
@@ -52,7 +53,11 @@ class CustomPlaylistsPage extends StatefulWidget {
   final String? initialPlaylistId;
   final ValueListenable<PlayerUiState> playerUiState;
   final List<YoutubeSearchResult> availableSongs;
+  /// Full Spotify fallback search. Used only when the cheap first pass does
+  /// not find a corroborated source.
   final Future<List<YoutubeSearchResult>> Function(String query)? searchSongs;
+  /// One-page relevance search used for the fast first pass of Spotify import.
+  final Future<List<YoutubeSearchResult>> Function(String query)? searchSpotifyFast;
   final Future<List<YoutubeSearchResult>> Function(List<YoutubeSearchResult> candidates)? enrichSearchResults;
   final VoidCallback onChanged;
   final Future<void> Function(Playlist playlist) onPlayPlaylist;
@@ -648,7 +653,8 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
   Future<void> _importSpotifyPlaylist() async {
     if (_spotifyImporting) return;
     final searchSongs = widget.searchSongs;
-    if (searchSongs == null) {
+    final fastSearchSongs = widget.searchSpotifyFast ?? searchSongs;
+    if (searchSongs == null || fastSearchSongs == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Pencarian YouTube belum siap untuk impor.')),
       );
@@ -877,128 +883,164 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
         tracksToImport.length,
         null,
       );
-      try {
-        // Small batches keep network pressure low while preserving Spotify's
-        // original ordering in the resolved array.
-        for (var start = 0; start < tracksToImport.length; start += 2) {
-          final end = (start + 2 < tracksToImport.length)
-              ? start + 2
-              : tracksToImport.length;
-          progressText.value = 'Mencocokkan lagu ${start + 1}–$end dari ${tracksToImport.length}…';
-          final indexes = List<int>.generate(end - start, (offset) => start + offset);
-          final batch = await Future.wait(indexes.map((index) async {
-            final track = tracksToImport[index];
-            try {
-              // Search artist-first, reversed artist/title order, featured
-              // collaborator variants, and title-only fallback. The matcher
-              // removes Spotify's feat./From suffixes only for matching; the
-              // imported display title remains exactly as Spotify supplied it.
-              final queries = SpotifyYoutubeTrackMatcher.buildSearchQueries(track);
-              if (queries.isEmpty) {
-                debugPrint('SPOTIFY IMPORT SKIPPED EMPTY SEARCH TITLE: ${track.title}');
-                return null;
-              }
 
-              final candidatesById = <String, YoutubeSearchResult>{};
-              var queryIndex = 0;
-              for (final query in queries) {
-                queryIndex++;
-                List<YoutubeSearchResult> results;
-                try {
-                  results = await searchSongs(query);
-                } catch (error) {
-                  debugPrint(
-                    'SPOTIFY SEARCH FAILED [${track.title}] '
-                    'query#$queryIndex "$query": $error',
-                  );
-                  continue;
-                }
-                for (final result in results) {
-                  if (result.videoId.isNotEmpty) {
-                    candidatesById.putIfAbsent(result.videoId, () => result);
-                  }
-                }
-                // Do not stop at the first plausible mirror. Continue until
-                // a strong artist/Topic/VEVO/distributor source is found, or
-                // all focused query variants have been checked.
-                if (SpotifyYoutubeTrackMatcher.hasPreferredOfficialMatch(
-                  track,
-                  candidatesById.values.toList(growable: false),
-                )) {
-                  break;
-                }
-              }
+      Future<YoutubeSearchResult?> resolveSpotifyTrack(
+        SpotifyPlaylistTrack track,
+      ) async {
+        try {
+          final queries = SpotifyYoutubeTrackMatcher.buildSearchQueries(track);
+          final fastQueries = widget.searchSpotifyFast != null
+              ? SpotifyYoutubeTrackMatcher.buildFastSearchQueries(track)
+              : queries.take(1).toList(growable: false);
+          if (queries.isEmpty || fastQueries.isEmpty) {
+            debugPrint('SPOTIFY IMPORT SKIPPED EMPTY SEARCH TITLE: ${track.title}');
+            return null;
+          }
 
-              var allCandidates = candidatesById.values.toList(growable: false);
-              // If no high-confidence artist-owned / Topic / VEVO source was
-              // found, inspect a very small shortlist for YouTube's structured
-              // MusicData. This allows a genuinely popular third-party upload
-              // to match when its performer credit is verified by metadata,
-              // while popularity alone can never admit a wrong singer.
-              if (!SpotifyYoutubeTrackMatcher.hasPreferredOfficialMatch(
-                    track,
-                    allCandidates,
-                  ) &&
-                  widget.enrichSearchResults != null) {
-                final detailCandidates =
-                    SpotifyYoutubeTrackMatcher.metadataLookupCandidates(
-                  track,
-                  allCandidates,
-                  limit: 8,
-                );
-                if (detailCandidates.isNotEmpty) {
-                  try {
-                    final enriched = await widget.enrichSearchResults!(
-                      detailCandidates,
-                    );
-                    for (final item in enriched) {
-                      candidatesById[item.videoId] = item;
-                    }
-                    allCandidates =
-                        candidatesById.values.toList(growable: false);
-                  } catch (detailError) {
-                    debugPrint(
-                      'SPOTIFY MUSIC METADATA LOOKUP FAILED '
-                      '[${track.title}]: $detailError',
-                    );
-                  }
-                }
-              }
+          final candidatesById = <String, YoutubeSearchResult>{};
+          var fastQueryCount = 0;
+          var deepFallbackUsed = false;
+          var metadataLookupCount = 0;
 
-              final match = SpotifyYoutubeTrackMatcher.bestMatch(
-                track,
-                allCandidates,
-              );
-              final coverCandidates = allCandidates
-                  .where(YoutubeMusicPolicy.isExplicitCoverVersion)
-                  .length;
-              debugPrint(
-                'SPOTIFY IMPORT MATCH [${track.title} - ${track.primaryArtist}]: '
-                'queries=${queries.length}, candidates=${allCandidates.length}, '
-                'covers=$coverCandidates, '
-                'metadata=${allCandidates.where((item) => item.musicDataTitle.isNotEmpty && item.musicDataArtist.isNotEmpty).length}, '
-                'selected=${match?.videoId ?? 'NONE'}',
-              );
-              if (match == null && allCandidates.isNotEmpty) {
-                final diagnosticCandidates = allCandidates.take(12).map((item) {
-                  final duration =
-                      item.durationSeconds?.round().toString() ?? '?';
-                  final views = item.viewCount?.toString() ?? '?';
-                  return '${item.title} '
-                      '[${item.channelTitle}; ${duration}s; $views views]';
-                }).join(' || ');
-                debugPrint(
-                  'SPOTIFY IMPORT UNMATCHED CANDIDATES [${track.title}]: '
-                  '$diagnosticCandidates',
-                );
+          void mergeCandidates(Iterable<YoutubeSearchResult> results) {
+            for (final result in results) {
+              if (result.videoId.isNotEmpty) {
+                candidatesById.putIfAbsent(result.videoId, () => result);
               }
-              return match == null
-                  ? null
-                  : SpotifyYoutubeTrackMatcher.applySpotifyMetadata(track, match);
-            } catch (error) {
-              debugPrint('SPOTIFY IMPORT SEARCH FAILED [${track.title}]: $error');
-              return null;
             }
+          }
+
+          bool hasConfidentMatch() =>
+              SpotifyYoutubeTrackMatcher.hasHighConfidenceMatch(
+            track,
+            candidatesById.values.toList(growable: false),
+          );
+
+          // Stage 1: one relevance page for the best artist/title query. A
+          // verified artist, label, Topic, or corroborated third-party result
+          // ends the search immediately, avoiding the old 3-page + popularity
+          // scan for every already-easy song.
+          for (final query in fastQueries) {
+            fastQueryCount++;
+            try {
+              final results = await fastSearchSongs(query);
+              mergeCandidates(results);
+            } catch (error) {
+              debugPrint(
+                'SPOTIFY FAST SEARCH FAILED [${track.title}] '
+                '"$query": $error',
+              );
+            }
+            if (hasConfidentMatch()) break;
+          }
+
+          // Stage 2: only unresolved/low-confidence tracks pay for the deeper
+          // search (extra relevance pages + popularity fallback). Reuse the
+          // most focused artist/title query; do not repeat every query variant.
+          if (!hasConfidentMatch() && widget.searchSpotifyFast != null) {
+            deepFallbackUsed = true;
+            final deepQuery = queries.first;
+            try {
+              final results = await searchSongs(deepQuery);
+              mergeCandidates(results);
+            } catch (error) {
+              debugPrint(
+                'SPOTIFY DEEP FALLBACK FAILED [${track.title}] '
+                '"$deepQuery": $error',
+              );
+            }
+          }
+
+          // Stage 3: structured MusicData is expensive. Only inspect a tiny
+          // shortlist when the search candidates still lack a high-confidence
+          // match. Cache hits are cheap; uncached detail requests are capped.
+          if (!hasConfidentMatch() && widget.enrichSearchResults != null) {
+            final allCandidates =
+                candidatesById.values.toList(growable: false);
+            final detailCandidates =
+                SpotifyYoutubeTrackMatcher.metadataLookupCandidates(
+              track,
+              allCandidates,
+              limit: 3,
+            );
+            if (detailCandidates.isNotEmpty) {
+              metadataLookupCount = detailCandidates.length;
+              try {
+                final enriched = await widget.enrichSearchResults!(
+                  detailCandidates,
+                );
+                mergeCandidates(enriched);
+              } catch (detailError) {
+                debugPrint(
+                  'SPOTIFY MUSIC METADATA LOOKUP FAILED '
+                  '[${track.title}]: $detailError',
+                );
+              }
+            }
+          }
+
+          final allCandidates = candidatesById.values.toList(growable: false);
+          final match = SpotifyYoutubeTrackMatcher.bestMatch(track, allCandidates);
+          final coverCandidates = allCandidates
+              .where(YoutubeMusicPolicy.isExplicitCoverVersion)
+              .length;
+          debugPrint(
+            'SPOTIFY IMPORT MATCH [${track.title} - ${track.primaryArtist}]: '
+            'fastQueries=$fastQueryCount, deep=$deepFallbackUsed, '
+            'metadataLookups=$metadataLookupCount, candidates=${allCandidates.length}, '
+            'covers=$coverCandidates, '
+            'metadata=${allCandidates.where((item) => item.musicDataTitle.isNotEmpty && item.musicDataArtist.isNotEmpty).length}, '
+            'selected=${match?.videoId ?? 'NONE'}',
+          );
+          if (match == null && allCandidates.isNotEmpty) {
+            final diagnosticCandidates = allCandidates.take(12).map((item) {
+              final duration = item.durationSeconds?.round().toString() ?? '?';
+              final views = item.viewCount?.toString() ?? '?';
+              return '${item.title} '
+                  '[${item.channelTitle}; ${duration}s; $views views]';
+            }).join(' || ');
+            debugPrint(
+              'SPOTIFY IMPORT UNMATCHED CANDIDATES [${track.title}]: '
+              '$diagnosticCandidates',
+            );
+          }
+          return match == null
+              ? null
+              : SpotifyYoutubeTrackMatcher.applySpotifyMetadata(track, match);
+        } catch (error) {
+          debugPrint('SPOTIFY IMPORT SEARCH FAILED [${track.title}]: $error');
+          return null;
+        }
+      }
+
+      // Identical Spotify tracks can appear more than once in a playlist.
+      // Resolve each unique identity once, then reuse the same video for every
+      // original occurrence while preserving the playlist's order and repeats.
+      final matchFutures = <String, Future<YoutubeSearchResult?>>{};
+      String trackIdentity(SpotifyPlaylistTrack track) =>
+          '${track.title.toLowerCase().trim()}|'
+          '${track.artists.map((artist) => artist.toLowerCase().trim()).join('|')}|'
+          '${track.durationMs ?? ''}';
+
+      try {
+        // Four tracks can make progress concurrently. The staged strategy
+        // ensures most tracks issue only one inexpensive network search.
+        const batchSize = 4;
+        for (var start = 0; start < tracksToImport.length; start += batchSize) {
+          final end = (start + batchSize < tracksToImport.length)
+              ? start + batchSize
+              : tracksToImport.length;
+          progressText.value =
+              'Mencocokkan lagu ${start + 1}–$end dari ${tracksToImport.length}…';
+          final indexes =
+              List<int>.generate(end - start, (offset) => start + offset);
+          final batch = await Future.wait(indexes.map((index) {
+            final track = tracksToImport[index];
+            final key = trackIdentity(track);
+            return matchFutures.putIfAbsent(
+              key,
+              () => resolveSpotifyTrack(track),
+            );
           }));
           for (var offset = 0; offset < indexes.length; offset++) {
             resolved[indexes[offset]] = batch[offset];

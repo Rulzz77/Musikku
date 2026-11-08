@@ -17,6 +17,7 @@ extension _HomePlaylists on _HomePageState {
           initialPlaylistId: initialPlaylistId,
           playerUiState: _playerUiState,
           searchSongs: _searchService.searchForSpotifyImport,
+          searchSpotifyFast: _searchService.searchForSpotifyImportFast,
           enrichSearchResults: _searchService.enrichMusicMetadata,
           availableSongs: <YoutubeSearchResult>[
             ..._favorites,

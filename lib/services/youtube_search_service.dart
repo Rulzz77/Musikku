@@ -534,6 +534,16 @@ class YoutubeSearchService {
   Future<List<YoutubeSearchResult>> searchForSpotifyImport(String query) =>
       _search(query, spotifyImportMode: true);
 
+  /// Low-latency Spotify first pass: one relevance page, no popularity page,
+  /// and no metadata enrichment. The importer calls the deeper method only
+  /// when the first-pass candidates do not contain a corroborated match.
+  Future<List<YoutubeSearchResult>> searchForSpotifyImportFast(String query) =>
+      _search(
+        query,
+        spotifyImportMode: true,
+        spotifyFastMode: true,
+      );
+
   static bool _matchesStructuredMusicDataQuery(
     String query,
     YoutubeSearchResult video,
@@ -564,6 +574,7 @@ class YoutubeSearchService {
   Future<List<YoutubeSearchResult>> _search(
     String query, {
     required bool spotifyImportMode,
+    bool spotifyFastMode = false,
   }) async {
     final keyword = query.trim();
     if (keyword.isEmpty) return const [];
@@ -581,8 +592,11 @@ class YoutubeSearchService {
     // Versioned cache separates Spotify's deeper candidate collection from
     // older, shorter/filtered result sets. Raw results are retained so a later
     // matcher improvement does not inherit an already-truncated candidate list.
+    final modeKey = spotifyFastMode
+        ? 'spotify-fast'
+        : (spotifyImportMode ? 'spotify-deep' : 'catalog');
     final cacheKey =
-        'explodeSearchV12SpotifyTitleCreditNormalization|${spotifyImportMode ? 'spotify' : 'catalog'}|${keyword.toLowerCase()}|${effectiveQuery.toLowerCase()}|${intent.latest ? 'date' : 'relevance'}';
+        'explodeSearchV13StagedSpotifyImport|$modeKey|${keyword.toLowerCase()}|${effectiveQuery.toLowerCase()}|${intent.latest ? 'date' : 'relevance'}';
     final resultLimit = spotifyImportMode ? 60 : 30;
     final cached = _cache[cacheKey];
 
@@ -649,7 +663,9 @@ class YoutubeSearchService {
       // similarly named songs. Spotify import inspects up to three relevance
       // pages; ordinary search keeps its lighter one-page fallback behavior.
       dynamic pageCursor = firstPage;
-      final maxRelevancePages = spotifyImportMode ? 3 : 2;
+      final maxRelevancePages = spotifyFastMode
+          ? 1
+          : (spotifyImportMode ? 3 : 2);
       for (var pageNumber = 1; pageNumber < maxRelevancePages; pageNumber++) {
         final acceptedCount = accepted().length;
         final enoughCandidates = spotifyImportMode
@@ -676,7 +692,8 @@ class YoutubeSearchService {
       final hasWidelyViewed = beforePopular.any(
         (video) => (video.viewCount ?? 0) >= 100000,
       );
-      if (!intent.latest &&
+      if (!spotifyFastMode &&
+          !intent.latest &&
           (spotifyImportMode || beforePopular.length < 12 || !hasWidelyViewed)) {
         try {
           final dynamic popularPage = await _youtubeExplode.search.search(

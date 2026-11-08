@@ -27,3 +27,16 @@
 - Karaoke and AI covers remain excluded.
 
 The Flutter test suite and analyzer still need to be run in a local Flutter SDK environment.
+
+## Follow-up fix for the 20-track regional playlist report
+
+- Fixed a title-normalization bug that removed all text after `feat.` even when the featured-artist credit appeared **before** the song title in a YouTube title (for example, `Northsle feat. Agiff - Bubrah`). Spotify title normalization and YouTube candidate normalization now use separate paths; candidate normalization preserves the full title and treats performer names as extra tokens.
+- Applied the same candidate-aware tokenization to title matching, similarity scoring, metadata shortlisting, and structured distributor-description matching.
+- Added a penalty for `Live Concert` / `Live Performance` / `Concert Version` when the Spotify release is a studio version, without penalizing regional `Official Live Music` releases.
+- Added regression cases for the full 20-track Javanese playlist sample, featured artists before the title, and multi-artist credits before the title.
+- Bumped the search cache namespace to V12 so the expanded title normalization does not reuse older cached candidate pools.
+
+The 20-track test uses synthetic official-channel result records to exercise all names and title patterns. It does not prove that a live YouTube search returned all 20 videos; that still needs to be tested on the user's device with the per-query diagnostics from `SPOTIFY SEARCH POOL` and `SPOTIFY IMPORT MATCH`.
+- Added compact artist-name matching for official channel/title spellings such as `GUYONWATON` vs `Guyon Waton` and `NDX AKA` vs `NDX A.K.A.`. This compact comparison only applies to performer names of at least six characters to avoid short-name false positives.
+- Added regression coverage for NDX A.K.A. punctuation variants and concatenated Guyon Waton channel names.
+- Added a lower-confidence, evidence-backed fallback for regional label/third-party uploads that lack an `Official` marker: the complete song title must match closely, a Spotify-credited performer must be present in the candidate, and duration must be within 25 seconds or views must be at least 100,000. This tier remains below verified official/Topic/VEVO/distributor sources; explicitly marked covers remain the last-resort tier.

@@ -582,7 +582,7 @@ class YoutubeSearchService {
     // older, shorter/filtered result sets. Raw results are retained so a later
     // matcher improvement does not inherit an already-truncated candidate list.
     final cacheKey =
-        'explodeSearchV10SpotifyCoverFallback|${spotifyImportMode ? 'spotify' : 'catalog'}|${keyword.toLowerCase()}|${effectiveQuery.toLowerCase()}|${intent.latest ? 'date' : 'relevance'}';
+        'explodeSearchV12SpotifyTitleCreditNormalization|${spotifyImportMode ? 'spotify' : 'catalog'}|${keyword.toLowerCase()}|${effectiveQuery.toLowerCase()}|${intent.latest ? 'date' : 'relevance'}';
     final resultLimit = spotifyImportMode ? 60 : 30;
     final cached = _cache[cacheKey];
 
@@ -718,9 +718,23 @@ class YoutubeSearchService {
         }
       }
 
-      final results = _rankSearchCandidates(keyword, accepted())
+      final acceptedResults = accepted();
+      final results = _rankSearchCandidates(keyword, acceptedResults)
           .take(resultLimit)
           .toList(growable: false);
+      if (spotifyImportMode) {
+        final acceptedIds = acceptedResults.map((video) => video.videoId).toSet();
+        final rejectedSamples = rawResults
+            .where((video) => !acceptedIds.contains(video.videoId))
+            .take(6)
+            .map((video) => '${video.title} [${video.channelTitle}]')
+            .join(' | ');
+        debugPrint(
+          'SPOTIFY SEARCH POOL [$keyword]: raw=${rawResults.length}, '
+          'eligible=${acceptedResults.length}, returned=${results.length}, '
+          'filteredSamples=${rejectedSamples.isEmpty ? '-' : rejectedSamples}',
+        );
+      }
 
       // Persist kandidat mentah, bukan hanya lagu yang lolos policy hari ini.
       // Jangan simpan daftar kosong agar hasil kosong sementara tidak menetap.

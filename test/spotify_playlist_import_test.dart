@@ -823,7 +823,7 @@ void main() {
       );
     });
 
-    test('requires Spotify primary artist for a multi-artist collaboration', () {
+    test('accepts a Spotify-credited collaborator when the duet upload is under their channel', () {
       const collaboration = SpotifyPlaylistTrack(
         title: 'Dumes',
         artists: ['OMWAWES', 'Guyon Waton'],
@@ -844,8 +844,8 @@ void main() {
       );
 
       expect(
-        SpotifyYoutubeTrackMatcher.bestMatch(collaboration, [secondaryOnly]),
-        isNull,
+        SpotifyYoutubeTrackMatcher.bestMatch(collaboration, [secondaryOnly])?.videoId,
+        'secondary-only',
       );
       expect(
         SpotifyYoutubeTrackMatcher.bestMatch(collaboration, [primaryCredited])?.videoId,
@@ -1342,6 +1342,263 @@ void main() {
       expect(YoutubeMusicPolicy.isSpotifyImportCandidate(aiCover), isFalse);
     });
 
+
+    test('matches official YouTube examples from the Javanese Spotify import report', () {
+      final examples = <({SpotifyPlaylistTrack track, YoutubeSearchResult upload})>[
+        (
+          track: const SpotifyPlaylistTrack(
+            title: 'Satru 2', artists: ['Denny Caknan', 'Happy Asmara'], durationMs: 280000,
+          ),
+          upload: candidate(
+            id: 'satru-2-topic', title: 'Satru 2', channel: 'DENNY CAKNAN - Topic',
+            description: 'Provided to YouTube by DC Production\n\n'
+                'Satru 2 · Denny Caknan · Happy Asmara\nAlbum: Satru 2',
+            durationSeconds: 280, viewCount: 1300000,
+          ),
+        ),
+        (
+          track: const SpotifyPlaylistTrack(
+            title: 'Kartonyono Medot Janji', artists: ['Denny Caknan'], durationMs: 300000,
+          ),
+          upload: candidate(
+            id: 'kartonyono-official',
+            title: 'Denny Caknan - Kartonyono Medot Janji (Official Music Video)',
+            channel: 'DENNY CAKNAN', durationSeconds: 300, viewCount: 320000000,
+          ),
+        ),
+        (
+          track: const SpotifyPlaylistTrack(title: 'Nemen', artists: ['Guyon Waton'], durationMs: 260000),
+          upload: candidate(
+            id: 'nemen-official', title: 'Nemen - Guyon Waton (Official Music Video)',
+            channel: 'Guyon Waton Official', durationSeconds: 260, viewCount: 10000000,
+          ),
+        ),
+        (
+          track: const SpotifyPlaylistTrack(title: 'Bubrah', artists: ['Northsle', 'Agiff'], durationMs: 250000),
+          upload: candidate(
+            id: 'bubrah-official', title: 'Northsle feat. Agiff - Bubrah (Official Music Video)',
+            channel: 'NorthSle', durationSeconds: 250, viewCount: 29000000,
+          ),
+        ),
+        (
+          track: const SpotifyPlaylistTrack(title: 'TAMU UNDANGAN - Reggae', artists: ['Niken Salindry'], durationMs: 235000),
+          upload: candidate(
+            id: 'tamu-undangan-topic', title: 'TAMU UNDANGAN (Reggae)',
+            channel: 'Niken Salindry - Topic',
+            description: 'Provided to YouTube by Berkarya Record\n\n'
+                'TAMU UNDANGAN (Reggae) · Niken Salindry',
+            durationSeconds: 235, viewCount: 23000000,
+          ),
+        ),
+        (
+          track: const SpotifyPlaylistTrack(title: 'Ora Ngemis Bali', artists: ['Lavora', 'Ratih SDE'], durationMs: 270000),
+          upload: candidate(
+            id: 'ora-ngemis-bali-official',
+            title: 'Ora Ngemis Bali - LAVORA Ft Ratih SDE (Official Music Video)',
+            channel: 'LAVORA Official', durationSeconds: 270, viewCount: 13000000,
+          ),
+        ),
+        (
+          track: const SpotifyPlaylistTrack(title: 'Sigar', artists: ['Denny Caknan'], durationMs: 270000),
+          upload: candidate(
+            id: 'sigar-official', title: 'Denny Caknan - Sigar (Official Music Video)',
+            channel: 'DENNY CAKNAN', durationSeconds: 270, viewCount: 72000000,
+          ),
+        ),
+        (
+          track: const SpotifyPlaylistTrack(title: 'Anak Lanang', artists: ['Ndarboy Genk'], durationMs: 270000),
+          upload: candidate(
+            id: 'anak-lanang-official',
+            title: 'Ndarboy Genk - Anak Lanang Original (Official Music Video)',
+            channel: 'Ndarboy Genk', durationSeconds: 270, viewCount: 23000000,
+          ),
+        ),
+        (
+          track: const SpotifyPlaylistTrack(title: 'Nangisi Lungamu', artists: ['Aftershine'], durationMs: 280000),
+          upload: candidate(
+            id: 'nangisi-lungamu-official',
+            title: 'Nangisi Lungamu - Aftershine ft Tiara Linggar (Official Music Video)',
+            channel: 'AFTERSHINE Official', durationSeconds: 280, viewCount: 7400000,
+          ),
+        ),
+      ];
+
+      for (final example in examples) {
+        expect(
+          SpotifyYoutubeTrackMatcher.bestMatch(example.track, [example.upload])?.videoId,
+          example.upload.videoId,
+          reason: '${example.track.title} by ${example.track.artists.join(', ')} should match',
+        );
+      }
+    });
+
+    test('keeps the song title when YouTube places featured artists before it', () {
+      const track = SpotifyPlaylistTrack(
+        title: 'Bubrah',
+        artists: ['Northsle', 'Agiff'],
+        durationMs: 250000,
+      );
+      final officialUpload = candidate(
+        id: 'bubrah-feature-before-title',
+        title: 'Northsle feat. Agiff - Bubrah (Official Music Video)',
+        channel: 'NorthSle Official Artist Channel',
+        durationSeconds: 250,
+        viewCount: 29000000,
+      );
+
+      expect(
+        SpotifyYoutubeTrackMatcher.bestMatch(track, [officialUpload])?.videoId,
+        'bubrah-feature-before-title',
+        reason: 'featured artist prefix must not erase the actual song title',
+      );
+    });
+
+    test('matches a multi-artist release when all credits precede the title', () {
+      const track = SpotifyPlaylistTrack(
+        title: 'Salam Dariku',
+        artists: ['Didik Budi', 'Cindi Cintya', 'Fywrizki', 'Cantika'],
+        durationMs: 240000,
+      );
+      final officialUpload = candidate(
+        id: 'salam-dariku-multi-credit',
+        title: 'Didik Budi feat. Cindi Cintya, Fywrizki & Cantika - Salam Dariku (Official Music Video)',
+        channel: 'Didik Budi Official',
+        durationSeconds: 240,
+        viewCount: 1200000,
+      );
+
+      expect(
+        SpotifyYoutubeTrackMatcher.bestMatch(track, [officialUpload])?.videoId,
+        'salam-dariku-multi-credit',
+      );
+    });
+
+    test('accepts an unlabelled third-party upload with exact artist, title, and duration', () {
+      const track = SpotifyPlaylistTrack(
+        title: 'Nemen',
+        artists: ['Guyon Waton'],
+        durationMs: 260000,
+      );
+      final unlabelledRelease = candidate(
+        id: 'nemen-third-party-duration-match',
+        title: 'Guyon Waton - Nemen',
+        channel: 'Regional Music Archive',
+        durationSeconds: 260,
+        viewCount: 4500,
+      );
+      expect(
+        SpotifyYoutubeTrackMatcher.bestMatch(track, [unlabelledRelease])?.videoId,
+        'nemen-third-party-duration-match',
+      );
+    });
+
+    test('matches NDX A.K.A. when YouTube formats the abbreviation as NDX AKA', () {
+      const track = SpotifyPlaylistTrack(
+        title: 'Kelingan Mantan',
+        artists: ['NDX A.K.A.'],
+      );
+      final upload = candidate(
+        id: 'ndx-aka-kelingan-mantan',
+        title: 'NDX AKA - Kelingan Mantan (Official Music Video)',
+        channel: 'NDX AKA Official',
+      );
+      expect(
+        SpotifyYoutubeTrackMatcher.bestMatch(track, [upload])?.videoId,
+        'ndx-aka-kelingan-mantan',
+      );
+    });
+
+    test('matches concatenated official channel names such as GUYONWATON', () {
+      const track = SpotifyPlaylistTrack(
+        title: 'Nemen',
+        artists: ['Guyon Waton'],
+      );
+      final upload = candidate(
+        id: 'guyonwaton-nemen-topic-style',
+        title: 'Nemen (Official Music Video)',
+        channel: 'GUYONWATON OFFICIAL',
+      );
+      expect(
+        SpotifyYoutubeTrackMatcher.bestMatch(track, [upload])?.videoId,
+        'guyonwaton-nemen-topic-style',
+      );
+    });
+
+    test('does not use a live concert recording for a studio Spotify track', () {
+      final liveVersion = candidate(
+        id: 'studio-track-live-concert',
+        title: 'Fiersa Besari - Celengan Rindu (Live Concert)',
+        channel: 'Fiersa Besari',
+      );
+      expect(
+        SpotifyYoutubeTrackMatcher.bestMatch(spotifyTrack, [liveVersion]),
+        isNull,
+      );
+    });
+
+    test('searches each Spotify collaborator separately', () {
+      const track = SpotifyPlaylistTrack(
+        title: 'Satru 2', artists: ['Denny Caknan', 'Happy Asmara'],
+      );
+      final queries = SpotifyYoutubeTrackMatcher.buildSearchQueries(track);
+      expect(queries, contains('Happy Asmara Satru 2'));
+      expect(queries, contains('Satru 2 Happy Asmara'));
+    });
+
+    test('matches the full regional playlist sample when artist credits precede song titles', () {
+      final tracks = <SpotifyPlaylistTrack>[
+        const SpotifyPlaylistTrack(title: 'Satru 2', artists: ['Denny Caknan', 'Happy Asmara']),
+        const SpotifyPlaylistTrack(title: 'Kartonyono Medot Janji', artists: ['Denny Caknan']),
+        const SpotifyPlaylistTrack(title: 'Nemen', artists: ['Guyon Waton']),
+        const SpotifyPlaylistTrack(title: 'Bubrah', artists: ['Northsle', 'Agiff']),
+        const SpotifyPlaylistTrack(title: 'Gampil', artists: ['Guyon Waton']),
+        const SpotifyPlaylistTrack(title: 'Sigar', artists: ['Denny Caknan']),
+        const SpotifyPlaylistTrack(title: 'TAMU UNDANGAN - Reggae', artists: ['Niken Salindry']),
+        const SpotifyPlaylistTrack(title: 'Ora Ngemis Bali', artists: ['Lavora', 'Ratih SDE']),
+        const SpotifyPlaylistTrack(title: 'Kelingan Mantan', artists: ['NDX A.K.A.']),
+        const SpotifyPlaylistTrack(title: 'Anak Lanang', artists: ['Ndarboy Genk']),
+        const SpotifyPlaylistTrack(title: 'Nangisi Lungamu', artists: ['Aftershine']),
+        const SpotifyPlaylistTrack(title: 'Lungaku', artists: ['Guyon Waton']),
+        const SpotifyPlaylistTrack(title: 'Aku Cah Kerjo', artists: ['Pendhoza']),
+        const SpotifyPlaylistTrack(title: 'Rasah Bali', artists: ['Lavora', 'Ena Vika']),
+        const SpotifyPlaylistTrack(title: 'Apa Kabar Mantan', artists: ['NDX A.K.A.']),
+        const SpotifyPlaylistTrack(title: 'Salam Dariku', artists: ['Didik Budi', 'Cindi Cintya', 'Fywrizki', 'Cantika']),
+        const SpotifyPlaylistTrack(title: 'Menepi', artists: ['NGATMOMBILUNG']),
+        const SpotifyPlaylistTrack(title: 'Nresnani', artists: ['Lavora', 'Damara De']),
+        const SpotifyPlaylistTrack(title: 'Kelangan', artists: ['Guyon Waton']),
+        const SpotifyPlaylistTrack(title: 'Sinarengan', artists: ['Denny Caknan', 'Bella Bonita']),
+      ];
+
+      for (var index = 0; index < tracks.length; index++) {
+        final track = tracks[index];
+        final creditedArtists = track.artists.join(' feat. ');
+        final upload = candidate(
+          id: 'regional-playlist-$index',
+          title: '$creditedArtists - ${track.title} (Official Music Video)',
+          channel: '${track.primaryArtist} Official',
+        );
+        expect(
+          SpotifyYoutubeTrackMatcher.bestMatch(track, [upload])?.videoId,
+          upload.videoId,
+          reason: 'failed to match ${track.title} — ${track.artists.join(', ')}',
+        );
+      }
+    });
+
+    test('allows an unlabelled but duration-matched version as a final cover fallback', () {
+      const track = SpotifyPlaylistTrack(
+        title: 'Nemen', artists: ['Guyon Waton'], durationMs: 260000,
+      );
+      final cover = candidate(
+        id: 'nemen-unlabelled-cover', title: 'Nemen',
+        channel: 'Independent Singer', durationSeconds: 260, viewCount: 1500,
+      );
+      expect(
+        SpotifyYoutubeTrackMatcher.bestMatch(track, [cover])?.videoId,
+        'nemen-unlabelled-cover',
+      );
+    });
+
     test('view count alone never authenticates a third-party uploader', () {
       final viralWrongTrack = candidate(
         id: 'viral-wrong-track',
@@ -1370,9 +1627,9 @@ void main() {
       );
     });
 
-    test('does not accept a low-view third-party mirror solely on MusicData', () {
-      final lowViewMirror = candidate(
-        id: 'low-view-mirror',
+    test('accepts exact structured MusicData for a low-view track upload', () {
+      final lowViewTrackUpload = candidate(
+        id: 'low-view-track-upload',
         title: 'Celengan Rindu',
         channel: 'Personal Music Uploads',
         viewCount: 1200,
@@ -1380,8 +1637,8 @@ void main() {
         musicDataArtist: 'Fiersa Besari',
       );
       expect(
-        SpotifyYoutubeTrackMatcher.bestMatch(spotifyTrack, [lowViewMirror]),
-        isNull,
+        SpotifyYoutubeTrackMatcher.bestMatch(spotifyTrack, [lowViewTrackUpload])?.videoId,
+        'low-view-track-upload',
       );
     });
 

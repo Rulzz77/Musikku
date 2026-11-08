@@ -951,6 +951,135 @@ void main() {
       expect(imported.videoId, 'dumes-official');
     });
 
+    test('builds title-only and artist/title search fallbacks without feat suffix noise', () {
+      const track = SpotifyPlaylistTrack(
+        title: 'Song Name (feat. Guest Artist)',
+        artists: ['Main Artist', 'Guest Artist'],
+      );
+
+      final queries = SpotifyYoutubeTrackMatcher.buildSearchQueries(track);
+
+      expect(queries, contains('Main Artist Song Name'));
+      expect(queries, contains('Song Name Main Artist'));
+      expect(queries, contains('Song Name'));
+      expect(queries.any((query) => query == 'Song Name Guest Artist'), isFalse);
+    });
+
+    test('matches a one-character song title when artist identity is verified', () {
+      const track = SpotifyPlaylistTrack(
+        title: 'A',
+        artists: ['Artist One'],
+        durationMs: 182000,
+      );
+      final officialUpload = candidate(
+        id: 'one-letter-song',
+        title: 'Artist One - A (Official Audio)',
+        channel: 'Artist One',
+        durationSeconds: 182,
+      );
+
+      expect(
+        SpotifyYoutubeTrackMatcher.bestMatch(track, [officialUpload])?.videoId,
+        'one-letter-song',
+      );
+    });
+
+    test('matches the core song when Spotify title has a featured-artist suffix', () {
+      const track = SpotifyPlaylistTrack(
+        title: 'Song Name (feat. Guest Artist)',
+        artists: ['Main Artist', 'Guest Artist'],
+      );
+      final officialUpload = candidate(
+        id: 'featured-song',
+        title: 'Main Artist - Song Name (Official Audio)',
+        channel: 'Main Artist',
+      );
+
+      expect(
+        SpotifyYoutubeTrackMatcher.bestMatch(track, [officialUpload])?.videoId,
+        'featured-song',
+      );
+      expect(
+        SpotifyYoutubeTrackMatcher.applySpotifyMetadata(track, officialUpload).title,
+        'Song Name (feat. Guest Artist)',
+      );
+    });
+
+    test('accepts exact YouTube Music song and artist metadata without a view threshold', () {
+      final structuredRelease = candidate(
+        id: 'structured-low-view-release',
+        title: 'Celengan Rindu',
+        channel: 'Independent Distributor',
+        musicDataTitle: 'Celengan Rindu',
+        musicDataArtist: 'Fiersa Besari',
+        viewCount: 1200,
+      );
+
+      expect(
+        SpotifyYoutubeTrackMatcher.bestMatch(
+          spotifyTrack,
+          [structuredRelease],
+        )?.videoId,
+        'structured-low-view-release',
+      );
+    });
+
+    test('accepts a parsed YouTube distributor artist credit without a view threshold', () {
+      final parsedCreditRelease = YoutubeSearchResult(
+        videoId: 'parsed-credit-release',
+        title: 'Celengan Rindu',
+        channelTitle: 'Independent Music Channel',
+        artistName: 'Fiersa Besari',
+        thumbnailUrl: '',
+        durationSeconds: 248,
+      );
+
+      expect(
+        SpotifyYoutubeTrackMatcher.bestMatch(
+          spotifyTrack,
+          [parsedCreditRelease],
+        )?.videoId,
+        'parsed-credit-release',
+      );
+    });
+
+    test('collects up to eight likely Spotify candidates for metadata enrichment', () {
+      final candidates = List<YoutubeSearchResult>.generate(
+        10,
+        (index) => candidate(
+          id: 'metadata-candidate-$index',
+          title: 'Fiersa Besari - Celengan Rindu (Official Audio)',
+          channel: 'Music Distributor $index',
+          viewCount: 10000 + index,
+        ),
+      );
+
+      expect(
+        SpotifyYoutubeTrackMatcher.metadataLookupCandidates(
+          spotifyTrack,
+          candidates,
+        ),
+        hasLength(8),
+      );
+    });
+
+    test('allows a popular exact-title third-party upload with explicit artist credit', () {
+      final popularRelease = candidate(
+        id: 'popular-third-party-original',
+        title: 'Fiersa Besari - Celengan Rindu',
+        channel: 'Musik Populer Indonesia',
+        viewCount: 250000,
+      );
+
+      expect(
+        SpotifyYoutubeTrackMatcher.bestMatch(
+          spotifyTrack,
+          [popularRelease],
+        )?.videoId,
+        'popular-third-party-original',
+      );
+    });
+
     test('supports non-Latin titles when the YouTube title includes the artist', () {
       const koreanTrack = SpotifyPlaylistTrack(
         title: '봄날',

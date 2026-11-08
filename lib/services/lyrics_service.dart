@@ -319,7 +319,7 @@ class LyricsService {
   static String _normalizeMetadata(String value) => value
       .toLowerCase()
       .replaceAll(RegExp(r'<[^>]*>'), ' ')
-      .replaceAll(RegExp(r'[^a-z0-9\s]'), ' ')
+      .replaceAll(RegExp(r'[^a-z0-9\u0080-\uFFFF\s]'), ' ')
       .replaceAll(RegExp(r'\s+'), ' ')
       .trim();
 

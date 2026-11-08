@@ -404,8 +404,8 @@ class YoutubeSearchService {
         .replaceAll(RegExp(r'[^a-z0-9\u0080-\uFFFF]+'), ' ')
         .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
-    final a = normalize(first).split(' ').where((part) => part.length > 1).toSet();
-    final b = normalize(second).split(' ').where((part) => part.length > 1).toSet();
+    final a = normalize(first).split(' ').where((part) => part.isNotEmpty).toSet();
+    final b = normalize(second).split(' ').where((part) => part.isNotEmpty).toSet();
     if (a.isEmpty || b.isEmpty) return 0;
     return a.intersection(b).length / a.length;
   }
@@ -449,7 +449,7 @@ class YoutubeSearchService {
           ),
           ' ',
         )
-        .replaceAll(RegExp(r'[^a-z0-9\s]'), ' ')
+        .replaceAll(RegExp(r'[^a-z0-9\u0080-\uFFFF\s]'), ' ')
         .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
 
@@ -479,7 +479,7 @@ class YoutubeSearchService {
         .trim();
     final queryTokens = normalize(query)
         .split(' ')
-        .where((token) => token.length > 1)
+        .where((token) => token.isNotEmpty)
         .toSet();
     if (queryTokens.isEmpty) return candidates.toList(growable: false);
 
@@ -578,12 +578,12 @@ class YoutubeSearchService {
 
     final intent = interpretSearch(keyword);
     final effectiveQuery = intent.apiQuery;
-    // V4 memisahkan cache berdasarkan query asli dan query API. Ini juga
-    // membatalkan cache V3 yang sempat menyimpan hasil kosong setelah filter
-    // terlalu ketat. Hasil mentah disimpan agar perubahan filter tidak
-    // mengabadikan daftar lagu yang sudah terlanjur terpotong.
+    // Versioned cache separates Spotify's deeper candidate collection from
+    // older, shorter/filtered result sets. Raw results are retained so a later
+    // matcher improvement does not inherit an already-truncated candidate list.
     final cacheKey =
-        'explodeSearchV8TypedSearchMetadata|${spotifyImportMode ? 'spotify' : 'catalog'}|${keyword.toLowerCase()}|${effectiveQuery.toLowerCase()}|${intent.latest ? 'date' : 'relevance'}';
+        'explodeSearchV9SpotifyDeepSearch|${spotifyImportMode ? 'spotify' : 'catalog'}|${keyword.toLowerCase()}|${effectiveQuery.toLowerCase()}|${intent.latest ? 'date' : 'relevance'}';
+    final resultLimit = spotifyImportMode ? 60 : 30;
     final cached = _cache[cacheKey];
 
     if (cached != null) {
@@ -594,7 +594,7 @@ class YoutubeSearchService {
         return _rankSearchCandidates(
           keyword,
           cached.results.where(acceptsCandidate),
-        ).take(30).toList(growable: false);
+        ).take(resultLimit).toList(growable: false);
       }
     }
 
@@ -610,7 +610,7 @@ class YoutubeSearchService {
       return _rankSearchCandidates(
         keyword,
         diskResults.where(acceptsCandidate),
-      ).take(30).toList(growable: false);
+      ).take(resultLimit).toList(growable: false);
     }
 
     debugPrint('EXPLODE SEARCH NETWORK REQUEST: $effectiveQuery');
@@ -645,28 +645,39 @@ class YoutubeSearchService {
           })
           .toList(growable: false);
 
-      // YouTube relevance can put label uploads and artist tracks below unrelated
-      // clips. When the first page yields few usable tracks, inspect one more
-      // page before concluding the catalogue is empty. This is limited to one page.
-      if (accepted().length < 12) {
+      // The first relevance page can be dominated by remixes, fan mirrors, or
+      // similarly named songs. Spotify import inspects up to three relevance
+      // pages; ordinary search keeps its lighter one-page fallback behavior.
+      dynamic pageCursor = firstPage;
+      final maxRelevancePages = spotifyImportMode ? 3 : 2;
+      for (var pageNumber = 1; pageNumber < maxRelevancePages; pageNumber++) {
+        final acceptedCount = accepted().length;
+        final enoughCandidates = spotifyImportMode
+            ? acceptedCount >= 45
+            : acceptedCount >= 12;
+        if (enoughCandidates) break;
         try {
-          final dynamic nextPage = await firstPage.nextPage();
-          if (nextPage != null) appendPage(nextPage);
+          final beforeCount = rawResults.length;
+          final dynamic nextPage = await pageCursor.nextPage();
+          if (nextPage == null) break;
+          appendPage(nextPage);
+          pageCursor = nextPage;
+          if (rawResults.length == beforeCount) break;
         } catch (paginationError) {
           debugPrint('EXPLODE SEARCH NEXT PAGE SKIPPED: $paginationError');
+          break;
         }
       }
 
-      // Relevance search can omit popular but valid third-party releases. If
-      // the pool is still small or contains no widely-played result, add one
-      // view-count-sorted page. Popularity is a tie-breaker, never an identity
-      // signal; title/artist filters still run below.
+      // A second ranking often surfaces original releases from channels that
+      // are not the artist's own. Spotify import always inspects one view-count
+      // page; view count only adds candidates and never authenticates a match.
       final beforePopular = accepted();
       final hasWidelyViewed = beforePopular.any(
         (video) => (video.viewCount ?? 0) >= 100000,
       );
       if (!intent.latest &&
-          (beforePopular.length < 12 || !hasWidelyViewed)) {
+          (spotifyImportMode || beforePopular.length < 12 || !hasWidelyViewed)) {
         try {
           final dynamic popularPage = await _youtubeExplode.search.search(
             effectiveQuery,
@@ -678,11 +689,8 @@ class YoutubeSearchService {
         }
       }
 
-      // If the artist/name filter leaves too few results, inspect only the
-      // three most-viewed plausible music candidates. Full Video.musicData can
-      // expose performer credits that are absent from SearchVideo.title,
-      // channel, and description. This avoids losing valid label/third-party
-      // uploads while keeping detail requests bounded for ordinary searches.
+      // Ordinary search can enrich a tiny popular shortlist. Spotify import
+      // performs a track-aware detail lookup after combining its query variants.
       if (!spotifyImportMode && !intent.latest && accepted().length < 12) {
         final acceptedIds = accepted().map((video) => video.videoId).toSet();
         final metadataCandidates = rawResults
@@ -690,10 +698,14 @@ class YoutubeSearchService {
                 !acceptedIds.contains(video.videoId) &&
                 (video.viewCount ?? 0) >= 100000 &&
                 YoutubeMusicPolicy.isMusicCandidate(video))
-            .toList()
-          ..sort((a, b) =>
-              (b.viewCount ?? 0).compareTo(a.viewCount ?? 0));
-        final shortlist = metadataCandidates.take(3).toList(growable: false);
+            .toList(growable: false);
+        // Relevance decides which popular candidates deserve a detail lookup;
+        // view count is only a tie-breaker. Otherwise unrelated viral uploads
+        // can consume all three metadata slots before the matching track is
+        // inspected for its structured YouTube Music artist/title credit.
+        final shortlist = _rankSearchCandidates(keyword, metadataCandidates)
+            .take(3)
+            .toList(growable: false);
         if (shortlist.isNotEmpty) {
           final enriched = await enrichMusicMetadata(shortlist);
           final enrichedById = {
@@ -707,7 +719,7 @@ class YoutubeSearchService {
       }
 
       final results = _rankSearchCandidates(keyword, accepted())
-          .take(30)
+          .take(resultLimit)
           .toList(growable: false);
 
       // Persist kandidat mentah, bukan hanya lagu yang lolos policy hari ini.

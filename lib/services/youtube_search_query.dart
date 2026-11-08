@@ -88,7 +88,7 @@ class YoutubeSearchQueryParser {
   static bool _isGenericMusicSearch(String query) {
     final tokens = query
         .toLowerCase()
-        .replaceAll(RegExp(r'[^a-z0-9&-]+'), ' ')
+        .replaceAll(RegExp(r'[^a-z0-9\u0080-\uFFFF&-]+'), ' ')
         .split(_whitespace)
         .where((token) => token.isNotEmpty)
         .toList(growable: false);

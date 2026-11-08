@@ -83,7 +83,7 @@ extension _YoutubeHubSearchViews on _YoutubeHubState {
         RegExp(r'\b(?:official(?:\s+music)?(?:\s+channel)?|vevo|topic|music\s+channel|channel)\b', caseSensitive: false),
         ' ',
       )
-      .replaceAll(RegExp(r'[^a-z0-9\s]'), ' ')
+      .replaceAll(RegExp(r'[^a-z0-9\u0080-\uFFFF\s]'), ' ')
       .replaceAll(RegExp(r'\s+'), ' ')
       .trim();
 

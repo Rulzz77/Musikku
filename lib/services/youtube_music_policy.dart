@@ -427,7 +427,7 @@ class YoutubeMusicPolicy {
         ),
         ' ',
       )
-      .replaceAll(RegExp(r'[^a-z0-9\s]'), ' ')
+      .replaceAll(RegExp(r'[^a-z0-9\u0080-\uFFFF\s]'), ' ')
       .replaceAll(RegExp(r'\s+'), ' ')
       .trim();
 

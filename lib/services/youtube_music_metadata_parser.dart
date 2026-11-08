@@ -100,27 +100,40 @@ class YoutubeMusicMetadataParser {
       .replaceAll(RegExp(r'\s*[·•]\s*$'), '')
       .trim();
 
-  static String _normalizeTitle(String value) => value
-      .toLowerCase()
-      .replaceFirst(
-        RegExp(r'\s+[-–—]\s*from\s+.+$', caseSensitive: false),
-        '',
-      )
-      .replaceAll(
-        RegExp(
-          r'\s*[-–—]\s*(?:official\s+)?(?:audio|video|music video|lyrics?|visualizer).*$',
-          caseSensitive: false,
-        ),
-        '',
-      )
-      .replaceAll(RegExp(r'\([^)]*\)|\[[^\]]*\]'), ' ')
-      .replaceAll(RegExp(r'[^a-z0-9\u0080-\uFFFF]+'), ' ')
-      .replaceAll(RegExp(r'\s+'), ' ')
-      .trim();
+  static String _normalizeTitle(String value) {
+    var normalized = value.toLowerCase().replaceFirst(
+      RegExp(r'\s+[-–—]\s*from\s+.+$', caseSensitive: false),
+      '',
+    );
+    normalized = normalized
+        .replaceAll(
+          RegExp(
+            r'\s*[\[(]\s*(?:feat(?:uring)?|ft)\.?\s+[^)\]]+[)\]]',
+            caseSensitive: false,
+          ),
+          ' ',
+        )
+        .replaceFirst(
+          RegExp(r'\s+(?:feat(?:uring)?|ft)\.?\s+.+$', caseSensitive: false),
+          '',
+        )
+        .replaceAll(
+          RegExp(
+            r'\s*[-–—]\s*(?:official\s+)?(?:audio|video|music video|lyrics?|visualizer).*$',
+            caseSensitive: false,
+          ),
+          '',
+        )
+        .replaceAll(RegExp(r'\([^)]*\)|\[[^]]*\]'), ' ')
+        .replaceAll(RegExp(r'[^a-z0-9\u0080-\uFFFF]+'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    return normalized;
+  }
 
   static double _titleCoverage(String expected, String candidate) {
-    final expectedTokens = expected.split(' ').where((token) => token.length > 1).toSet();
-    final candidateTokens = candidate.split(' ').where((token) => token.length > 1).toSet();
+    final expectedTokens = expected.split(' ').where((token) => token.isNotEmpty).toSet();
+    final candidateTokens = candidate.split(' ').where((token) => token.isNotEmpty).toSet();
     if (expectedTokens.isEmpty || candidateTokens.isEmpty) return 0;
     return expectedTokens.intersection(candidateTokens).length /
         expectedTokens.length;

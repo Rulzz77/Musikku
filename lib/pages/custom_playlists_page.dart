@@ -888,37 +888,14 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
           final batch = await Future.wait(indexes.map((index) async {
             final track = tracksToImport[index];
             try {
-              // Search by performer + title first, then title alone. YouTube
-              // may order these fields either way ("Artist - Song" or
-              // "Song - Artist"), so the query policy compares their tokens
-              // across title/channel/description and the matcher verifies the
-              // actual primary artist before accepting anything.
-              final queries = <String>{};
-              final coreTitle = track.title
-                  .replaceFirst(
-                    RegExp(r'\s+[-–—]\s*from\s+.+$', caseSensitive: false),
-                    '',
-                  )
-                  .trim();
-              if (track.primaryArtist.isNotEmpty) {
-                // Start broad, then query official variants explicitly. This
-                // keeps the usual single request fast when it already finds
-                // the artist/label source, while exposing official results
-                // buried below fan mirrors in YouTube relevance ranking.
-                queries.add('${track.primaryArtist} $coreTitle'.trim());
-                queries.add(
-                  '${track.primaryArtist} $coreTitle official audio'.trim(),
-                );
-                queries.add(
-                  '${track.primaryArtist} $coreTitle official music video'.trim(),
-                );
-              }
-              if (track.artists.length > 1) {
-                queries.add('$coreTitle ${track.artists.join(' ')}'.trim());
-              }
-              queries.add(coreTitle);
-              if (track.title.trim() != coreTitle) {
-                queries.add(track.title.trim());
+              // Search artist-first, reversed artist/title order, featured
+              // collaborator variants, and title-only fallback. The matcher
+              // removes Spotify's feat./From suffixes only for matching; the
+              // imported display title remains exactly as Spotify supplied it.
+              final queries = SpotifyYoutubeTrackMatcher.buildSearchQueries(track);
+              if (queries.isEmpty) {
+                debugPrint('SPOTIFY IMPORT SKIPPED EMPTY SEARCH TITLE: ${track.title}');
+                return null;
               }
 
               final candidatesById = <String, YoutubeSearchResult>{};
@@ -966,7 +943,7 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
                     SpotifyYoutubeTrackMatcher.metadataLookupCandidates(
                   track,
                   allCandidates,
-                  limit: 3,
+                  limit: 8,
                 );
                 if (detailCandidates.isNotEmpty) {
                   try {
@@ -990,6 +967,12 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
               final match = SpotifyYoutubeTrackMatcher.bestMatch(
                 track,
                 allCandidates,
+              );
+              debugPrint(
+                'SPOTIFY IMPORT MATCH [${track.title} - ${track.primaryArtist}]: '
+                'queries=${queries.length}, candidates=${allCandidates.length}, '
+                'metadata=${allCandidates.where((item) => item.musicDataTitle.isNotEmpty && item.musicDataArtist.isNotEmpty).length}, '
+                'selected=${match?.videoId ?? 'NONE'}',
               );
               return match == null
                   ? null

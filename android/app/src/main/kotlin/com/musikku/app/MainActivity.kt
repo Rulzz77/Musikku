@@ -243,8 +243,28 @@ class MainActivity : AudioServiceActivity() {
                     if (suffix == null) {
                         result.error("INVALID_ICON_VARIANT", "Varian ikon tidak dikenal.", null)
                     } else {
+                        val aliases = listOf("Blue", "Black", "Purple", "Green", "Pink", "Orange", "Teal", "Silver")
+                        // Startup memanggil setter untuk menerapkan preferensi tersimpan.
+                        // Jangan sentuh PackageManager kalau ikon itu sudah aktif; sebagian
+                        // launcher/OEM bereaksi pada perubahan alias dengan me-recreate task.
+                        val enabledAliases = aliases.filter { alias ->
+                            when (packageManager.getComponentEnabledSetting(
+                                ComponentName(this, "$packageName.Launcher$alias"),
+                            )) {
+                                PackageManager.COMPONENT_ENABLED_STATE_ENABLED -> true
+                                PackageManager.COMPONENT_ENABLED_STATE_DISABLED -> false
+                                else -> alias == "Blue" // manifest default: hanya Blue enabled
+                            }
+                        }
+                        if (enabledAliases.size == 1 && enabledAliases.single() == suffix) {
+                            result.success(true)
+                            return@setMethodCallHandler
+                        }
+
+                        // Changing launcher aliases can be followed by the OS
+                        // recreating the app task. Snapshot live Media3 time first.
+                        PlaybackService.persistPlaybackSnapshotStatic()
                         runCatching {
-                            val aliases = listOf("Blue", "Black", "Purple", "Green", "Pink", "Orange", "Teal", "Silver")
                             val selected = ComponentName(this, "$packageName.Launcher$suffix")
                             // Enable the new alias first so the launcher never has zero entry points.
                             packageManager.setComponentEnabledSetting(
@@ -734,7 +754,8 @@ class MainActivity : AudioServiceActivity() {
                         override fun run() {
                             val snapshot = PlaybackService.currentMediaSnapshot()
                             if (snapshot?.videoId == videoId &&
-                                snapshot.sourceType == "youtube_audio") {
+                                snapshot.sourceType == "youtube_audio" &&
+                                PlaybackService.isAudioPlayerTrackReadyStatic(videoId)) {
                                 result.success(null)
                                 return
                             }
@@ -896,13 +917,25 @@ class MainActivity : AudioServiceActivity() {
 
 
                     val requestedVideoId = call.argument<String>("videoId")?.trim().orEmpty()
+                    val audioOnlyRequest = call.argument<Boolean>("audioOnly") ?: false
                     val serviceVideoId = PlaybackService.currentMediaSnapshot()?.videoId.orEmpty()
                     val serviceMatchesRequestedTrack = requestedVideoId.isNotBlank() &&
                         requestedVideoId == serviceVideoId &&
-                        PlaybackService.isAudioPlayerActiveStatic()
+                        PlaybackService.isAudioPlayerTrackReadyStatic(requestedVideoId)
                     if (serviceMatchesRequestedTrack) {
                         PlaybackService.playAudioStatic()
                         result.success(null)
+                        return@setMethodCallHandler
+                    }
+
+                    if (audioOnlyRequest && requestedVideoId.isNotBlank()) {
+                        // A requested audio-only track must never fall through
+                        // to the hidden WebView player. Flutter will reload it.
+                        result.error(
+                            "PLAYBACK_SOURCE_NOT_READY",
+                            "Sumber audio native sudah tidak aktif; lagu perlu dimuat ulang.",
+                            null,
+                        )
                         return@setMethodCallHandler
                     }
 
@@ -910,12 +943,12 @@ class MainActivity : AudioServiceActivity() {
 
 
                     if (player == null) {
-
                         MusikKuLogger.e(
                             TAG,
                             "PLAY GAGAL: PLAYER NULL"
                         )
-
+                        result.error("PLAYER_NOT_READY", "Pemutar belum siap menerima Play.", null)
+                        return@setMethodCallHandler
                     } else {
 
                         MusikKuLogger.d(
@@ -969,7 +1002,7 @@ class MainActivity : AudioServiceActivity() {
                     val serviceVideoId = PlaybackService.currentMediaSnapshot()?.videoId.orEmpty()
                     val serviceMatchesRequestedTrack = requestedVideoId.isNotBlank() &&
                         requestedVideoId == serviceVideoId &&
-                        PlaybackService.isAudioPlayerActiveStatic()
+                        PlaybackService.isAudioPlayerTrackReadyStatic(requestedVideoId)
                     if (serviceMatchesRequestedTrack) {
                         PlaybackService.pauseAudioStatic()
                         result.success(null)
@@ -1133,9 +1166,10 @@ class MainActivity : AudioServiceActivity() {
 
                     YoutubePlatformView.instance?.deactivateForExternalPlayback()
 
+                    val localVideoId = "local:$mediaId"
                     PlaybackService.start(
                         this,
-                        videoId = "local:$mediaId",
+                        videoId = localVideoId,
                         title = title.ifBlank { "Tanpa judul" },
                         artist = artist,
                         thumbnailUrl = "",
@@ -1146,7 +1180,30 @@ class MainActivity : AudioServiceActivity() {
                         mediaUri = uri,
                         gaplessQueue = gaplessQueue,
                     )
-                    result.success(null)
+
+                    var attempts = 0
+                    val verifyLocalServiceStarted = object : Runnable {
+                        override fun run() {
+                            val snapshot = PlaybackService.currentMediaSnapshot()
+                            if (snapshot?.videoId == localVideoId &&
+                                snapshot.sourceType == "local" &&
+                                PlaybackService.isAudioPlayerTrackReadyStatic(localVideoId)) {
+                                result.success(null)
+                                return
+                            }
+                            attempts += 1
+                            if (attempts >= 20) {
+                                result.error(
+                                    "LOCAL_AUDIO_SERVICE_START_FAILED",
+                                    "Layanan pemutar lokal belum siap untuk lagu ini",
+                                    null,
+                                )
+                            } else {
+                                Handler(Looper.getMainLooper()).postDelayed(this, 75L)
+                            }
+                        }
+                    }
+                    Handler(Looper.getMainLooper()).postDelayed(verifyLocalServiceStarted, 50L)
                 }
 
 
@@ -1233,6 +1290,15 @@ class MainActivity : AudioServiceActivity() {
                 // ==================================================
                 // NATIVE PLAYBACK SNAPSHOT BACKUP
                 // ==================================================
+
+                "isPlaybackServiceTrackReady" -> {
+                    val requestedVideoId = call.argument<String>("videoId")?.trim().orEmpty()
+                    val activeSnapshot = PlaybackService.currentMediaSnapshot()
+                    val ready = requestedVideoId.isNotBlank() &&
+                        activeSnapshot?.videoId == requestedVideoId &&
+                        PlaybackService.isAudioPlayerTrackReadyStatic(requestedVideoId)
+                    result.success(ready)
+                }
 
                 "getNativePlaybackSnapshot" -> {
                     val prefs =

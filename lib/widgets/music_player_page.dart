@@ -71,24 +71,18 @@ class MusicPlayerPage extends StatefulWidget {
 }
 
 class _MusicPlayerPageState extends State<MusicPlayerPage> {
-  bool get _isDark => Theme.of(context).brightness == Brightness.dark;
-  Color get _canvas => Theme.of(context).colorScheme.onPrimary;
-  Color get _playerBackground => _isDark
-      ? const Color(0xFF111419)
-      : const Color(0xFFF2F5F8);
-  Color get _muted => _isDark
-      ? const Color(0xFFAAB7C8)
-      : const Color(0xFF687482);
-  Color get _mainText => _isDark
-      ? const Color(0xFFF1F4F8)
-      : const Color(0xFF1B222B);
-  Color get _controlInk => _isDark
-      ? const Color(0xFFEEF3FA)
-      : const Color(0xFF283442);
-  Color get _controlSurface => _controlInk.withValues(alpha: _isDark ? 0.07 : 0.055);
-  Color get _controlBorder => _controlInk.withValues(alpha: _isDark ? 0.075 : 0.09);
-  Color get _citrus => Theme.of(context).colorScheme.primary;
-  Color get _coral => Theme.of(context).colorScheme.secondary;
+  ThemeData get _theme => Theme.of(context);
+  ColorScheme get _scheme => _theme.colorScheme;
+  bool get _isDark => _theme.brightness == Brightness.dark;
+  Color get _canvas => _scheme.onPrimary;
+  Color get _playerBackground => _theme.scaffoldBackgroundColor;
+  Color get _muted => _scheme.onSurfaceVariant;
+  Color get _mainText => _scheme.onSurface;
+  Color get _controlInk => _scheme.onSurface;
+  Color get _controlSurface => _scheme.surfaceContainerHigh.withValues(alpha: 0.72);
+  Color get _controlBorder => _scheme.outlineVariant.withValues(alpha: 0.72);
+  Color get _citrus => _scheme.primary;
+  Color get _coral => _scheme.secondary;
 
   double? _dragPositionMs;
   double? _seekHoldMs;
@@ -159,19 +153,12 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: isDark
-                        ? [
-                            const Color(0x300D1422),
-                            const Color(0x55343E4C),
-                            const Color(0xAA1A2029),
-                            _playerBackground,
-                          ]
-                        : [
-                            const Color(0x18FFFFFF),
-                            const Color(0x66FFFFFF),
-                            const Color(0xDDF2F5F8),
-                            _playerBackground,
-                          ],
+                    colors: [
+                      _scheme.surface.withValues(alpha: isDark ? 0.06 : 0.02),
+                      _scheme.surface.withValues(alpha: isDark ? 0.26 : 0.32),
+                      _scheme.surface.withValues(alpha: isDark ? 0.78 : 0.84),
+                      _playerBackground,
+                    ],
                     stops: [0, 0.42, 0.76, 1],
                   ),
                 ),
@@ -299,12 +286,12 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
               ),
               _buildControlDeck(busy: busy, playing: playing, compact: compact),
               if (matchesTrack && state.playbackState == NativePlaybackState.error)
-                const Text(
+                Text(
                   'Audio gagal dimuat. Coba putar ulang atau pilih lagu berikutnya.',
                   textAlign: TextAlign.center,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: Color(0xFFFF9A91), fontSize: 10.5),
+                  style: TextStyle(color: _scheme.error, fontSize: 10.5),
                 ),
               _buildBottomActions(context),
             ],

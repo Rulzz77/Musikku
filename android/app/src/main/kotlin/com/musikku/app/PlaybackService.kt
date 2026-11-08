@@ -210,8 +210,14 @@ class PlaybackService : MediaBrowserServiceCompat() {
             return status
         }
 
+        /** Persist the live Media3 position before Android changes launcher aliases. */
+        fun persistPlaybackSnapshotStatic(): Boolean =
+            activeInstance?.persistPlaybackSnapshotNow(commitToDisk = true) == true
+
         fun isLocalActiveStatic(): Boolean = activeInstance?.isLocalActive() == true
         fun isAudioPlayerActiveStatic(): Boolean = activeInstance?.isAudioPlayerActive() == true
+        fun isAudioPlayerTrackReadyStatic(videoId: String): Boolean =
+            activeInstance?.isAudioPlayerTrackReady(videoId) == true
         fun playLocalStatic() { activeInstance?.playLocal() }
         fun pauseLocalStatic() { activeInstance?.pauseLocal() }
         fun seekLocalStatic(seconds: Double) { activeInstance?.seekLocal(seconds) }
@@ -2333,6 +2339,18 @@ class PlaybackService : MediaBrowserServiceCompat() {
     fun isLocalActive(): Boolean = currentSourceType == "local"
     fun isAudioPlayerActive(): Boolean = isAudioPlayerSource()
 
+    /** True only after Media3 owns the exact URI for the requested track. */
+    fun isAudioPlayerTrackReady(videoId: String): Boolean {
+        if (videoId.isBlank() || currentVideoId != videoId || !isAudioPlayerSource()) {
+            return false
+        }
+        val player = localPlayer ?: return false
+        val expectedUri = currentMediaUri.trim()
+        if (expectedUri.isEmpty()) return false
+        val actualUri = player.currentMediaItem?.localConfiguration?.uri?.toString()
+        return actualUri == expectedUri && player.playbackState != Player.STATE_IDLE
+    }
+
     fun playAudio() {
         if (isAudioPlayerSource()) {
             ensureLocalPlayer()
@@ -2542,14 +2560,31 @@ class PlaybackService : MediaBrowserServiceCompat() {
         }
     }
 
-    private fun persistPlaybackSnapshot() {
+    /** Read position/duration from the live ExoPlayer before writing the snapshot. */
+    private fun persistPlaybackSnapshotNow(commitToDisk: Boolean = false): Boolean {
+        if (currentVideoId.isBlank()) return false
+        val activePlayer = localPlayer
+        if (isAudioPlayerSource() && activePlayer != null) {
+            currentPositionMs = activePlayer.currentPosition.coerceAtLeast(0L)
+            val duration = activePlayer.duration
+            if (duration > 0L && duration != C.TIME_UNSET) {
+                currentDurationMs = duration
+            }
+            currentPlaying = activePlayer.isPlaying
+            positionClockBaseElapsedMs = SystemClock.elapsedRealtime()
+        }
+        persistPlaybackSnapshot(commitToDisk = commitToDisk)
+        return true
+    }
+
+    private fun persistPlaybackSnapshot(commitToDisk: Boolean = false) {
         val position = effectivePositionMs()
         currentPositionMs = position
         positionClockBaseElapsedMs = SystemClock.elapsedRealtime()
         positionPersistedAtElapsedMs = positionClockBaseElapsedMs
 
         val prefs = getSharedPreferences("musikku_native_playback", Context.MODE_PRIVATE)
-        prefs.edit()
+        val editor = prefs.edit()
             .putString("videoId", currentVideoId)
             .putString("title", currentTitle)
             .putString("artist", currentArtist)
@@ -2557,7 +2592,13 @@ class PlaybackService : MediaBrowserServiceCompat() {
             .putLong("durationMs", currentDurationMs)
             .putBoolean("playing", currentPlaying)
             .putLong("savedAtElapsedMs", positionPersistedAtElapsedMs)
-            .apply()
+        if (commitToDisk) {
+            // Launcher-alias changes and task removal can be followed by an
+            // immediate process death; use a durable write for these snapshots.
+            editor.commit()
+        } else {
+            editor.apply()
+        }
     }
 
     fun clearPlaybackSnapshot() {
@@ -3082,6 +3123,17 @@ class PlaybackService : MediaBrowserServiceCompat() {
 
     private fun stopPlaybackService() {
         snapshotHandler.removeCallbacks(snapshotRunnable)
+        // Capture the exact player position before releasing ExoPlayer.
+        val activePlayer = localPlayer
+        if (isAudioPlayerSource() && activePlayer != null) {
+            currentPositionMs = activePlayer.currentPosition.coerceAtLeast(0L)
+            val duration = activePlayer.duration
+            if (duration > 0L && duration != C.TIME_UNSET) currentDurationMs = duration
+            activePlayer.pause()
+        }
+        currentPlaying = false
+        positionClockBaseElapsedMs = SystemClock.elapsedRealtime()
+        persistPlaybackSnapshot(commitToDisk = true)
         if (wakeLock.isHeld) {
             wakeLock.release()
         }

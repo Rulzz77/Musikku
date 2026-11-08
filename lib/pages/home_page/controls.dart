@@ -154,7 +154,9 @@ extension _HomeControls on _HomePageState {
       // menjadi titik pertama yang benar-benar memuat lagu dan melanjutkan
       // dari posisi terakhir.
       if (_restoredNeedsLoad) {
-        _restoredNeedsLoad = false;
+        // Keep this flag set until _playVideo confirms that Media3/iFrame has
+        // accepted the track. _playVideo handles resolver errors internally,
+        // so clearing it here would make the next Play tap target an empty player.
         _isRestoringLastPlayback = true;
 
         try {
@@ -183,11 +185,14 @@ extension _HomeControls on _HomePageState {
           (!_youtubeController.isUsingYoutubeAudio ||
               !stateBelongsToTrack ||
               _nativeState.playbackState == NativePlaybackState.error);
+      final nativeSourceReady =
+          await _youtubeController.isNativePlaybackReady(video.videoId);
 
       // A failed resolver can leave the previous Media3 item paused in the
       // service. Never call native Play against that stale item; reload the
       // selected song and resolve a fresh URL instead.
-      if (remoteAudioUnavailable || _nativeState.playbackState == NativePlaybackState.error) {
+      if (!nativeSourceReady || remoteAudioUnavailable ||
+          _nativeState.playbackState == NativePlaybackState.error) {
         // Koneksi putus lalu pulih: lanjutkan dari menit terakhir, bukan dari
         // awal lagu. Posisi native sudah 0 pada state error.
         final resumeAt = _resumePositionFor(video);
@@ -196,6 +201,7 @@ extension _HomeControls on _HomePageState {
           recordHistory: false,
           restorePosition: resumeAt > 0 ? resumeAt : null,
           restoreDurationSeconds: _nativeState.duration.inMilliseconds / 1000.0,
+          autoPlay: true,
         );
         return;
       }
@@ -206,7 +212,22 @@ extension _HomeControls on _HomePageState {
       } else {
         await _setPlayerVolume(_playerVolumePercent);
         _crossfadeFadingVideoId = '';
-        await _youtubeController.playVideo();
+        try {
+          await _youtubeController.playVideo();
+        } catch (playError) {
+          // The service may disappear between the readiness check and Play.
+          // Reload the selected track rather than leaving the UI on a dead item.
+          debugPrint('NATIVE PLAY LOST; RELOADING TRACK: $playError');
+          final resumeAt = _resumePositionFor(video);
+          await _playVideo(
+            video,
+            recordHistory: false,
+            restorePosition: resumeAt > 0 ? resumeAt : null,
+            restoreDurationSeconds:
+                _nativeState.duration.inMilliseconds / 1000.0,
+            autoPlay: true,
+          );
+        }
       }
     } catch (e) {
       debugPrint('PLAY/PAUSE ERROR: $e');

@@ -722,13 +722,35 @@ class NativeYoutubeController {
   // PLAY
   // ========================================================
 
+  /// True only when Android's live Media3 service owns this exact track.
+  /// A persisted Flutter snapshot can outlive the native foreground service.
+  Future<bool> isNativePlaybackReady(String videoId) async {
+    if (!Platform.isAndroid) return true;
+    final id = videoId.trim();
+    if (id.isEmpty) return false;
+    try {
+      return await _methods.invokeMethod<bool>(
+            'isPlaybackServiceTrackReady',
+            {'videoId': id},
+          ) ??
+          false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> playVideo() async {
     _setIntent(true);
     if (Platform.isIOS && _iosYoutubeSource) {
       await _iosYoutube.playVideo();
       return;
     }
-    await _methods.invokeMethod('play', {'videoId': _activeVideoId});
+    await _methods.invokeMethod('play', {
+      'videoId': _activeVideoId,
+      // Native Media3 owns YouTube-audio and local tracks. Embedded watch/video
+      // playback remains allowed to use YoutubePlatformView.
+      'audioOnly': _usingYoutubeAudio || _activeVideoId.startsWith('local:'),
+    });
   }
 
   // ========================================================

@@ -115,11 +115,11 @@ class AppSettingsPage extends StatelessWidget {
   final VoidCallback? onOpenAudioSettings;
 
   String _themeLabel(AppThemeChoice choice) => switch (choice) {
-        AppThemeChoice.system => 'Ikuti perangkat',
-        AppThemeChoice.dark => 'Dark',
+        AppThemeChoice.system => 'Otomatis',
+        AppThemeChoice.dark => 'Gelap',
         AppThemeChoice.amoled => 'AMOLED',
-        AppThemeChoice.light => 'Light',
-        AppThemeChoice.pink => 'Ikuti perangkat',
+        AppThemeChoice.light => 'Terang',
+        AppThemeChoice.pink => 'Otomatis',
       };
 
   @override
@@ -161,14 +161,19 @@ class AppSettingsPage extends StatelessWidget {
                     children: [
                       Row(
                         children: [
-                          Expanded(child: Text('Pilih suasana aplikasi', style: TextStyle(color: scheme.onSurface, fontSize: 13, fontWeight: FontWeight.w900))),
+                          Expanded(child: Text('Tema aplikasi', style: TextStyle(color: scheme.onSurface, fontSize: 14, fontWeight: FontWeight.w900))),
                           Text(_themeLabel(selected), style: TextStyle(color: scheme.primary, fontSize: 10, fontWeight: FontWeight.w800)),
                         ],
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 5),
+                      Text(
+                        'Pilih tema terang, gelap, AMOLED, atau ikuti perangkat. Perubahan diterapkan langsung ke seluruh aplikasi.',
+                        style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11, height: 1.4),
+                      ),
+                      const SizedBox(height: 13),
                       LayoutBuilder(
                         builder: (context, constraints) {
-                          final columns = constraints.maxWidth >= 430 ? 5 : 3;
+                          final columns = constraints.maxWidth >= 620 ? 4 : 2;
                           final itemWidth = (constraints.maxWidth - ((columns - 1) * 8)) / columns;
                           return Wrap(
                             spacing: 8,
@@ -185,7 +190,7 @@ class AppSettingsPage extends StatelessWidget {
                                         AnimatedContainer(
                                           duration: MediaQuery.of(context).disableAnimations ? Duration.zero : const Duration(milliseconds: 180),
                                           width: double.infinity,
-                                          height: 48,
+                                          height: 58,
                                           decoration: BoxDecoration(
                                             color: switch (choice) {
                                               AppThemeChoice.system => scheme.surfaceContainerHighest,
@@ -229,7 +234,7 @@ class AppSettingsPage extends StatelessWidget {
                                           ),
                                         ),
                                         const SizedBox(height: 6),
-                                        Text(_themeLabel(choice), maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: TextStyle(color: selected == choice ? scheme.primary : scheme.onSurfaceVariant, fontSize: 9.5, fontWeight: selected == choice ? FontWeight.w900 : FontWeight.w600)),
+                                        Text(_themeLabel(choice), maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: TextStyle(color: selected == choice ? scheme.primary : scheme.onSurfaceVariant, fontSize: 11, fontWeight: selected == choice ? FontWeight.w900 : FontWeight.w700)),
                                       ],
                                     ),
                                   ),
@@ -264,7 +269,7 @@ class AppSettingsPage extends StatelessWidget {
                       const SizedBox(height: 13),
                       LayoutBuilder(
                         builder: (context, constraints) {
-                          final columns = constraints.maxWidth >= 420 ? 7 : 4;
+                          final columns = constraints.maxWidth >= 760 ? 7 : constraints.maxWidth >= 520 ? 5 : 4;
                           final itemWidth = (constraints.maxWidth - ((columns - 1) * 9)) / columns;
                           return Wrap(
                             spacing: 9,
@@ -291,7 +296,7 @@ class AppSettingsPage extends StatelessWidget {
                                           child: selected == color ? const Icon(Icons.check_rounded, color: Colors.white, size: 19) : null,
                                         ),
                                         const SizedBox(height: 5),
-                                        Text(color.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 9.5, fontWeight: selected == color ? FontWeight.w900 : FontWeight.w600, color: selected == color ? scheme.primary : scheme.onSurfaceVariant)),
+                                        Text(color.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 10.5, fontWeight: selected == color ? FontWeight.w900 : FontWeight.w600, color: selected == color ? scheme.primary : scheme.onSurfaceVariant)),
                                       ],
                                     ),
                                   ),

@@ -5,27 +5,43 @@
 .pub-cache/
 .flutter-plugins
 .flutter-plugins-dependencies
+**/.dart_tool/
+**/build/
 build/
 coverage/
 
+# Platform-generated integration files and dependency caches
+**/.gradle/
+android/.gradle/
+android/local.properties
+android/build/
+android/app/build/
+ios/Pods/
+ios/Flutter/ephemeral/
+linux/flutter/ephemeral/
+macos/Flutter/ephemeral/
+windows/flutter/ephemeral/
+
 # IDE and OS
 .idea/
+.vscode/
 *.iml
 .DS_Store
 Thumbs.db
-.vscode/
 
-# Android generated/local configuration
-android/.gradle/
-android/local.properties
+# Local Android signing material (never commit production keys)
 android/key.properties
-android/build/
-android/app/build/
 android/app/*.jks
 android/app/*.keystore
 android/app/*.p12
 android/app/*.pfx
 android/app/*.pem
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.pem
+*.key
 
 # Local secrets and environment files
 .env
@@ -35,15 +51,7 @@ secrets.*
 *.secret
 *.credentials
 
-# Signing material (never commit production keys)
-*.jks
-*.keystore
-*.p12
-*.pfx
-*.pem
-*.key
-
-# Local backups and editor swap files
+# Local backups and temporary files
 *.bak
 *.bak_*
 *.backup
@@ -52,5 +60,9 @@ secrets.*
 *.swp
 *.swo
 
-# Flutter build metadata
-.flutter-plugins-dependencies
+# Packaged builds and local archives belong in GitHub Release assets, not Git
+*.apk
+*.aab
+*.ipa
+*.zip
+*.dSYM/

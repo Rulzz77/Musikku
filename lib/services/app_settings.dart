@@ -243,6 +243,7 @@ class AppSettingsController {
   }
 
   Future<bool> setAppIcon(AppIconChoice value) async {
+    if (value == appIcon.value) return true;
     final applied = await AppIconService.setLauncherIcon(value.name);
     if (!applied) return false;
     appIcon.value = value;
@@ -344,7 +345,9 @@ class AppSettingsController {
       case AppThemeChoice.system:
         return ThemeMode.system;
       case AppThemeChoice.light:
+        return ThemeMode.light;
       case AppThemeChoice.pink:
+        // Legacy combined pink mode is migrated to system + pink accent.
         return ThemeMode.system;
       case AppThemeChoice.dark:
       case AppThemeChoice.amoled:

@@ -222,11 +222,6 @@ extension _HomePlayback on _HomePageState {
       _crossfadeFadingVideoId = '';
     }
 
-    // Player native akan di-load sekarang, jadi lagu hasil restore tidak lagi
-    // "menunggu load" — termasuk kalau user memilih lagu yang sama dengan
-    // lagu terakhir. Kalau flag ini tertinggal, tombol Pause malah memuat ulang.
-    _restoredNeedsLoad = false;
-
     if (!sameVideo) {
       // Start a fresh listening-history candidate. It will only be committed
       // once native playback proves that at least ten seconds were heard.
@@ -371,6 +366,10 @@ extension _HomePlayback on _HomePageState {
           return;
         }
       }
+
+      // Native load completed successfully. Keep the restore flag set on any
+      // resolver/Media3 error so the next Play press retries a fresh load.
+      _restoredNeedsLoad = false;
 
       if (transitionPlaying || wasAutoFading) {
         await _fadeVolume(

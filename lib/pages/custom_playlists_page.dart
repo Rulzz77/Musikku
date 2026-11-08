@@ -2632,7 +2632,6 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
       ],
     );
   }
-
 }
 
 enum _PlaylistSortMode { recent, name, songs, folder }

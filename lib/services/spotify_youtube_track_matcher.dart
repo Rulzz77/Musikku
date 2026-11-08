@@ -15,20 +15,17 @@ class SpotifyYoutubeTrackMatcher {
     if (coreTitle.isEmpty) return const <String>[];
 
     final queries = <String>{};
-    final primary = track.primaryArtist.trim();
-    if (primary.isNotEmpty) {
-      queries.add('$primary $coreTitle');
-      queries.add('$coreTitle $primary');
-      queries.add('$primary $coreTitle official audio');
+    final primaryVariants = _artistQueryVariants(track.primaryArtist);
+    for (final artist in primaryVariants) {
+      queries.add('$artist $coreTitle');
+      queries.add('$coreTitle $artist');
     }
-    // Spotify collaborations can be indexed on YouTube under a collaborator's
-    // channel/title rather than the first Spotify credit. Search every credited
-    // performer independently; the matcher still verifies the song title.
+    // Spotify collaborations can surface under any credited performer.
     for (final artist in track.artists.skip(1).take(4)) {
-      final name = artist.trim();
-      if (name.isEmpty) continue;
-      queries.add('$name $coreTitle');
-      queries.add('$coreTitle $name');
+      for (final variant in _artistQueryVariants(artist).take(2)) {
+        queries.add('$variant $coreTitle');
+        queries.add('$coreTitle $variant');
+      }
     }
     if (track.artists.length > 1) {
       queries.add('$coreTitle ${track.artists.join(' ')}');
@@ -46,17 +43,21 @@ class SpotifyYoutubeTrackMatcher {
         .toList(growable: false);
   }
 
-  /// A small first-pass query set for low-latency imports. The first query
-  /// targets the primary artist, the second targets a collaborator when one
-  /// exists, and the last is title-only for channel/label indexing differences.
-  /// Deeper variants remain available through [buildSearchQueries].
+  /// A short query set that includes punctuation-free artist aliases. This is
+  /// especially useful for Indonesian stage names such as `NDX A.K.A.` which
+  /// YouTube indexes as `NDX AKA` or `NDXAKA`.
   static List<String> buildFastSearchQueries(SpotifyPlaylistTrack track) {
     final coreTitle = _searchCoreTitle(track.title);
     if (coreTitle.isEmpty) return const <String>[];
 
     final queries = <String>{};
-    final primary = track.primaryArtist.trim();
-    if (primary.isNotEmpty) queries.add('$primary $coreTitle');
+    final primaryVariants = _artistQueryVariants(track.primaryArtist);
+    // Try every useful spelling for punctuation-heavy aliases such as
+    // NDX A.K.A. -> NDX AKA -> NDXAKA. The exact and compact forms matter
+    // because YouTube search indexes these channel names inconsistently.
+    for (final artist in primaryVariants.take(3)) {
+      queries.add('$artist $coreTitle');
+    }
 
     if (track.artists.length > 1) {
       final collaborator = track.artists[1].trim();
@@ -67,7 +68,27 @@ class SpotifyYoutubeTrackMatcher {
     return queries
         .map((query) => query.replaceAll(RegExp(r'\s+'), ' ').trim())
         .where((query) => query.isNotEmpty)
+        .take(5)
         .toList(growable: false);
+  }
+
+  static List<String> _artistQueryVariants(String rawArtist) {
+    final artist = rawArtist.trim();
+    if (artist.isEmpty) return const <String>[];
+    final variants = <String>{artist};
+    final punctuationFree = artist
+        .replaceAll(RegExp(r'[.]'), '')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    if (punctuationFree.isNotEmpty) variants.add(punctuationFree);
+    final compact = punctuationFree.replaceAll(
+      RegExp(r'[^a-zA-Z0-9\u0080-\uFFFF]'),
+      '',
+    );
+    if (compact.length >= 6 && compact != punctuationFree) {
+      variants.add(compact);
+    }
+    return variants.toList(growable: false);
   }
 
   static String _searchCoreTitle(String value) {
@@ -111,6 +132,42 @@ class SpotifyYoutubeTrackMatcher {
         continue;
       }
 
+      // Structured YouTube Music performer/title credits are stronger than
+      // a copied artist name in a fan-upload title. If both fields are present
+      // and contradict Spotify, do not pass this off as the original recording.
+      if (!explicitlyMarkedCover &&
+          _hasContradictoryStructuredMusicData(spotifyTrack, candidate)) {
+        continue;
+      }
+
+      if (!explicitlyMarkedCover &&
+          _hasUnrequestedAlternateVersion(candidate.title, spotifyTrack.title)) {
+        final expectedSeconds = spotifyTrack.durationMs == null
+            ? null
+            : spotifyTrack.durationMs! / 1000.0;
+        final actualSeconds = candidate.durationSeconds;
+        final sameRecordingLength = expectedSeconds != null &&
+            actualSeconds != null &&
+            (expectedSeconds - actualSeconds).abs() <= 8;
+        final isOfficialLiveMusic = RegExp(
+          r'\bofficial\s+live\s+music\b',
+          caseSensitive: false,
+        ).hasMatch(candidate.title);
+        final containsOtherAlternate = RegExp(
+          r'\b(?:remix|acoustic|instrumental|slowed|sped[ -]?up|nightcore|reverb|karaoke)\b',
+          caseSensitive: false,
+        ).hasMatch(candidate.title);
+        // Some Indonesian labels publish their full-song upload under the
+        // conventional title `Official Live Music`. Accept that special case
+        // only with verified label/artist credits and an almost exact runtime.
+        // Remix/acoustic/slowed variants are never promoted as the original.
+        if (!isOfficialLiveMusic || containsOtherAlternate ||
+            _officialSourceRank(spotifyTrack, candidate) < 4 ||
+            !sameRecordingLength) {
+          continue;
+        }
+      }
+
       final titleCoverage = _tokenCoverage(spotifyTrack.title, candidate.title);
       final titleScore = _similarity(spotifyTrack.title, candidate.title);
       final artistScore = _artistSimilarity(spotifyTrack, candidate);
@@ -130,13 +187,7 @@ class SpotifyYoutubeTrackMatcher {
           actualSecondsForFallback != null &&
           (expectedSecondsForFallback - actualSecondsForFallback).abs() <= 25;
       final fallbackPopular = (candidate.viewCount ?? 0) >= 100000;
-      final unlabelledVersionFallback = !explicitlyMarkedCover &&
-          artistScore < 0.82 &&
-          titleCoverage >= 0.98 &&
-          titleScore >= 0.84 &&
-          alternatePenalty == 0 &&
-          (fallbackDurationClose || fallbackPopular);
-      if (explicitlyMarkedCover || unlabelledVersionFallback) {
+      if (explicitlyMarkedCover) {
         // A cover is a deliberate fallback for Spotify import only. The
         // original/artist-owned/label candidate always outranks it. Require a
         // near-exact song title plus corroboration from duration or popularity
@@ -159,6 +210,16 @@ class SpotifyYoutubeTrackMatcher {
             ((candidate.viewCount ?? 0) >= 10000 ? 0.06 : 0) -
             durationPenalty;
       } else {
+        // Do not replace a Spotify studio recording with a different-length
+        // recording just because the title and singer happen to match. Small
+        // intros/outros are tolerated; large duration gaps are treated as a
+        // different arrangement/version. Explicit covers use their own fallback
+        // gate above and are considered only after originals are exhausted.
+        if (expectedSecondsForFallback != null &&
+            actualSecondsForFallback != null &&
+            (expectedSecondsForFallback - actualSecondsForFallback).abs() > 24) {
+          continue;
+        }
         score = (titleScore * 0.64) + (artistScore * 0.36) -
             durationPenalty - alternatePenalty;
 
@@ -174,6 +235,13 @@ class SpotifyYoutubeTrackMatcher {
         // YouTube search relevance is not a source-authenticity signal. Prefer
         // Topic/VEVO, structured distributor credits, and artist/label uploads.
         officialRank = _officialSourceRank(spotifyTrack, candidate);
+        if (_hasUnrequestedAlternateVersion(candidate.title, spotifyTrack.title) &&
+            officialRank > 2) {
+          // The sole alternate upload admitted above is a verified Official
+          // Live Music fallback. Keep it below studio/original releases even
+          // when its uploader is an artist Topic channel or a trusted label.
+          officialRank = 2;
+        }
         // Rank 2 means YouTube's result has an explicit official/resmi marker,
         // but the channel could not be mapped to a known artist/label account.
         // That is acceptable only after the independent title + artist gates
@@ -250,19 +318,28 @@ class SpotifyYoutubeTrackMatcher {
     List<YoutubeSearchResult> candidates,
   ) {
     final match = bestMatch(spotifyTrack, candidates);
-    return match != null && _officialSourceRank(spotifyTrack, match) >= 5;
+    if (match == null ||
+        YoutubeMusicPolicy.isExplicitCoverVersion(match) ||
+        _hasUnrequestedAlternateVersion(match.title, spotifyTrack.title)) {
+      return false;
+    }
+    return _officialSourceRank(spotifyTrack, match) >= 5;
   }
 
-  /// True when a first-page result is already supported by an artist-owned
-  /// channel, verified label/distributor credit, or corroborated exact match.
-  /// Explicit covers intentionally never satisfy this shortcut: the importer
-  /// should keep looking for the original before accepting a cover fallback.
+  /// Only a verified original/label/artist source ends the fallback search.
+  /// Rank 3 popular third-party uploads and every cover keep searching so a
+  /// later query can still find the actual recording.
   static bool hasHighConfidenceMatch(
     SpotifyPlaylistTrack spotifyTrack,
     List<YoutubeSearchResult> candidates,
   ) {
     final match = bestMatch(spotifyTrack, candidates);
-    return match != null && _officialSourceRank(spotifyTrack, match) >= 3;
+    if (match == null ||
+        YoutubeMusicPolicy.isExplicitCoverVersion(match) ||
+        _hasUnrequestedAlternateVersion(match.title, spotifyTrack.title)) {
+      return false;
+    }
+    return _officialSourceRank(spotifyTrack, match) >= 4;
   }
 
   static int _officialSourceRank(
@@ -374,6 +451,27 @@ class SpotifyYoutubeTrackMatcher {
     if (officialTitle || officialChannel) return 2;
     if (_isKnownMusicLabelChannel(channelRaw)) return 2;
     return 0;
+  }
+
+  static bool _hasContradictoryStructuredMusicData(
+    SpotifyPlaylistTrack track,
+    YoutubeSearchResult candidate,
+  ) {
+    final dataTitle = candidate.musicDataTitle.trim();
+    final dataArtist = candidate.musicDataArtist.trim();
+    if (dataTitle.isEmpty || dataArtist.isEmpty) return false;
+    // Metadata services sometimes omit a Spotify title suffix such as
+    // `- Reggae`; allow a partial but clearly related title while still
+    // rejecting a structured credit for an unrelated song.
+    final titleMatches = _tokenCoverage(track.title, dataTitle) >= 0.60 &&
+        _similarity(track.title, dataTitle) >= 0.68;
+    final artistMatches = track.artists.any(
+      (artist) => _artistCreditMatches(
+        _normalizeArtistText(dataArtist),
+        _normalizeArtistText(artist),
+      ),
+    );
+    return !titleMatches || !artistMatches;
   }
 
   static bool _matchesStructuredMusicData(
@@ -496,6 +594,11 @@ class SpotifyYoutubeTrackMatcher {
         .join(', ');
     return candidate.copyWith(
       title: track.title.trim(),
+      sourceVideoTitle: candidate.sourceVideoTitle.isNotEmpty
+          ? candidate.sourceVideoTitle
+          : candidate.title,
+      spotifyTrackId: track.spotifyTrackId,
+      spotifyDurationMs: track.durationMs,
       // Keep the visible Spotify credit aligned with the playlist while also
       // preserving the primary performer separately for verified album art.
       channelTitle: credits.isEmpty ? candidate.channelTitle : credits,
@@ -829,6 +932,32 @@ class SpotifyYoutubeTrackMatcher {
     return ((difference - 20) / 180).clamp(0.0, 0.12).toDouble();
   }
 
+  static bool _hasUnrequestedAlternateVersion(
+    String candidateTitle,
+    String expectedTitle,
+  ) {
+    final candidate = candidateTitle.toLowerCase();
+    final expected = expectedTitle.toLowerCase();
+    const markers = <String, String>{
+      'live': r'\blive\b|\blive\s+(?:music|session|performance|concert)\b',
+      'remix': r'\bremix(?:ed)?\b',
+      'acoustic': r'\bacoustic\b',
+      'instrumental': r'\binstrumental\b',
+      'slowed': r'\bslowed\b',
+      'sped-up': r'\bsped[ -]?up\b',
+      'nightcore': r'\bnightcore\b',
+      'reverb': r'\breverb\b',
+      'karaoke': r'\bkaraoke\b',
+    };
+    for (final entry in markers.entries) {
+      if (RegExp(entry.value, caseSensitive: false).hasMatch(candidate) &&
+          !RegExp(entry.value, caseSensitive: false).hasMatch(expected)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   static double _alternateVersionPenalty(
     String candidateTitle,
     String expectedTitle,
@@ -840,16 +969,19 @@ class SpotifyYoutubeTrackMatcher {
       r'\bsped\s*up\b',
       r'\bslowed\b',
       r'\bnightcore\b',
-      // Do not replace a Spotify studio release with a concert recording.
-      // `official live music` is intentionally not matched here: many
-      // Indonesian regional releases use that phrase for a legitimate
-      // official full-song performance, and those can be verified by credits.
       r'\blive\s+concert\b',
       r'\blive\s+performance\b',
       r'\bconcert\s+version\b',
     ];
     final candidate = candidateTitle.toLowerCase();
     final expected = expectedTitle.toLowerCase();
+    // A verified `Official Live Music` upload is allowed only as a fallback
+    // for regional releases, but it must lose to a studio candidate of the
+    // same source tier. Keep the penalty modest so it remains usable alone.
+    if (RegExp(r'\bofficial\s+live\s+music\b').hasMatch(candidate) &&
+        !RegExp(r'\blive\b').hasMatch(expected)) {
+      return 0.12;
+    }
     for (final marker in alternateMarkers) {
       if (RegExp(marker).hasMatch(candidate) &&
           !RegExp(marker).hasMatch(expected)) {

@@ -10,6 +10,10 @@ void main() {
       required String channel,
       String artist = '',
       String sourceChannel = '',
+      String sourceVideoTitle = '',
+      String spotifyTrackId = '',
+      int? spotifyDurationMs,
+      double? durationSeconds = 235,
       bool local = false,
     }) => YoutubeSearchResult(
           videoId: id,
@@ -17,6 +21,10 @@ void main() {
           channelTitle: channel,
           artistName: artist,
           sourceChannelTitle: sourceChannel,
+          sourceVideoTitle: sourceVideoTitle,
+          spotifyTrackId: spotifyTrackId,
+          spotifyDurationMs: spotifyDurationMs,
+          durationSeconds: durationSeconds,
           thumbnailUrl: '',
           sourceType: local ? 'local' : 'youtube',
         );
@@ -28,16 +36,104 @@ void main() {
         channel: 'Denny Caknan',
         artist: 'Denny Caknan',
         sourceChannel: 'Musica Studios',
+        spotifyTrackId: 'spotify-cundamani-1',
+        spotifyDurationMs: 235000,
       );
       final searchResult = track(
         id: 'another-youtube-video-id',
         title: 'Denny Caknan - Cundamani (Official Audio)',
         channel: 'Denny Caknan - Topic',
+        durationSeconds: 235,
       );
       final playlist = Playlist(id: 'one', name: 'Impor Spotify', songs: [imported]);
 
       expect(playlist.containsTrack(searchResult), isTrue);
       expect(Playlist.sameTrack(imported, searchResult), isTrue);
+    });
+
+    test('does not mark the same title and artist when the recording duration differs', () {
+      final imported = track(
+        id: 'studio-cinta',
+        title: 'Cinta',
+        channel: 'Penyanyi A',
+        artist: 'Penyanyi A',
+        spotifyTrackId: 'spotify-cinta-studio',
+        spotifyDurationMs: 220000,
+        durationSeconds: 220,
+      );
+      final alternateRecording = track(
+        id: 'live-cinta',
+        title: 'Cinta',
+        channel: 'Penyanyi A - Topic',
+        durationSeconds: 278,
+        sourceVideoTitle: 'Penyanyi A - Cinta (Official Audio)',
+      );
+      final playlist = Playlist(id: 'one', name: 'Mix', songs: [imported]);
+
+      expect(playlist.containsTrack(alternateRecording), isFalse);
+    });
+
+    test('does not mark a same-title same-artist item when version tags differ', () {
+      final imported = track(
+        id: 'studio-song',
+        title: 'Nemen',
+        channel: 'Guyon Waton',
+        artist: 'Guyon Waton',
+        sourceVideoTitle: 'Nemen (Official Music Video)',
+        spotifyTrackId: 'spotify-nemen-studio',
+        spotifyDurationMs: 260000,
+      );
+      final liveVersion = track(
+        id: 'live-song',
+        title: 'Nemen (Official Live Music)',
+        channel: 'Guyon Waton - Topic',
+        artist: 'Guyon Waton',
+        durationSeconds: 260,
+      );
+      final playlist = Playlist(id: 'one', name: 'Mix', songs: [imported]);
+
+      expect(playlist.containsTrack(liveVersion), isFalse);
+    });
+
+    test('does not use title and artist alone when duration is missing', () {
+      final imported = track(
+        id: 'saved-song',
+        title: 'Cinta',
+        channel: 'Penyanyi A',
+        artist: 'Penyanyi A',
+        durationSeconds: null,
+      );
+      final unknownDuration = track(
+        id: 'unknown-duration-song',
+        title: 'Cinta',
+        channel: 'Penyanyi A - Topic',
+        durationSeconds: null,
+      );
+      final playlist = Playlist(id: 'one', name: 'Mix', songs: [imported]);
+
+      expect(playlist.containsTrack(unknownDuration), isFalse);
+    });
+
+    test('different Spotify track IDs never collapse into one playlist item', () {
+      final first = track(
+        id: 'first-video',
+        title: 'Cinta',
+        channel: 'Penyanyi A',
+        artist: 'Penyanyi A',
+        spotifyTrackId: 'spotify-cinta-single',
+        spotifyDurationMs: 220000,
+      );
+      final second = track(
+        id: 'second-video',
+        title: 'Cinta',
+        channel: 'Penyanyi A',
+        artist: 'Penyanyi A',
+        spotifyTrackId: 'spotify-cinta-live',
+        spotifyDurationMs: 220000,
+      );
+      final playlist = Playlist(id: 'one', name: 'Mix', songs: [first]);
+
+      expect(playlist.containsTrack(second), isFalse);
     });
 
     test('does not mark a same-title song from a different artist as added', () {
@@ -92,6 +188,7 @@ void main() {
             'Dumes · OMWAWES · Guyon Waton\n'
             'Album: Dumes\n',
         thumbnailUrl: '',
+        durationSeconds: 235,
       );
       final playlist = Playlist(id: 'one', name: 'Impor Spotify', songs: [imported]);
 
@@ -104,6 +201,9 @@ void main() {
         title: 'Satru',
         channel: 'Denny Caknan, Happy Asmara',
         artist: 'Denny Caknan',
+        spotifyTrackId: 'spotify-satru-2',
+        spotifyDurationMs: 235000,
+        sourceVideoTitle: 'Satru (Official Audio)',
       );
       final youtubeResult = track(
         id: 'youtube-satru-topic',
@@ -153,6 +253,7 @@ void main() {
             'Album: Cundamani\n'
             'Auto-generated by YouTube.',
         thumbnailUrl: '',
+        durationSeconds: 235,
       );
       final playlist = Playlist(
         id: 'one',

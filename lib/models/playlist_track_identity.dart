@@ -6,14 +6,38 @@ import 'youtube_search_result.dart';
 /// YouTube video ID later, so a conservative title + performer check follows.
 class PlaylistTrackIdentity {
   static bool matches(YoutubeSearchResult first, YoutubeSearchResult second) {
+    // A YouTube video ID is the strongest identity for a saved media item.
     if (first.videoId.isNotEmpty && first.videoId == second.videoId) {
       return true;
     }
     if (first.isLocal || second.isLocal) return false;
+
+    // Spotify's track ID identifies the recording, not merely its display
+    // title. When both sides carry it, never collapse different Spotify tracks.
+    final firstSpotifyId = first.spotifyTrackId.trim();
+    final secondSpotifyId = second.spotifyTrackId.trim();
+    if (firstSpotifyId.isNotEmpty && secondSpotifyId.isNotEmpty) {
+      return firstSpotifyId == secondSpotifyId;
+    }
+
+    // The import stores the original YouTube title separately because the
+    // visible title is replaced with Spotify's clean display title. Compare
+    // version tags before falling back to title/artist matching: studio and
+    // live/remix/acoustic/cover recordings are not interchangeable.
+    if (!_sameVersionFamily(first, second)) return false;
+
     if (_isAlternateOrUnofficialUpload(first) ||
         _isAlternateOrUnofficialUpload(second)) {
       return false;
     }
+
+    final firstDuration = _durationMilliseconds(first);
+    final secondDuration = _durationMilliseconds(second);
+    // Same title + same singer is not enough. If the source durations are not
+    // available, only exact video ID or Spotify ID above can prove identity.
+    if (firstDuration == null || secondDuration == null) return false;
+    final tolerance = (firstDuration * 0.04).clamp(8000, 14000).toDouble();
+    if ((firstDuration - secondDuration).abs() > tolerance) return false;
 
     final artistNames = <String>{
       ..._artistNames(first),
@@ -28,44 +52,105 @@ class PlaylistTrackIdentity {
     return _artistEvidenceMatches(first, second);
   }
 
+  static int? _durationMilliseconds(YoutubeSearchResult song) {
+    final spotifyDuration = song.spotifyDurationMs;
+    if (spotifyDuration != null && spotifyDuration > 0) return spotifyDuration;
+    final seconds = song.durationSeconds;
+    if (seconds == null || seconds <= 0) return null;
+    return (seconds * 1000).round();
+  }
+
+  static bool _sameVersionFamily(
+    YoutubeSearchResult first,
+    YoutubeSearchResult second,
+  ) {
+    final firstMarkers = _versionMarkers(first);
+    final secondMarkers = _versionMarkers(second);
+    return firstMarkers.length == secondMarkers.length &&
+        firstMarkers.containsAll(secondMarkers);
+  }
+
+  static Set<String> _versionMarkers(YoutubeSearchResult song) {
+    final rawTitle = [
+      song.sourceVideoTitle,
+      song.title,
+    ].where((value) => value.trim().isNotEmpty).join(' ').toLowerCase();
+    final markers = <String>{};
+    void add(String marker, String pattern) {
+      if (RegExp(pattern, caseSensitive: false).hasMatch(rawTitle)) {
+        markers.add(marker);
+      }
+    }
+
+    add('live', r'\blive\b|\blive\s+(?:music|session|performance|concert)\b');
+    add('remix', r'\bremix(?:ed)?\b');
+    add('acoustic', r'\bacoustic\b');
+    add('instrumental', r'\binstrumental\b');
+    add('karaoke', r'\bkaraoke\b');
+    add('cover', r'\bcover(?:ed)?\b|\bkover\b');
+    add('slowed', r'\bslowed\b');
+    add('sped-up', r'\bsped[ -]?up\b');
+    add('nightcore', r'\bnightcore\b');
+    add('reverb', r'\breverb\b');
+    add('piano-version', r'\bpiano\s+(?:version|cover)\b');
+    add('guitar-version', r'\b(?:guitar|gitar)\s+(?:version|cover)\b');
+    return markers;
+  }
+
   static bool _artistEvidenceMatches(
     YoutubeSearchResult first,
     YoutubeSearchResult second,
   ) {
-    final firstArtist = _explicitArtist(first);
-    final secondArtist = _explicitArtist(second);
+    final firstArtists = _explicitArtists(first);
+    final secondArtists = _explicitArtists(second);
 
-    // A collaboration can surface under a different primary artist on
-    // YouTube than Spotify's display order. Accept a shared credited performer
-    // from the Spotify collaborator list, but never match on title alone.
-    if (firstArtist.isNotEmpty && secondArtist.isNotEmpty) {
-      if (_sameArtist(firstArtist, secondArtist)) return true;
-      if (_channelCreditsContain(first.channelTitle, secondArtist) ||
-          _channelCreditsContain(second.channelTitle, firstArtist)) {
+    // Spotify imports store the full collaborator list in channelTitle while
+    // artistName contains only the primary performer. A YouTube Topic result
+    // may surface under the second collaborator, so compare the complete
+    // credited sets instead of requiring the primary artist on both sides.
+    if (firstArtists.isNotEmpty && secondArtists.isNotEmpty) {
+      if (firstArtists.any((left) =>
+          secondArtists.any((right) => _sameArtist(left, right)))) {
         return true;
+      }
+      for (final expected in firstArtists) {
+        if (_hasArtistEvidence(
+          second,
+          expected,
+          referenceTitle: first.title,
+          referenceSourceChannel: first.sourceChannelTitle,
+        )) {
+          return true;
+        }
+      }
+      for (final expected in secondArtists) {
+        if (_hasArtistEvidence(
+          first,
+          expected,
+          referenceTitle: second.title,
+          referenceSourceChannel: second.sourceChannelTitle,
+        )) {
+          return true;
+        }
       }
       return false;
     }
 
-    // Spotify-imported entries have a canonical artistName. A later YouTube
-    // result may be uploaded by a label, so channelTitle alone must not be
-    // mistaken for the performer. Look for structured music credits, an
-    // artist-owned/Topic channel, or an artist credit in the video title.
-    if (firstArtist.isNotEmpty) {
-      return _hasArtistEvidence(
-        second,
-        firstArtist,
-        referenceTitle: first.title,
-        referenceSourceChannel: first.sourceChannelTitle,
-      );
+    if (firstArtists.isNotEmpty) {
+      return firstArtists.any((expected) => _hasArtistEvidence(
+            second,
+            expected,
+            referenceTitle: first.title,
+            referenceSourceChannel: first.sourceChannelTitle,
+          ));
     }
-    if (secondArtist.isNotEmpty) {
-      return _hasArtistEvidence(
-        first,
-        secondArtist,
-        referenceTitle: second.title,
-        referenceSourceChannel: second.sourceChannelTitle,
-      );
+    if (secondArtists.isNotEmpty) {
+      return secondArtists.any((expected) => _hasArtistEvidence(
+            first,
+            expected,
+            referenceTitle: second.title,
+            referenceSourceChannel: second.sourceChannelTitle,
+          ));
     }
 
     // Legacy playlist entries without structured credits use channel identity.
@@ -74,6 +159,48 @@ class PlaylistTrackIdentity {
     return firstChannel.isNotEmpty &&
         secondChannel.isNotEmpty &&
         _sameArtist(firstChannel, secondChannel);
+  }
+
+  static Set<String> _explicitArtists(YoutubeSearchResult song) {
+    final names = <String>{};
+    void addCredits(String raw) {
+      final cleaned = raw.trim();
+      const stageNameExceptions = <String>{
+        'earth, wind & fire',
+        'crosby, stills & nash',
+        'emerson, lake & palmer',
+        'tyler, the creator',
+      };
+      if (stageNameExceptions.contains(cleaned.toLowerCase())) {
+        final normalized = _normalizeArtist(cleaned);
+        if (normalized.isNotEmpty) names.add(normalized);
+        return;
+      }
+      for (final part in cleaned.split(RegExp(
+        r',|\s+&\s+|\s+feat(?:uring)?\.?\s+|\s+ft\.?\s+',
+        caseSensitive: false,
+      ))) {
+        final normalized = _normalizeArtist(part);
+        if (normalized.isNotEmpty) names.add(normalized);
+      }
+    }
+
+    addCredits(song.artistName);
+    final metadata = YoutubeMusicMetadataParser.parse(
+      title: song.title,
+      description: song.description,
+    );
+    addCredits(metadata.artistName);
+
+    // Only treat channelTitle as a multi-artist credit when the entry carries
+    // Spotify-import metadata. On ordinary YouTube search results it is the
+    // uploader name, not necessarily the performer.
+    if (song.spotifyTrackId.trim().isNotEmpty ||
+        song.spotifyDurationMs != null ||
+        song.sourceVideoTitle.trim().isNotEmpty) {
+      addCredits(song.channelTitle);
+    }
+    return names;
   }
 
   static String _explicitArtist(YoutubeSearchResult song) {
@@ -173,26 +300,6 @@ class PlaylistTrackIdentity {
       r'\b(?:karaoke|instrumental|nightcore|sped[ -]?up|slowed|re[ -]?upload|unofficial|fan[ -]?(?:made|upload)|cover[ -]?(?:by|version|song)|(?:acoustic|piano|guitar) cover|ai cover|suno|udio)\b',
       caseSensitive: false,
     ).hasMatch(searchable);
-  }
-
-  static bool _channelCreditsContain(String rawCredits, String expectedArtist) {
-    final expected = _normalizeArtist(expectedArtist);
-    if (expected.isEmpty || rawCredits.trim().isEmpty) return false;
-    const stageNameExceptions = <String>{
-      'earth, wind & fire',
-      'crosby, stills & nash',
-      'emerson, lake & palmer',
-      'tyler, the creator',
-    };
-    final cleaned = rawCredits.trim();
-    if (stageNameExceptions.contains(cleaned.toLowerCase())) {
-      return _sameArtist(cleaned, expected);
-    }
-    final credits = cleaned.split(RegExp(
-      r',|\s+&\s+|\s+feat(?:uring)?\.?\s+|\s+ft\.?\s+',
-      caseSensitive: false,
-    ));
-    return credits.any((credit) => _sameArtist(credit, expected));
   }
 
   static bool _looksLikeLabel(String raw) {

@@ -285,6 +285,8 @@ void main() {
       const spotifyTrack = SpotifyPlaylistTrack(
         title: 'Satru',
         artists: ['Denny Caknan', 'Happy Asmara'],
+        spotifyTrackId: 'spotify-satru-recording',
+        durationMs: 282000,
         album: 'Satru (Single)',
       );
       const candidate = YoutubeSearchResult(
@@ -300,8 +302,14 @@ void main() {
       expect(imported.artistName, 'Denny Caknan');
       expect(imported.channelTitle, 'Denny Caknan, Happy Asmara');
       expect(imported.sourceChannelTitle, 'Music Label - Topic');
+      expect(imported.sourceVideoTitle, 'Satru Official Audio');
+      expect(imported.spotifyTrackId, 'spotify-satru-recording');
+      expect(imported.spotifyDurationMs, 282000);
       final restored = YoutubeSearchResult.fromJson(imported.toJson());
       expect(restored.sourceChannelTitle, 'Music Label - Topic');
+      expect(restored.sourceVideoTitle, 'Satru Official Audio');
+      expect(restored.spotifyTrackId, 'spotify-satru-recording');
+      expect(restored.spotifyDurationMs, 282000);
       expect(imported.album, 'Satru (Single)');
     });
 
@@ -1238,6 +1246,42 @@ void main() {
       );
     });
 
+    test('rejects a title-copy upload when structured MusicData credits another singer', () {
+      final mismatchedStructuredCredit = candidate(
+        id: 'copied-title-wrong-musicdata-artist',
+        title: 'Fiersa Besari - Celengan Rindu (Official Audio)',
+        channel: 'Viral Music Archive',
+        viewCount: 9500000,
+        musicDataTitle: 'Celengan Rindu',
+        musicDataArtist: 'Penyanyi Lain',
+      );
+      expect(
+        SpotifyYoutubeTrackMatcher.bestMatch(
+          spotifyTrack,
+          [mismatchedStructuredCredit],
+        ),
+        isNull,
+      );
+    });
+
+    test('accepts a matching structured credit when Spotify adds a genre suffix', () {
+      const reggaeTrack = SpotifyPlaylistTrack(
+        title: 'TAMU UNDANGAN - Reggae',
+        artists: ['Niken Salindry'],
+      );
+      final officialUpload = candidate(
+        id: 'tamu-undangan-reggae-official',
+        title: 'Niken Salindry - TAMU UNDANGAN (Reggae) Official Music Video',
+        channel: 'Niken Salindry Official',
+        musicDataTitle: 'Tamu Undangan',
+        musicDataArtist: 'Niken Salindry',
+      );
+      expect(
+        SpotifyYoutubeTrackMatcher.bestMatch(reggaeTrack, [officialUpload])?.videoId,
+        'tamu-undangan-reggae-official',
+      );
+    });
+
     test('finds Dian Anic - Kecewa from the Musik Proaktif official video', () {
       const track = SpotifyPlaylistTrack(
         title: 'Kecewa',
@@ -1338,6 +1382,49 @@ void main() {
       expect(
         SpotifyYoutubeTrackMatcher.bestMatch(track, [officialLiveUpload])?.videoId,
         'keloas-rena-movies-ageng-music',
+      );
+      // It is an acceptable fallback, but it must not stop a deeper query
+      // that may still find the studio/original release.
+      expect(
+        SpotifyYoutubeTrackMatcher.hasHighConfidenceMatch(
+          track,
+          [officialLiveUpload],
+        ),
+        isFalse,
+      );
+    });
+
+    test('prefers studio original over a more popular official live recording', () {
+      const track = SpotifyPlaylistTrack(
+        title: 'Keloas',
+        artists: ['Rena Movies', 'Ageng Music'],
+        durationMs: 393000,
+      );
+      const liveUpload = YoutubeSearchResult(
+        videoId: 'keloas-live-popular',
+        title: 'Rena Movies ft Ageng Music - Keloas (Official Live Music)',
+        channelTitle: 'Global Musik Era Digital',
+        description: 'Artist: Rena Movies ft Ageng Music',
+        thumbnailUrl: '',
+        durationSeconds: 393,
+        viewCount: 7000000,
+      );
+      const studioOriginal = YoutubeSearchResult(
+        videoId: 'keloas-studio-original',
+        title: 'Rena Movies ft Ageng Music - Keloas (Official Audio)',
+        channelTitle: 'Rena Movies Official',
+        description: 'Official audio release',
+        thumbnailUrl: '',
+        durationSeconds: 393,
+        viewCount: 15000,
+      );
+
+      expect(
+        SpotifyYoutubeTrackMatcher.bestMatch(
+          track,
+          [liveUpload, studioOriginal],
+        )?.videoId,
+        'keloas-studio-original',
       );
     });
 
@@ -1587,6 +1674,55 @@ void main() {
       expect(queries, contains('Satru 2 Happy Asmara'));
     });
 
+    test('fast search includes punctuation-free NDX A.K.A. aliases', () {
+      const track = SpotifyPlaylistTrack(
+        title: 'Kelingan Mantan',
+        artists: ['NDX A.K.A.'],
+      );
+      final fastQueries = SpotifyYoutubeTrackMatcher.buildFastSearchQueries(track);
+      expect(fastQueries, contains('NDX A.K.A. Kelingan Mantan'));
+      expect(fastQueries, contains('NDX AKA Kelingan Mantan'));
+      expect(fastQueries, contains('NDXAKA Kelingan Mantan'));
+      final fullQueries = SpotifyYoutubeTrackMatcher.buildSearchQueries(track);
+      expect(fullQueries, contains('NDX AKA Kelingan Mantan'));
+    });
+
+    test('does not let a viral cover stop the search for the original', () {
+      const track = SpotifyPlaylistTrack(
+        title: 'Kelingan Mantan',
+        artists: ['NDX A.K.A.'],
+        durationMs: 270000,
+      );
+      final cover = candidate(
+        id: 'ndx-cover',
+        title: 'Kelingan Mantan - Cover by Another Singer',
+        channel: 'Viral Cover Official',
+        durationSeconds: 270,
+        viewCount: 9000000,
+      );
+      expect(
+        SpotifyYoutubeTrackMatcher.hasHighConfidenceMatch(track, [cover]),
+        isFalse,
+      );
+    });
+
+    test('rejects an artist-channel remix even when title and channel match', () {
+      const track = SpotifyPlaylistTrack(
+        title: 'Apa Kabar Mantan',
+        artists: ['NDX A.K.A.'],
+        durationMs: 270000,
+      );
+      final remix = candidate(
+        id: 'ndx-remix',
+        title: 'NDX AKA - Apa Kabar Mantan (Official Remix)',
+        channel: 'NDX A.K.A. Official',
+        durationSeconds: 270,
+        viewCount: 2000000,
+      );
+      expect(YoutubeMusicPolicy.isSpotifyImportCandidate(remix), isTrue);
+      expect(SpotifyYoutubeTrackMatcher.bestMatch(track, [remix]), isNull);
+    });
+
     test('matches the full regional playlist sample when artist credits precede song titles', () {
       final tracks = <SpotifyPlaylistTrack>[
         const SpotifyPlaylistTrack(title: 'Satru 2', artists: ['Denny Caknan', 'Happy Asmara']),
@@ -1627,7 +1763,7 @@ void main() {
       }
     });
 
-    test('allows an unlabelled but duration-matched version as a final cover fallback', () {
+    test('does not treat an unlabelled same-title upload as a cover without explicit attribution', () {
       const track = SpotifyPlaylistTrack(
         title: 'Nemen', artists: ['Guyon Waton'], durationMs: 260000,
       );
@@ -1636,8 +1772,8 @@ void main() {
         channel: 'Independent Singer', durationSeconds: 260, viewCount: 1500,
       );
       expect(
-        SpotifyYoutubeTrackMatcher.bestMatch(track, [cover])?.videoId,
-        'nemen-unlabelled-cover',
+        SpotifyYoutubeTrackMatcher.bestMatch(track, [cover]),
+        isNull,
       );
     });
 

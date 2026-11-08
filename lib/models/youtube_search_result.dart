@@ -14,6 +14,13 @@ class YoutubeSearchResult {
   /// Actual YouTube upload channel, preserved when Spotify credits are used
   /// as the visible performer name for an imported playlist entry.
   final String sourceChannelTitle;
+  /// Original YouTube title before Spotify display metadata is applied.
+  /// Used to distinguish studio, live, remix, and cover recordings.
+  final String sourceVideoTitle;
+  /// Spotify recording identity attached only to tracks resolved from Spotify.
+  final String spotifyTrackId;
+  /// Canonical Spotify duration in milliseconds for stable playlist identity.
+  final int? spotifyDurationMs;
   final String thumbnailUrl;
   final int? viewCount;
   final DateTime? publishedAt;
@@ -96,6 +103,9 @@ class YoutubeSearchResult {
     this.musicDataTitle = '',
     this.musicDataArtist = '',
     this.sourceChannelTitle = '',
+    this.sourceVideoTitle = '',
+    this.spotifyTrackId = '',
+    this.spotifyDurationMs,
     required this.thumbnailUrl,
     this.viewCount,
     this.publishedAt,
@@ -122,6 +132,9 @@ class YoutubeSearchResult {
     String? musicDataTitle,
     String? musicDataArtist,
     String? sourceChannelTitle,
+    String? sourceVideoTitle,
+    String? spotifyTrackId,
+    int? spotifyDurationMs,
     String? thumbnailUrl,
     int? viewCount,
     DateTime? publishedAt,
@@ -147,6 +160,9 @@ class YoutubeSearchResult {
       musicDataTitle: musicDataTitle ?? this.musicDataTitle,
       musicDataArtist: musicDataArtist ?? this.musicDataArtist,
       sourceChannelTitle: sourceChannelTitle ?? this.sourceChannelTitle,
+      sourceVideoTitle: sourceVideoTitle ?? this.sourceVideoTitle,
+      spotifyTrackId: spotifyTrackId ?? this.spotifyTrackId,
+      spotifyDurationMs: spotifyDurationMs ?? this.spotifyDurationMs,
       thumbnailUrl: thumbnailUrl ?? this.thumbnailUrl,
       viewCount: viewCount ?? this.viewCount,
       publishedAt: publishedAt ?? this.publishedAt,
@@ -175,6 +191,9 @@ class YoutubeSearchResult {
       'musicDataTitle': musicDataTitle,
       'musicDataArtist': musicDataArtist,
       'sourceChannelTitle': sourceChannelTitle,
+      'sourceVideoTitle': sourceVideoTitle,
+      'spotifyTrackId': spotifyTrackId,
+      'spotifyDurationMs': spotifyDurationMs,
       'thumbnailUrl': thumbnailUrl,
       'viewCount': viewCount,
       'publishedAt': publishedAt?.toIso8601String(),
@@ -206,6 +225,11 @@ class YoutubeSearchResult {
       musicDataTitle: json['musicDataTitle']?.toString() ?? '',
       musicDataArtist: json['musicDataArtist']?.toString() ?? '',
       sourceChannelTitle: json['sourceChannelTitle']?.toString() ?? '',
+      sourceVideoTitle: json['sourceVideoTitle']?.toString() ?? '',
+      spotifyTrackId: json['spotifyTrackId']?.toString() ?? '',
+      spotifyDurationMs: json['spotifyDurationMs'] is num
+          ? (json['spotifyDurationMs'] as num).toInt()
+          : null,
       thumbnailUrl: json['thumbnailUrl']?.toString() ?? '',
       viewCount: json['viewCount'] is num ? (json['viewCount'] as num).toInt() : null,
       publishedAt: DateTime.tryParse(json['publishedAt']?.toString() ?? ''),

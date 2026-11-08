@@ -902,10 +902,14 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
           var deepFallbackUsed = false;
           var metadataLookupCount = 0;
 
-          void mergeCandidates(Iterable<YoutubeSearchResult> results) {
+          void mergeCandidates(
+            Iterable<YoutubeSearchResult> results, {
+            bool replaceExisting = false,
+          }) {
             for (final result in results) {
-              if (result.videoId.isNotEmpty) {
-                candidatesById.putIfAbsent(result.videoId, () => result);
+              if (result.videoId.isEmpty) continue;
+              if (replaceExisting || !candidatesById.containsKey(result.videoId)) {
+                candidatesById[result.videoId] = result;
               }
             }
           }
@@ -916,22 +920,54 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
             candidatesById.values.toList(growable: false),
           );
 
-          // Stage 1: one relevance page for the best artist/title query. A
-          // verified artist, label, Topic, or corroborated third-party result
-          // ends the search immediately, avoiding the old 3-page + popularity
-          // scan for every already-easy song.
-          for (final query in fastQueries) {
-            fastQueryCount++;
-            try {
-              final results = await fastSearchSongs(query);
-              mergeCandidates(results);
-            } catch (error) {
-              debugPrint(
-                'SPOTIFY FAST SEARCH FAILED [${track.title}] '
-                '"$query": $error',
-              );
+          // Stage 1: query the canonical artist and its punctuation-free alias
+          // together. This catches names such as `NDX A.K.A.` / `NDX AKA` while
+          // keeping the first pass to at most two simultaneous requests.
+          final primaryQueries = fastQueries.take(2).toList(growable: false);
+          fastQueryCount += primaryQueries.length;
+          final primaryResults = await Future.wait(
+            primaryQueries.map((query) async {
+              try {
+                return await fastSearchSongs(query);
+              } catch (error) {
+                debugPrint(
+                  'SPOTIFY FAST SEARCH FAILED [${track.title}] '
+                  '"$query": $error',
+                );
+                return const <YoutubeSearchResult>[];
+              }
+            }),
+          );
+          for (final results in primaryResults) {
+            mergeCandidates(results);
+          }
+
+          // Do not stop at a popular/relevant result. Run any remaining fast
+          // collaborator/title-only query unless a verified artist-owned
+          // original is already present. Label/Topic credits are compared
+          // together before the importer decides whether deep fallback is
+          // needed, so a cover cannot short-circuit the original search.
+          if (!SpotifyYoutubeTrackMatcher.hasPreferredOfficialMatch(
+            track,
+            candidatesById.values.toList(growable: false),
+          )) {
+            for (final query in fastQueries.skip(2)) {
+              fastQueryCount++;
+              try {
+                mergeCandidates(await fastSearchSongs(query));
+              } catch (error) {
+                debugPrint(
+                  'SPOTIFY FAST FALLBACK FAILED [${track.title}] '
+                  '"$query": $error',
+                );
+              }
+              if (SpotifyYoutubeTrackMatcher.hasPreferredOfficialMatch(
+                track,
+                candidatesById.values.toList(growable: false),
+              )) {
+                break;
+              }
             }
-            if (hasConfidentMatch()) break;
           }
 
           // Stage 2: only unresolved/low-confidence tracks pay for the deeper
@@ -969,7 +1005,11 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
                 final enriched = await widget.enrichSearchResults!(
                   detailCandidates,
                 );
-                mergeCandidates(enriched);
+                // Enrichment returns the same video IDs with structured
+                // MusicData/artist/duration fields filled in. Replace the
+                // lightweight search entries; putIfAbsent here silently threw
+                // away every enriched result and made the matcher blind to it.
+                mergeCandidates(enriched, replaceExisting: true);
               } catch (detailError) {
                 debugPrint(
                   'SPOTIFY MUSIC METADATA LOOKUP FAILED '
@@ -1017,10 +1057,13 @@ class _CustomPlaylistsPageState extends State<CustomPlaylistsPage> {
       // Resolve each unique identity once, then reuse the same video for every
       // original occurrence while preserving the playlist's order and repeats.
       final matchFutures = <String, Future<YoutubeSearchResult?>>{};
-      String trackIdentity(SpotifyPlaylistTrack track) =>
-          '${track.title.toLowerCase().trim()}|'
-          '${track.artists.map((artist) => artist.toLowerCase().trim()).join('|')}|'
-          '${track.durationMs ?? ''}';
+      String trackIdentity(SpotifyPlaylistTrack track) {
+        final spotifyId = track.spotifyTrackId.trim();
+        if (spotifyId.isNotEmpty) return 'spotify:$spotifyId';
+        return '${track.title.toLowerCase().trim()}|'
+            '${track.artists.map((artist) => artist.toLowerCase().trim()).join('|')}|'
+            '${track.durationMs ?? ''}';
+      }
 
       try {
         // Four tracks can make progress concurrently. The staged strategy

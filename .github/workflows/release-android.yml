@@ -1,0 +1,218 @@
+
+name: MusikKu Android Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: musikku-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-release:
+    name: Build and Publish APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Install Android SDK packages
+        run: |
+          sdkmanager --install \
+            "platforms;android-37" \
+            "build-tools;35.0.0" \
+            "cmake;3.22.1" \
+            "ndk;27.0.12077973"
+
+      - name: Validate release version
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import pathlib
+          import re
+          import os
+          import sys
+
+          root = pathlib.Path("build.gradle.kts").read_text(
+              encoding="utf-8"
+          )
+
+          updater = pathlib.Path(
+              "app/src/main/java/com/music/bitchord/data/AppUpdateChecker.kt"
+          ).read_text(encoding="utf-8")
+
+          root_match = re.search(
+              r'extra\["bitchordVersionName"\]\s*=\s*"([^"]+)"',
+              root
+          )
+
+          updater_match = re.search(
+              r'APP_VERSION\s*=\s*"([^"]+)"',
+              updater
+          )
+
+          if not root_match:
+              sys.exit("ERROR: bitchordVersionName not found.")
+
+          if not updater_match:
+              sys.exit("ERROR: APP_VERSION not found in updater.")
+
+          gradle_version = root_match.group(1)
+          updater_version = updater_match.group(1)
+          tag_version = os.environ["GITHUB_REF_NAME"].removeprefix("v")
+
+          print("Gradle version:", gradle_version)
+          print("Updater version:", updater_version)
+          print("Git tag version:", tag_version)
+
+          if gradle_version != updater_version:
+              sys.exit("ERROR: Gradle and updater versions do not match.")
+
+          if gradle_version != tag_version:
+              sys.exit("ERROR: Git tag and application version do not match.")
+
+          print("Version validation successful.")
+          PY
+
+      - name: Prepare release signing
+        shell: bash
+        env:
+          MUSIKKU_KEYSTORE_BASE64: ${{ secrets.MUSIKKU_KEYSTORE_BASE64 }}
+          MUSIKKU_STORE_PASSWORD: ${{ secrets.MUSIKKU_STORE_PASSWORD }}
+          MUSIKKU_KEY_ALIAS: ${{ secrets.MUSIKKU_KEY_ALIAS }}
+          MUSIKKU_KEY_PASSWORD: ${{ secrets.MUSIKKU_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          for name in \
+            MUSIKKU_KEYSTORE_BASE64 \
+            MUSIKKU_STORE_PASSWORD \
+            MUSIKKU_KEY_ALIAS \
+            MUSIKKU_KEY_PASSWORD
+          do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Missing GitHub secret: $name"
+              exit 1
+            fi
+          done
+
+          printf '%s' "$MUSIKKU_KEYSTORE_BASE64" |
+            base64 --decode > musikku-release.jks
+
+          test -s musikku-release.jks
+
+          cat > keystore.properties <<EOF
+          storeFile=musikku-release.jks
+          storePassword=${MUSIKKU_STORE_PASSWORD}
+          keyAlias=${MUSIKKU_KEY_ALIAS}
+          keyPassword=${MUSIKKU_KEY_PASSWORD}
+          EOF
+
+          echo "Release signing configuration prepared."
+
+      - name: Build production release APKs
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon :app:assembleProdRelease
+
+      - name: Prepare APK release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          SOURCE="app/build/outputs/apk/prod/release"
+          DEST="release-assets"
+
+          mkdir -p "$DEST"
+
+          cp "$SOURCE/app-prod-arm64-v8a-release.apk" \
+            "$DEST/MusikKu-arm64-v8a.apk"
+
+          cp "$SOURCE/app-prod-armeabi-v7a-release.apk" \
+            "$DEST/MusikKu-armeabi-v7a.apk"
+
+          cp "$SOURCE/app-prod-x86_64-release.apk" \
+            "$DEST/MusikKu-x86_64.apk"
+
+          cp "$SOURCE/app-prod-universal-release.apk" \
+            "$DEST/MusikKu-universal.apk"
+
+          echo "Release assets prepared:"
+          ls -lh "$DEST"
+
+      - name: Verify APK signatures
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/.android/sdk}}"
+
+          APKSIGNER="$(find "$SDK_ROOT/build-tools" \
+            -type f -name apksigner | sort -V | tail -n 1)"
+
+          if [ -z "$APKSIGNER" ]; then
+            echo "::error::apksigner not found."
+            exit 1
+          fi
+
+          EXPECTED_SHA256="cb554bfa8ea9f4d56a035d3ffa922e4b560f02023652d5f9e7d3261ac1733120"
+
+          for apk in release-assets/*.apk; do
+            echo "Checking: $apk"
+
+            VERIFY_OUTPUT="$("$APKSIGNER" verify \
+              --verbose --print-certs "$apk")"
+
+            echo "$VERIFY_OUTPUT"
+
+            ACTUAL_SHA256="$(printf '%s\n' "$VERIFY_OUTPUT" |
+              awk -F': ' '/Signer #1 certificate SHA-256 digest:/ {
+                print tolower($2)
+                exit
+              }' | tr -d ':')"
+
+            if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
+              echo "::error::APK signing certificate mismatch: $apk"
+              exit 1
+            fi
+
+            echo "Signature verified: $apk"
+          done
+
+          echo "All APK signatures are valid."
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            release-assets/*.apk \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "MusikKu $GITHUB_REF_NAME" \
+            --generate-notes \
+            --verify-tag
+
+      - name: Remove temporary signing files
+        if: always()
+        run: |
+          rm -f musikku-release.jks
+          rm -f keystore.properties

@@ -1,0 +1,49 @@
+name: Build MusikKu Android APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: musikku-android-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-apk:
+    name: Build production debug APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout MusikKu
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Set up Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build MusikKu APK
+        run: |
+          chmod +x ./gradlew
+          ./gradlew :app:assembleProdDebug -Pbitchord.bundleWear=false --no-daemon --max-workers=2
+
+      - name: Verify APK output
+        run: test -n "$(find app/build/outputs/apk/prod/debug -maxdepth 1 -type f -name '*.apk' -print -quit)"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MusikKu-prod-debug-${{ github.run_number }}
+          path: app/build/outputs/apk/prod/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14

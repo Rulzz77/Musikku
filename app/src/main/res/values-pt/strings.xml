@@ -1,6 +1,6 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">BitChord</string>
+    <string name="app_name">MusikKu</string>
     <string name="playback_channel_name">Tocando agora</string>
     <string name="download_channel_name">Downloads</string>
     <string name="download_channel_description">Músicas sendo salvas na sua pasta de Música</string>
@@ -1049,7 +1049,7 @@
 
     <string name="auto_login_title">Sign in to YouTube on your phone</string>
 
-    <string name="auto_login_subtitle">Open BitChord on your phone to sign in</string>
+    <string name="auto_login_subtitle">Open MusikKu on your phone to sign in</string>
 
     <string name="auto_empty_recents_title">No recent songs</string>
 

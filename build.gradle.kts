@@ -41,9 +41,8 @@ buildscript {
  * No "v" in the name — the in-app updater reads it as a number; the "v" is the
  * release tag's alone.
  */
-extra["bitchordVersionCode"] = 39
-extra["bitchordVersionName"] = "1.9.1"
-
+extra["bitchordVersionCode"] = 1
+extra["bitchordVersionName"] = "0.1.0"
 /*
  * Bump this by hand before cutting each sideloaded test build ("beta2",
  * "beta3", ...) and blank it out before cutting the real release. Marks the
@@ -64,7 +63,6 @@ extra["bitchordVersionName"] = "1.9.1"
  * beta watch app shows "Update available" as soon as the phone has the release.
  */
 extra["bitchordBetaSuffix"] = ""
-
 plugins {
     id("com.android.application") version "8.10.1" apply false
     id("com.android.library") version "8.10.1" apply false

@@ -1,0 +1,313 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<manifest
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission
+        android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- ===================================================== -->
+    <!-- INTERNET -->
+    <!-- ===================================================== -->
+
+    <uses-permission
+        android:name="android.permission.INTERNET" />
+
+    <!-- ===================================================== -->
+    <!-- WAKE LOCK -->
+    <!-- Supaya perangkat tidak langsung melepas CPU saat
+         playback/background service aktif -->
+    <!-- ===================================================== -->
+
+    <uses-permission
+        android:name="android.permission.WAKE_LOCK" />
+
+    <!-- Audio effect / equalizer best-effort support. -->
+    <uses-permission
+        android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+
+    <!-- Floating Lyrics uses Android's special "Display over other apps" access. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
+    <!-- Optional automotive capability; the app remains installable on phones. -->
+    <uses-feature android:name="android.hardware.type.automotive" android:required="false" />
+
+    <!-- ===================================================== -->
+    <!-- FOREGROUND SERVICE -->
+    <!-- ===================================================== -->
+
+    <uses-permission
+        android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+
+    <!-- ===================================================== -->
+    <!-- ANDROID 14+ -->
+    <!-- Foreground service khusus media playback -->
+    <!-- ===================================================== -->
+
+    <uses-permission
+        android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+
+    <!-- ===================================================== -->
+    <!-- ANDROID 13+ -->
+    <!-- Notification permission -->
+    <!-- ===================================================== -->
+
+    <uses-permission
+        android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Local music library. Android 13+ uses READ_MEDIA_AUDIO; older
+         Android versions use READ_EXTERNAL_STORAGE (only through API 32). -->
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+
+    <uses-permission
+        android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+    <!-- ===================================================== -->
+    <!-- APPLICATION -->
+    <!-- ===================================================== -->
+
+    <application
+        android:name="${applicationName}"
+        android:label="MusikKu"
+        android:icon="@mipmap/ic_launcher_blue"
+        android:allowBackup="false"
+        android:usesCleartextTraffic="false"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:supportsRtl="true"
+        android:appCategory="audio">
+
+        <!-- ================================================= -->
+        <!-- MAIN FLUTTER ACTIVITY -->
+        <!-- ================================================= -->
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:taskAffinity=""
+            android:resizeableActivity="true"
+            android:supportsPictureInPicture="true"
+            android:theme="@style/LaunchTheme"
+            android:configChanges="
+                orientation|
+                keyboardHidden|
+                keyboard|
+                screenSize|
+                smallestScreenSize|
+                locale|
+                layoutDirection|
+                fontScale|
+                screenLayout|
+                density|
+                uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+
+            <!-- Android 16 pada layar besar dapat mengabaikan request orientasi.
+                 Property ini mempertahankan perilaku orientasi yang diminta Flutter
+                 untuk device yang membutuhkan landscape manual. -->
+            <property
+                android:name="android.window.PROPERTY_COMPAT_ALLOW_RESTRICTED_RESIZABILITY"
+                android:value="true" />
+
+            <meta-data
+                android:name="io.flutter.embedding.android.NormalTheme"
+                android:resource="@style/NormalTheme" />
+
+
+        </activity>
+
+            <!-- Launcher aliases keep one exact MusikKu mark and swap only its color palette. -->
+            <activity-alias
+                android:name=".LauncherBlue"
+                android:targetActivity=".MainActivity"
+                android:label="MusikKu"
+                android:icon="@mipmap/ic_launcher_blue"
+                android:enabled="true"
+                android:exported="true">
+                <intent-filter>
+                    <action android:name="android.intent.action.MAIN" />
+                    <category android:name="android.intent.category.LAUNCHER" />
+                </intent-filter>
+            </activity-alias>
+            <activity-alias
+                android:name=".LauncherBlack"
+                android:targetActivity=".MainActivity"
+                android:label="MusikKu"
+                android:icon="@mipmap/ic_launcher_black"
+                android:enabled="false"
+                android:exported="true">
+                <intent-filter>
+                    <action android:name="android.intent.action.MAIN" />
+                    <category android:name="android.intent.category.LAUNCHER" />
+                </intent-filter>
+            </activity-alias>
+            <activity-alias
+                android:name=".LauncherPurple"
+                android:targetActivity=".MainActivity"
+                android:label="MusikKu"
+                android:icon="@mipmap/ic_launcher_purple"
+                android:enabled="false"
+                android:exported="true">
+                <intent-filter>
+                    <action android:name="android.intent.action.MAIN" />
+                    <category android:name="android.intent.category.LAUNCHER" />
+                </intent-filter>
+            </activity-alias>
+            <activity-alias
+                android:name=".LauncherGreen"
+                android:targetActivity=".MainActivity"
+                android:label="MusikKu"
+                android:icon="@mipmap/ic_launcher_green"
+                android:enabled="false"
+                android:exported="true">
+                <intent-filter>
+                    <action android:name="android.intent.action.MAIN" />
+                    <category android:name="android.intent.category.LAUNCHER" />
+                </intent-filter>
+            </activity-alias>
+            <activity-alias
+                android:name=".LauncherPink"
+                android:targetActivity=".MainActivity"
+                android:label="MusikKu"
+                android:icon="@mipmap/ic_launcher_pink"
+                android:enabled="false"
+                android:exported="true">
+                <intent-filter>
+                    <action android:name="android.intent.action.MAIN" />
+                    <category android:name="android.intent.category.LAUNCHER" />
+                </intent-filter>
+            </activity-alias>
+            <activity-alias
+                android:name=".LauncherOrange"
+                android:targetActivity=".MainActivity"
+                android:label="MusikKu"
+                android:icon="@mipmap/ic_launcher_orange"
+                android:enabled="false"
+                android:exported="true">
+                <intent-filter>
+                    <action android:name="android.intent.action.MAIN" />
+                    <category android:name="android.intent.category.LAUNCHER" />
+                </intent-filter>
+            </activity-alias>
+            <activity-alias
+                android:name=".LauncherTeal"
+                android:targetActivity=".MainActivity"
+                android:label="MusikKu"
+                android:icon="@mipmap/ic_launcher_teal"
+                android:enabled="false"
+                android:exported="true">
+                <intent-filter>
+                    <action android:name="android.intent.action.MAIN" />
+                    <category android:name="android.intent.category.LAUNCHER" />
+                </intent-filter>
+            </activity-alias>
+            <activity-alias
+                android:name=".LauncherSilver"
+                android:targetActivity=".MainActivity"
+                android:label="MusikKu"
+                android:icon="@mipmap/ic_launcher_silver"
+                android:enabled="false"
+                android:exported="true">
+                <intent-filter>
+                    <action android:name="android.intent.action.MAIN" />
+                    <category android:name="android.intent.category.LAUNCHER" />
+                </intent-filter>
+            </activity-alias>
+
+
+        <!-- ================================================= -->
+        <!-- PLAYBACK SERVICE -->
+        <!-- ================================================= -->
+
+        <service
+            android:name=".PlaybackService"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="android.permission.BIND_MEDIA_BROWSER_SERVICE"
+            android:foregroundServiceType="mediaPlayback"
+            android:stopWithTask="false">
+            <intent-filter>
+                <action android:name="android.media.browse.MediaBrowserService" />
+            </intent-filter>
+        </service>
+
+        <service
+            android:name=".FloatingLyricsService"
+            android:enabled="true"
+            android:exported="false" />
+
+        <!-- Foreground priority for the active offline download queue. -->
+        <service
+            android:name=".OfflineDownloadForegroundService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="dataSync"
+            android:stopWithTask="false" />
+
+        <receiver
+            android:name=".MusikKuHomeWidgetProvider"
+            android:label="MusikKu Player"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/musikku_player_widget_info" />
+        </receiver>
+
+        <meta-data
+            android:name="com.google.android.gms.car.application"
+            android:resource="@xml/automotive_app_desc" />
+        <meta-data
+            android:name="com.android.automotive"
+            android:resource="@xml/automotive_app_desc" />
+
+
+
+        <!-- APK updater: FileProvider membagikan hanya file di cache/apk_updates. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+        <!-- ================================================= -->
+        <!-- FLUTTER EMBEDDING -->
+        <!-- ================================================= -->
+
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
+
+    </application>
+
+    <!-- ===================================================== -->
+    <!-- PACKAGE VISIBILITY -->
+    <!-- ===================================================== -->
+
+    <queries>
+
+        <intent>
+
+            <action
+                android:name="android.intent.action.PROCESS_TEXT" />
+
+            <data
+                android:mimeType="text/plain" />
+
+        </intent>
+
+    </queries>
+
+</manifest>

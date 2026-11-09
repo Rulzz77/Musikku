@@ -1,0 +1,1122 @@
+import 'dart:async';
+import 'dart:io';
+
+import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter/services.dart';
+import 'package:youtube_player_iframe/youtube_player_iframe.dart';
+
+import '../models/native_youtube_state.dart';
+import '../models/youtube_player_debug.dart';
+import '../models/youtube_search_result.dart';
+import 'youtube_music_policy.dart';
+
+class NativeYoutubeController {
+  static const MethodChannel _methods =
+      MethodChannel('musikku/youtube_player');
+
+  static const EventChannel _events =
+      EventChannel('musikku/youtube_player/events');
+  static const MethodChannel _newPipe = MethodChannel('musikku/newpipe');
+
+  late final YoutubePlayerController _iosYoutube = YoutubePlayerController(
+    params: const YoutubePlayerParams(
+      showControls: true,
+      showFullscreenButton: true,
+      playsInline: true,
+      privacyEnhancedMode: true,
+      interfaceLanguage: 'id',
+      enableCaption: true,
+      captionLanguage: 'id',
+      videoStateUpdateInterval: 500,
+    ),
+  );
+  YoutubePlayerController get iosYoutubeController => _iosYoutube;
+  StreamSubscription<YoutubePlayerValue>? _iosYoutubeSub;
+  StreamSubscription<YoutubeVideoState>? _iosPositionSub;
+  bool _iosYoutubeSource = false;
+
+  NativeYoutubeState _lastState = const NativeYoutubeState();
+  bool _usingYoutubeAudio = false;
+  String _activeVideoId = ''; // Prevent stale Media3 source controls after resolver errors.
+  // Guard async stream resolution: a slow previous search must never replace
+  // the song the user selected most recently.
+  int _youtubeAudioLoadGeneration = 0;
+  final Set<String> _nativeRemoteGaplessQueueIds = <String>{};
+  int _remoteGaplessQueueGeneration = 0;
+  Future<void> _remoteGaplessAppendQueue = Future<void>.value();
+
+  NativeYoutubeState get lastState => _lastState;
+  /// True when a remote YouTube source is active on this platform.
+  /// Android uses the NewPipe/Media3 audio stream; iOS uses the official
+  /// embedded iFrame player, so HomePage queue/room logic must treat both as
+  /// an active remote source even though iOS is not audio-only.
+  bool get isUsingYoutubeAudio =>
+      _usingYoutubeAudio || (Platform.isIOS && _iosYoutubeSource);
+
+  // ========================================================
+  // PLAYBACK INTENT (optimistic UI)
+  // ========================================================
+  //
+  // Saat user menekan Play/Pause, ikon langsung berubah mengikuti niat user
+  // ([_intent]). Niat ini dihapus begitu native MEMBENARKANNYA (playing /
+  // paused), atau setelah [_intentTimeout]. Event native yang bertentangan
+  // dan datang telat TIDAK boleh mengubah niat, itu penyebab bug ikon
+  // nyangkut di Pause sebelumnya.
+
+  static const Duration _intentTimeout = Duration(milliseconds: 1500);
+
+  bool? _intent;
+  Timer? _intentTimer;
+
+  void _setIntent(bool playing) {
+    _intentTimer?.cancel();
+    _intent = playing;
+
+    // Publish the user intent immediately, before awaiting the native method
+    // channel. The room broadcaster listens to this state stream, so a pause
+    // is sent to guests at button time instead of waiting for the next native
+    // callback or the periodic two-second room snapshot.
+    _emit(_lastState);
+
+    _intentTimer = Timer(_intentTimeout, () {
+      if (_intent == null) {
+        return;
+      }
+
+      _intent = null;
+      _emit(_lastState);
+    });
+  }
+
+  void _clearIntent() {
+    _intentTimer?.cancel();
+    _intentTimer = null;
+    _intent = null;
+  }
+
+  bool _confirmsIntent(bool wantPlaying, NativePlaybackState s) {
+    if (wantPlaying) {
+      return s == NativePlaybackState.playing ||
+          s == NativePlaybackState.buffering;
+    }
+
+    return s == NativePlaybackState.paused ||
+        s == NativePlaybackState.ended ||
+        s == NativePlaybackState.error;
+  }
+
+  // ========================================================
+  // STATE STREAM
+  // ========================================================
+
+  /// Satu stream bersama untuk semua listener (HomePage & FullPlayerPage).
+  /// Hanya ada SATU listener ke EventChannel native; kalau tiap akses membuat
+  /// receiveBroadcastStream() baru, listener baru menggantikan listener lama
+  /// di sisi native dan auto-next di HomePage berhenti.
+  final StreamController<NativeYoutubeState> _out =
+      StreamController<NativeYoutubeState>.broadcast();
+
+  StreamSubscription<dynamic>? _nativeSub;
+
+  Stream<NativeYoutubeState> get stateStream {
+    _nativeSub ??= _events.receiveBroadcastStream().listen(
+      _onNativeEvent,
+      onError: _out.addError,
+    );
+    if (Platform.isIOS) {
+      _iosYoutubeSub ??= _iosYoutube.stream.listen(_onIosYoutubeValue);
+    }
+    return _out.stream;
+  }
+
+  void _onIosYoutubeValue(YoutubePlayerValue value) {
+    if (!_iosYoutubeSource) return;
+    final state = value.hasError
+        ? NativePlaybackState.error
+        : switch (value.playerState) {
+      PlayerState.unStarted => NativePlaybackState.unstarted,
+      PlayerState.ended => NativePlaybackState.ended,
+      PlayerState.playing => NativePlaybackState.playing,
+      PlayerState.paused => NativePlaybackState.paused,
+      PlayerState.buffering => NativePlaybackState.buffering,
+      PlayerState.cued => NativePlaybackState.cued,
+      _ => NativePlaybackState.unknown,
+    };
+    final wanted = _intent;
+    if (wanted != null && _confirmsIntent(wanted, state)) _clearIntent();
+    _emit(NativeYoutubeState(
+      playbackState: state,
+      position: _lastState.position,
+      duration: value.metaData.duration,
+      videoId: value.metaData.videoId.isNotEmpty ? value.metaData.videoId : _activeVideoId,
+      bufferedFraction: _lastState.bufferedFraction,
+    ));
+  }
+
+  void _startIosPositionUpdates() {
+    _iosPositionSub?.cancel();
+    // The controller already emits video-state updates every 500 ms via
+    // YoutubePlayerParams.videoStateUpdateInterval. Use the non-deprecated
+    // stream and forward its current position to the progress updater.
+    _iosPositionSub = _iosYoutube.videoStateStream.listen((videoState) {
+      unawaited(_refreshIosProgress(videoState.position));
+    });
+  }
+
+  Future<void> _refreshIosProgress(Duration position) async {
+    if (!_iosYoutubeSource) return;
+    try {
+      final durationSeconds = await _iosYoutube.duration;
+      final buffered = await _iosYoutube.videoLoadedFraction;
+      final duration = Duration(milliseconds: (durationSeconds * 1000).round());
+      if (!_iosYoutubeSource) return;
+      _emit(NativeYoutubeState(
+        playbackState: _lastState.playbackState,
+        position: position,
+        duration: duration,
+        videoId: _activeVideoId,
+        bufferedFraction: buffered,
+      ));
+    } catch (_) {
+      // Keep the last known state if the WebView is initializing or closing.
+    }
+  }
+
+  void _emit(NativeYoutubeState raw) {
+    final state = NativeYoutubeState(
+      playbackState: raw.playbackState,
+      position: raw.position,
+      duration: raw.duration,
+      videoId: raw.videoId,
+      bufferedFraction: raw.bufferedFraction,
+      bufferedAhead: raw.bufferedAhead,
+      networkRxBytes: raw.networkRxBytes,
+      networkType: raw.networkType,
+      trackTransition: raw.trackTransition,
+      requestedPlaying: _intent,
+    );
+
+    _lastState = state;
+
+    if (!_out.isClosed) {
+      _out.add(state);
+    }
+  }
+
+  void _onNativeEvent(dynamic event) {
+    // Saat iFrame YouTube aktif, abaikan event AVPlayer lama yang mungkin
+    // masih terkirim ketika sumber lokal baru saja dihentikan.
+    if (Platform.isIOS && _iosYoutubeSource) return;
+    if (event is! Map) {
+      _emit(const NativeYoutubeState(
+        playbackState: NativePlaybackState.unknown,
+      ));
+      return;
+    }
+
+    final rawState = (event['state'] ?? event['event'] ?? '').toString();
+    final state = _parseState(rawState);
+    final eventVideoId = event['videoId']?.toString() ?? '';
+    if (event['trackTransition'] == true && eventVideoId.isNotEmpty) {
+      // Media3 has already advanced its native playlist; subsequent Play/
+      // Pause/seek commands must target the newly active local media ID.
+      _activeVideoId = eventVideoId;
+    }
+
+    final position = (event['position'] as num?)?.toDouble() ?? 0.0;
+    final duration = (event['duration'] as num?)?.toDouble() ?? 0.0;
+
+    final wanted = _intent;
+
+    if (wanted != null && _confirmsIntent(wanted, state)) {
+      _clearIntent();
+    }
+
+    _emit(NativeYoutubeState(
+      playbackState: state,
+      position: Duration(milliseconds: (position * 1000).round()),
+      duration: Duration(milliseconds: (duration * 1000).round()),
+      videoId: eventVideoId,
+      bufferedFraction: (event['bufferedFraction'] as num?)?.toDouble() ?? 0.0,
+      bufferedAhead: Duration(
+        milliseconds: ((((event['bufferedAheadSeconds'] as num?)?.toDouble() ?? 0.0).clamp(0.0, 86400.0)) * 1000).round(),
+      ),
+      networkRxBytes: (event['networkRxBytes'] as num?)?.toInt() ?? 0,
+      networkType: event['networkType']?.toString() ?? 'unknown',
+      trackTransition: event['trackTransition'] == true,
+    ));
+  }
+
+  static NativePlaybackState _parseState(String raw) {
+    switch (raw) {
+      case 'unstarted':
+        return NativePlaybackState.unstarted;
+      case 'ended':
+        return NativePlaybackState.ended;
+      case 'playing':
+        return NativePlaybackState.playing;
+      case 'paused':
+        return NativePlaybackState.paused;
+      case 'buffering':
+        return NativePlaybackState.buffering;
+      case 'cued':
+        return NativePlaybackState.cued;
+      case 'error':
+        return NativePlaybackState.error;
+      default:
+        return NativePlaybackState.unknown;
+    }
+  }
+
+  void dispose() {
+    _youtubeAudioLoadGeneration++;
+    _intentTimer?.cancel();
+    _nativeSub?.cancel();
+    _iosYoutubeSub?.cancel();
+    _iosPositionSub?.cancel();
+    if (Platform.isIOS) {
+      unawaited(_iosYoutube.close());
+    }
+    _out.close();
+  }
+
+  // ========================================================
+  // LOAD VIDEO
+  // ========================================================
+
+  Future<void> loadVideoById({
+    required String videoId,
+    double startSeconds = 0.0,
+  }) async {
+    _youtubeAudioLoadGeneration++; // invalidate an older audio extraction
+    _activeVideoId = videoId;
+    _usingYoutubeAudio = false;
+    _setIntent(true);
+
+    final safeStart = startSeconds.isFinite && startSeconds > 0
+        ? startSeconds
+        : 0.0;
+
+    if (Platform.isIOS) {
+      try { await _methods.invokeMethod('pauseActiveAudio'); } catch (_) {}
+      _iosYoutubeSource = true;
+      _emit(NativeYoutubeState(
+        playbackState: NativePlaybackState.buffering,
+        position: Duration(milliseconds: (safeStart * 1000).round()),
+        videoId: videoId,
+      ));
+      await _iosYoutube.loadVideoById(videoId: videoId, startSeconds: safeStart);
+      _startIosPositionUpdates();
+      return;
+    }
+
+    PlatformException? lastError;
+
+    for (var attempt = 0; attempt < 8; attempt++) {
+      try {
+        await _methods.invokeMethod(
+          'loadVideo',
+          {
+            'videoId': videoId,
+            'startSeconds': safeStart,
+          },
+        );
+        return;
+      } on PlatformException catch (e) {
+        if (e.code != 'PLAYER_NOT_READY') {
+          rethrow;
+        }
+
+        lastError = e;
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+      }
+    }
+
+    if (lastError != null) {
+      throw lastError;
+    }
+  }
+
+  /// Eksperimen audio-only untuk track YouTube.
+  /// Resolusi stream dilakukan di native NewPipe bridge; pemutaran audio
+  /// ditangani ExoPlayer di PlaybackService agar kontrol layar kunci dan
+  /// background tidak bergantung pada lifecycle WebView.
+  Future<void> loadYoutubeAudioTrack({
+    required String videoId,
+    required String title,
+    required String artist,
+    required String thumbnailUrl,
+    double startSeconds = 0.0,
+    double durationSeconds = 0.0,
+    bool playing = true,
+    List<Map<String, Object?>> gaplessQueue = const <Map<String, Object?>>[],
+  }) async {
+    if (!RegExp(r'^[A-Za-z0-9_-]{11}$').hasMatch(videoId)) {
+      throw ArgumentError.value(videoId, 'videoId', 'ID YouTube tidak valid');
+    }
+
+    final safeStart = startSeconds.isFinite && startSeconds > 0 ? startSeconds : 0.0;
+    final safeDuration = durationSeconds.isFinite && durationSeconds > 0 ? durationSeconds : 0.0;
+    if (Platform.isIOS) {
+      ++_youtubeAudioLoadGeneration;
+      try { await _methods.invokeMethod('pauseActiveAudio'); } catch (_) {}
+      _activeVideoId = videoId;
+      _usingYoutubeAudio = false;
+      _iosYoutubeSource = true;
+      _setIntent(playing);
+      _emit(NativeYoutubeState(
+        playbackState: playing ? NativePlaybackState.buffering : NativePlaybackState.cued,
+        position: Duration(milliseconds: (safeStart * 1000).round()),
+        duration: Duration(milliseconds: (safeDuration * 1000).round()),
+        videoId: videoId,
+      ));
+      if (playing) {
+        await _iosYoutube.loadVideoById(videoId: videoId, startSeconds: safeStart);
+      } else {
+        await _iosYoutube.cueVideoById(videoId: videoId, startSeconds: safeStart);
+      }
+      _startIosPositionUpdates();
+      return;
+    }
+
+    final generation = ++_youtubeAudioLoadGeneration;
+    _remoteGaplessQueueGeneration++;
+    _nativeRemoteGaplessQueueIds.clear();
+    _activeVideoId = videoId;
+    _usingYoutubeAudio = false;
+    _setIntent(playing);
+
+    // Audio-only: pause the previous source first. Do not load/prepare a
+    // YouTube video surface, which was the source of overlapping sound and
+    // state events that could cause the queue to skip unexpectedly.
+    try {
+      await _methods.invokeMethod('pauseActiveAudio');
+    } catch (_) {}
+
+    _emit(NativeYoutubeState(
+      playbackState: NativePlaybackState.buffering,
+      position: Duration(milliseconds: (safeStart * 1000).round()),
+      duration: Duration(milliseconds: (safeDuration * 1000).round()),
+      videoId: videoId,
+    ));
+
+    Map<String, dynamic>? resolved;
+    Object? resolveFailure;
+    for (var attempt = 0; attempt < 2; attempt++) {
+      if (generation != _youtubeAudioLoadGeneration) return;
+      try {
+        resolved = await _newPipe.invokeMapMethod<String, dynamic>(
+          'resolveAudio',
+          {'videoId': videoId},
+        );
+        resolveFailure = null;
+        break;
+      } catch (error) {
+        if (generation != _youtubeAudioLoadGeneration) return;
+        resolveFailure = error;
+        if (attempt == 0) {
+          await Future<void>.delayed(const Duration(milliseconds: 400));
+        }
+      }
+    }
+
+    if (generation != _youtubeAudioLoadGeneration) return;
+    if (resolveFailure != null) {
+      _usingYoutubeAudio = false;
+      _clearIntent();
+      _emit(NativeYoutubeState(
+        playbackState: NativePlaybackState.error,
+        position: Duration(milliseconds: (safeStart * 1000).round()),
+        duration: Duration(milliseconds: (safeDuration * 1000).round()),
+        videoId: videoId,
+      ));
+      throw resolveFailure;
+    }
+
+    final streamUrl = resolved?['streamUrl']?.toString().trim() ?? '';
+    if (streamUrl.isEmpty || !streamUrl.startsWith('https://')) {
+      _usingYoutubeAudio = false;
+      _clearIntent();
+      _emit(NativeYoutubeState(
+        playbackState: NativePlaybackState.error,
+        position: Duration(milliseconds: (safeStart * 1000).round()),
+        duration: Duration(milliseconds: (safeDuration * 1000).round()),
+        videoId: videoId,
+      ));
+      throw PlatformException(
+        code: 'AUDIO_STREAM_UNAVAILABLE',
+        message: 'Sumber audio tidak tersedia untuk lagu ini.',
+      );
+    }
+
+    final rawHeaders = resolved?['headers'];
+    final headers = <String, String>{};
+    if (rawHeaders is Map) {
+      for (final entry in rawHeaders.entries) {
+        final key = entry.key?.toString().trim() ?? '';
+        final value = entry.value?.toString().trim() ?? '';
+        if (key.isNotEmpty && value.isNotEmpty) headers[key] = value;
+      }
+    }
+
+    try {
+      if (generation != _youtubeAudioLoadGeneration) return;
+      _usingYoutubeAudio = true;
+      await _methods.invokeMethod('loadYoutubeAudio', {
+        'videoId': videoId,
+        'title': title,
+        'artist': artist,
+        'thumbnailUrl': thumbnailUrl,
+        'streamUrl': streamUrl,
+        'headers': headers,
+        'startSeconds': safeStart,
+        'durationSeconds': safeDuration,
+        'playing': playing,
+      });
+      if (generation == _youtubeAudioLoadGeneration) {
+        _usingYoutubeAudio = true;
+        if (gaplessQueue.isNotEmpty) {
+          unawaited(_resolveAndAppendRemoteGaplessQueue(
+            currentVideoId: videoId,
+            candidates: gaplessQueue,
+            generation: generation,
+          ));
+        }
+      }
+    } catch (_) {
+      if (generation == _youtubeAudioLoadGeneration) {
+        _usingYoutubeAudio = false;
+        _clearIntent();
+        _emit(NativeYoutubeState(
+          playbackState: NativePlaybackState.error,
+          position: Duration(milliseconds: (safeStart * 1000).round()),
+          duration: Duration(milliseconds: (safeDuration * 1000).round()),
+          videoId: videoId,
+        ));
+      }
+      rethrow;
+    }
+  }
+
+  /// Add a rolling window of upcoming remote items to the same Media3 player.
+  /// Calls are serialized so a transition cannot race an earlier resolver job.
+  Future<void> appendRemoteGaplessSuccessors({
+    required String currentVideoId,
+    required List<Map<String, Object?>> candidates,
+  }) async {
+    if (!Platform.isAndroid || !_usingYoutubeAudio || candidates.isEmpty) return;
+    final generation = _youtubeAudioLoadGeneration;
+    final queueGeneration = _remoteGaplessQueueGeneration;
+    final previous = _remoteGaplessAppendQueue;
+    final next = previous.then((_) => _performRemoteGaplessAppend(
+          currentVideoId: currentVideoId,
+          candidates: candidates,
+          generation: generation,
+          queueGeneration: queueGeneration,
+          maximumNewTracks: 6,
+        ));
+    _remoteGaplessAppendQueue = next.catchError((Object error, StackTrace stackTrace) {
+      debugPrint('REMOTE GAPLESS APPEND QUEUE ERROR: $error');
+    });
+    await next;
+  }
+
+  Future<void> _resolveAndAppendRemoteGaplessQueue({
+    required String currentVideoId,
+    required List<Map<String, Object?>> candidates,
+    required int generation,
+  }) async {
+    final queueGeneration = _remoteGaplessQueueGeneration;
+    final previous = _remoteGaplessAppendQueue;
+    final next = previous.then((_) => _performRemoteGaplessAppend(
+          currentVideoId: currentVideoId,
+          candidates: candidates,
+          generation: generation,
+          queueGeneration: queueGeneration,
+          maximumNewTracks: 6,
+        ));
+    _remoteGaplessAppendQueue = next.catchError((Object error, StackTrace stackTrace) {
+      debugPrint('REMOTE GAPLESS INITIAL QUEUE ERROR: $error');
+    });
+    await next;
+  }
+
+  Future<void> _performRemoteGaplessAppend({
+    required String currentVideoId,
+    required List<Map<String, Object?>> candidates,
+    required int generation,
+    required int queueGeneration,
+    required int maximumNewTracks,
+  }) async {
+    if (generation != _youtubeAudioLoadGeneration ||
+        queueGeneration != _remoteGaplessQueueGeneration ||
+        !_usingYoutubeAudio ||
+        candidates.isEmpty) {
+      return;
+    }
+
+    final resolvedTracks = <Map<String, Object?>>[];
+    final resolvedIds = <String>[];
+    for (final candidate in candidates) {
+      if (generation != _youtubeAudioLoadGeneration ||
+          queueGeneration != _remoteGaplessQueueGeneration) {
+        return;
+      }
+      if (resolvedTracks.length >= maximumNewTracks) break;
+      final videoId = candidate['videoId']?.toString().trim() ?? '';
+      if (!RegExp(r'^[A-Za-z0-9_-]{11}$').hasMatch(videoId) ||
+          videoId == currentVideoId ||
+          _nativeRemoteGaplessQueueIds.contains(videoId) ||
+          resolvedIds.contains(videoId)) {
+        continue;
+      }
+      final title = candidate['title']?.toString().trim() ?? '';
+      final artist = candidate['artist']?.toString().trim() ?? '';
+      final rawDuration = candidate['durationSeconds'];
+      final durationSeconds = rawDuration is num && rawDuration.isFinite
+          ? rawDuration.toDouble()
+          : 0.0;
+      final policyCandidate = YoutubeSearchResult(
+        videoId: videoId,
+        title: title,
+        channelTitle: artist,
+        thumbnailUrl: candidate['thumbnailUrl']?.toString() ?? '',
+        durationSeconds: durationSeconds > 0 ? durationSeconds : null,
+      );
+      if (!YoutubeMusicPolicy.isMusicCandidate(policyCandidate)) {
+        debugPrint('GAPLESS: reject non-track successor $videoId | $title');
+        continue;
+      }
+      try {
+        final resolved = await _newPipe.invokeMapMethod<String, dynamic>(
+          'resolveAudio',
+          {'videoId': videoId},
+        ).timeout(const Duration(seconds: 18));
+        if (generation != _youtubeAudioLoadGeneration ||
+            queueGeneration != _remoteGaplessQueueGeneration) {
+          return;
+        }
+        final streamUrl = resolved?['streamUrl']?.toString().trim() ?? '';
+        final uri = Uri.tryParse(streamUrl);
+        final host = uri?.host.toLowerCase() ?? '';
+        final trusted = uri != null &&
+            uri.scheme == 'https' &&
+            (host == 'googlevideo.com' || host.endsWith('.googlevideo.com')) &&
+            (uri.port == -1 || uri.port == 443) &&
+            uri.userInfo.isEmpty &&
+            uri.fragment.isEmpty;
+        if (!trusted) break;
+
+        final safeHeaders = <String, String>{};
+        final rawHeaders = resolved?['headers'];
+        if (rawHeaders is Map) {
+          for (final entry in rawHeaders.entries) {
+            final key = entry.key?.toString().trim() ?? '';
+            final value = entry.value?.toString().trim() ?? '';
+            if (!const {'user-agent', 'referer', 'origin'}
+                    .contains(key.toLowerCase()) ||
+                value.isEmpty ||
+                value.length > 2048 ||
+                value.contains('\r') ||
+                value.contains('\n')) {
+              continue;
+            }
+            safeHeaders[key] = value;
+          }
+        }
+        final safeDurationSeconds = durationSeconds.clamp(0.0, 86400.0);
+        resolvedTracks.add(<String, Object?>{
+          'videoId': videoId,
+          'title': title.isEmpty ? 'Tanpa judul' : title,
+          'artist': artist,
+          'thumbnailUrl': candidate['thumbnailUrl']?.toString() ?? '',
+          'streamUrl': streamUrl,
+          'headers': safeHeaders,
+          'durationSeconds': safeDurationSeconds,
+        });
+        resolvedIds.add(videoId);
+      } catch (error) {
+        // Stop at the first unavailable successor to preserve playlist order.
+        debugPrint('REMOTE GAPLESS PRELOAD STOPPED ($videoId): $error');
+        break;
+      }
+    }
+
+    if (generation != _youtubeAudioLoadGeneration ||
+        queueGeneration != _remoteGaplessQueueGeneration ||
+        resolvedTracks.isEmpty) {
+      return;
+    }
+    try {
+      final result = await _methods.invokeMapMethod<String, dynamic>(
+        'appendYoutubeGaplessQueue',
+        <String, Object?>{
+          'currentVideoId': currentVideoId,
+          'tracks': resolvedTracks,
+        },
+      ).timeout(const Duration(seconds: 20));
+      if (generation != _youtubeAudioLoadGeneration ||
+          queueGeneration != _remoteGaplessQueueGeneration ||
+          result == null) {
+        return;
+      }
+      final appended = (result['appended'] as num?)?.toInt() ?? 0;
+      final acceptedCount = appended.clamp(0, resolvedIds.length).toInt();
+      for (final id in resolvedIds.take(acceptedCount)) {
+        _nativeRemoteGaplessQueueIds.add(id);
+      }
+    } catch (error) {
+      debugPrint('REMOTE GAPLESS QUEUE NOT ATTACHED: $error');
+    }
+  }
+
+  // ========================================================
+  // LOCAL MUSIC
+  // ========================================================
+
+  Future<void> loadLocalTrack({
+    required String mediaId,
+    required String title,
+    required String artist,
+    required String mediaUri,
+    double startSeconds = 0.0,
+    double durationSeconds = 0.0,
+    List<Map<String, String>> gaplessQueue = const <Map<String, String>>[],
+  }) async {
+    _youtubeAudioLoadGeneration++; // invalidate a pending YouTube resolver
+    if (Platform.isIOS && _iosYoutubeSource) {
+      await _iosYoutube.pauseVideo();
+      _iosPositionSub?.cancel();
+    }
+    _iosYoutubeSource = false;
+    _activeVideoId = 'local:$mediaId';
+    _usingYoutubeAudio = false;
+    _setIntent(true);
+    await _methods.invokeMethod(
+      'loadLocal',
+      {
+        'mediaId': mediaId,
+        'title': title,
+        'artist': artist,
+        'mediaUri': mediaUri,
+        'startSeconds': startSeconds,
+        'durationSeconds': durationSeconds,
+        'gaplessQueue': gaplessQueue,
+      },
+    );
+  }
+
+  /// Remove only future native playlist entries; keep the current track running.
+  Future<void> clearNativeGaplessQueue() async {
+    if (!Platform.isAndroid) return;
+    _remoteGaplessQueueGeneration++;
+    _nativeRemoteGaplessQueueIds.clear();
+    try {
+      await _methods.invokeMethod<void>('clearNativeGaplessQueue');
+    } catch (_) {
+      // Older native builds can safely continue with Flutter auto-next.
+    }
+  }
+
+  // ========================================================
+  // PLAY
+  // ========================================================
+
+  /// True only when Android's live Media3 service owns this exact track.
+  /// A persisted Flutter snapshot can outlive the native foreground service.
+  Future<bool> isNativePlaybackReady(String videoId) async {
+    if (!Platform.isAndroid) return true;
+    final id = videoId.trim();
+    if (id.isEmpty) return false;
+    try {
+      return await _methods.invokeMethod<bool>(
+            'isPlaybackServiceTrackReady',
+            {'videoId': id},
+          ) ??
+          false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> playVideo() async {
+    _setIntent(true);
+    if (Platform.isIOS && _iosYoutubeSource) {
+      await _iosYoutube.playVideo();
+      return;
+    }
+    await _methods.invokeMethod('play', {
+      'videoId': _activeVideoId,
+      // Native Media3 owns YouTube-audio and local tracks. Embedded watch/video
+      // playback remains allowed to use YoutubePlatformView.
+      'audioOnly': _usingYoutubeAudio || _activeVideoId.startsWith('local:'),
+    });
+  }
+
+  // ========================================================
+  // PAUSE
+  // ========================================================
+
+  Future<void> pauseVideo() async {
+    _setIntent(false);
+    if (Platform.isIOS && _iosYoutubeSource) {
+      await _iosYoutube.pauseVideo();
+      return;
+    }
+    await _methods.invokeMethod('pause', {'videoId': _activeVideoId});
+  }
+
+  Future<void> setPlayerUiVisible(bool visible) async {
+    try {
+      await _methods.invokeMethod('setPlayerUiVisible', {'visible': visible});
+    } catch (_) {
+      // Versi native lama tetap boleh berjalan tanpa kontrol UI tambahan.
+    }
+  }
+
+  /// 0 = mati, 1 = Hemat, 2 = Super hemat. Native menurunkan kualitas saat
+  /// memakai paket data dan saat aplikasi di background (video tak terlihat).
+  Future<void> setDataSaverLevel(int level) async {
+    try {
+      await _methods.invokeMethod('setDataSaverLevel', {'level': level});
+    } catch (_) {
+      // Versi native lama tetap boleh berjalan tanpa fitur ini.
+    }
+  }
+
+  Future<void> setPlaybackQuality(String quality) async {
+    await _methods.invokeMethod(
+      'setPlaybackQuality',
+      {'quality': quality},
+    );
+  }
+
+  Future<void> setCaptionSettings({
+    required bool enabled,
+    String language = 'id',
+  }) async {
+    await _methods.invokeMethod(
+      'setCaptionSettings',
+      {
+        'enabled': enabled,
+        'language': language.trim().isEmpty ? 'id' : language.trim(),
+      },
+    );
+  }
+
+  Future<List<Map<String, String>>> getHealthEvents() async {
+    try {
+      final raw = await _methods.invokeMethod<dynamic>('getHealthEvents');
+      if (raw is List) {
+        return raw.whereType<Map>().map((item) => Map<String, String>.from(
+          item.map((key, value) => MapEntry(key.toString(), value.toString())),
+        )).toList(growable: false);
+      }
+    } catch (_) {}
+    return const <Map<String, String>>[];
+  }
+
+  Future<void> clearHealthEvents() async {
+    try {
+      await _methods.invokeMethod('clearHealthEvents');
+    } catch (_) {}
+  }
+
+  Future<String> getNetworkType() async {
+    try {
+      final value = await _methods.invokeMethod<String>('getNetworkType');
+      return value?.isNotEmpty == true ? value! : 'unknown';
+    } catch (_) {
+      return 'unknown';
+    }
+  }
+
+  Future<YoutubePlayerDebugSnapshot> getPlayerDebugSnapshot() async {
+    try {
+      final raw = await _methods.invokeMethod<dynamic>(
+        'getPlayerDebugSnapshot',
+      );
+
+      if (raw is Map) {
+        return YoutubePlayerDebugSnapshot.fromMap(raw);
+      }
+
+      return const YoutubePlayerDebugSnapshot(error: 'invalid_response');
+    } on PlatformException catch (e) {
+      return YoutubePlayerDebugSnapshot(
+        error: '${e.code}: ${e.message ?? 'unknown'}',
+      );
+    } catch (e) {
+      return YoutubePlayerDebugSnapshot(error: e.toString());
+    }
+  }
+
+  /// zoom 1.0 = normal; >1.0 memperbesar video agar tepinya terpotong.
+  Future<void> setVideoCrop(double zoom) async {
+    try {
+      await _methods.invokeMethod('setVideoCrop', {'zoom': zoom});
+    } catch (_) {
+      // Build native lama tanpa fitur crop tetap berjalan normal.
+    }
+  }
+
+  Future<void> setLandscapeSystemUi(bool immersive) async {
+    try {
+      await _methods.invokeMethod('setLandscapeSystemUi', {'immersive': immersive});
+    } catch (_) {
+      // Fallback aman untuk build native lama.
+    }
+  }
+
+
+  // ========================================================
+  // SEEK
+  // ========================================================
+
+  Future<void> seekTo({
+    required double seconds,
+  }) async {
+    if (Platform.isIOS && _iosYoutubeSource) {
+      await _iosYoutube.seekTo(seconds: seconds, allowSeekAhead: true);
+      return;
+    }
+    await _methods.invokeMethod(
+      'seek',
+      {
+        'seconds': seconds,
+        'videoId': _activeVideoId,
+      },
+    );
+  }
+
+  // ========================================================
+  // AUDIO VOLUME / EFFECTS
+  // ========================================================
+
+  Future<void> setVolume(int percent) async {
+    final safe = percent.clamp(0, 100);
+    if (Platform.isIOS && _iosYoutubeSource) {
+      await _iosYoutube.setVolume(safe.toInt());
+      return;
+    }
+    await _methods.invokeMethod('setVolume', {'percent': safe, 'videoId': _activeVideoId});
+  }
+
+  Future<bool> setEqualizerPreset(String preset) async {
+    final normalizedPreset = preset.trim().toLowerCase();
+
+    // These profiles use the existing five-band native EQ bridge. They are
+    // tonal optimizations only: they do not decode Dolby Atmos or create
+    // multichannel/virtual-surround audio.
+    if (normalizedPreset == 'dangdut') {
+      return setEqualizerBands(const <double>[3.0, 2.0, 0.5, 2.0, 1.0]);
+    }
+    if (normalizedPreset == 'speaker clarity') {
+      // Small phone speakers have limited sub-bass. A gentle low-band cut
+      // leaves headroom while the presence bands help vocals and details.
+      return setEqualizerBands(const <double>[-1.5, 0.5, 1.5, 2.0, 1.0]);
+    }
+
+    final result = await _methods.invokeMethod<dynamic>(
+      'setEqualizerPreset',
+      {'preset': preset},
+    );
+
+    return result == true;
+  }
+
+  /// Apply five manual EQ bands in dB (-12..+12). Android may report false
+  /// when the current device/output mix does not support an output EQ.
+  Future<bool> setEqualizerBands(List<double> bandsDb) async {
+    final safeBands = List<double>.generate(
+      5,
+      (index) => (index < bandsDb.length ? bandsDb[index] : 0.0)
+          .clamp(-12.0, 12.0)
+          .toDouble(),
+    );
+    final result = await _methods.invokeMethod<dynamic>(
+      'setEqualizerBands',
+      {'bandsDb': safeBands},
+    );
+    return result == true;
+  }
+
+  // ========================================================
+  // CURRENT TIME
+  // ========================================================
+
+  Future<double> get currentTime async {
+    if (Platform.isIOS && _iosYoutubeSource) {
+      return _iosYoutube.currentTime;
+    }
+    final value =
+        await _methods.invokeMethod<dynamic>(
+      'currentTime',
+      {'videoId': _activeVideoId},
+    );
+
+    return (value as num?)?.toDouble() ?? 0.0;
+  }
+
+  // ========================================================
+  // NATIVE PERSISTED SNAPSHOT
+  // ========================================================
+
+  Future<Map<String, dynamic>> loadNativePlaybackSnapshot() async {
+    final value = await _methods.invokeMethod<dynamic>(
+      'getNativePlaybackSnapshot',
+    );
+
+    if (value is! Map) {
+      return <String, dynamic>{};
+    }
+
+    return Map<String, dynamic>.from(value);
+  }
+
+
+  Future<void> exportBackup(String rawJson) async {
+    await _methods.invokeMethod('exportBackup', {'json': rawJson});
+  }
+
+  Future<String?> importBackup() async {
+    final value = await _methods.invokeMethod<dynamic>('importBackup');
+    return value?.toString();
+  }
+
+  // ========================================================
+  // START MEDIA NOTIFICATION
+  // ========================================================
+
+  Future<void> startNotification({
+    required String videoId,
+    required String title,
+    required String artist,
+    String thumbnailUrl = '',
+    String mediaUri = '',
+    required bool playing,
+    Duration position = Duration.zero,
+    Duration duration = Duration.zero,
+  }) async {
+    await _methods.invokeMethod(
+      'startNotification',
+      {
+        'videoId': videoId,
+        'title': title,
+        'artist': artist,
+        'thumbnailUrl': thumbnailUrl,
+        'mediaUri': mediaUri,
+        'playing': playing,
+        'positionSeconds': position.inMilliseconds / 1000.0,
+        'durationSeconds': duration.inMilliseconds / 1000.0,
+      },
+    );
+  }
+
+  // ========================================================
+  // UPDATE MEDIA NOTIFICATION
+  // ========================================================
+
+  Future<void> updateNotification({
+    required String videoId,
+    required String title,
+    required String artist,
+    String thumbnailUrl = '',
+    String mediaUri = '',
+    required bool playing,
+    Duration position = Duration.zero,
+    Duration duration = Duration.zero,
+  }) async {
+    await _methods.invokeMethod(
+      'updateNotification',
+      {
+        'videoId': videoId,
+        'title': title,
+        'artist': artist,
+        'thumbnailUrl': thumbnailUrl,
+        'mediaUri': mediaUri,
+        'playing': playing,
+        'positionSeconds': position.inMilliseconds / 1000.0,
+        'durationSeconds': duration.inMilliseconds / 1000.0,
+      },
+    );
+  }
+
+  // ========================================================
+  // STOP MEDIA NOTIFICATION
+  // ========================================================
+
+  Future<void> stopNotification() async {
+    await _methods.invokeMethod(
+      'stopNotification',
+    );
+  }
+
+  // ========================================================
+  // MEDIA CONTROL CALLBACK
+  // ========================================================
+
+  void setNotificationCallbacks({
+    required Future<void> Function() onNext,
+    required Future<void> Function() onPrevious,
+    required Future<void> Function() onPlayPause,
+    required Future<void> Function() onStop,
+    void Function(bool pipEnabled)? onPipChanged,
+    void Function()? onPipWillEnter,
+    Future<void> Function(String? videoId, double? positionSeconds, bool shouldPlay)? onYoutubeAudioPlaybackError,
+    void Function(String videoId, String error)? onYoutubeEmbedError,
+  }) {
+    _methods.setMethodCallHandler(
+      (call) async {
+        switch (call.method) {
+          case 'notificationNext':
+            await onNext();
+            break;
+
+          case 'notificationPrevious':
+            await onPrevious();
+            break;
+
+          case 'notificationPlayPause':
+            await onPlayPause();
+            break;
+
+          case 'notificationStop':
+            await onStop();
+            break;
+
+          case 'youtubeAudioPlaybackError':
+            final args = call.arguments;
+            final map = args is Map ? args : const <Object?, Object?>{};
+            final failedVideoId = map['videoId']?.toString();
+            final rawPosition = map['positionSeconds'];
+            final failedPosition = rawPosition is num ? rawPosition.toDouble() : null;
+            final shouldPlay = map['shouldPlay'] == true;
+            await onYoutubeAudioPlaybackError?.call(failedVideoId, failedPosition, shouldPlay);
+            break;
+
+          case 'youtubeEmbedError':
+            final args = call.arguments;
+            final map = args is Map ? args : const <Object?, Object?>{};
+            onYoutubeEmbedError?.call(
+              map['videoId']?.toString() ?? '',
+              map['error']?.toString() ?? 'unknown',
+            );
+            break;
+
+          case 'youtubePipWillEnter':
+            onPipWillEnter?.call();
+            break;
+
+          case 'youtubePipChanged':
+            onPipChanged?.call(call.arguments == true);
+            break;
+
+
+        }
+
+        return null;
+      },
+    );
+  }
+}

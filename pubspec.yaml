@@ -1,0 +1,47 @@
+name: flutter_application_5
+description: "MusikKu - pemutar musik lintas platform."
+publish_to: 'none'
+version: 5.7.4+57
+environment:
+  sdk: ^3.13.4
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  crypto: ^3.0.7
+  audio_service: ^0.18.19
+  http: ^1.5.0
+  html: ^0.15.7
+  image_picker: 1.1.2
+  path_provider: ^2.1.6
+  shared_preferences: ^2.5.5
+  supabase_flutter: ^2.18.3
+  youtube_explode_dart: ^3.1.0
+  youtube_player_iframe: ^6.0.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_launcher_icons: ^0.14.4
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/icon/app_icon.png
+    - assets/icon/launcher/ic_launcher_blue.png
+    - assets/icon/launcher/ic_launcher_black.png
+    - assets/icon/launcher/ic_launcher_purple.png
+    - assets/icon/launcher/ic_launcher_green.png
+    - assets/icon/launcher/ic_launcher_pink.png
+    - assets/icon/launcher/ic_launcher_orange.png
+    - assets/icon/launcher/ic_launcher_teal.png
+    - assets/icon/launcher/ic_launcher_silver.png
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon/app_icon.png"
+  min_sdk_android: 21

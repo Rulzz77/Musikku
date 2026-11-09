@@ -1,0 +1,788 @@
+part of '../home_page.dart';
+
+// Extension ini bagian dari _HomePageState; setState aman dipakai di sini.
+// ignore_for_file: invalid_use_of_protected_member
+
+/// Antrean, shuffle pool, dan menu video.
+extension _HomeQueue on _HomePageState {
+  String? get _shuffleMusicStyle {
+    if (_activeSource == _ListSource.favorites ||
+        _activeSource == _ListSource.playlist ||
+        _activeSource == _ListSource.local ||
+        _activeSource == _ListSource.collection) {
+      return null; // Jangan memaksakan filter genre pada playlist/koleksi yang sudah dipilih.
+    }
+
+    final query = _activeSource == _ListSource.radio && _radio.hasSeed
+        ? _radio.seed
+        : _lastSearchQuery;
+    return MusicStyleMatcher.styleForContext(
+      query: query,
+      currentVideo: _currentVideo,
+    );
+  }
+
+  String? get _shuffleMusicLanguage {
+    if (_activeSource == _ListSource.favorites ||
+        _activeSource == _ListSource.playlist ||
+        _activeSource == _ListSource.local ||
+        _activeSource == _ListSource.collection) {
+      return null;
+    }
+    final query = _activeSource == _ListSource.radio && _radio.hasSeed
+        ? _radio.seed
+        : _lastSearchQuery;
+    return MusicStyleMatcher.languageForContext(
+      query: query,
+      currentVideo: _currentVideo,
+    );
+  }
+
+  void _prepareShufflePool({
+    bool excludeCurrent = true,
+    YoutubeSearchResult? sourceVideo,
+  }) {
+    final style = _shuffleMusicStyle;
+    final language = _shuffleMusicLanguage;
+    final reference = sourceVideo ?? _currentVideo;
+    final bool? localSource = reference?.isLocal;
+    final allowMixedPlaylistSources =
+        _activeSource == _ListSource.playlist && _activePlaylistId != null;
+    _shufflePool = _activeList.where((video) {
+      if (!PlaybackSourcePolicy.isAllowedForAutomaticNext(video)) {
+        return false;
+      }
+      // A user-authored playlist is an explicit selection; dislike should not
+      // silently remove one of its tracks from that fixed playback list.
+      if (_activeSource != _ListSource.playlist &&
+          _dislikedIds.contains(video.videoId)) {
+        return false;
+      }
+      if (!allowMixedPlaylistSources &&
+          localSource != null &&
+          video.isLocal != localSource) {
+        return false;
+      }
+      return MusicStyleMatcher.isCompatible(
+        video: video,
+        targetStyle: style,
+        targetLanguage: language,
+        allowCrossLanguage: _activeSource == _ListSource.radio && !_radio.locksLanguage,
+      );
+    }).toList();
+
+    final excludedId = sourceVideo?.videoId ?? _currentVideo?.videoId;
+    if (excludeCurrent && excludedId != null && excludedId.isNotEmpty) {
+      _shufflePool.removeWhere((video) => video.videoId == excludedId);
+    }
+  }
+
+  /// Queue boleh berisi sumber campuran karena item dapat ditambahkan manual.
+  /// Saat Shuffle aktif, hanya ambil item dari sumber yang sedang diputar;
+  /// item dari sumber lain tetap menunggu di antrean.
+  QueueItem? _takeQueueItemForCurrentMode({required bool shuffle}) {
+    if (_queueManager.isEmpty) return null;
+    if (!shuffle) return _queueManager.takeFirst();
+
+    final current = _currentVideo;
+    if (current == null) return _queueManager.takeRandom();
+
+    // Utamakan lagu dengan artis berbeda dari yang baru diputar (batas jendela
+    // + jeda minimal, sama seperti Radio). Kalau semua kandidat satu artis,
+    // preferArtistVariety mengembalikan semuanya sehingga Next tidak mati.
+    final sameSource = _queueManager.items
+        .map((item) => item.video)
+        .where((video) => video.isLocal == current.isLocal)
+        .toList(growable: false);
+    final varietyIds = _radio
+        .preferArtistVariety(sameSource)
+        .map((video) => video.videoId)
+        .toSet();
+
+    bool matchesSource(YoutubeSearchResult video) =>
+        video.isLocal == current.isLocal && varietyIds.contains(video.videoId);
+
+    if (_playerUiState.value.isSmartShuffle) {
+      return _queueManager.takeSmartMatching(
+        matches: matchesSource,
+        score: (video) => _safeQueueScore(
+          video,
+          currentArtist: current.channelTitle,
+        ),
+      );
+    }
+    return _queueManager.takeRandomMatching(matchesSource);
+  }
+
+  double _smartShuffleScore(
+    YoutubeSearchResult video, {
+    String? currentArtist,
+    String? targetStyle,
+    String? targetLanguage,
+    YoutubeSearchResult? referenceVideo,
+  }) {
+    final stat = _listeningStatsById[video.videoId];
+    // Artis dibaca dari judul + channel (bukan nama channel saja).
+    final artistKey = MusicStyleMatcher.artistKeyFor(video);
+    final activeVideo = referenceVideo ?? _currentVideo;
+    final activeArtistKey = activeVideo == null
+        ? (currentArtist ?? '')
+        : MusicStyleMatcher.artistKeyFor(activeVideo);
+    var artistPlayCount = 0;
+    var artistSkipCount = 0;
+    var artistHasLikedTrack = false;
+
+    if (artistKey.isNotEmpty) {
+      for (final entry in _listeningStatsById.entries) {
+        final entryArtist = MusicStyleMatcher.artistKeyFromParts(
+          title: entry.value.title,
+          channelTitle: entry.value.artist,
+        );
+        if (entryArtist != artistKey) {
+          continue;
+        }
+        artistPlayCount += entry.value.playCount;
+        artistSkipCount += entry.value.skipCount;
+        if (_likedIds.contains(entry.key)) artistHasLikedTrack = true;
+      }
+    }
+
+    final effectiveTargetStyle = targetStyle ??
+        _shuffleMusicStyle ??
+        (activeVideo == null ? null : MusicStyleMatcher.styleFromVideo(activeVideo));
+    final effectiveTargetLanguage = targetLanguage ??
+        _shuffleMusicLanguage ??
+        (activeVideo == null ? null : MusicStyleMatcher.languageFromVideo(activeVideo));
+    final musicalSimilarity = activeVideo == null
+        ? 0.0
+        : MusicStyleMatcher.radioSimilarityScore(
+            video: video,
+            targetStyle: effectiveTargetStyle,
+            targetLanguage: effectiveTargetLanguage,
+          );
+
+    return SmartQueueScorer.score(
+          video: video,
+          stat: stat,
+          isLiked: _likedIds.contains(video.videoId),
+          isDisliked: _dislikedIds.contains(video.videoId),
+          currentArtist: activeArtistKey,
+          candidateArtist: artistKey,
+          artistPlayCount: artistPlayCount,
+          artistSkipCount: artistSkipCount,
+          artistHasLikedTrack: artistHasLikedTrack,
+          musicalSimilarity: musicalSimilarity,
+          currentVideo: activeVideo,
+          recentArtistKeys: _radio.recentSelectionArtistKeys,
+        ) +
+        _random.nextDouble() * 1.25;
+  }
+
+  double _safeQueueScore(
+    YoutubeSearchResult video, {
+    String? currentArtist,
+    String? targetStyle,
+    String? targetLanguage,
+    YoutubeSearchResult? referenceVideo,
+  }) {
+    final value = _smartShuffleScore(
+      video,
+      currentArtist: currentArtist,
+      targetStyle: targetStyle,
+      targetLanguage: targetLanguage,
+      referenceVideo: referenceVideo,
+    );
+    return value.isFinite ? value : -1000000.0;
+  }
+
+  /// Pilih kandidat rekomendasi dari shortlist berbobot. Dipakai juga oleh
+  /// fallback cache agar auto-next tidak berubah menjadi pemilihan acak murni.
+  YoutubeSearchResult? _pickSmartWeightedCandidate(
+    List<YoutubeSearchResult> candidates, {
+    YoutubeSearchResult? currentVideo,
+    String? targetStyle,
+    String? targetLanguage,
+  }) {
+    if (candidates.isEmpty) return null;
+    final current = currentVideo ?? _currentVideo;
+    final scored = candidates
+        .map((video) => (
+              video: video,
+              score: _safeQueueScore(
+                video,
+                currentArtist: current?.channelTitle,
+                targetStyle: targetStyle,
+                targetLanguage: targetLanguage,
+                referenceVideo: current,
+              ),
+            ))
+        .toList()
+      ..sort((a, b) => b.score.compareTo(a.score));
+
+    final shortlist = scored.take(8).toList(growable: false);
+    if (shortlist.isEmpty) return null;
+    final bestScore = shortlist.first.score;
+    final weights = shortlist
+        .map((item) => exp(
+              ((item.score - bestScore) / 7.0).clamp(-6.0, 0.0).toDouble(),
+            ))
+        .toList(growable: false);
+    final totalWeight = weights.fold<double>(0.0, (sum, weight) => sum + weight);
+    if (totalWeight <= 0 || !totalWeight.isFinite) return shortlist.first.video;
+
+    var roll = _random.nextDouble() * totalWeight;
+    for (var index = 0; index < shortlist.length; index++) {
+      roll -= weights[index];
+      if (roll <= 0) return shortlist[index].video;
+    }
+    return shortlist.last.video;
+  }
+
+  YoutubeSearchResult? _takeShuffleVideo() {
+    final style = _shuffleMusicStyle;
+    final language = _shuffleMusicLanguage;
+    final current = _currentVideo;
+    _shufflePool.removeWhere((video) {
+      if (!PlaybackSourcePolicy.isAllowedForAutomaticNext(video)) {
+        return true;
+      }
+      if (_activeSource != _ListSource.playlist &&
+          _dislikedIds.contains(video.videoId)) {
+        return true;
+      }
+      // Explicit custom playlists may intentionally mix local and YouTube
+      // tracks. Other Shuffle sessions stay source-pure.
+      final allowMixedPlaylistSources =
+          _activeSource == _ListSource.playlist && _activePlaylistId != null;
+      if (!allowMixedPlaylistSources &&
+          current != null &&
+          video.isLocal != current.isLocal) {
+        return true;
+      }
+      return !MusicStyleMatcher.isCompatible(
+        video: video,
+        targetStyle: style,
+        targetLanguage: language,
+        allowCrossLanguage: _activeSource == _ListSource.radio && !_radio.locksLanguage,
+      );
+    });
+    if (_shufflePool.isEmpty) {
+      return null;
+    }
+
+    // Kandidat yang label genrenya cocok didahulukan; lagu tanpa label genre
+    // baru menjadi fallback setelah kandidat yang dikenali habis.
+    final bool radioMix = _activeSource == _ListSource.radio && !_radio.locksLanguage;
+    late final List<YoutubeSearchResult> candidatesPool;
+    if (radioMix) {
+      candidatesPool = MusicStyleMatcher.rankForRadio(
+        _shufflePool,
+        targetStyle: style,
+        targetLanguage: language,
+        allowCrossLanguage: true,
+      );
+    } else {
+      final languageCandidates = MusicStyleMatcher.prioritizeLanguage(_shufflePool, language);
+      final preferred = MusicStyleMatcher.prioritizeStyle(
+        languageCandidates,
+        style,
+        targetLanguage: language,
+      );
+      candidatesPool = preferred.isNotEmpty
+          ? preferred
+          : (languageCandidates.isNotEmpty ? languageCandidates : _shufflePool);
+    }
+
+    // Hindari artis yang sama muncul terus: batasi per jendela putar terakhir
+    // dan beri jeda beberapa lagu (logika yang sama dengan Radio).
+    final variedPool = _radio.preferArtistVariety(candidatesPool);
+
+    if (!_playerUiState.value.isSmartShuffle) {
+      final selected = variedPool[_random.nextInt(variedPool.length)];
+      _shufflePool.removeWhere((video) => video.videoId == selected.videoId);
+      return selected;
+    }
+
+    final currentArtist = _currentVideo?.channelTitle;
+    final scored = variedPool
+        .map(
+          (video) => (
+            video: video,
+            score: _safeQueueScore(video, currentArtist: currentArtist),
+          ),
+        )
+        .toList()
+      ..sort((a, b) => b.score.compareTo(a.score));
+
+    // Weighted draw dari delapan skor terbaik: kandidat paling relevan
+    // lebih sering terpilih, tetapi hasil tidak terkunci pada satu lagu.
+    final topCount = scored.length < 8 ? scored.length : 8;
+    final top = scored.take(topCount).toList(growable: false);
+    final bestScore = top.first.score;
+    final weights = top
+        .map((item) => exp(
+              ((item.score - bestScore) / 7.0).clamp(-6.0, 0.0).toDouble(),
+            ))
+        .toList(growable: false);
+    final totalWeight = weights.fold<double>(0.0, (sum, weight) => sum + weight);
+    var roll = _random.nextDouble() * totalWeight;
+    var selected = top.last.video;
+    for (var index = 0; index < top.length; index++) {
+      roll -= weights[index];
+      if (roll <= 0) {
+        selected = top[index].video;
+        break;
+      }
+    }
+    _shufflePool.removeWhere((video) => video.videoId == selected.videoId);
+    return selected;
+  }
+
+  void _addToQueue(YoutubeSearchResult video) {
+    final added = _queueManager.add(video);
+
+    if (added) {
+      unawaited(_storage.saveQueue(_queueManager.items));
+      unawaited(_youtubeController.clearNativeGaplessQueue());
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {});
+
+    _toast(
+      added
+          ? '"${video.title}" ditambahkan ke antrean'
+          : '"${video.title}" sudah ada di antrean',
+    );
+  }
+
+  void _playNext(YoutubeSearchResult video) {
+    _queueManager.addNext(video);
+    unawaited(_storage.saveQueue(_queueManager.items));
+    unawaited(_youtubeController.clearNativeGaplessQueue());
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {});
+
+    _toast('"${video.title}" akan diputar berikutnya');
+  }
+
+  Future<void> _toggleChannelBlock(YoutubeSearchResult video) async {
+    final keys = ChannelBlockFilter.keysFor(video);
+    if (keys.isEmpty) return;
+
+    final alreadyBlocked = keys.any(_blockedChannelKeys.contains);
+    setState(() {
+      if (alreadyBlocked) {
+        _blockedChannelKeys.removeAll(keys);
+      } else {
+        _blockedChannelKeys.addAll(keys);
+      }
+    });
+    await _storage.saveBlockedChannelKeys(_blockedChannelKeys);
+
+    // Refresh the recommendation pool so an updated block immediately affects
+    // the next Radio choice. The current song is not interrupted.
+    if (_radio.hasSeed) {
+      _radio.restart(_radio.seed);
+      unawaited(_radio.refill());
+    }
+
+    _toast(
+      alreadyBlocked
+          ? 'Rekomendasi channel diizinkan lagi'
+          : 'Channel disembunyikan dari rekomendasi Radio',
+      duration: const Duration(seconds: 2),
+    );
+  }
+
+  Future<void> _chooseTrackArtwork(YoutubeSearchResult video) async {
+    try {
+      final picked = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 92,
+        maxWidth: 1800,
+        maxHeight: 1800,
+      );
+      if (picked == null) return;
+      final documents = await getApplicationDocumentsDirectory();
+      final directory = Directory('${documents.path}/musikku_track_artwork');
+      await directory.create(recursive: true);
+      final safeId = video.videoId.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
+      final ext = picked.name.contains('.') ? '.${picked.name.split('.').last.toLowerCase()}' : '.jpg';
+      final destination = File('${directory.path}/${safeId}_${DateTime.now().millisecondsSinceEpoch}$ext');
+      await File(picked.path).copy(destination.path);
+      await TrackArtworkService.setArtwork(video.videoId, destination.path);
+      if (!mounted) return;
+      setState(() {});
+      _toast('Cover lagu berhasil diperbarui.');
+    } catch (error) {
+      if (mounted) _toast('Cover lagu gagal diperbarui: $error');
+    }
+  }
+
+  Future<void> _resetTrackArtwork(YoutubeSearchResult video) async {
+    await TrackArtworkService.clearArtwork(video.videoId);
+    if (!mounted) return;
+    setState(() {});
+    _toast('Cover asli lagu dipulihkan.');
+  }
+
+  void _showVideoMenu(YoutubeSearchResult video, {Playlist? fromPlaylist}) {
+    showVideoMenuSheet(
+      context,
+      video: video,
+      isFavorite: _isFavorite(video.videoId),
+      isLiked: _likedIds.contains(video.videoId),
+      isDisliked: _dislikedIds.contains(video.videoId),
+      isChannelBlocked: ChannelBlockFilter.isBlocked(video, _blockedChannelKeys),
+      onLike: () => _toggleLike(video),
+      onDislike: () => _toggleDislike(video),
+      onToggleChannelBlock: () => _toggleChannelBlock(video),
+      onOpenArtist: () => _openArtist(
+        video.channelTitle,
+        channelId: video.channelId,
+      ),
+      onPlayNext: () => _playNext(video),
+      onAddToQueue: () => _addToQueue(video),
+      onToggleFavorite: () => _toggleFavorite(video),
+      onAddToPlaylist: () => _showAddToPlaylist(video),
+      onStartRadio: () => _startRadioFromVideo(video),
+      onChangeArtwork: () => _chooseTrackArtwork(video),
+      onResetArtwork: () => _resetTrackArtwork(video),
+      onRemoveFromPlaylist: fromPlaylist == null
+          ? null
+          : () => _removeFromPlaylist(fromPlaylist, video),
+    );
+  }
+}
+
+// Sheet antrean terpadu dari layar Now Playing. Perubahan urutan, hapus item,
+// dan clear queue langsung disimpan sehingga antrean pulih setelah aplikasi dibuka lagi.
+extension _HomeQueueSheet on _HomePageState {
+  void _showQueueSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      useSafeArea: true,
+      isScrollControlled: true,
+      constraints: const BoxConstraints(maxWidth: 640),
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          final scheme = Theme.of(context).colorScheme;
+          final items = _queueManager.items;
+          final current = _currentVideo;
+          final maxHeight = MediaQuery.sizeOf(context).height * 0.82;
+
+          final messenger = ScaffoldMessenger.of(context);
+
+          Future<void> clearQueue() async {
+            final confirm = await showDialog<bool>(
+              context: context,
+              builder: (dialogContext) => AlertDialog(
+                title: const Text('Kosongkan antrean?'),
+                content: const Text('Semua lagu yang menunggu akan dihapus dari antrean.'),
+                actions: [
+                  TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Batal')),
+                  FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Kosongkan')),
+                ],
+              ),
+            );
+            if (confirm != true) return;
+            final previousItems = List<QueueItem>.from(_queueManager.items);
+            if (previousItems.isEmpty) return;
+            _queueManager.clear();
+            await _storage.saveQueue(_queueManager.items);
+            if (mounted) setState(() {});
+            if (sheetContext.mounted) setSheetState(() {});
+            messenger.hideCurrentSnackBar();
+            messenger.showSnackBar(
+              SnackBar(
+                content: Text('${previousItems.length} lagu dihapus dari antrean'),
+                duration: const Duration(seconds: 6),
+                action: SnackBarAction(
+                  label: 'URUNGKAN',
+                  onPressed: () {
+                    // Restore missing entries at their former indexes without
+                    // deleting songs that may have been added after clearing.
+                    for (var i = 0; i < previousItems.length; i++) {
+                      _queueManager.restoreAtIndex(previousItems[i], i);
+                    }
+                    unawaited(_youtubeController.clearNativeGaplessQueue());
+                    unawaited(_storage.saveQueue(_queueManager.items));
+                    if (mounted) setState(() {});
+                    if (sheetContext.mounted) setSheetState(() {});
+                  },
+                ),
+              ),
+            );
+          }
+
+          void removeFromQueueWithUndo(YoutubeSearchResult video) {
+            final removal = _queueManager.removeWithIndex(video.videoId);
+            if (removal == null) return;
+            unawaited(_storage.saveQueue(_queueManager.items));
+            if (mounted) setState(() {});
+            setSheetState(() {});
+            messenger.hideCurrentSnackBar();
+            messenger.showSnackBar(
+              SnackBar(
+                content: Text('"${video.title}" dihapus dari antrean'),
+                duration: const Duration(seconds: 6),
+                action: SnackBarAction(
+                  label: 'URUNGKAN',
+                  onPressed: () {
+                    final restored = _queueManager.restoreAtIndex(
+                      removal.item,
+                      removal.index,
+                    );
+                    if (!restored) return;
+                    unawaited(_youtubeController.clearNativeGaplessQueue());
+                    unawaited(_storage.saveQueue(_queueManager.items));
+                    if (mounted) setState(() {});
+                    if (sheetContext.mounted) setSheetState(() {});
+                  },
+                ),
+              ),
+            );
+          }
+
+          return Material(
+            color: scheme.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+            clipBehavior: Clip.antiAlias,
+            child: SizedBox(
+              height: maxHeight,
+              child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 16, 12),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'UP NEXT',
+                              style: TextStyle(color: scheme.primary, fontSize: 9, letterSpacing: 1.7, fontWeight: FontWeight.w900),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              'Antrean putar',
+                              style: TextStyle(color: scheme.onSurface, fontSize: 21, fontWeight: FontWeight.w900, letterSpacing: -0.65),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              '${items.length} lagu menunggu giliran',
+                              style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (items.isNotEmpty)
+                        IconButton(
+                          tooltip: 'Kosongkan antrean',
+                          onPressed: () => unawaited(clearQueue()),
+                          icon: const Icon(Icons.delete_sweep_outlined),
+                        ),
+                      if (items.isNotEmpty)
+                        IconButton.filledTonal(
+                          tooltip: 'Putar lagu pertama di antrean',
+                          onPressed: () {
+                            final first = _queueManager.takeFirst();
+                            if (first == null) return;
+                            unawaited(_storage.saveQueue(_queueManager.items));
+                            Navigator.of(sheetContext).pop();
+                            unawaited(_playVideo(first.video));
+                          },
+                          icon: const Icon(Icons.play_arrow_rounded),
+                        ),
+                    ],
+                  ),
+                ),
+                if (current != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+                    child: Container(
+                      padding: const EdgeInsets.all(11),
+                      decoration: BoxDecoration(
+                        color: scheme.primary.withValues(alpha: 0.09),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: scheme.primary.withValues(alpha: 0.22)),
+                      ),
+                      child: Row(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(13),
+                            child: AlbumArtworkImage(
+                              track: current,
+                              width: 70,
+                              height: 70,
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                          const SizedBox(width: 13),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(Icons.graphic_eq_rounded, color: scheme.primary, size: 14),
+                                    const SizedBox(width: 5),
+                                    Text(
+                                      'NOW PLAYING',
+                                      style: TextStyle(color: scheme.primary, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.1),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  current.title,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(color: scheme.onSurface, fontSize: 14, height: 1.2, fontWeight: FontWeight.w900),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  current.channelTitle,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Icon(Icons.equalizer_rounded, color: scheme.primary, size: 25),
+                        ],
+                      ),
+                    ),
+                  ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                  child: Row(
+                    children: [
+                      Text('NEXT UP', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.35)),
+                      const Spacer(),
+                      if (items.isNotEmpty)
+                        Text('Geser untuk atur urutan', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 9)),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: items.isEmpty
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(22),
+                            child: MusicEmptyState(
+                              icon: Icons.queue_music_rounded,
+                              title: 'Antrean masih kosong',
+                              message: 'Tambahkan lagu lewat menu ⋮ pada kartu lagu.',
+                            ),
+                          ),
+                        )
+                      : ReorderableListView.builder(
+                          padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+                          itemCount: items.length,
+                          onReorderItem: (oldIndex, newIndex) {
+                            // onReorderItem sudah menyesuaikan newIndex untuk item
+                            // yang dipindahkan; jangan kurangi indeks lagi.
+                            final target = newIndex.clamp(0, items.length - 1).toInt();
+                            _queueManager.move(oldIndex: oldIndex, newIndex: target);
+                            unawaited(_storage.saveQueue(_queueManager.items));
+                            if (mounted) setState(() {});
+                            setSheetState(() {});
+                          },
+                          itemBuilder: (context, index) {
+                            final item = items[index];
+                            final video = item.video;
+                            final durationSeconds = video.durationSeconds?.round();
+                            final durationLabel = durationSeconds == null || durationSeconds <= 0
+                                ? ''
+                                : '${durationSeconds ~/ 60}:${(durationSeconds % 60).toString().padLeft(2, '0')}';
+                            return Padding(
+                              key: ValueKey<String>(item.id),
+                              padding: const EdgeInsets.symmetric(vertical: 4),
+                              child: Material(
+                                color: scheme.surfaceContainerLow,
+                                borderRadius: BorderRadius.circular(14),
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(14),
+                                  onTap: () {
+                                    _queueManager.remove(video.videoId);
+                                    unawaited(_storage.saveQueue(_queueManager.items));
+                                    Navigator.of(sheetContext).pop();
+                                    unawaited(_playVideo(video).then((_) {
+                                      _prepareRadioForTrack(video);
+                                    }));
+                                  },
+                                  child: Padding(
+                                    padding: const EdgeInsets.fromLTRB(10, 9, 6, 9),
+                                    child: Row(
+                                      children: [
+                                        ClipRRect(
+                                          borderRadius: BorderRadius.circular(12),
+                                          child: AlbumArtworkImage(
+                                            track: video,
+                                            width: 58,
+                                            height: 58,
+                                            fit: BoxFit.cover,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Text(video.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13)),
+                                              const SizedBox(height: 4),
+                                              Text(video.channelTitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
+                                              const SizedBox(height: 5),
+                                              Text(
+                                                durationLabel.isEmpty ? 'NEXT UP' : 'NEXT UP · $durationLabel',
+                                                style: TextStyle(fontSize: 8.5, letterSpacing: 0.8, fontWeight: FontWeight.w900, color: scheme.primary),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        IconButton(
+                                          tooltip: 'Hapus dari antrean',
+                                          visualDensity: VisualDensity.compact,
+                                          onPressed: () => removeFromQueueWithUndo(video),
+                                          icon: const Icon(Icons.close_rounded, size: 20),
+                                        ),
+                                        ReorderableDragStartListener(
+                                          index: index,
+                                          child: Padding(
+                                            padding: const EdgeInsets.symmetric(horizontal: 5),
+                                            child: Icon(Icons.drag_handle_rounded, color: scheme.onSurfaceVariant),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}

@@ -191,7 +191,6 @@ fun SettingsScreen(
     windowWidth: Dp,
     signedIn: Boolean,
     account: Account?,
-    onSignIn: () -> Unit,
     onSignOut: () -> Unit,
     onAccountScrobbling: () -> Unit,
     onEqualizer: () -> Unit,

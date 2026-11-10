@@ -60,6 +60,7 @@ fun AccountProfileSelector(
     activeProfileId: String?,
     hazeState: HazeState,
     onSelect: (GoogleAccountSession, YouTubeProfile) -> Unit,
+    onAddAccount: () -> Unit,
     onRemoveAccount: (GoogleAccountSession) -> Unit,
     onOpenSettings: () -> Unit,
     onDismiss: () -> Unit,
@@ -137,6 +138,7 @@ fun AccountProfileSelector(
                         managing, { onSelect(account, profile); onDismiss() }, { onRemoveAccount(account) })
                 }
                 }
+                item { SelectorAction(SfIcons.Add, stringResource(R.string.add_account), onClick = onAddAccount) }
                 item { SelectorAction(SfIcons.Close, stringResource(R.string.manage_accounts)) { managing = !managing } }
                 item { SelectorAction(SfIcons.Settings, stringResource(R.string.settings), onClick = onOpenSettings) }
             }

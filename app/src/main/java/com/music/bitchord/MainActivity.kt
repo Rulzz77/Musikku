@@ -5524,10 +5524,6 @@ private fun BitChordApp(
                 activeProfileId = activeProfileId,
                 hazeState = hazeState,
                 onSelect = { selected, profile -> viewModel.selectProfile(selected.accountId, profile.profileId) },
-                onAddAccount = {
-                    showAccountSelector = false
-                    webSession = WebSessionMode.SIGN_IN
-                },
                 onRemoveAccount = { selected ->
                     viewModel.removeAccount(selected.accountId)
                     showAccountSelector = false

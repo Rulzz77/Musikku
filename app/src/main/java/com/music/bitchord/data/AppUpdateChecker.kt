@@ -27,7 +27,7 @@ object AppUpdateChecker {
         "https://api.github.com/repos/Rulzz77/Musikku/releases/latest"
 
     // Samakan dengan bitchordVersionName di build.gradle.kts.
-    private const val APP_VERSION = "0.1.2"
+    private const val APP_VERSION = "0.1.3"
 
     // Harus sesuai dengan nama APK pada GitHub Releases.
     private const val APK_PREFIX = "MusikKu-"

@@ -47,9 +47,12 @@ val lastfmSecret: String = (
  * builds and runs, and simply asks for an address the first time somebody opens
  * the screen. See ListenTogether.DEFAULT_SERVER.
  */
+// A blank local.properties entry is common in CI when the optional secret
+// is not configured. Treat it as absent so the built-in public service remains
+// available and Create/Join are not disabled in production APKs.
 val listenTogetherServer: String = (
-    localProps.getProperty("LISTEN_TOGETHER_SERVER")
-        ?: System.getenv("LISTEN_TOGETHER_SERVER")
+    localProps.getProperty("LISTEN_TOGETHER_SERVER")?.takeIf { it.isNotBlank() }
+        ?: System.getenv("LISTEN_TOGETHER_SERVER")?.takeIf { it.isNotBlank() }
         ?: "https://bitchord-listen-together.onrender.com"
     ).trim().trimEnd('/')
 

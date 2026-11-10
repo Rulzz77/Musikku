@@ -158,6 +158,8 @@ fun HomeScreen(
     onMoodsShowAll: () -> Unit = {},
     /** Whether the Top Picks and mood artwork may animate — see [LocalArtworkMotion]. */
     artworkMotion: Boolean = true,
+    /** Device-owned playlists, shown independently of the remote Home feed. */
+    extraShelves: List<HomeShelf> = emptyList(),
 ) {
     // Top Picks' pictures and motion wait for the feed — see LocalArtworkImages.
     val feedReady = state !is UiState.Loading
@@ -241,6 +243,17 @@ fun HomeScreen(
                     )
                     if (loadingMore) feedMoreSkeleton()
                 }
+            }
+            // Device-owned playlists remain visible even when the remote feed is
+            // signed out, loading, or unavailable.
+            if (extraShelves.isNotEmpty()) {
+                itemsIndexedShelves(
+                    shelves = extraShelves,
+                    onItemClick = onItemClick,
+                    onItemLongPress = onItemLongPress,
+                    currentSong = currentSong,
+                    isPlaying = isPlaying,
+                )
             }
         }
     }

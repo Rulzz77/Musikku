@@ -154,11 +154,10 @@ val ServerConnectionState.health: ListenTogether.Health
  *
  * ## Identity
  *
- * Creating or joining requires a signed-in account — that is what puts real
- * names and faces in the member list on every device — and [identity] is where
- * that is enforced on this side. The server cannot verify the claim; what it
- * can do is refuse anyone without the token it minted, which is why the token
- * is stored and never shown.
+ * Creating or joining uses a persistent anonymous identity for this
+ * installation. A nickname is shown to other members; no Google account or
+ * avatar is required. The server mints an unguessable membership token on join,
+ * stores it locally, and requires it for all subsequent party actions.
  */
 object ListenTogether {
 

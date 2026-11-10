@@ -389,7 +389,7 @@ fun ListenTogetherScreen(
                         failure = null
                     },
                     busy = busy,
-                    enabled = signedIn && ListenTogether.hasServer,
+                    enabled = ListenTogether.canJoin() && ListenTogether.hasServer,
                     error = failure,
                     onSubmit = { openPartyPreview(codeInput, null) },
                 )

@@ -20,6 +20,15 @@ MusikKu is a personal Android music-player fork based on the open-source BitChor
 
 The upstream Kotlin package namespace is intentionally retained to minimize risky mass refactoring. It is an internal code namespace, distinct from the installed Android application ID.
 
+## Repository layout
+
+- `app/`, `shared/`, and `sharedUi/`: the native Kotlin/Compose Android application and shared code.
+- `tv/` and `wearos/`: Android TV and Wear OS targets.
+- `backend/`: the Go service used by Listen Together.
+- `web/`: the independent web player and browser extension.
+
+The legacy Flutter application and its generated platform runners have been retired from this repository. The native Android project is built from the root Gradle project; it does not use a Flutter `lib/` directory or `pubspec.yaml`.
+
 ## Open in Android Studio
 
 1. Install Android Studio, JDK 17 or the JDK required by the current upstream Gradle/AGP combination, Android SDK 37, Android NDK, and CMake 3.22.1.

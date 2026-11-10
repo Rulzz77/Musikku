@@ -149,10 +149,10 @@ jobs:
 
           echo "Release signing configuration prepared."
 
-      - name: Build production release APKs
+      - name: Build production phone APKs
         run: |
           chmod +x ./gradlew
-          ./gradlew --no-daemon :app:assembleProdRelease
+          ./gradlew --no-daemon :app:assembleProdRelease -x :wearos:packageProdRelease
 
       - name: Prepare APK release assets
         shell: bash

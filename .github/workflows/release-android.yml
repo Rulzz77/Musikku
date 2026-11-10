@@ -1,4 +1,3 @@
-
 name: MusikKu Android Release
 
 on:
@@ -15,7 +14,7 @@ concurrency:
 
 jobs:
   build-release:
-    name: Build and Publish APK
+    name: Build and Publish Android + Wear OS
     runs-on: ubuntu-latest
     timeout-minutes: 120
 
@@ -52,10 +51,7 @@ jobs:
           import os
           import sys
 
-          root = pathlib.Path("build.gradle.kts").read_text(
-              encoding="utf-8"
-          )
-
+          root = pathlib.Path("build.gradle.kts").read_text(encoding="utf-8")
           updater = pathlib.Path(
               "app/src/main/java/com/music/bitchord/data/AppUpdateChecker.kt"
           ).read_text(encoding="utf-8")
@@ -115,7 +111,6 @@ jobs:
             fi
           done
 
-          # Decode the original MusikKu keystore.
           printf '%s' "$MUSIKKU_KEYSTORE_BASE64" |
             base64 --decode > musikku-release.jks
 
@@ -124,22 +119,19 @@ jobs:
             exit 1
           fi
 
-          # Validate keystore, password, and alias.
           keytool -list \
             -keystore musikku-release.jks \
             -storepass "$MUSIKKU_STORE_PASSWORD" \
             -alias "$MUSIKKU_KEY_ALIAS"
 
-          # Wear OS still expects the legacy filename.
+          # Wear OS legacy keystore filename
           cp -f musikku-release.jks bitchord-release.jks
 
-          # Ensure both files contain exactly the same keystore.
           cmp -s musikku-release.jks bitchord-release.jks
 
-          echo "Both keystore files are identical:"
+          echo "Keystore SHA-256:"
           sha256sum musikku-release.jks bitchord-release.jks
 
-          # Configure the main Android application.
           cat > keystore.properties <<EOF
           storeFile=musikku-release.jks
           storePassword=${MUSIKKU_STORE_PASSWORD}
@@ -149,10 +141,12 @@ jobs:
 
           echo "Release signing configuration prepared."
 
-      - name: Build production phone APKs
+      - name: Build production phone and Wear OS
         run: |
           chmod +x ./gradlew
-          ./gradlew --no-daemon :app:assembleProdRelease -x :wearos:packageProdRelease
+          ./gradlew --no-daemon \
+            :app:assembleProdRelease \
+            :wearos:packageProdRelease
 
       - name: Prepare APK release assets
         shell: bash
@@ -160,6 +154,7 @@ jobs:
           set -euo pipefail
 
           SOURCE="app/build/outputs/apk/prod/release"
+          WEAR_SOURCE="wearos/build/outputs/apk/prod/release"
           DEST="release-assets"
 
           mkdir -p "$DEST"
@@ -175,6 +170,16 @@ jobs:
 
           cp "$SOURCE/app-prod-universal-release.apk" \
             "$DEST/MusikKu-universal.apk"
+
+          cp "$WEAR_SOURCE/BitChordWear-prod-release.apk" \
+            "$DEST/MusikKu-WearOS.apk"
+
+          APK_COUNT=$(find "$DEST" -maxdepth 1 -type f -name "*.apk" | wc -l)
+
+          if [ "$APK_COUNT" -ne 5 ]; then
+            echo "::error::Expected 5 APK files, found $APK_COUNT."
+            exit 1
+          fi
 
           echo "Release assets prepared:"
           ls -lh "$DEST"
@@ -218,7 +223,7 @@ jobs:
             echo "Signature verified: $apk"
           done
 
-          echo "All APK signatures are valid."
+          echo "All five APK signatures are valid."
 
       - name: Publish GitHub Release
         env:

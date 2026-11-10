@@ -5,52 +5,133 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: musikku-android-release-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-prod-release:
+    name: Build signed production APKs
     runs-on: ubuntu-latest
+    timeout-minutes: 120
 
     steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v4
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-    - name: Set up JDK 17
-      uses: actions/setup-java@v4
-      with:
-        java-version: '17'
-        distribution: 'temurin'
-        cache: gradle
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
 
-    - name: Setup Secrets (Keystore & local.properties)
-      run: |
-        echo "LASTFM_API_KEY=${{ secrets.LASTFM_API_KEY }}" > local.properties
-        echo "LASTFM_SECRET=${{ secrets.LASTFM_SECRET }}" >> local.properties
-        echo "LISTEN_TOGETHER_SERVER=${{ secrets.LISTEN_TOGETHER_SERVER }}" >> local.properties
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
 
-        echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > bitchord-release.jks
-        {
-          echo "storeFile=bitchord-release.jks"
-          echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}"
-          echo "keyAlias=${{ secrets.KEY_ALIAS }}"
-          echo "keyPassword=${{ secrets.KEY_PASSWORD }}"
-        } > keystore.properties
+      - name: Write local.properties
+        env:
+          LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
+          LASTFM_SECRET: ${{ secrets.LASTFM_SECRET }}
+          LISTEN_TOGETHER_SERVER: ${{ secrets.LISTEN_TOGETHER_SERVER }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            printf 'LASTFM_API_KEY=%s\n' "$LASTFM_API_KEY"
+            printf 'LASTFM_SECRET=%s\n' "$LASTFM_SECRET"
+            printf 'LISTEN_TOGETHER_SERVER=%s\n' "$LISTEN_TOGETHER_SERVER"
+          } > local.properties
 
-    - name: Grant execute permission for gradlew
-      run: chmod +x gradlew
+      # Use the same signing secrets as release-android.yml. Wear OS still
+      # reads the legacy bitchord-release.jks filename, so create both names
+      # from one decoded file and verify them before Gradle starts.
+      - name: Restore and validate release keystore
+        env:
+          # Prefer the current MUSIKKU_* names, but keep compatibility with
+          # the older generic secret names used by the previous workflow.
+          MUSIKKU_KEYSTORE_BASE64: ${{ secrets.MUSIKKU_KEYSTORE_BASE64 || secrets.KEYSTORE_BASE64 }}
+          MUSIKKU_STORE_PASSWORD: ${{ secrets.MUSIKKU_STORE_PASSWORD || secrets.KEYSTORE_PASSWORD }}
+          MUSIKKU_KEY_ALIAS: ${{ secrets.MUSIKKU_KEY_ALIAS || secrets.KEY_ALIAS }}
+          MUSIKKU_KEY_PASSWORD: ${{ secrets.MUSIKKU_KEY_PASSWORD || secrets.KEY_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
 
-    - name: Build Signed Prod Release APK
-      run: ./gradlew assembleProdRelease
+          for name in \
+            MUSIKKU_KEYSTORE_BASE64 \
+            MUSIKKU_STORE_PASSWORD \
+            MUSIKKU_KEY_ALIAS \
+            MUSIKKU_KEY_PASSWORD
+          do
+            if [[ -z "${!name:-}" ]]; then
+              echo "::error::Missing GitHub Actions secret: $name"
+              exit 1
+            fi
+          done
 
-    - name: Upload APK Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: bitchord-prod-release-signed
-        path: app/build/outputs/apk/prod/release/*.apk
+          # Remove accidental whitespace/newlines from the Base64 secret.
+          if ! printf '%s' "$MUSIKKU_KEYSTORE_BASE64" \
+            | tr -d '[:space:]' \
+            | base64 --decode > musikku-release.jks; then
+            echo "::error::MUSIKKU_KEYSTORE_BASE64 is not valid Base64. Re-encode the original .jks file."
+            exit 1
+          fi
 
-    # Built by the same assembleProdRelease, with the same key. The watch app
-    # only pairs with a phone app signed by the same key, so a prod watch APK
-    # for these phone builds can only come from here, never a local build.
-    - name: Upload Wear OS APK Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: bitchord-wear-prod-release-signed
-        path: wearos/build/outputs/apk/prod/release/*.apk
+          if [[ ! -s musikku-release.jks ]]; then
+            echo "::error::Decoded keystore is empty. Check MUSIKKU_KEYSTORE_BASE64."
+            exit 1
+          fi
+
+          # This fails early with a clear message if the file is corrupt,
+          # the store password is wrong, or the alias does not exist.
+          if ! keytool -list -keystore musikku-release.jks \
+            -storepass "$MUSIKKU_STORE_PASSWORD" \
+            -alias "$MUSIKKU_KEY_ALIAS"; then
+            echo "::error::Decoded file is not a readable release keystore, or password/alias is incorrect."
+            exit 1
+          fi
+
+          # Keep the legacy Wear OS filename byte-for-byte identical.
+          cp -f musikku-release.jks bitchord-release.jks
+          cmp -s musikku-release.jks bitchord-release.jks
+
+          cat > keystore.properties <<EOF_PROPS
+          storeFile=musikku-release.jks
+          storePassword=${MUSIKKU_STORE_PASSWORD}
+          keyAlias=${MUSIKKU_KEY_ALIAS}
+          keyPassword=${MUSIKKU_KEY_PASSWORD}
+          EOF_PROPS
+
+          echo "Release keystore decoded and validated successfully."
+          sha256sum musikku-release.jks bitchord-release.jks
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x ./gradlew
+
+      - name: Build Signed Prod Release APK and Wear OS APK
+        run: ./gradlew --no-daemon --max-workers=2 :app:assembleProdRelease
+
+      - name: Upload Phone APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: musikku-prod-release-signed
+          path: app/build/outputs/apk/prod/release/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Wear OS APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: musikku-wear-prod-release-signed
+          path: wearos/build/outputs/apk/prod/release/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Remove temporary signing files
+        if: always()
+        run: |
+          rm -f musikku-release.jks bitchord-release.jks keystore.properties local.properties

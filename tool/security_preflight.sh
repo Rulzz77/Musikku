@@ -89,9 +89,9 @@ for rel in tracked:
                 and text.count(match.group(0)) == 1
                 and "x-goog-api-key" in text
                 and re.fullmatch(
-                    r"""\\s*private\\s+const\\s+val\\s+GOOGLE_API_KEY\\s*=\\s*["']"""
+                    r"""\s*private\s+const\s+val\s+GOOGLE_API_KEY\s*=\s*["']"""
                     + re.escape(match.group(0))
-                    + r"""["']\\s*""",
+                    + r"""["']\s*""",
                     matched_line,
                 ) is not None
             )

@@ -243,9 +243,9 @@ fun ListenTogetherScreen(
 
     // A link tap is already an explicit request to join. Signed-out users keep
     // the populated code while the sign-in page is open.
-    LaunchedEffect(inviteCode, inviteServer, signedIn) {
+    LaunchedEffect(inviteCode, inviteServer) {
         val code = inviteCode ?: return@LaunchedEffect
-        if (!signedIn || busy) return@LaunchedEffect
+        if (busy) return@LaunchedEffect
 
         val activeServer = (ListenTogether.activePartyServerBase() ?: ListenTogether.effectiveIdleServerBase()).trim().trimEnd('/')
         val targetServer = inviteServer?.trim()?.trimEnd('/')
@@ -363,7 +363,7 @@ fun ListenTogetherScreen(
                     maxMembers = maxMembers,
                     onMaxMembersChange = { maxMembers = it.coerceIn(2, 10) },
                     busy = busy,
-                    enabled = signedIn && ListenTogether.hasServer,
+                    enabled = ListenTogether.canJoin() && ListenTogether.hasServer,
                     error = failure,
                     onCreate = {
                         busy = true

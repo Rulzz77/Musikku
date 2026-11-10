@@ -1,29 +1,137 @@
 name: MusikKu Android Release
 
+# Simpan sebagai .github/workflows/release-android.yml (menggantikan workflow rilis lama).
+#
+# Cara pakai:
+#   1. Ganti bitchordVersionName di build.gradle.kts (satu-satunya tempat).
+#   2. Commit dan push ke branch main.
+# Workflow akan membaca versi, membuat tag v<versi>, build, lalu publish Release.
+# Kalau tag/release untuk versi itu sudah ada, build dilewati.
+# Build dilewati juga kalau bitchordBetaSuffix tidak kosong (beta sideload manual).
+# bitchordVersionCode tetap diisi manual, tapi harus lebih tinggi dari rilis sebelumnya.
+
 on:
   push:
-    tags:
-      - "v*"
+    branches:
+      - main
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: musikku-release-${{ github.ref }}
+  group: musikku-release
   cancel-in-progress: false
 
 jobs:
+  # ==========================================
+  # JOB 1: BACA VERSI & CEK SUDAH PERNAH RILIS
+  # ==========================================
+  check-version:
+    name: Check version
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+      should_release: ${{ steps.read.outputs.should_release }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read version and check existing release
+        id: read
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          VERSION="$(sed -n 's/.*extra\["bitchordVersionName"][[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' build.gradle.kts | head -n 1)"
+          SUFFIX="$(sed -n 's/.*extra\["bitchordBetaSuffix"][[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' build.gradle.kts | head -n 1)"
+          VERSION_CODE="$(sed -n 's/.*extra\["bitchordVersionCode"][[:space:]]*=[[:space:]]*\([0-9][0-9]*\).*/\1/p' build.gradle.kts | head -n 1)"
+
+          if [[ -z "$VERSION" ]]; then
+            echo "::error::bitchordVersionName not found in build.gradle.kts."
+            exit 1
+          fi
+
+          if [[ -z "$VERSION_CODE" ]]; then
+            echo "::error::bitchordVersionCode not found in build.gradle.kts."
+            exit 1
+          fi
+
+          if ! [[ "$VERSION" =~ ^[0-9]+(\.[0-9]+)*$ ]]; then
+            echo "::error::Invalid version format: $VERSION"
+            exit 1
+          fi
+
+          TAG="v$VERSION"
+          SHOULD_RELEASE=true
+          REASON=""
+
+          # Build beta (sideload manual) tidak dipublish otomatis.
+          if [[ -n "$SUFFIX" ]]; then
+            SHOULD_RELEASE=false
+            REASON="bitchordBetaSuffix is set ($SUFFIX). Beta builds are not published automatically."
+          fi
+
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            SHOULD_RELEASE=false
+            REASON="Tag $TAG already exists."
+          fi
+
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            SHOULD_RELEASE=false
+            REASON="Release $TAG already exists."
+          fi
+
+          # versionCode harus naik dibanding rilis sebelumnya,
+          # kalau tidak Android menolak update.
+          if [[ "$SHOULD_RELEASE" == "true" ]]; then
+            PREV_TAG="$(git tag --list 'v*' --sort=-v:refname | head -n 1)"
+
+            if [[ -n "$PREV_TAG" ]]; then
+              PREV_CODE="$(git show "$PREV_TAG:build.gradle.kts" 2>/dev/null | sed -n 's/.*extra\["bitchordVersionCode"][[:space:]]*=[[:space:]]*\([0-9][0-9]*\).*/\1/p' | head -n 1 || true)"
+
+              if [[ -n "$PREV_CODE" && "$VERSION_CODE" -le "$PREV_CODE" ]]; then
+                echo "::error::bitchordVersionCode ($VERSION_CODE) must be higher than $PREV_TAG ($PREV_CODE). Bump it and push again."
+                exit 1
+              fi
+            fi
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "should_release=$SHOULD_RELEASE" >> "$GITHUB_OUTPUT"
+
+          if [[ "$SHOULD_RELEASE" == "true" ]]; then
+            echo "Version $VERSION (code $VERSION_CODE) is new. Release $TAG will be built." | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Build skipped: $REASON" | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+
+  # ==========================================
+  # JOB 2: BUILD & PUBLISH
+  # ==========================================
   build-release:
     name: Build and Publish Android + Wear OS
+    needs: check-version
+    if: needs.check-version.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 120
+
+    env:
+      RELEASE_VERSION: ${{ needs.check-version.outputs.version }}
 
     steps:
       # ==========================================
       # 1. CHECKOUT
       # ==========================================
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -31,113 +139,68 @@ jobs:
       # 2. JAVA SETUP
       # ==========================================
       - name: Set up Java 17
-        uses: actions/setup-java@v6
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
           cache: gradle
 
       # ==========================================
-      # 3. ANDROID SDK SETUP
+      # 3. GRADLE SETUP
+      # (Android SDK bawaan runner dipakai; AGP mengunduh sisanya,
+      #  sama seperti workflow "Android Release APK".)
       # ==========================================
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v4
-
-      # ==========================================
-      # 4. INSTALL ANDROID SDK
-      # ==========================================
-      - name: Install Android SDK packages
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
-
-          if [[ -z "$SDK_ROOT" ]]; then
-            echo "::error::Android SDK root not found."
-            exit 1
-          fi
-
-          echo "Android SDK: $SDK_ROOT"
-
-          sdkmanager --sdk_root="$SDK_ROOT" --install \
-            "platforms;android-37.0" \
-            "build-tools;35.0.0" \
-            "cmake;3.22.1" \
-            "ndk;27.0.12077973"
-
-          # Verify Android 37.0 installation.
-          PLATFORM_DIR="$SDK_ROOT/platforms/android-37.0"
-
-          if [[ ! -f "$PLATFORM_DIR/android.jar" ]]; then
-            echo "::error::Android SDK 37.0 installation failed."
-            exit 1
-          fi
-
-          # Compatibility with tools expecting android-37.
-          if [[ ! -e "$SDK_ROOT/platforms/android-37" ]]; then
-            ln -s android-37.0 "$SDK_ROOT/platforms/android-37"
-          fi
-
-          if [[ ! -f "$SDK_ROOT/platforms/android-37/android.jar" ]]; then
-            echo "::error::Android 37 compatibility directory is invalid."
-            exit 1
-          fi
-
-          echo "Android SDK 37 is ready."
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
 
       # ==========================================
-      # 5. VALIDATE VERSION
+      # 5. SYNC APP_VERSION DARI GRADLE
       # ==========================================
-      - name: Validate release version
+      - name: Sync APP_VERSION with Gradle version
         shell: bash
         run: |
           python3 - <<'PY'
+          import os
           import pathlib
           import re
-          import os
-          import sys
 
-          root = pathlib.Path("build.gradle.kts").read_text(
-              encoding="utf-8"
-          )
+          version = os.environ["RELEASE_VERSION"]
 
-          updater = pathlib.Path(
+          path = pathlib.Path(
               "app/src/main/java/com/music/bitchord/data/AppUpdateChecker.kt"
-          ).read_text(encoding="utf-8")
+          )
+          text = path.read_text(encoding="utf-8")
 
-          root_match = re.search(
-              r'extra\["bitchordVersionName"\]\s*=\s*"([^"]+)"',
-              root
+          new_text, count = re.subn(
+              r'(APP_VERSION\s*=\s*")[^"]+(")',
+              lambda m: m.group(1) + version + m.group(2),
+              text,
+              count=1,
           )
 
-          updater_match = re.search(
-              r'APP_VERSION\s*=\s*"([^"]+)"',
-              updater
-          )
-
-          if not root_match:
-              sys.exit("ERROR: bitchordVersionName not found.")
-
-          if not updater_match:
-              sys.exit("ERROR: APP_VERSION not found.")
-
-          gradle_version = root_match.group(1)
-          updater_version = updater_match.group(1)
-          tag_version = os.environ["GITHUB_REF_NAME"].removeprefix("v")
-
-          print("Gradle version:", gradle_version)
-          print("Updater version:", updater_version)
-          print("Git tag version:", tag_version)
-
-          if gradle_version != updater_version:
-              sys.exit("ERROR: Gradle and updater versions do not match.")
-
-          if gradle_version != tag_version:
-              sys.exit("ERROR: Git tag and application version do not match.")
-
-          print("Version validation successful.")
+          if count == 0:
+              print("APP_VERSION is not a string literal; nothing to sync.")
+          else:
+              path.write_text(new_text, encoding="utf-8")
+              print("APP_VERSION set to", version)
           PY
+
+      # ==========================================
+      # 5b. LOCAL.PROPERTIES (API key dari secrets)
+      # ==========================================
+      - name: Write local.properties
+        env:
+          LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
+          LASTFM_SECRET: ${{ secrets.LASTFM_SECRET }}
+          LISTEN_TOGETHER_SERVER: ${{ secrets.LISTEN_TOGETHER_SERVER }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            printf 'LASTFM_API_KEY=%s\n' "$LASTFM_API_KEY"
+            printf 'LASTFM_SECRET=%s\n' "$LASTFM_SECRET"
+            printf 'LISTEN_TOGETHER_SERVER=%s\n' "$LISTEN_TOGETHER_SERVER"
+          } > local.properties
 
       # ==========================================
       # 6. RELEASE SIGNING
@@ -145,10 +208,10 @@ jobs:
       - name: Prepare and validate release signing
         shell: bash
         env:
-          MUSIKKU_KEYSTORE_BASE64: ${{ secrets.MUSIKKU_KEYSTORE_BASE64 }}
-          MUSIKKU_STORE_PASSWORD: ${{ secrets.MUSIKKU_STORE_PASSWORD }}
-          MUSIKKU_KEY_ALIAS: ${{ secrets.MUSIKKU_KEY_ALIAS }}
-          MUSIKKU_KEY_PASSWORD: ${{ secrets.MUSIKKU_KEY_PASSWORD }}
+          MUSIKKU_KEYSTORE_BASE64: ${{ secrets.MUSIKKU_KEYSTORE_BASE64 || secrets.KEYSTORE_BASE64 }}
+          MUSIKKU_STORE_PASSWORD: ${{ secrets.MUSIKKU_STORE_PASSWORD || secrets.KEYSTORE_PASSWORD }}
+          MUSIKKU_KEY_ALIAS: ${{ secrets.MUSIKKU_KEY_ALIAS || secrets.KEY_ALIAS }}
+          MUSIKKU_KEY_PASSWORD: ${{ secrets.MUSIKKU_KEY_PASSWORD || secrets.KEY_PASSWORD }}
 
         run: |
           set -euo pipefail
@@ -217,9 +280,7 @@ jobs:
 
           chmod +x ./gradlew
 
-          ./gradlew --no-daemon \
-            :app:assembleProdRelease \
-            :wearos:packageProdRelease
+          ./gradlew --no-daemon --max-workers=2 :app:assembleProdRelease
 
       # ==========================================
       # 8. PREPARE RELEASE ASSETS
@@ -235,25 +296,31 @@ jobs:
 
           mkdir -p "$DEST"
 
-          # Android ARM64.
-          cp "$SOURCE/app-prod-arm64-v8a-release.apk" \
-            "$DEST/MusikKu-arm64-v8a.apk"
+          echo "Phone APK output:"
+          ls -lh "$SOURCE" || true
+          echo "Wear OS APK output:"
+          ls -lh "$WEAR_SOURCE" || true
 
-          # Android ARMv7.
-          cp "$SOURCE/app-prod-armeabi-v7a-release.apk" \
-            "$DEST/MusikKu-armeabi-v7a.apk"
+          copy_apk() {
+            # $1 = folder, $2 = glob, $3 = destination file name
+            local found
+            found="$(find "$1" -maxdepth 1 -type f -name "$2" 2>/dev/null | sort | head -n 1 || true)"
 
-          # Android x86_64.
-          cp "$SOURCE/app-prod-x86_64-release.apk" \
-            "$DEST/MusikKu-x86_64.apk"
+            if [[ -z "$found" ]]; then
+              echo "::error::No APK matching '$2' found in $1"
+              exit 1
+            fi
 
-          # Android Universal.
-          cp "$SOURCE/app-prod-universal-release.apk" \
-            "$DEST/MusikKu-universal.apk"
+            cp "$found" "$DEST/$3"
+            echo "$found -> $DEST/$3"
+          }
 
-          # Wear OS.
-          cp "$WEAR_SOURCE/BitChordWear-prod-release.apk" \
-            "$DEST/MusikKu-WearOS.apk"
+          # Nama tujuan harus diawali "MusikKu-" (dipakai AppUpdateChecker).
+          copy_apk "$SOURCE" "*arm64-v8a*.apk" "MusikKu-arm64-v8a.apk"
+          copy_apk "$SOURCE" "*armeabi-v7a*.apk" "MusikKu-armeabi-v7a.apk"
+          copy_apk "$SOURCE" "*x86_64*.apk" "MusikKu-x86_64.apk"
+          copy_apk "$SOURCE" "*universal*.apk" "MusikKu-universal.apk"
+          copy_apk "$WEAR_SOURCE" "*.apk" "MusikKu-WearOS.apk"
 
           # Validate APK count.
           APK_COUNT=$(find "$DEST" \
@@ -272,7 +339,7 @@ jobs:
       # ==========================================
       # 9. VERIFY APK SIGNATURES
       # ==========================================
-            - name: Verify APK signatures
+      - name: Verify APK signatures
         shell: bash
         run: |
           set -euo pipefail
@@ -350,7 +417,7 @@ jobs:
       # 10. UPLOAD BUILD ARTIFACTS
       # ==========================================
       - name: Upload APK build artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: MusikKu-Android-WearOS-APKs
           path: release-assets/*.apk
@@ -358,7 +425,7 @@ jobs:
           if-no-files-found: error
 
       # ==========================================
-      # 11. PUBLISH GITHUB RELEASE
+      # 11. PUBLISH GITHUB RELEASE (tag dibuat otomatis)
       # ==========================================
       - name: Publish GitHub Release
         env:
@@ -367,14 +434,16 @@ jobs:
         run: |
           set -euo pipefail
 
-          gh release create "$GITHUB_REF_NAME" \
+          TAG="v${RELEASE_VERSION}"
+
+          gh release create "$TAG" \
             release-assets/*.apk \
             --repo "$GITHUB_REPOSITORY" \
-            --title "MusikKu $GITHUB_REF_NAME" \
-            --generate-notes \
-            --verify-tag
+            --target "$GITHUB_SHA" \
+            --title "MusikKu $TAG" \
+            --generate-notes
 
-          echo "GitHub Release published successfully."
+          echo "GitHub Release $TAG published successfully."
 
       # ==========================================
       # 12. CLEANUP
@@ -385,3 +454,4 @@ jobs:
           rm -f musikku-release.jks
           rm -f bitchord-release.jks
           rm -f keystore.properties
+          rm -f local.properties

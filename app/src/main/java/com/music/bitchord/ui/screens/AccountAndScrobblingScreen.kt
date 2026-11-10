@@ -77,18 +77,18 @@ fun AccountAndScrobblingScreen(
 
         // One card: who is signed in, which profile is listening, and the way
         // out, with the explanation of profiles underneath.
-        SettingsGroup(
-            footer = if (signedIn) stringResource(R.string.account_profiles_help) else null,
+        if (signedIn) SettingsGroup(
+            footer = stringResource(R.string.account_profiles_help),
             topSpacing = 0.dp,
         ) {
-            AccountCard(
-                signedIn = signedIn,
-                account = account,
-                onSignIn = onSignIn,
-                onClick = onSwitchChannel,
-                grouped = true,
-            )
             if (signedIn) {
+                AccountCard(
+                    signedIn = true,
+                    account = account,
+                    onSignIn = {},
+                    onClick = onSwitchChannel,
+                    grouped = true,
+                )
                 FullWidthDivider()
                 SettingsRow(
                     icon = SfIcons.SwitchAccount,

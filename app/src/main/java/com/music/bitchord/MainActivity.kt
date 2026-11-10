@@ -3690,7 +3690,6 @@ private fun BitChordApp(
                                         },
                                     )
                                 },
-                                onSignIn = { webSession = WebSessionMode.SIGN_IN },
                                 onRetry = viewModel::loadLibrary,
                                 refreshing = MainViewModel.Feed.LIBRARY in refreshing,
                                 onRefresh = { viewModel.refresh(MainViewModel.Feed.LIBRARY) },

@@ -763,7 +763,7 @@ object ListenTogether {
     }
 
     /** Whether this device has an account it can jam as. */
-    fun canJoin(): Boolean = identity() != null
+    fun canJoin(): Boolean = true
 
     fun nickname(): String = prefs.getString(KEY_NICKNAME, null).orEmpty()
 
@@ -814,7 +814,7 @@ object ListenTogether {
     }
 
     private suspend fun doCreateOnServer(serverBase: String, nickname: String, maxMembers: Int): String {
-        val who = identity(nickname) ?: throw PartyException("not_signed_in", "Sign in to listen together.")
+        val who = identity(nickname)
         if (serverBase.isBlank()) throw PartyException("no_server", "Set the party server address first.")
         val membership = post(
             "$serverBase/api/parties",
@@ -934,11 +934,6 @@ object ListenTogether {
     ): SwitchPartyResult = switchMutex.withLock {
         withContext(Dispatchers.IO) {
             val who = identity(nickname)
-                ?: return@withContext if (_state.value.inParty) {
-                    SwitchPartyResult.TargetFailedRecovered(_state.value.code.orEmpty(), "Sign in to listen together.")
-                } else {
-                    SwitchPartyResult.TargetFailedNoParty("Sign in to listen together.")
-                }
 
             val normTarget = when (val res = parseAndNormalizeServerUrl(targetCustomServer)) {
                 is ServerUrlValidationResult.Valid -> res.normalizedUrl
@@ -1453,34 +1448,17 @@ object ListenTogether {
     )
 
     /**
-     * Who this device is jamming as, or null if it cannot.
-     *
-     * [AuthStore.isSignedIn][com.music.bitchord.auth.AuthStore.isSignedIn]
-     * rather than "is there a cookie": a jar with no signable secret in it is a
-     * session the app is already treating as signed out everywhere else, and a
-     * party is not the place to start disagreeing with that.
-     *
-     * [userId] is a hash of the account and profile ids, not either of them. It
-     * only has to be stable and comparable — the server never needs to know
-     * which Google account it stands for, and a party server that accumulated
-     * real account identifiers would be holding something it has no use for.
+     * A party identity belongs to this installation, never to a Google account.
+     * The random device id is persisted locally, so a reinstall gets a fresh
+     * identity while app restarts and nickname changes keep the same member.
      */
-    private fun identity(nickname: String = nickname()): Identity? {
-        val store = BitChordApplication.authStore
-        if (!store.isSignedIn) return null
-        val account = store.activeSession ?: return null
-        val profile = account.profiles.firstOrNull { it.profileId == account.activeProfileId }
-            ?: account.profiles.firstOrNull()
-        val name = nickname.trim().takeIf { it.isNotBlank() }
-            ?: profile?.name?.takeIf { it.isNotBlank() }
-            ?: account.name.takeIf { it.isNotBlank() }
-            ?: account.email.substringBefore('@').takeIf { it.isNotBlank() }
-            ?: return null
+    private fun identity(nickname: String = nickname()): Identity {
+        val device = deviceId()
         return Identity(
-            userId = sha256("${account.accountId}:${profile?.profileId.orEmpty()}").take(32),
-            deviceId = deviceId(),
-            name = name,
-            avatar = profile?.avatar?.takeIf { it.startsWith("http") },
+            userId = sha256("anonymous:$device").take(32),
+            deviceId = device,
+            name = nickname.trim().takeIf { it.isNotBlank() } ?: "Listener",
+            avatar = null,
         )
     }
 

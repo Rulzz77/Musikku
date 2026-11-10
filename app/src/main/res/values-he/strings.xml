@@ -1462,4 +1462,9 @@
     <string name="bit_perfect_status_inexact">%1$s · לא מדויק: המקור הזה אינו PCM ללא אובדן</string>
     <string name="bit_perfect_status_waiting">ממתין לרצועת Lossless ביציאה נתמכת</string>
     <string name="bit_perfect_status_unavailable">לא זמין עבור רצועה זו (%1$s)</string>
+
+    <string name="automix_overview">סקירה כללית של Automix</string>
+    <string name="diwali_title">BitChord מאחלת לכם דיוואלי שמח</string>
+    <string name="diwali_subtitle">מי ייתן וחג האורות ימלא את ביתכם בשמחה ואת ימיכם במוזיקה.</string>
+    <string name="diwali_cta">בואו נחגוג</string>
 </resources>

@@ -84,6 +84,7 @@ fun AccountAndScrobblingScreen(
                 AccountCard(
                     signedIn = true,
                     account = account,
+                    onSignIn = {},
                     onClick = onSwitchChannel,
                     grouped = true,
                 )

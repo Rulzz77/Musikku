@@ -4494,12 +4494,9 @@ private fun BitChordApp(
                 },
                 onAddToPlaylist = {
                     songActions = null
-                    if (song.localUri != null && (song.videoId.startsWith("content://") || song.videoId.startsWith("file://"))) {
-                        offlinePlaylistTarget = song
-                    } else {
-                        viewModel.loadPlaylists()
-                        playlistTarget = song
-                    }
+                    // Every track — including YouTube streams — is saved to
+                    // the device-owned playlist store. No Google account needed.
+                    offlinePlaylistTarget = song
                 },
                 onRemoveFromPlaylist = editable?.let {
                     {
@@ -4507,7 +4504,7 @@ private fun BitChordApp(
                         viewModel.removeFromPlaylist(it.browseId, song)
                     }
                 } ?: detail?.browseId
-                    ?.takeIf { !fromPlayer && song.localUri != null && OfflinePlaylists.isOfflinePlaylist(it) }
+                    ?.takeIf { !fromPlayer && OfflinePlaylists.isOfflinePlaylist(it) }
                     ?.let { id ->
                         {
                             songActions = null

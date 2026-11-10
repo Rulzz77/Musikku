@@ -34,6 +34,7 @@
     <string name="new_playlist">新建播放列表</string>
     <string name="saved_to_youtube_music">已儲存到 YouTube Music</string>
     <string name="sign_in">登入</string>
+    <string name="sign_in_to_add_to_playlist">登入即可新增至播放清單</string>
     <string name="sign_out">退出登入</string>
     <string name="signed_in">已登入</string>
     <string name="not_signed_in">未登入</string>

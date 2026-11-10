@@ -69,6 +69,7 @@
     <string name="auto_empty_offline_subtitle">Download songs on your phone to listen here</string>
     <string name="auto_unavailable_title">Content unavailable</string>
     <string name="auto_unavailable_subtitle">Reopen the folder and try again</string>
+    <string name="sign_in_to_add_to_playlist">Sign in to add to playlist</string>
     <string name="add_to_playlist">Add to playlist</string>
     <string name="add_to_library">Add to library</string>
     <string name="remove_from_library">Remove from library</string>

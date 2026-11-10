@@ -37,6 +37,7 @@
     <string name="new_playlist">Новый плейлист</string>
     <string name="saved_to_youtube_music">Сохранено в YouTube Music</string>
     <string name="sign_in">Войти</string>
+    <string name="sign_in_to_add_to_playlist">Войдите, чтобы добавить в плейлист</string>
     <string name="sign_out">Выйти</string>
     <string name="signed_in">Вход выполнен</string>
     <string name="not_signed_in">Вход не выполнен</string>

@@ -68,6 +68,36 @@ for rel in tracked:
     for label, pattern in patterns:
         for match in pattern.finditer(text):
             line = text.count("\n", 0, match.start()) + 1
+            # YouTube's Web/Innertube client sends its public browser API key
+            # as x-goog-api-key. This is client configuration, not an OAuth
+            # token or a project-owned private credential. Permit only the
+            # single value assigned to GOOGLE_API_KEY in this exact PoToken
+            # WebView source file; any other Google key remains a hard failure.
+            line_start = text.rfind("\n", 0, match.start()) + 1
+            line_end = text.find("\n", match.end())
+            if line_end < 0:
+                line_end = len(text)
+            matched_line = text[line_start:line_end]
+
+            # YouTube's Innertube WebView sends this browser API key as
+            # x-goog-api-key. It is public client configuration, not an
+            # OAuth/private token. Exempt only the exact single assignment
+            # in this one source file; all other Google API keys still fail.
+            is_known_public_youtube_key = (
+                label == "Google API key"
+                and posix == "app/src/main/java/com/music/bitchord/data/innertube/potoken/PoTokenWebView.kt"
+                and text.count(match.group(0)) == 1
+                and "x-goog-api-key" in text
+                and re.fullmatch(
+                    r"""\s*private\s+const\s+val\s+GOOGLE_API_KEY\s*=\s*["']"""
+                    + re.escape(match.group(0))
+                    + r"""["']\s*""",
+                    matched_line,
+                ) is not None
+            )
+            if is_known_public_youtube_key:
+                continue
+
             hits.append((posix, line, label))
     for match in pem.finditer(text):
         line = text.count("\n", 0, match.start()) + 1
@@ -80,6 +110,7 @@ for path, line, label in hits:
     if item in seen:
         continue
     seen.add(item)
+    print(f"Potential credential location: {path}:{line} ({label}); matched content is not printed.", file=sys.stderr)
     print(f"::error file={path},line={line},title=Potential credential::{label} pattern detected; matched content is not printed.")
     failed = True
 

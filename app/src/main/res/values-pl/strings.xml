@@ -38,6 +38,7 @@
     <string name="new_playlist">Nowa playlista</string>
     <string name="saved_to_youtube_music">Zapisano do YouTube Music</string>
     <string name="sign_in">Zaloguj</string>
+    <string name="sign_in_to_add_to_playlist">Zaloguj się, aby dodać do playlisty</string>
     <string name="sign_out">Wyloguj</string>
     <string name="signed_in">Zalogowano</string>
     <string name="not_signed_in">Nie zalogowano</string>

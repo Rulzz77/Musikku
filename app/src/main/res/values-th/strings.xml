@@ -34,6 +34,7 @@
     <string name="new_playlist">เพลย์ลิสต์ใหม่</string>
     <string name="saved_to_youtube_music">บันทึกลง YouTube Music แล้ว</string>
     <string name="sign_in">ลงชื่อเข้าใช้</string>
+    <string name="sign_in_to_add_to_playlist">ลงชื่อเข้าใช้เพื่อเพิ่มลงในเพลย์ลิสต์</string>
     <string name="sign_out">ออกจากระบบ</string>
     <string name="signed_in">ลงชื่อเข้าใช้แล้ว</string>
     <string name="not_signed_in">ยังไม่ได้ลงชื่อเข้าใช้</string>

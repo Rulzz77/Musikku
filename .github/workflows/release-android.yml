@@ -74,7 +74,7 @@ jobs:
               sys.exit("ERROR: bitchordVersionName not found.")
 
           if not updater_match:
-              sys.exit("ERROR: APP_VERSION not found in updater.")
+              sys.exit("ERROR: APP_VERSION not found.")
 
           gradle_version = root_match.group(1)
           updater_version = updater_match.group(1)
@@ -93,7 +93,7 @@ jobs:
           print("Version validation successful.")
           PY
 
-      - name: Prepare release signing
+      - name: Prepare and validate release signing
         shell: bash
         env:
           MUSIKKU_KEYSTORE_BASE64: ${{ secrets.MUSIKKU_KEYSTORE_BASE64 }}
@@ -115,11 +115,31 @@ jobs:
             fi
           done
 
+          # Decode the original MusikKu keystore.
           printf '%s' "$MUSIKKU_KEYSTORE_BASE64" |
             base64 --decode > musikku-release.jks
 
-          test -s musikku-release.jks
+          if [ ! -s musikku-release.jks ]; then
+            echo "::error::Decoded keystore is empty."
+            exit 1
+          fi
 
+          # Validate keystore, password, and alias.
+          keytool -list \
+            -keystore musikku-release.jks \
+            -storepass "$MUSIKKU_STORE_PASSWORD" \
+            -alias "$MUSIKKU_KEY_ALIAS"
+
+          # Wear OS still expects the legacy filename.
+          cp -f musikku-release.jks bitchord-release.jks
+
+          # Ensure both files contain exactly the same keystore.
+          cmp -s musikku-release.jks bitchord-release.jks
+
+          echo "Both keystore files are identical:"
+          sha256sum musikku-release.jks bitchord-release.jks
+
+          # Configure the main Android application.
           cat > keystore.properties <<EOF
           storeFile=musikku-release.jks
           storePassword=${MUSIKKU_STORE_PASSWORD}
@@ -215,4 +235,5 @@ jobs:
         if: always()
         run: |
           rm -f musikku-release.jks
+          rm -f bitchord-release.jks
           rm -f keystore.properties

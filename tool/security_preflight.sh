@@ -80,6 +80,7 @@ for path, line, label in hits:
     if item in seen:
         continue
     seen.add(item)
+    print(f"Potential credential location: {path}:{line} ({label}); matched content is not printed.", file=sys.stderr)
     print(f"::error file={path},line={line},title=Potential credential::{label} pattern detected; matched content is not printed.")
     failed = True
 

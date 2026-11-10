@@ -376,7 +376,9 @@ object LocalMediaRepository {
         // downloads, which it always sees.
         val trustMissing = canAsk && hasStoragePermission(context)
         songs.filter { song ->
-            val uri = song.localUri ?: return@filter false
+            // YouTube tracks are valid members of a device-owned playlist too;
+            // only rows that point at a local file need the MediaStore check.
+            val uri = song.localUri ?: return@filter true
             val id = uri.mediaStoreAudioId()
             when {
                 id != null -> id in existing || !trustMissing

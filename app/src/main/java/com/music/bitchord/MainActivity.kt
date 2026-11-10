@@ -928,8 +928,8 @@ private fun BitChordApp(
         navigator.reset(AppRoute.Settings, AppRoute.ListenTogether)
         JamInviteLink.handled()
     }
-    LaunchedEffect(signedIn, activeJamInviteCode) {
-        if (signedIn && activeJamInviteCode != null) {
+    LaunchedEffect(activeJamInviteCode) {
+        if (activeJamInviteCode != null) {
             navigator.pushAll(AppRoute.Settings, AppRoute.ListenTogether)
         }
     }
@@ -1043,6 +1043,22 @@ private fun BitChordApp(
             thumbnailUrl = playlist.songs.firstOrNull { !it.thumbnailUrl.isNullOrBlank() }?.thumbnailUrl,
             videoId = null,
             browseId = playlist.browseId,
+        )
+    }
+    // Playlists created from the Add to playlist menu are stored separately
+    // from Spotify imports. Surface the same device-owned records on both tabs.
+    val offlinePlaylistItems = offlinePlaylists.map { playlist ->
+        ShelfItem(
+            title = playlist.title,
+            subtitle = stringResource(R.string.local_playlist_subtitle, playlist.songs.size),
+            thumbnailUrl = playlist.songs.firstOrNull { !it.thumbnailUrl.isNullOrBlank() }?.thumbnailUrl,
+            videoId = null,
+            browseId = playlist.browseId,
+        )
+    }
+    val homeLocalPlaylistShelves = remember(offlinePlaylistItems) {
+        if (offlinePlaylistItems.isEmpty()) emptyList() else listOf(
+            HomeShelf(context.getString(R.string.your_playlists), offlinePlaylistItems),
         )
     }
     // What a browse id is recorded under in Downloads.collections, when it names
@@ -3043,10 +3059,6 @@ private fun BitChordApp(
                                 signedIn = signedIn,
                                 account = account,
                                 channelName = selectedChannelName,
-                                onSignIn = {
-                                    navigator.clear()
-                                    webSession = WebSessionMode.SIGN_IN
-                                },
                                 onSwitchChannel = {
                                     viewModel.loadChannels()
                                     showAccountSelector = true
@@ -3077,16 +3089,11 @@ private fun BitChordApp(
                             WearOsScreen(contentPadding = listPadding)
                         } else if (pageRoute == AppRoute.ListenTogether) {
                             ListenTogetherScreen(
-                                signedIn = signedIn,
                                 inviteCode = activeJamInviteCode,
                                 inviteServer = activeJamInviteServer,
                                 onInviteHandled = {
                                     activeJamInviteCode = null
                                     activeJamInviteServer = null
-                                },
-                                onSignIn = {
-                                    navigator.clear()
-                                    webSession = WebSessionMode.SIGN_IN
                                 },
                                 contentPadding = listPadding,
                                 onEditServer = { editingPartyServer = true },
@@ -3118,10 +3125,6 @@ private fun BitChordApp(
                                 windowWidth = windowWidth,
                                 signedIn = signedIn,
                                 account = account,
-                                onSignIn = {
-                                    navigator.clear()
-                                    webSession = WebSessionMode.SIGN_IN
-                                },
                                 onSignOut = { viewModel.signOut() },
                                 onAccountScrobbling = { navigator.push(AppRoute.AccountScrobbling) },
                                 onEqualizer = { navigator.push(AppRoute.Equalizer) },
@@ -3384,8 +3387,6 @@ private fun BitChordApp(
                                 title = stringResource(R.string.listen_now),
                                 festiveLogo = diwaliFestive,
                                 onFestiveLogoClick = { showDiwali = true },
-                                signedIn = signedIn,
-                                onSignIn = { webSession = WebSessionMode.SIGN_IN },
                                 onItemClick = { item, shelfTitle ->
                                     val song = shelfSong(item)
                                     // Hoisted because ShelfItem lives in :shared, and
@@ -3416,6 +3417,7 @@ private fun BitChordApp(
                                 recentlyPlayedLoading = homeRecentlyPlayedLoading && !hideRecents,
                                 topPicks = topPicks,
                                 topPicksLoading = topPicksLoading,
+                                extraShelves = homeLocalPlaylistShelves,
                                 listenerName = account?.name,
                                 // Neither shelf is drawn without its callback.
                                 onTopPickClick = openTopPick.takeUnless { hideTopPicks },
@@ -3688,14 +3690,13 @@ private fun BitChordApp(
                                         },
                                     )
                                 },
-                                onSignIn = { webSession = WebSessionMode.SIGN_IN },
                                 onRetry = viewModel::loadLibrary,
                                 refreshing = MainViewModel.Feed.LIBRARY in refreshing,
                                 onRefresh = { viewModel.refresh(MainViewModel.Feed.LIBRARY) },
                                 pullState = libraryPull,
                                 contentPadding = listPadding,
                                 links = libraryLinks(),
-                                deviceItems = libraryDeviceItems(downloadedReleases) + localPlaylistItems,
+                                deviceItems = libraryDeviceItems(downloadedReleases) + localPlaylistItems + offlinePlaylistItems,
                             )
                         }
                     }
@@ -5307,12 +5308,10 @@ private fun BitChordApp(
             ) { it },
         ) {
             OnboardingScreen(
-                signedIn = signedIn,
                 initialName = remember {
                     ListenTogether.nickname().ifBlank { account?.name.orEmpty() }
                 },
                 onNameChosen = ListenTogether::setNickname,
-                onSignIn = { webSession = WebSessionMode.SIGN_IN },
                 onFinish = AppSettings::setOnboardingComplete,
             )
         }
@@ -5525,10 +5524,6 @@ private fun BitChordApp(
                 activeProfileId = activeProfileId,
                 hazeState = hazeState,
                 onSelect = { selected, profile -> viewModel.selectProfile(selected.accountId, profile.profileId) },
-                onAddAccount = {
-                    showAccountSelector = false
-                    webSession = WebSessionMode.SIGN_IN
-                },
                 onRemoveAccount = { selected ->
                     viewModel.removeAccount(selected.accountId)
                     showAccountSelector = false

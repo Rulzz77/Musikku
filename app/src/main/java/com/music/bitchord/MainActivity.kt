@@ -736,8 +736,6 @@ private fun BitChordApp(
     // Separate from [songActions] so the menu can close behind it — the picker
     // is the next step, not a second sheet stacked on the first.
     var playlistTarget by remember { mutableStateOf<Song?>(null) }
-    // Preserve the selected track while a guest signs in from its menu.
-    var pendingPlaylistSongAfterSignIn by remember { mutableStateOf<Song?>(null) }
     // The picker opened from the Library tab, where there is no track and
     // creating the playlist is the whole errand.
     var creatingPlaylist by remember { mutableStateOf(false) }
@@ -4496,17 +4494,9 @@ private fun BitChordApp(
                 },
                 onAddToPlaylist = {
                     songActions = null
-                    if (song.localUri != null && (song.videoId.startsWith("content://") || song.videoId.startsWith("file://"))) {
-                        offlinePlaylistTarget = song
-                    } else if (!signedIn) {
-                        // A YouTube Music playlist belongs to an account. Keep
-                        // the chosen song, sign in, then reopen its picker.
-                        pendingPlaylistSongAfterSignIn = song
-                        webSession = WebSessionMode.SIGN_IN
-                    } else {
-                        viewModel.loadPlaylists()
-                        playlistTarget = song
-                    }
+                    // Every track — including YouTube streams — is saved to
+                    // the device-owned playlist store. No Google account needed.
+                    offlinePlaylistTarget = song
                 },
                 onRemoveFromPlaylist = editable?.let {
                     {
@@ -5329,10 +5319,7 @@ private fun BitChordApp(
 
         // ---- Google sign-in (full screen WebView) ----
         webSession?.let { mode ->
-            BackHandler {
-                webSession = null
-                pendingPlaylistSongAfterSignIn = null
-            }
+            BackHandler { webSession = null }
             // Raised by "Use this channel", read by the browser as "take the
             // session from the page as it now stands". A counter rather than a
             // flag so a second tap, after a failed first one, is still a new
@@ -5350,10 +5337,7 @@ private fun BitChordApp(
                             .padding(horizontal = 8.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        IconButton(onClick = {
-                            webSession = null
-                            pendingPlaylistSongAfterSignIn = null
-                        }) {
+                        IconButton(onClick = { webSession = null }) {
                             Icon(
                                 Icons.Rounded.Close,
                                 contentDescription = stringResource(R.string.close),
@@ -5414,11 +5398,6 @@ private fun BitChordApp(
                                     if (mode == WebSessionMode.SIGN_IN) {
                                         navigator.clear()
                                         selectedTab = TAB_LIBRARY
-                                        pendingPlaylistSongAfterSignIn?.let { pendingSong ->
-                                            pendingPlaylistSongAfterSignIn = null
-                                            viewModel.loadPlaylists()
-                                            playlistTarget = pendingSong
-                                        }
                                     }
                                 } else {
                                     captureFailed = true

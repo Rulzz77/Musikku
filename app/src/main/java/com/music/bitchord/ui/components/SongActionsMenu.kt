@@ -80,12 +80,10 @@ import java.util.Locale
  * what the menu is opened for; the queue and navigation rows below it were
  * always the fallback for "I meant to do something with this song".
  *
- * Everything that writes to the account is hidden outright when [signedIn] is
- * false rather than shown and refused. A track playing from a local file or a
- * finished download (`song.localUri != null`) carries no YouTube identity to
- * rate, fetch again or share, so it gets the offline player's rows instead:
- * Like and Add to playlist against the device's own playlists (see
- * [com.music.bitchord.data.OfflinePlaylists]), signed in or not.
+ * Account-only actions are hidden when [signedIn] is false. Add to playlist
+ * always uses the device-owned [com.music.bitchord.data.OfflinePlaylists]
+ * store, so both YouTube tracks and device files can be saved without Google
+ * sign-in.
  *
  * [showSleepTimer] and [onShare] are the player's extras: a sleep timer isn't a
  * property of some row in a list, so it only appears where it means something.
@@ -198,13 +196,6 @@ fun SongActionsMenu(
     // A local file or a finished download has no YouTube identity behind it to
     // rate, save, queue into a playlist, fetch again, or share a link for.
     val isOffline = song.localUri != null
-    // Raw device files use the local playlist store; YouTube-backed tracks,
-    // including cached downloads, need a YouTube Music session.
-    val isDeviceFile = isOffline && (
-        song.videoId.startsWith("content://") || song.videoId.startsWith("file://")
-    )
-    val needsPlaylistSignIn = !signedIn && !isDeviceFile
-
     val rows: @Composable ColumnScope.() -> Unit = {
         // Groups are drawn as they turn out to have something in them, and the
         // separator goes *before* a group, never after — so a menu whose last
@@ -290,17 +281,10 @@ fun SongActionsMenu(
             }
         }
 
-        // The playlist action stays visible to guests as a route into sign-in;
-        // after a successful login the host returns to this song's picker.
-        // Device files still go straight to the independent offline playlist
-        // store and never ask for a YouTube account.
         if (startsGroup()) IosMenuSeparator()
         ActionRow(
             icon = SfIcons.AddToPlaylist,
-            label = stringResource(
-                if (needsPlaylistSignIn) R.string.sign_in_to_add_to_playlist
-                else R.string.add_to_playlist,
-            ),
+            label = stringResource(R.string.add_to_playlist),
             accent = palette.accent,
             onClick = onAddToPlaylist,
         )

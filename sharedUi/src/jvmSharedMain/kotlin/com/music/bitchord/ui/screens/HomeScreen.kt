@@ -82,7 +82,6 @@ import com.music.bitchord.ui.components.PullToRefresh
 import com.music.bitchord.ui.components.SHELF_CARD_WIDTH
 import com.music.bitchord.ui.components.VideoThumbnails
 import com.music.bitchord.ui.components.SearchPlayingBars
-import com.music.bitchord.ui.components.SignInBanner
 import com.music.bitchord.ui.components.feedMoreSkeleton
 import com.music.bitchord.ui.components.feedSkeleton
 import com.music.bitchord.ui.components.recentlyPlayedSkeleton
@@ -126,8 +125,6 @@ fun HomeScreen(
     festiveLogo: Boolean = false,
     /** Tapping the festive wordmark, e.g. to bring its greeting back. */
     onFestiveLogoClick: (() -> Unit)? = null,
-    signedIn: Boolean = true,
-    onSignIn: (() -> Unit)? = null,
     /**
      * Holding a card rather than tapping it. Every card on the feed answers,
      * whichever kind it is: the caller reads the item the same way it does for
@@ -193,17 +190,6 @@ fun HomeScreen(
         ) {
             if (title != null) {
                 item { HomeTitle(title, festiveLogo = festiveLogo, onFestiveLogoClick = onFestiveLogoClick) }
-            }
-            if (!signedIn && onSignIn != null) {
-                item {
-                    // Read in this item, so a scroll starting or ending
-                    // recomposes the banner alone.
-                    SignInBanner(
-                        onSignIn = onSignIn,
-                        modifier = Modifier.padding(bottom = 8.dp),
-                        motion = LocalArtworkMotion.current && !listState.isScrollInProgress,
-                    )
-                }
             }
             if (onTopPickClick != null) {
                 when {

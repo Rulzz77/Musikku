@@ -38,6 +38,7 @@
     <string name="new_playlist">새 재생목록</string>
     <string name="saved_to_youtube_music">YouTube Music에 저장했습니다</string>
     <string name="sign_in">로그인</string>
+    <string name="sign_in_to_add_to_playlist">재생목록에 추가하려면 로그인하세요</string>
     <string name="sign_out">로그아웃</string>
     <string name="signed_in">로그인함</string>
     <string name="not_signed_in">로그인하지 않음</string>

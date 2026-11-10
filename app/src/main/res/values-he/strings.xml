@@ -37,6 +37,7 @@
     <string name="new_playlist">פלייליסט חדש</string>
     <string name="saved_to_youtube_music">נשמר ל-YouTube Music</string>
     <string name="sign_in">התחברות</string>
+    <string name="sign_in_to_add_to_playlist">יש להתחבר כדי להוסיף לפלייליסט</string>
     <string name="sign_out">התנתקות</string>
     <string name="signed_in">מחובר</string>
     <string name="not_signed_in">לא מחובר</string>

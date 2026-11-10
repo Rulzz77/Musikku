@@ -40,7 +40,6 @@ fun AccountAndScrobblingScreen(
     signedIn: Boolean,
     account: Account?,
     channelName: String?,
-    onSignIn: () -> Unit,
     onSwitchChannel: () -> Unit,
     onSignOut: () -> Unit,
     onOpenListenBrainzLogin: () -> Unit,
@@ -85,7 +84,6 @@ fun AccountAndScrobblingScreen(
                 AccountCard(
                     signedIn = true,
                     account = account,
-                    onSignIn = {},
                     onClick = onSwitchChannel,
                     grouped = true,
                 )

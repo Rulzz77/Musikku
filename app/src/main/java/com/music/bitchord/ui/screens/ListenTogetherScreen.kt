@@ -128,11 +128,9 @@ internal fun ServerUrlError.toMessageRes(): Int = when (this) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ListenTogetherScreen(
-    signedIn: Boolean,
     inviteCode: String? = null,
     inviteServer: String? = null,
     onInviteHandled: () -> Unit = {},
-    onSignIn: () -> Unit,
     contentPadding: PaddingValues,
     /**
      * Opens the server editor, which is mounted at the root rather than here.
@@ -478,21 +476,10 @@ fun ListenTogetherScreen(
     ) {
         SettingsPageTitle(stringResource(R.string.listen_together))
 
-        if (!signedIn) {
-            SettingsGroup(footer = stringResource(R.string.listen_together_sign_in_footer), topSpacing = 0.dp) {
-                SettingsRow(
-                    icon = SfIcons.Login,
-                    title = stringResource(R.string.sign_in),
-                    subtitle = stringResource(R.string.not_signed_in),
-                    onClick = onSignIn,
-                )
-            }
-        }
-
         if (!state.inParty) {
             PartyLanding(
                 avatarUrl = ListenTogether.myAvatarUrl(),
-                enabled = signedIn && ListenTogether.hasServer && !busy,
+                enabled = ListenTogether.canJoin() && ListenTogether.hasServer && !busy,
                 // The last attempt's message does not belong on the next one.
                 onCreate = {
                     failure = null

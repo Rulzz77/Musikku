@@ -94,25 +94,15 @@ import com.music.bitchord.ui.player.cyclingMeshPalette
  */
 @Composable
 fun OnboardingScreen(
-    signedIn: Boolean,
     initialName: String,
-    /** Saves the party name. Called on Next, before the second page. */
+    /** Saves the party name. */
     onNameChosen: (String) -> Unit,
-    /** Opens the Google sign-in. The caller finishes onboarding once it lands. */
-    onSignIn: () -> Unit,
     onFinish: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var page by rememberSaveable { mutableIntStateOf(PAGE_NAME) }
+    val page = PAGE_NAME
     var name by rememberSaveable { mutableStateOf(initialName) }
     val focusManager = LocalFocusManager.current
-
-    BackHandler(enabled = page == PAGE_CONNECT) { page = PAGE_NAME }
-    // "Sign in with Google" goes through the app's own sign-in WebView, raised
-    // over this page; the account landing is what ends the welcome.
-    LaunchedEffect(signedIn, page) {
-        if (signedIn && page == PAGE_CONNECT) onFinish()
-    }
 
     // The mesh never settles on one palette: each crossfade is as long as the
     // hold, so one runs straight into the next.
@@ -174,14 +164,10 @@ fun OnboardingScreen(
                             if (chosen.isEmpty()) return@next
                             focusManager.clearFocus()
                             onNameChosen(chosen)
-                            if (signedIn) onFinish() else page = PAGE_CONNECT
+                            onFinish()
                         },
                     )
-                    else -> ConnectPage(
-                        onBack = { page = PAGE_NAME },
-                        onSignIn = onSignIn,
-                        onSkip = onFinish,
-                    )
+
                 }
             }
         }

@@ -1045,6 +1045,22 @@ private fun BitChordApp(
             browseId = playlist.browseId,
         )
     }
+    // Playlists created from the Add to playlist menu are stored separately
+    // from Spotify imports. Surface the same device-owned records on both tabs.
+    val offlinePlaylistItems = offlinePlaylists.map { playlist ->
+        ShelfItem(
+            title = playlist.title,
+            subtitle = stringResource(R.string.local_playlist_subtitle, playlist.songs.size),
+            thumbnailUrl = playlist.songs.firstOrNull { !it.thumbnailUrl.isNullOrBlank() }?.thumbnailUrl,
+            videoId = null,
+            browseId = playlist.browseId,
+        )
+    }
+    val homeLocalPlaylistShelves = remember(offlinePlaylistItems) {
+        if (offlinePlaylistItems.isEmpty()) emptyList() else listOf(
+            HomeShelf(context.getString(R.string.your_playlists), offlinePlaylistItems),
+        )
+    }
     // What a browse id is recorded under in Downloads.collections, when it names
     // a release downloaded whole — see BrowseTarget.downloadId. A downloaded
     // playlist's own page and its card both carry the id under the
@@ -3416,6 +3432,7 @@ private fun BitChordApp(
                                 recentlyPlayedLoading = homeRecentlyPlayedLoading && !hideRecents,
                                 topPicks = topPicks,
                                 topPicksLoading = topPicksLoading,
+                                extraShelves = homeLocalPlaylistShelves,
                                 listenerName = account?.name,
                                 // Neither shelf is drawn without its callback.
                                 onTopPickClick = openTopPick.takeUnless { hideTopPicks },
@@ -3695,7 +3712,7 @@ private fun BitChordApp(
                                 pullState = libraryPull,
                                 contentPadding = listPadding,
                                 links = libraryLinks(),
-                                deviceItems = libraryDeviceItems(downloadedReleases) + localPlaylistItems,
+                                deviceItems = libraryDeviceItems(downloadedReleases) + localPlaylistItems + offlinePlaylistItems,
                             )
                         }
                     }

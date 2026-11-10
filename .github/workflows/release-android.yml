@@ -272,7 +272,7 @@ jobs:
       # ==========================================
       # 9. VERIFY APK SIGNATURES
       # ==========================================
-      - name: Verify APK signatures
+            - name: Verify APK signatures
         shell: bash
         run: |
           set -euo pipefail
@@ -290,9 +290,17 @@ jobs:
 
           EXPECTED_SHA256="cb554bfa8ea9f4d56a035d3ffa922e4b560f02023652d5f9e7d3261ac1733120"
 
+          APK_COUNT=0
+
           for apk in release-assets/*.apk; do
 
+            echo "======================================"
             echo "Checking: $apk"
+
+            if [[ ! -f "$apk" ]]; then
+              echo "::error::APK not found: $apk"
+              exit 1
+            fi
 
             VERIFY_OUTPUT="$("$APKSIGNER" verify \
               --verbose \
@@ -301,15 +309,23 @@ jobs:
 
             echo "$VERIFY_OUTPUT"
 
+            # Support both old and new apksigner output formats.
             ACTUAL_SHA256="$(
               printf '%s\n' "$VERIFY_OUTPUT" |
-              awk -F': ' '
-                /Signer #1 certificate SHA-256 digest:/ {
-                  print tolower($2)
-                  exit
-                }
-              ' | tr -d ':'
+              awk '/certificate SHA-256 digest:/ {
+                print tolower($NF)
+                exit
+              }' |
+              tr -d ':'
             )"
+
+            if [[ -z "$ACTUAL_SHA256" ]]; then
+              echo "::error::Unable to extract SHA-256 fingerprint: $apk"
+              exit 1
+            fi
+
+            echo "Expected SHA256: $EXPECTED_SHA256"
+            echo "Actual SHA256:   $ACTUAL_SHA256"
 
             if [[ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]]; then
               echo "::error::APK signing certificate mismatch: $apk"
@@ -318,8 +334,16 @@ jobs:
 
             echo "Signature verified: $apk"
 
+            APK_COUNT=$((APK_COUNT + 1))
+
           done
 
+          if [[ "$APK_COUNT" -ne 5 ]]; then
+            echo "::error::Expected 5 APKs, verified $APK_COUNT."
+            exit 1
+          fi
+
+          echo "======================================"
           echo "All five APK signatures are valid."
 
       # ==========================================

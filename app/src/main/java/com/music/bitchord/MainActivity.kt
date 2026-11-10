@@ -4504,7 +4504,7 @@ private fun BitChordApp(
                         viewModel.removeFromPlaylist(it.browseId, song)
                     }
                 } ?: detail?.browseId
-                    ?.takeIf { !fromPlayer && song.localUri != null && OfflinePlaylists.isOfflinePlaylist(it) }
+                    ?.takeIf { !fromPlayer && OfflinePlaylists.isOfflinePlaylist(it) }
                     ?.let { id ->
                         {
                             songActions = null

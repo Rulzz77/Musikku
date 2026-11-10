@@ -928,8 +928,8 @@ private fun BitChordApp(
         navigator.reset(AppRoute.Settings, AppRoute.ListenTogether)
         JamInviteLink.handled()
     }
-    LaunchedEffect(signedIn, activeJamInviteCode) {
-        if (signedIn && activeJamInviteCode != null) {
+    LaunchedEffect(activeJamInviteCode) {
+        if (activeJamInviteCode != null) {
             navigator.pushAll(AppRoute.Settings, AppRoute.ListenTogether)
         }
     }
@@ -3059,10 +3059,6 @@ private fun BitChordApp(
                                 signedIn = signedIn,
                                 account = account,
                                 channelName = selectedChannelName,
-                                onSignIn = {
-                                    navigator.clear()
-                                    webSession = WebSessionMode.SIGN_IN
-                                },
                                 onSwitchChannel = {
                                     viewModel.loadChannels()
                                     showAccountSelector = true
@@ -3093,16 +3089,11 @@ private fun BitChordApp(
                             WearOsScreen(contentPadding = listPadding)
                         } else if (pageRoute == AppRoute.ListenTogether) {
                             ListenTogetherScreen(
-                                signedIn = signedIn,
                                 inviteCode = activeJamInviteCode,
                                 inviteServer = activeJamInviteServer,
                                 onInviteHandled = {
                                     activeJamInviteCode = null
                                     activeJamInviteServer = null
-                                },
-                                onSignIn = {
-                                    navigator.clear()
-                                    webSession = WebSessionMode.SIGN_IN
                                 },
                                 contentPadding = listPadding,
                                 onEditServer = { editingPartyServer = true },
@@ -5324,12 +5315,10 @@ private fun BitChordApp(
             ) { it },
         ) {
             OnboardingScreen(
-                signedIn = signedIn,
                 initialName = remember {
                     ListenTogether.nickname().ifBlank { account?.name.orEmpty() }
                 },
                 onNameChosen = ListenTogether::setNickname,
-                onSignIn = { webSession = WebSessionMode.SIGN_IN },
                 onFinish = AppSettings::setOnboardingComplete,
             )
         }

@@ -1,5 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<network-security-config>
-    <!-- Reject HTTP/cleartext traffic. Use HTTPS for API, streaming, and update requests. -->
-    <base-config cleartextTrafficPermitted="false" />
-</network-security-config>

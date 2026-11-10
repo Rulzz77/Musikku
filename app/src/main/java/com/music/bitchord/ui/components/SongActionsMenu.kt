@@ -198,6 +198,12 @@ fun SongActionsMenu(
     // A local file or a finished download has no YouTube identity behind it to
     // rate, save, queue into a playlist, fetch again, or share a link for.
     val isOffline = song.localUri != null
+    // Raw device files use the local playlist store; YouTube-backed tracks,
+    // including cached downloads, need a YouTube Music session.
+    val isDeviceFile = isOffline && (
+        song.videoId.startsWith("content://") || song.videoId.startsWith("file://")
+    )
+    val needsPlaylistSignIn = !signedIn && !isDeviceFile
 
     val rows: @Composable ColumnScope.() -> Unit = {
         // Groups are drawn as they turn out to have something in them, and the
@@ -284,18 +290,21 @@ fun SongActionsMenu(
             }
         }
 
-        // The account's rows, or for a local file or download the offline
-        // player's own pair: a heart that files the track under this device's
-        // Liked playlist, and the device's playlists. [likeStatus] is that
-        // playlist's answer there, not YouTube's, and neither needs an account.
+        // The playlist action stays visible to guests as a route into sign-in;
+        // after a successful login the host returns to this song's picker.
+        // Device files still go straight to the independent offline playlist
+        // store and never ask for a YouTube account.
+        if (startsGroup()) IosMenuSeparator()
+        ActionRow(
+            icon = SfIcons.AddToPlaylist,
+            label = stringResource(
+                if (needsPlaylistSignIn) R.string.sign_in_to_add_to_playlist
+                else R.string.add_to_playlist,
+            ),
+            accent = palette.accent,
+            onClick = onAddToPlaylist,
+        )
         if (canRate) {
-            if (startsGroup()) IosMenuSeparator()
-            ActionRow(
-                icon = SfIcons.AddToPlaylist,
-                label = stringResource(R.string.add_to_playlist),
-                accent = palette.accent,
-                onClick = onAddToPlaylist,
-            )
             onRemoveFromPlaylist?.let {
                 ActionRow(
                     icon = SfIcons.RemoveFromPlaylist,

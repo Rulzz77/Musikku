@@ -19,11 +19,17 @@ jobs:
     timeout-minutes: 120
 
     steps:
+      # ==========================================
+      # 1. CHECKOUT
+      # ==========================================
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
+      # ==========================================
+      # 2. JAVA SETUP
+      # ==========================================
       - name: Set up Java 17
         uses: actions/setup-java@v6
         with:
@@ -31,17 +37,58 @@ jobs:
           java-version: "17"
           cache: gradle
 
+      # ==========================================
+      # 3. ANDROID SDK SETUP
+      # ==========================================
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
 
+      # ==========================================
+      # 4. INSTALL ANDROID SDK
+      # ==========================================
       - name: Install Android SDK packages
+        shell: bash
         run: |
-          sdkmanager --install \
-            "platforms;android-37" \
+          set -euo pipefail
+
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+
+          if [[ -z "$SDK_ROOT" ]]; then
+            echo "::error::Android SDK root not found."
+            exit 1
+          fi
+
+          echo "Android SDK: $SDK_ROOT"
+
+          sdkmanager --sdk_root="$SDK_ROOT" --install \
+            "platforms;android-37.0" \
             "build-tools;35.0.0" \
             "cmake;3.22.1" \
             "ndk;27.0.12077973"
 
+          # Verify Android 37.0 installation.
+          PLATFORM_DIR="$SDK_ROOT/platforms/android-37.0"
+
+          if [[ ! -f "$PLATFORM_DIR/android.jar" ]]; then
+            echo "::error::Android SDK 37.0 installation failed."
+            exit 1
+          fi
+
+          # Compatibility with tools expecting android-37.
+          if [[ ! -e "$SDK_ROOT/platforms/android-37" ]]; then
+            ln -s android-37.0 "$SDK_ROOT/platforms/android-37"
+          fi
+
+          if [[ ! -f "$SDK_ROOT/platforms/android-37/android.jar" ]]; then
+            echo "::error::Android 37 compatibility directory is invalid."
+            exit 1
+          fi
+
+          echo "Android SDK 37 is ready."
+
+      # ==========================================
+      # 5. VALIDATE VERSION
+      # ==========================================
       - name: Validate release version
         shell: bash
         run: |
@@ -51,7 +98,10 @@ jobs:
           import os
           import sys
 
-          root = pathlib.Path("build.gradle.kts").read_text(encoding="utf-8")
+          root = pathlib.Path("build.gradle.kts").read_text(
+              encoding="utf-8"
+          )
+
           updater = pathlib.Path(
               "app/src/main/java/com/music/bitchord/data/AppUpdateChecker.kt"
           ).read_text(encoding="utf-8")
@@ -89,6 +139,9 @@ jobs:
           print("Version validation successful.")
           PY
 
+      # ==========================================
+      # 6. RELEASE SIGNING
+      # ==========================================
       - name: Prepare and validate release signing
         shell: bash
         env:
@@ -96,6 +149,7 @@ jobs:
           MUSIKKU_STORE_PASSWORD: ${{ secrets.MUSIKKU_STORE_PASSWORD }}
           MUSIKKU_KEY_ALIAS: ${{ secrets.MUSIKKU_KEY_ALIAS }}
           MUSIKKU_KEY_PASSWORD: ${{ secrets.MUSIKKU_KEY_PASSWORD }}
+
         run: |
           set -euo pipefail
 
@@ -105,26 +159,37 @@ jobs:
             MUSIKKU_KEY_ALIAS \
             MUSIKKU_KEY_PASSWORD
           do
-            if [ -z "${!name:-}" ]; then
+            if [[ -z "${!name:-}" ]]; then
               echo "::error::Missing GitHub secret: $name"
               exit 1
             fi
           done
 
-          printf '%s' "$MUSIKKU_KEYSTORE_BASE64" |
-            base64 --decode > musikku-release.jks
+          # Decode keystore.
+          if ! printf '%s' "$MUSIKKU_KEYSTORE_BASE64" |
+            tr -d '[:space:]' |
+            base64 --decode > musikku-release.jks; then
 
-          if [ ! -s musikku-release.jks ]; then
+            echo "::error::Invalid Base64 keystore."
+            exit 1
+          fi
+
+          if [[ ! -s musikku-release.jks ]]; then
             echo "::error::Decoded keystore is empty."
             exit 1
           fi
 
-          keytool -list \
+          # Validate keystore and alias.
+          if ! keytool -list \
             -keystore musikku-release.jks \
             -storepass "$MUSIKKU_STORE_PASSWORD" \
-            -alias "$MUSIKKU_KEY_ALIAS"
+            -alias "$MUSIKKU_KEY_ALIAS"; then
 
-          # Wear OS legacy keystore filename
+            echo "::error::Keystore validation failed."
+            exit 1
+          fi
+
+          # Wear OS legacy filename.
           cp -f musikku-release.jks bitchord-release.jks
 
           cmp -s musikku-release.jks bitchord-release.jks
@@ -132,6 +197,7 @@ jobs:
           echo "Keystore SHA-256:"
           sha256sum musikku-release.jks bitchord-release.jks
 
+          # Main Android signing configuration.
           cat > keystore.properties <<EOF
           storeFile=musikku-release.jks
           storePassword=${MUSIKKU_STORE_PASSWORD}
@@ -141,13 +207,23 @@ jobs:
 
           echo "Release signing configuration prepared."
 
+      # ==========================================
+      # 7. BUILD ANDROID + WEAR OS
+      # ==========================================
       - name: Build production phone and Wear OS
+        shell: bash
         run: |
+          set -euo pipefail
+
           chmod +x ./gradlew
+
           ./gradlew --no-daemon \
             :app:assembleProdRelease \
             :wearos:packageProdRelease
 
+      # ==========================================
+      # 8. PREPARE RELEASE ASSETS
+      # ==========================================
       - name: Prepare APK release assets
         shell: bash
         run: |
@@ -159,24 +235,33 @@ jobs:
 
           mkdir -p "$DEST"
 
+          # Android ARM64.
           cp "$SOURCE/app-prod-arm64-v8a-release.apk" \
             "$DEST/MusikKu-arm64-v8a.apk"
 
+          # Android ARMv7.
           cp "$SOURCE/app-prod-armeabi-v7a-release.apk" \
             "$DEST/MusikKu-armeabi-v7a.apk"
 
+          # Android x86_64.
           cp "$SOURCE/app-prod-x86_64-release.apk" \
             "$DEST/MusikKu-x86_64.apk"
 
+          # Android Universal.
           cp "$SOURCE/app-prod-universal-release.apk" \
             "$DEST/MusikKu-universal.apk"
 
+          # Wear OS.
           cp "$WEAR_SOURCE/BitChordWear-prod-release.apk" \
             "$DEST/MusikKu-WearOS.apk"
 
-          APK_COUNT=$(find "$DEST" -maxdepth 1 -type f -name "*.apk" | wc -l)
+          # Validate APK count.
+          APK_COUNT=$(find "$DEST" \
+            -maxdepth 1 \
+            -type f \
+            -name "*.apk" | wc -l)
 
-          if [ "$APK_COUNT" -ne 5 ]; then
+          if [[ "$APK_COUNT" -ne 5 ]]; then
             echo "::error::Expected 5 APK files, found $APK_COUNT."
             exit 1
           fi
@@ -184,6 +269,9 @@ jobs:
           echo "Release assets prepared:"
           ls -lh "$DEST"
 
+      # ==========================================
+      # 9. VERIFY APK SIGNATURES
+      # ==========================================
       - name: Verify APK signatures
         shell: bash
         run: |
@@ -192,9 +280,10 @@ jobs:
           SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/.android/sdk}}"
 
           APKSIGNER="$(find "$SDK_ROOT/build-tools" \
-            -type f -name apksigner | sort -V | tail -n 1)"
+            -type f \
+            -name apksigner | sort -V | tail -n 1)"
 
-          if [ -z "$APKSIGNER" ]; then
+          if [[ -z "$APKSIGNER" ]]; then
             echo "::error::apksigner not found."
             exit 1
           fi
@@ -202,33 +291,58 @@ jobs:
           EXPECTED_SHA256="cb554bfa8ea9f4d56a035d3ffa922e4b560f02023652d5f9e7d3261ac1733120"
 
           for apk in release-assets/*.apk; do
+
             echo "Checking: $apk"
 
             VERIFY_OUTPUT="$("$APKSIGNER" verify \
-              --verbose --print-certs "$apk")"
+              --verbose \
+              --print-certs \
+              "$apk")"
 
             echo "$VERIFY_OUTPUT"
 
-            ACTUAL_SHA256="$(printf '%s\n' "$VERIFY_OUTPUT" |
-              awk -F': ' '/Signer #1 certificate SHA-256 digest:/ {
-                print tolower($2)
-                exit
-              }' | tr -d ':')"
+            ACTUAL_SHA256="$(
+              printf '%s\n' "$VERIFY_OUTPUT" |
+              awk -F': ' '
+                /Signer #1 certificate SHA-256 digest:/ {
+                  print tolower($2)
+                  exit
+                }
+              ' | tr -d ':'
+            )"
 
-            if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
+            if [[ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]]; then
               echo "::error::APK signing certificate mismatch: $apk"
               exit 1
             fi
 
             echo "Signature verified: $apk"
+
           done
 
           echo "All five APK signatures are valid."
 
+      # ==========================================
+      # 10. UPLOAD BUILD ARTIFACTS
+      # ==========================================
+      - name: Upload APK build artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: MusikKu-Android-WearOS-APKs
+          path: release-assets/*.apk
+          retention-days: 14
+          if-no-files-found: error
+
+      # ==========================================
+      # 11. PUBLISH GITHUB RELEASE
+      # ==========================================
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
+
         run: |
+          set -euo pipefail
+
           gh release create "$GITHUB_REF_NAME" \
             release-assets/*.apk \
             --repo "$GITHUB_REPOSITORY" \
@@ -236,6 +350,11 @@ jobs:
             --generate-notes \
             --verify-tag
 
+          echo "GitHub Release published successfully."
+
+      # ==========================================
+      # 12. CLEANUP
+      # ==========================================
       - name: Remove temporary signing files
         if: always()
         run: |

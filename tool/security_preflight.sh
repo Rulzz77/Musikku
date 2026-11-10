@@ -68,6 +68,25 @@ for rel in tracked:
     for label, pattern in patterns:
         for match in pattern.finditer(text):
             line = text.count("\n", 0, match.start()) + 1
+            # YouTube's Web/Innertube client sends its public browser API key
+            # as x-goog-api-key. This is client configuration, not an OAuth
+            # token or a project-owned private credential. Permit only the
+            # single value assigned to GOOGLE_API_KEY in this exact PoToken
+            # WebView source file; any other Google key remains a hard failure.
+            is_known_public_youtube_key = (
+                label == "Google API key"
+                and posix == "app/src/main/java/com/music/bitchord/data/innertube/potoken/PoTokenWebView.kt"
+                and text.count(match.group(0)) == 1
+                and "x-goog-api-key" in text
+                and re.search(
+                    r"private\\s+const\\s+val\\s+GOOGLE_API_KEY\\s*=\\s*[\"']$",
+                    text[max(0, match.start() - 100):match.start()],
+                ) is not None
+                and re.match(r"""[\"']""", text[match.end():]) is not None
+            )
+            if is_known_public_youtube_key:
+                continue
+
             hits.append((posix, line, label))
     for match in pem.finditer(text):
         line = text.count("\n", 0, match.start()) + 1

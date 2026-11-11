@@ -76,7 +76,46 @@ object BiniLyrics {
         val body = lyricsGet(url.toString()) ?: return@withContext null
         val response = runCatching { lyricsJson.decodeFromString<Response>(body) }.getOrNull()
             ?: return@withContext null
-        response.results?.firstOrNull()
+        selectHit(response, title, artist, durationMs, isrc)
+    }
+
+    /**
+     * Search results are ranked by the provider, but the first result is not
+     * necessarily this recording (same-name live/remix/cover entries can rank
+     * ahead). Apply the same strict title, artist, version and duration checks
+     * as lrc.red before allowing its ISRC to influence the rest of the lookup.
+     *
+     * When the caller already knows an ISRC, accept only that exact recording.
+     */
+    internal fun selectHit(
+        response: Response,
+        title: String,
+        artist: String,
+        durationMs: Long,
+        isrc: String? = null,
+    ): Hit? {
+        val candidates = response.results.orEmpty()
+        if (!isrc.isNullOrBlank()) {
+            return candidates.firstOrNull { it.isrc.equals(isrc, ignoreCase = true) }
+        }
+        val selectedIsrc = LrcRed.best(
+            candidates.mapNotNull { candidate ->
+                val candidateIsrc = candidate.isrc ?: return@mapNotNull null
+                val candidateTitle = candidate.trackName ?: return@mapNotNull null
+                val candidateArtist = candidate.artistName ?: return@mapNotNull null
+                LrcRed.Hit(
+                    isrc = candidateIsrc,
+                    title = candidateTitle,
+                    artist = candidateArtist,
+                    album = candidate.albumName,
+                    duration = candidate.duration?.toDouble(),
+                )
+            },
+            title,
+            artist,
+            durationMs,
+        )?.isrc ?: return null
+        return candidates.firstOrNull { it.isrc.equals(selectedIsrc, ignoreCase = true) }
     }
 
     /**

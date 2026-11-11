@@ -1,6 +1,7 @@
 package com.music.bitchord
 
 import com.music.bitchord.data.lyrics.BiniLyrics
+import com.music.bitchord.data.lyrics.LrcRed
 import com.music.bitchord.data.lyrics.Unison
 import com.music.bitchord.data.lyrics.artistForLyricsSearch
 import com.music.bitchord.data.lyrics.forLyricsSearch
@@ -41,6 +42,60 @@ class NewLyricsSourceTest {
         assertEquals("golden hour", hit.trackName)
         assertEquals(209, hit.duration)
         assertEquals("https://lyrics-storage.binimum.org/GBKPL2204171.ttml", hit.lyricsUrl)
+    }
+
+    @Test
+    fun `BiniLyrics skips a higher-ranked result from a different artist`() {
+        val response = BiniLyrics.Response(
+            results = listOf(
+                BiniLyrics.Hit(
+                    trackName = "golden hour",
+                    artistName = "A Different Artist",
+                    duration = 209,
+                    isrc = "USAAA2200001",
+                ),
+                BiniLyrics.Hit(
+                    trackName = "golden hour",
+                    artistName = "JVKE",
+                    duration = 209,
+                    isrc = "GBKPL2204171",
+                ),
+            ),
+        )
+
+        assertEquals(
+            "GBKPL2204171",
+            BiniLyrics.selectHit(response, "golden hour", "JVKE", 209_000)?.isrc,
+        )
+    }
+
+    @Test
+    fun `BiniLyrics rejects a different recording version`() {
+        val response = BiniLyrics.Response(
+            results = listOf(
+                BiniLyrics.Hit(
+                    trackName = "golden hour (Live)",
+                    artistName = "JVKE",
+                    duration = 209,
+                    isrc = "USAAA2200002",
+                ),
+            ),
+        )
+
+        assertNull(BiniLyrics.selectHit(response, "golden hour", "JVKE", 209_000))
+    }
+
+    @Test
+    fun `BiniLyrics requires a matching ISRC when one is already known`() {
+        val response = BiniLyrics.Response(
+            results = listOf(
+                BiniLyrics.Hit(trackName = "golden hour", artistName = "JVKE", isrc = "GBKPL2204171"),
+            ),
+        )
+
+        assertNull(
+            BiniLyrics.selectHit(response, "golden hour", "JVKE", 209_000, "USAAA2200009"),
+        )
     }
 
     @Test

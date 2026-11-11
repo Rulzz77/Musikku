@@ -1878,6 +1878,8 @@ class PlaybackService : MediaLibraryService() {
         onUserIntent = { partySync?.onLocalIntent() },
         deferPlayToParty = { partySync?.shouldDeferPlay() == true },
         lockedTransport = { playing -> partySync?.onLockedTransport(playing) == true },
+        routePartyNext = { partySync?.routeNext() == true },
+        routePartyPrevious = { restart -> partySync?.routePrevious(restart) == true },
         cast = speakers,
     ) { lastPublishedSubtitle }
 
@@ -8057,6 +8059,10 @@ class PlaybackService : MediaLibraryService() {
         private val deferPlayToParty: () -> Boolean,
         /** @see PartySync.onLockedTransport */
         private val lockedTransport: (Boolean) -> Boolean,
+        /** @see PartySync.routeNext */
+        private val routePartyNext: () -> Boolean,
+        /** @see PartySync.routePrevious */
+        private val routePartyPrevious: (Boolean) -> Boolean,
         /** Cast or the watch, whichever is the speaker — its clock is what this reports. */
         private val cast: RemoteSpeaker,
         private val getSubtitle: () -> String?,
@@ -8447,6 +8453,9 @@ class PlaybackService : MediaLibraryService() {
         }
 
         override fun seekToPrevious() {
+            val restartCurrent = wrappedPlayer.currentPosition > wrappedPlayer.maxSeekToPreviousPosition ||
+                !wrappedPlayer.hasPreviousMediaItem()
+            if (routePartyPrevious(restartCurrent)) return
             if (locked()) return
             onUserIntent()
             if (cast.active) {
@@ -8589,6 +8598,7 @@ class PlaybackService : MediaLibraryService() {
         }
 
         override fun seekToPreviousMediaItem() {
+            if (routePartyPrevious(false)) return
             if (locked()) return
             onUserIntent()
             crossfade.onSkipRequested()
@@ -8600,6 +8610,7 @@ class PlaybackService : MediaLibraryService() {
         }
 
         override fun seekToNextMediaItem() {
+            if (routePartyNext()) return
             if (locked()) return
             onUserIntent()
             crossfade.onSkipRequested()
@@ -8607,6 +8618,7 @@ class PlaybackService : MediaLibraryService() {
         }
 
         override fun seekToNext() {
+            if (routePartyNext()) return
             if (locked()) return
             onUserIntent()
             crossfade.onSkipRequested()

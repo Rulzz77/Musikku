@@ -288,6 +288,39 @@ class PartySync(
         }
     }
 
+    /**
+     * Routes a skip through the party server instead of moving only this phone.
+     *
+     * The server owns the shared queue index. Updating it there makes every
+     * member converge on the same next track; a local ExoPlayer skip followed
+     * by a debounced setTrack could race with the other members' reconciler.
+     *
+     * Returns true when the action belongs to an active party (including a
+     * locked listener, whose local transport must remain inert).
+     */
+    fun routeNext(): Boolean {
+        val party = ListenTogether.state.value
+        if (!party.inParty) return false
+        if (party.controlsLocked) return true
+        if (party.connection != ListenTogether.Connection.LIVE) return false
+        ListenTogether.next()
+        return true
+    }
+
+    /**
+     * Routes previous through the shared queue, while preserving the familiar
+     * "restart this track" behaviour when the playhead is past the restart
+     * threshold or there is no earlier item.
+     */
+    fun routePrevious(restartCurrent: Boolean): Boolean {
+        val party = ListenTogether.state.value
+        if (!party.inParty) return false
+        if (party.controlsLocked) return true
+        if (party.connection != ListenTogether.Connection.LIVE) return false
+        if (restartCurrent) ListenTogether.seek(0L) else ListenTogether.previous()
+        return true
+    }
+
     /** A queue row started dragging in the UI. See [onLocalIntent]. */
     private var queueDragActive = false
 
@@ -909,23 +942,14 @@ class PartySync(
     }
 
     private fun onLeftParty() {
-        Log.i(TAG, "left party, restoring personal queue if stashed")
+        // Keep the last song played in the room. The personal snapshot is only
+        // a safety net for a service restart while still in a party; it must
+        // not replace the shared song when the user explicitly leaves.
+        Log.i(TAG, "left party, keeping the last shared track and clearing personal snapshot")
         loadingVideoId = null
         focusLost = false
         rejoining = false
-        val stashed = PartyPersonalQueueStash.load()
-        if (stashed != null) {
-            val exo = player() ?: return
-            val items = stashed.songs.map { it.toMediaItem() }
-            exo.setMediaItems(items, stashed.index, stashed.positionMs)
-            exo.prepare()
-            if (stashed.wasPlaying) {
-                exo.play()
-            } else {
-                exo.pause()
-            }
-            PartyPersonalQueueStash.clear()
-        }
+        PartyPersonalQueueStash.clear()
     }
 
     private fun reconcileQueue(party: ListenTogether.State, exo: Player) {

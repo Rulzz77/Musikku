@@ -280,6 +280,8 @@ private fun ListenTogether.State.toPartyUi() = PartyUi(
     members = members,
     you = you,
     code = code,
+    hasPrevious = queue.index > 0,
+    hasNext = queue.index >= 0 && queue.index < queue.items.lastIndex,
 )
 
 /**

@@ -288,6 +288,39 @@ class PartySync(
         }
     }
 
+    /**
+     * Routes a skip through the party server instead of moving only this phone.
+     *
+     * The server owns the shared queue index. Updating it there makes every
+     * member converge on the same next track; a local ExoPlayer skip followed
+     * by a debounced setTrack could race with the other members' reconciler.
+     *
+     * Returns true when the action belongs to an active party (including a
+     * locked listener, whose local transport must remain inert).
+     */
+    fun routeNext(): Boolean {
+        val party = ListenTogether.state.value
+        if (!party.inParty) return false
+        if (party.controlsLocked) return true
+        if (party.connection != ListenTogether.Connection.LIVE) return false
+        ListenTogether.next()
+        return true
+    }
+
+    /**
+     * Routes previous through the shared queue, while preserving the familiar
+     * "restart this track" behaviour when the playhead is past the restart
+     * threshold or there is no earlier item.
+     */
+    fun routePrevious(restartCurrent: Boolean): Boolean {
+        val party = ListenTogether.state.value
+        if (!party.inParty) return false
+        if (party.controlsLocked) return true
+        if (party.connection != ListenTogether.Connection.LIVE) return false
+        if (restartCurrent) ListenTogether.seek(0L) else ListenTogether.previous()
+        return true
+    }
+
     /** A queue row started dragging in the UI. See [onLocalIntent]. */
     private var queueDragActive = false
 

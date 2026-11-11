@@ -87,7 +87,7 @@ object BiniLyrics {
      *
      * When the caller already knows an ISRC, accept only that exact recording.
      */
-    internal fun selectHit(
+    fun selectHit(
         response: Response,
         title: String,
         artist: String,

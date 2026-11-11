@@ -138,6 +138,81 @@ class PartyPersonalQueueStashTest {
         assertFalse(restored.wasPlaying)
     }
 
+    @Test
+    fun testPersonalSnapshotSurvivesServiceRestartWhilePartyIsActive() {
+        val personalSongs = listOf(
+            Song(videoId = "personal-1", title = "Personal 1", artist = "Artist", thumbnailUrl = null),
+            Song(videoId = "personal-2", title = "Personal 2", artist = "Artist", thumbnailUrl = null),
+            Song(videoId = "personal-3", title = "Personal 3", artist = "Artist", thumbnailUrl = null),
+        )
+        val partySongs = listOf(
+            Song(videoId = "party-1", title = "Party 1", artist = "Artist", thumbnailUrl = null),
+        )
+
+        PartyPersonalQueueStash.stash(
+            songs = personalSongs,
+            index = 2,
+            positionMs = 73500L,
+            wasPlaying = true,
+        )
+
+        // PlaybackService may be recreated while the party remains connected.
+        val restoredForStartup = PartyPersonalQueueStash.loadForServiceStart(isInParty = true)
+        assertNotNull(restoredForStartup)
+        assertTrue(PartyPersonalQueueStash.hasStash())
+
+        // PartySync's initial state must not replace the original personal
+        // position with the party timeline (which can still be at position 0).
+        assertFalse(
+            PartyPersonalQueueStash.stashIfAbsent(
+                songs = partySongs,
+                index = 0,
+                positionMs = 0L,
+                wasPlaying = true,
+            ),
+        )
+
+        val afterPartySync = PartyPersonalQueueStash.load()
+        assertNotNull(afterPartySync)
+        assertEquals("personal-3", afterPartySync!!.songs[afterPartySync.index].videoId)
+        assertEquals(2, afterPartySync.index)
+        assertEquals(73500L, afterPartySync.positionMs)
+        assertTrue(afterPartySync.wasPlaying)
+    }
+
+    @Test
+    fun testUnpreparedPlayerUsesDurableLastPlayedPosition() {
+        val songs = listOf(
+            Song(videoId = "personal-1", title = "Personal 1", artist = "Artist", thumbnailUrl = null),
+            Song(videoId = "personal-2", title = "Personal 2", artist = "Artist", thumbnailUrl = null),
+            Song(videoId = "personal-3", title = "Personal 3", artist = "Artist", thumbnailUrl = null),
+        )
+        val lastPlayed = LastPlayed.Snapshot(songs, index = 2, positionMs = 91000L)
+
+        assertTrue(PartyPersonalQueueStash.stashFromLastPlayed(lastPlayed))
+
+        val restored = PartyPersonalQueueStash.load()
+        assertNotNull(restored)
+        assertEquals("personal-3", restored!!.songs[restored.index].videoId)
+        assertEquals(2, restored.index)
+        assertEquals(91000L, restored.positionMs)
+    }
+
+    @Test
+    fun testServiceStartOutsidePartyConsumesPersonalSnapshotOnce() {
+        val songs = listOf(
+            Song(videoId = "personal-1", title = "Personal 1", artist = "Artist", thumbnailUrl = null),
+        )
+        PartyPersonalQueueStash.stash(songs, index = 0, positionMs = 42000L, wasPlaying = true)
+
+        val restored = PartyPersonalQueueStash.loadForServiceStart(isInParty = false)
+
+        assertNotNull(restored)
+        assertEquals(42000L, restored!!.positionMs)
+        assertFalse(PartyPersonalQueueStash.hasStash())
+        assertNull(PartyPersonalQueueStash.load())
+    }
+
     private class FakeSharedPreferences : SharedPreferences {
         private val data = mutableMapOf<String, Any?>()
 

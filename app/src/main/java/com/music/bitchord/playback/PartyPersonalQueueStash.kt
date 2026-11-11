@@ -34,35 +34,55 @@ object PartyPersonalQueueStash {
         prefs = testPrefs
     }
 
-    /** Stash directly from a live player. */
+    /** Stash directly from a live player without replacing an earlier personal snapshot. */
     fun stashFromPlayer(player: Player): Boolean {
-        if (!::prefs.isInitialized) return false
+        if (!::prefs.isInitialized || hasStash()) return false
+        if (player.playbackState == Player.STATE_IDLE) {
+            // A just-recreated service may have restored LastPlayed into the
+            // timeline without preparing Media3 yet. Its currentPosition is
+            // still 0 in that state; use the durable index and playhead instead.
+            if (stashFromLastPlayed(LastPlayed.load())) return true
+        }
         if (player.mediaItemCount == 0) {
             // Player is empty; check if LastPlayed holds a restorable personal queue
-            val fallback = LastPlayed.load()
-            if (fallback != null && fallback.songs.isNotEmpty()) {
-                stash(
-                    songs = fallback.songs,
-                    index = fallback.index,
-                    positionMs = fallback.positionMs,
-                    wasPlaying = false,
-                )
-                return true
-            }
-            return false
+            return stashFromLastPlayed(LastPlayed.load())
         }
         val songs = (0 until player.mediaItemCount).mapNotNull { idx ->
             player.getMediaItemAt(idx).toSong().takeUnless { it.isDeviceFile() }
         }
         if (songs.isEmpty()) return false
         val safeIndex = player.currentMediaItemIndex.coerceIn(0, songs.size - 1)
-        stash(
+        return stashIfAbsent(
             songs = songs,
             index = safeIndex,
             positionMs = player.currentPosition.coerceAtLeast(0L),
             wasPlaying = player.playWhenReady,
         )
-        return true
+    }
+
+    /**
+     * Use the durable queue snapshot when Media3 has not prepared its restored
+     * timeline yet (or has no timeline at all).
+     */
+    internal fun stashFromLastPlayed(snapshot: LastPlayed.Snapshot?): Boolean {
+        if (snapshot == null || snapshot.songs.isEmpty()) return false
+        return stashIfAbsent(
+            songs = snapshot.songs,
+            index = snapshot.index,
+            positionMs = snapshot.positionMs,
+            wasPlaying = false,
+        )
+    }
+
+    /**
+     * Keep the first snapshot taken before a party. A service recreation while
+     * already in a party must not replace it with the party's queue (often at
+     * position zero while Media3 is still preparing the restored timeline).
+     */
+    fun stashIfAbsent(songs: List<Song>, index: Int, positionMs: Long, wasPlaying: Boolean): Boolean {
+        if (!::prefs.isInitialized || songs.isEmpty() || hasStash()) return false
+        stash(songs, index, positionMs, wasPlaying)
+        return hasStash()
     }
 
     fun stash(songs: List<Song>, index: Int, positionMs: Long, wasPlaying: Boolean) {
@@ -98,6 +118,17 @@ object PartyPersonalQueueStash {
             positionMs = stored.positionMs.coerceAtLeast(0L),
             wasPlaying = stored.wasPlaying,
         )
+    }
+
+    /**
+     * Called by PlaybackService during startup. A live party owns the player,
+     * but the personal snapshot must survive until that party is left. Outside
+     * a party it is a one-shot restore and can be consumed immediately.
+     */
+    fun loadForServiceStart(isInParty: Boolean): Snapshot? {
+        val snapshot = load()
+        if (!isInParty || snapshot == null) clear()
+        return snapshot
     }
 
     fun clear() {

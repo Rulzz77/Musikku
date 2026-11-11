@@ -1788,16 +1788,15 @@ class PlaybackService : MediaLibraryService() {
         observeScrobbling()
         observeDiscord()
         watchSleepTimer()
-        val restored = if (PartyPersonalQueueStash.hasStash()) {
-            val stashed = PartyPersonalQueueStash.load()
-            PartyPersonalQueueStash.clear()
-            if (stashed != null && stashed.songs.isNotEmpty()) {
-                persistedQueueStart = 0
-                exoPlayer.setMediaItems(stashed.songs.map { it.toMediaItem() }, stashed.index, stashed.positionMs)
-                true
-            } else {
-                restoreLastQueue(exoPlayer)
-            }
+        val alreadyInParty = ListenTogether.state.value.inParty
+        val hadPersonalStash = PartyPersonalQueueStash.hasStash()
+        val stashed = PartyPersonalQueueStash.loadForServiceStart(isInParty = alreadyInParty)
+        val restored = if (stashed != null && stashed.songs.isNotEmpty()) {
+            persistedQueueStart = 0
+            exoPlayer.setMediaItems(stashed.songs.map { it.toMediaItem() }, stashed.index, stashed.positionMs)
+            true
+        } else if (hadPersonalStash && !alreadyInParty) {
+            restoreLastQueue(exoPlayer)
         } else {
             restoreBoundedQueueOrLast(exoPlayer)
         }

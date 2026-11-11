@@ -353,6 +353,9 @@ data class PartyUi(
     val members: List<PartyMember> = emptyList(),
     val you: PartyMember? = null,
     val code: String? = null,
+    /** Shared queue navigation, independent of this device's local Media3 queue. */
+    val hasPrevious: Boolean = false,
+    val hasNext: Boolean = false,
 )
 
 sealed interface LyricsTranslationResult {

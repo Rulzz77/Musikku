@@ -181,6 +181,24 @@ class PartyPersonalQueueStashTest {
     }
 
     @Test
+    fun testUnpreparedPlayerUsesDurableLastPlayedPosition() {
+        val songs = listOf(
+            Song(videoId = "personal-1", title = "Personal 1", artist = "Artist", thumbnailUrl = null),
+            Song(videoId = "personal-2", title = "Personal 2", artist = "Artist", thumbnailUrl = null),
+            Song(videoId = "personal-3", title = "Personal 3", artist = "Artist", thumbnailUrl = null),
+        )
+        val lastPlayed = LastPlayed.Snapshot(songs, index = 2, positionMs = 91000L)
+
+        assertTrue(PartyPersonalQueueStash.stashFromLastPlayed(lastPlayed))
+
+        val restored = PartyPersonalQueueStash.load()
+        assertNotNull(restored)
+        assertEquals("personal-3", restored!!.songs[restored.index].videoId)
+        assertEquals(2, restored.index)
+        assertEquals(91000L, restored.positionMs)
+    }
+
+    @Test
     fun testServiceStartOutsidePartyConsumesPersonalSnapshotOnce() {
         val songs = listOf(
             Song(videoId = "personal-1", title = "Personal 1", artist = "Artist", thumbnailUrl = null),

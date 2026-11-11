@@ -37,18 +37,15 @@ object PartyPersonalQueueStash {
     /** Stash directly from a live player without replacing an earlier personal snapshot. */
     fun stashFromPlayer(player: Player): Boolean {
         if (!::prefs.isInitialized || hasStash()) return false
+        if (player.playbackState == Player.STATE_IDLE) {
+            // A just-recreated service may have restored LastPlayed into the
+            // timeline without preparing Media3 yet. Its currentPosition is
+            // still 0 in that state; use the durable index and playhead instead.
+            if (stashFromLastPlayed(LastPlayed.load())) return true
+        }
         if (player.mediaItemCount == 0) {
             // Player is empty; check if LastPlayed holds a restorable personal queue
-            val fallback = LastPlayed.load()
-            if (fallback != null && fallback.songs.isNotEmpty()) {
-                return stashIfAbsent(
-                    songs = fallback.songs,
-                    index = fallback.index,
-                    positionMs = fallback.positionMs,
-                    wasPlaying = false,
-                )
-            }
-            return false
+            return stashFromLastPlayed(LastPlayed.load())
         }
         val songs = (0 until player.mediaItemCount).mapNotNull { idx ->
             player.getMediaItemAt(idx).toSong().takeUnless { it.isDeviceFile() }
@@ -60,6 +57,20 @@ object PartyPersonalQueueStash {
             index = safeIndex,
             positionMs = player.currentPosition.coerceAtLeast(0L),
             wasPlaying = player.playWhenReady,
+        )
+    }
+
+    /**
+     * Use the durable queue snapshot when Media3 has not prepared its restored
+     * timeline yet (or has no timeline at all).
+     */
+    internal fun stashFromLastPlayed(snapshot: LastPlayed.Snapshot?): Boolean {
+        if (snapshot == null || snapshot.songs.isEmpty()) return false
+        return stashIfAbsent(
+            songs = snapshot.songs,
+            index = snapshot.index,
+            positionMs = snapshot.positionMs,
+            wasPlaying = false,
         )
     }
 

@@ -905,6 +905,11 @@ fun NowPlayingScreen(
     // Listening in a party whose host has taken the controls: the transport
     // keeps only play/pause, which from here moves this device alone.
     val controlsLocked = rememberControlsLocked()
+    val partyUi by PlayerPlatform.host.party.collectAsStateWithLifecycle()
+    // A room owns a shared queue; the local Media3 projection may contain only
+    // the current track. Read navigation availability from the party instead.
+    val canSkipNext = if (partyUi.inParty) partyUi.hasNext else hasNext
+    val canSkipPrevious = if (partyUi.inParty) partyUi.hasPrevious else hasPrevious
     var showListenTogetherMembers by remember { mutableStateOf(false) }
     // Who's actually in the party is worth a look before the settings page —
     // see [ListenTogetherMembersSheet]. Only meaningful once there is a party
@@ -2008,8 +2013,8 @@ fun NowPlayingScreen(
                         TransportRow(
                             isPlaying = isPlaying,
                             isLoading = isLoading || audioVersionSwitching,
-                            previousEnabled = !controlsLocked && (hasPrevious || pastRestartPoint),
-                            nextEnabled = !controlsLocked && hasNext,
+                            previousEnabled = !controlsLocked && (canSkipPrevious || pastRestartPoint),
+                            nextEnabled = !controlsLocked && canSkipNext,
                             onPrevious = onPrevious,
                             onPlayPause = onPlayPause,
                             onNext = onNext,
@@ -2231,8 +2236,8 @@ fun NowPlayingScreen(
                                     isPlaying = isPlaying,
                                     isLoading = isLoading || audioVersionSwitching,
                                     previousEnabled = !controlsLocked &&
-                                        (hasPrevious || pastRestartPoint),
-                                    nextEnabled = !controlsLocked && hasNext,
+                                        (canSkipPrevious || pastRestartPoint),
+                                    nextEnabled = !controlsLocked && canSkipNext,
                                     onPrevious = onPrevious,
                                     onPlayPause = onPlayPause,
                                     onNext = onNext,
@@ -4127,8 +4132,8 @@ fun NowPlayingScreen(
                             isPlaying = isPlaying,
                             isLoading = isLoading || audioVersionSwitching,
                             previousEnabled = !controlsLocked &&
-                                (hasPrevious || pastRestartPoint),
-                            nextEnabled = !controlsLocked && hasNext,
+                                (canSkipPrevious || pastRestartPoint),
+                            nextEnabled = !controlsLocked && canSkipNext,
                             onPrevious = onPrevious,
                             onPlayPause = onPlayPause,
                             onNext = onNext,

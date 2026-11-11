@@ -8598,7 +8598,7 @@ class PlaybackService : MediaLibraryService() {
         }
 
         override fun seekToPreviousMediaItem() {
-            if (routePartyPrevious(restartCurrent = false)) return
+            if (routePartyPrevious(false)) return
             if (locked()) return
             onUserIntent()
             crossfade.onSkipRequested()

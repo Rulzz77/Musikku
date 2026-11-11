@@ -942,23 +942,14 @@ class PartySync(
     }
 
     private fun onLeftParty() {
-        Log.i(TAG, "left party, restoring personal queue if stashed")
+        // Keep the last song played in the room. The personal snapshot is only
+        // a safety net for a service restart while still in a party; it must
+        // not replace the shared song when the user explicitly leaves.
+        Log.i(TAG, "left party, keeping the last shared track and clearing personal snapshot")
         loadingVideoId = null
         focusLost = false
         rejoining = false
-        val stashed = PartyPersonalQueueStash.load()
-        if (stashed != null) {
-            val exo = player() ?: return
-            val items = stashed.songs.map { it.toMediaItem() }
-            exo.setMediaItems(items, stashed.index, stashed.positionMs)
-            exo.prepare()
-            if (stashed.wasPlaying) {
-                exo.play()
-            } else {
-                exo.pause()
-            }
-            PartyPersonalQueueStash.clear()
-        }
+        PartyPersonalQueueStash.clear()
     }
 
     private fun reconcileQueue(party: ListenTogether.State, exo: Player) {

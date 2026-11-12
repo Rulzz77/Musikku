@@ -2988,9 +2988,23 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun reloadLocalDetail(browseId: String) {
         viewModelScope.launch {
             val state = localPageState(browseId) ?: return@launch
+            val imported = com.music.bitchord.data.spotify.LocalPlaylistStore.getPlaylist(browseId)
+            val offline = OfflinePlaylists.get(browseId)
             _detailStack.value = _detailStack.value.map {
                 if (it.browseId == browseId) {
-                    it.copy(songs = state)
+                    val songs = (state as? UiState.Success)?.data.orEmpty()
+                    it.copy(
+                        songs = state,
+                        title = imported?.title ?: offline?.title ?: it.title,
+                        subtitle = imported?.let {
+                            getApplication<Application>().getString(R.string.local_playlist_subtitle, it.songs.size)
+                        } ?: it.subtitle,
+                        thumbnailUrl = imported?.coverUrl
+                            ?: imported?.songs?.firstNotNullOfOrNull { song -> song.thumbnailUrl }
+                            ?: offline?.coverUrl
+                            ?: offline?.songs?.firstNotNullOfOrNull { song -> song.thumbnailUrl }
+                            ?: it.thumbnailUrl,
+                    )
                 } else it
             }
         }

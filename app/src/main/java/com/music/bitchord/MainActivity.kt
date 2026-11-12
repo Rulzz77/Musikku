@@ -101,6 +101,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -3850,8 +3851,17 @@ private fun BitChordApp(
                             val keyboard = LocalSoftwareKeyboardController.current
                             LaunchedEffect(searchFocusRequested) {
                                 if (searchFocusRequested) {
-                                    searchFieldFocus.requestFocus()
-                                    keyboard?.show()
+                                    // Wait until the newly inserted top-bar field has
+                                    // attached its focus target before requesting focus.
+                                    withFrameNanos { }
+                                    val focused = runCatching {
+                                        searchFieldFocus.requestFocus()
+                                    }.getOrDefault(false)
+                                    if (focused) {
+                                        runCatching { keyboard?.show() }
+                                    }
+                                    // A focus failure must never take down the app;
+                                    // the visible field remains available for a manual tap.
                                     searchFocusRequested = false
                                 }
                             }

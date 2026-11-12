@@ -5046,8 +5046,7 @@ private fun BitChordApp(
                     if (song == null) false else {
                         when {
                             choice.playlistId.startsWith(com.music.bitchord.data.spotify.IMPORTED_PLAYLIST_PREFIX) ->
-                                com.music.bitchord.data.spotify.LocalPlaylistStore.getPlaylist(choice.playlistId)
-                                    ?.songs?.any { it.videoId == song.videoId } == true
+                                com.music.bitchord.data.spotify.LocalPlaylistStore.containsSong(choice.playlistId, song)
                             else ->
                                 OfflinePlaylists.get(OfflinePlaylists.PREFIX + choice.playlistId)
                                     ?.songs?.any { it.videoId == song.videoId || (song.localUri != null && it.localUri == song.localUri) } == true

@@ -76,6 +76,7 @@ import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Sort
 import androidx.compose.material.icons.rounded.Upgrade
 import com.music.bitchord.data.listentogether.ServerConnectionState
+import com.music.bitchord.data.remote.RemoteConfig
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -101,7 +102,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -109,12 +109,10 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
@@ -779,9 +777,6 @@ private fun BitChordApp(
     val autoplayEnabled = autoplayEnabledFor(partyState, autoplay)
     val partyServerStatus by ListenTogether.serverConnectionState.collectAsStateWithLifecycle()
     val listenBrainzToken by AppSettings.listenBrainzToken.collectAsStateWithLifecycle()
-    // Set when Search is opened, so its top-bar field can take focus.
-    var searchFocusRequested by remember { mutableStateOf(false) }
-    val searchFieldFocus = remember { FocusRequester() }
     // Invalidates an in-flight radio lookup when a later play request wins.
     var playRequestGeneration by remember { mutableIntStateOf(0) }
     // Starting radio from the item already playing must not replace that media
@@ -891,6 +886,7 @@ private fun BitChordApp(
             showUpdateDialog = true
         }
     }
+    val remoteConfig by RemoteConfig.snapshot.collectAsStateWithLifecycle()
     val query by viewModel.query.collectAsStateWithLifecycle()
     val results by viewModel.results.collectAsStateWithLifecycle()
     val exploreState by viewModel.explore.collectAsStateWithLifecycle()
@@ -987,6 +983,9 @@ private fun BitChordApp(
     // sort control because the button that opens it sits in the top bar beside
     // it, and reset with the page so a filter never follows you to the next one.
     var detailSearching by rememberSaveable(topDetail?.browseId) { mutableStateOf(false) }
+    LaunchedEffect(remoteConfig.features.playlistSearch) {
+        if (!remoteConfig.features.playlistSearch) detailSearching = false
+    }
     val likeStatuses by viewModel.likeStatuses.collectAsStateWithLifecycle()
     // A device file's heart is the device's Liked playlist, not a YouTube
     // rating: the file has no identity there to rate. One rule for every
@@ -3493,8 +3492,11 @@ private fun BitChordApp(
                                 onLoadMore = viewModel::loadMoreSearchResults,
                                 listState = searchListState,
                                 scrollResetTrigger = searchScrollReset,
-                                focusRequested = searchFocusRequested,
-                                onFocusHandled = { searchFocusRequested = false },
+                                // Search focus is intentionally user-driven: the field is
+                                // in the animated top-bar accessory, so requesting focus
+                                // during tab navigation can race its attachment.
+                                focusRequested = false,
+                                onFocusHandled = {},
                                 // Search hits are alternatives to each other, not a running
                                 // order — play the one tapped and build a station from it.
                                 onSongClick = { songs, index ->
@@ -3842,34 +3844,17 @@ private fun BitChordApp(
                     modifier = Modifier.align(Alignment.TopCenter),
                     // Only on the Search tab itself, not on anything pushed over it.
                     accessory = if (
-                        selectedTab == TAB_SEARCH && route == null && detail == null && selectedMoodGenre == null
+                        remoteConfig.features.globalSearch &&
+                            selectedTab == TAB_SEARCH && route == null && detail == null && selectedMoodGenre == null
                     ) {
                         {
                             // The search field lives up here in the bar, beside the
                             // account photo, so it answers the nav bar's Search tap
                             // itself: focus and keyboard, the way the page used to.
-                            val keyboard = LocalSoftwareKeyboardController.current
-                            LaunchedEffect(searchFocusRequested) {
-                                if (searchFocusRequested) {
-                                    // Wait until the newly inserted top-bar field has
-                                    // attached its focus target before requesting focus.
-                                    withFrameNanos { }
-                                    val focused = runCatching {
-                                        searchFieldFocus.requestFocus()
-                                    }.getOrDefault(false)
-                                    if (focused) {
-                                        runCatching { keyboard?.show() }
-                                    }
-                                    // A focus failure must never take down the app;
-                                    // the visible field remains available for a manual tap.
-                                    searchFocusRequested = false
-                                }
-                            }
                             SearchField(
                                 query = query,
                                 onQueryChange = viewModel::onQueryChange,
                                 onSubmit = viewModel::submitSearch,
-                                focusRequester = searchFieldFocus,
                                 placeholder = org.jetbrains.compose.resources.stringResource(
                                     if (searchSource == SearchSource.LIBRARY) {
                                         SharedRes.string.search_library_hint
@@ -4024,7 +4009,7 @@ private fun BitChordApp(
                             // Shuffle / Play / Add.
                             if ((isReleaseDetail || isLocalDetail) && detail != null) {
                                 val releaseSongs = (detail.songs as? UiState.Success)?.data.orEmpty()
-                                if (releaseSongs.isNotEmpty()) {
+                                if (remoteConfig.features.playlistSearch && releaseSongs.isNotEmpty()) {
                                     IconButton(onClick = { detailSearching = !detailSearching }) {
                                         Icon(
                                             if (detailSearching) Icons.Rounded.Close else BitChordIcons.Search,
@@ -4117,13 +4102,13 @@ private fun BitChordApp(
                             // a contextual search that filters their own track list.
                             // Avoid showing the catalog-wide Search beside it: two
                             // magnifiers on one page read as duplicate controls.
-                            val pageHasOwnSearch = detail != null &&
+                            val pageHasOwnSearch = remoteConfig.features.playlistSearch && detail != null &&
                                 (isReleaseDetail || isLocalDetail) &&
                                 (detail.songs as? UiState.Success)?.data?.isNotEmpty() == true
                             // Elsewhere, global Search stays in the top bar and opens
                             // a fresh, focused catalog search. Its field replaces this
                             // icon only while the Search root is actually visible.
-                            if (!pageHasOwnSearch &&
+                            if (remoteConfig.features.globalSearch && !pageHasOwnSearch &&
                                 !(selectedTab == TAB_SEARCH && route == null && detail == null && selectedMoodGenre == null)
                             ) {
                                 IconButton(
@@ -4132,7 +4117,6 @@ private fun BitChordApp(
                                         viewModel.closeMoodGenre()
                                         selectedTab = TAB_SEARCH
                                         viewModel.onQueryChange("")
-                                        searchFocusRequested = true
                                     },
                                 ) {
                                     Icon(
@@ -4193,10 +4177,9 @@ private fun BitChordApp(
                     viewModel.closeMoodGenre()
                     selectedTab = index
 
-                    // Search entry resets the field, focuses it, and opens the keyboard.
+                    // Search entry resets its query; the user taps the field to type.
                     if (index == TAB_SEARCH) {
                         viewModel.onQueryChange("")
-                        searchFocusRequested = true
                     }
                 }
 

@@ -2775,7 +2775,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             if (localPlaylist != null) {
                 name = localPlaylist.title
                 credit = getApplication<Application>().getString(R.string.local_playlist_subtitle, localPlaylist.songs.size)
-                artwork = localPlaylist.coverUrl ?: localPlaylist.songs.firstOrNull { !it.thumbnailUrl.isNullOrBlank() }?.thumbnailUrl
+                artwork = localPlaylist.coverUrl
+                    ?: localPlaylist.songs.firstOrNull { !it.thumbnailUrl.isNullOrBlank() }?.thumbnailUrl
+            }
+            OfflinePlaylists.get(browseId)?.let { playlist ->
+                artwork = playlist.coverUrl
+                    ?: playlist.songs.firstOrNull { !it.thumbnailUrl.isNullOrBlank() }?.thumbnailUrl
             }
             // Named by the store rather than by whatever opened it, which
             // may be a "Playing from" label from before a rename.

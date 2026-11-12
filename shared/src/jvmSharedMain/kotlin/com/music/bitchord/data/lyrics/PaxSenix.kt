@@ -151,6 +151,20 @@ object PaxSenix {
         if (documents.isEmpty()) return parseResponse(raw)
 
         return documents.mapNotNull { document ->
+            // Older PaxSenix responses sometimes expose anonymous LRC documents
+            // as JSON strings rather than objects with title/artist metadata.
+            // Keep supporting that wire format, but only accept a document
+            // whose final timestamp is close to the requested track runtime.
+            if (document is JsonPrimitive && document.isString) {
+                if (durationMs <= 0L) return@mapNotNull null
+                val lrc = document.contentOrNull ?: return@mapNotNull null
+                val lines = parseResponse(lrc) ?: return@mapNotNull null
+                val distance = durationDistance(lines, durationMs)
+                val allowedDistance = maxOf(20_000L, durationMs / 10L)
+                if (distance > allowedDistance) return@mapNotNull null
+                return@mapNotNull ParsedDocument(lines, metadataScore = 0, distance)
+            }
+
             val candidate = document as? JsonObject ?: return@mapNotNull null
             val details = candidate["attributes"] as? JsonObject ?: candidate
             val candidateTitle = details.firstString(TITLE_KEYS) ?: return@mapNotNull null
@@ -158,9 +172,8 @@ object PaxSenix {
                 ?: details.artistNames().orEmpty()
             val candidateDurationMs = details.firstLong(DURATION_KEYS).toDurationMs()
 
-            // The generic endpoint can return several songs for one query. A
-            // fuzzy score of zero is not a match: never choose Laut Kidul just
-            // because it shares the artist with Tanpo Tresnamu.
+            // Metadata-bearing candidates must identify the same recording;
+            // a shared artist or similar runtime is never enough on its own.
             if (!lyricsCandidateMatches(
                     title = title,
                     artist = artist,

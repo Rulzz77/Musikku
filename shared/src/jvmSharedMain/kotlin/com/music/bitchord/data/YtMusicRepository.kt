@@ -216,7 +216,7 @@ object YtMusicRepository {
                 it.title.contains("mix", ignoreCase = true) ||
                 it.title.contains("recommend", ignoreCase = true)
         }
-        val qpSongs = qpShelf?.items?.mapNotNull { item ->
+        val qpSongs = qpShelf?.items?.filterNot { it.isVideo }?.mapNotNull { item ->
             item.videoId?.takeUnless { it in excludeSongIds }?.let { vid ->
                 Song(
                     videoId = vid,
@@ -238,7 +238,7 @@ object YtMusicRepository {
         } else shelves
 
         val homeShelfSongs = candidateShelves.flatMap { shelf ->
-            shelf.items.mapNotNull { item ->
+            shelf.items.filterNot { it.isVideo }.mapNotNull { item ->
                 item.videoId?.takeUnless { it in excludeSongIds }?.let { vid ->
                     Song(
                         videoId = vid,
@@ -254,7 +254,7 @@ object YtMusicRepository {
 
         // 3. Any shelf items on Home that have videoId
         val allHomeTrackSongs = shelves.flatMap { shelf ->
-            shelf.items.mapNotNull { item ->
+            shelf.items.filterNot { it.isVideo }.mapNotNull { item ->
                 item.videoId?.let { vid ->
                     Song(
                         videoId = vid,
@@ -341,6 +341,7 @@ object YtMusicRepository {
             InnertubeParser.parseSearchPage(
                 Innertube.search(query, filter.params, anonymous),
                 includeVideos = filter == SearchFilter.VIDEOS,
+                includeAllTrackTypes = filter == SearchFilter.ALL || filter == SearchFilter.SONGS,
             ).let { page ->
                 SearchPage(page.rows.distinctBy { it.identityKey() }, page.continuation)
             }
@@ -351,6 +352,7 @@ object YtMusicRepository {
         InnertubeParser.parseSearchPage(
             Innertube.searchContinuation(token),
             includeVideos = filter == SearchFilter.VIDEOS,
+            includeAllTrackTypes = filter == SearchFilter.ALL || filter == SearchFilter.SONGS,
         ).let { page ->
             SearchPage(page.rows.distinctBy { it.identityKey() }, page.continuation)
         }
@@ -396,6 +398,7 @@ object YtMusicRepository {
             InnertubeParser.parseSearchPage(
                 Innertube.searchTypeahead(input),
                 includeVideos = false,
+                includeAllTrackTypes = true,
             ).let { page ->
                 SearchPage(page.rows.distinctBy { it.identityKey() }, page.continuation)
             }

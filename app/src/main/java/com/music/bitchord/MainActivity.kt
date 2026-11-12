@@ -529,6 +529,22 @@ private fun BitChordApp(
 ) {
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
+    var playlistCoverTarget by remember { mutableStateOf<String?>(null) }
+    val playlistCoverPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        val target = playlistCoverTarget
+        if (uri != null && target != null) {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                )
+            }
+            com.music.bitchord.data.spotify.LocalPlaylistStore.updateCover(target, uri.toString())
+            OfflinePlaylists.updateCover(target, uri.toString())
+            viewModel.reloadLocalDetail(target)
+        }
+        playlistCoverTarget = null
+    }
     val hazeState = remember { HazeState() }
     // Recording the backdrop layer costs a draw pass, so it only runs when a
     // liquid-glass surface (the nav bar or artwork-page back button) can sample it.
@@ -1039,7 +1055,7 @@ private fun BitChordApp(
         ShelfItem(
             title = playlist.title,
             subtitle = stringResource(R.string.local_playlist_subtitle, playlist.songs.size),
-            thumbnailUrl = playlist.songs.firstOrNull { !it.thumbnailUrl.isNullOrBlank() }?.thumbnailUrl,
+            thumbnailUrl = playlist.coverUrl ?: playlist.songs.firstOrNull { !it.thumbnailUrl.isNullOrBlank() }?.thumbnailUrl,
             videoId = null,
             browseId = playlist.browseId,
         )
@@ -1050,7 +1066,7 @@ private fun BitChordApp(
         ShelfItem(
             title = playlist.title,
             subtitle = stringResource(R.string.local_playlist_subtitle, playlist.songs.size),
-            thumbnailUrl = playlist.songs.firstOrNull { !it.thumbnailUrl.isNullOrBlank() }?.thumbnailUrl,
+            thumbnailUrl = playlist.coverUrl ?: playlist.songs.firstOrNull { !it.thumbnailUrl.isNullOrBlank() }?.thumbnailUrl,
             videoId = null,
             browseId = playlist.browseId,
         )
@@ -4453,6 +4469,9 @@ private fun BitChordApp(
             // carries the per-entry id a removal is expressed in.
             val editable = viewModel.editablePlaylist(detail?.browseId)
                 ?.takeIf { !fromPlayer && song.setVideoId != null }
+            val importedEditable = detail?.browseId
+                ?.takeIf { !fromPlayer }
+                ?.let { com.music.bitchord.data.spotify.LocalPlaylistStore.getPlaylist(it) }
             // Asked of the cache's index off the main thread as the menu opens,
             // so "Remove from cache" is only offered for a track it holds.
             // Re-asked when the cache changes, which is what drops the row
@@ -4529,6 +4548,12 @@ private fun BitChordApp(
                         {
                             songActions = null
                             OfflinePlaylists.remove(id, song)
+                        }
+                    } ?: importedEditable?.let { playlist ->
+                        {
+                            songActions = null
+                            com.music.bitchord.data.spotify.LocalPlaylistStore.removeSong(playlist.browseId, song)
+                            viewModel.reloadLocalDetail(playlist.browseId)
                         }
                     },
                 onRemoveFromCache = if (inCache) {
@@ -4950,8 +4975,9 @@ private fun BitChordApp(
                                 when {
                                     added > 1 -> context.resources.getQuantityString(
                                         R.plurals.added_to_playlists_notice, added, added,
-                                    )
-                                    added == 1 -> context.getString(R.string.song_added_to_playlist)
+                                    ) + ": " + picked.joinToString(", ") { it.title }.take(90)
+                                    added == 1 -> context.getString(R.string.song_added_to_playlist) +
+                                        ": " + picked.joinToString(", ") { it.title }.take(90)
                                     alreadyThere > 0 && failed == 0 ->
                                         context.getString(R.string.song_already_in_playlist)
                                     else -> context.getString(R.string.failed)
@@ -4986,8 +5012,9 @@ private fun BitChordApp(
                             playlist.songs.size,
                             playlist.songs.size,
                         ),
-                        thumbnailUrl = playlist.songs.firstNotNullOfOrNull { it.thumbnailUrl }
-                            .takeUnless { playlist.isLiked },
+                        thumbnailUrl = if (playlist.isLiked) null else {
+                            playlist.coverUrl ?: playlist.songs.firstNotNullOfOrNull { it.thumbnailUrl }
+                        },
                     )
                 }
                 val importedChoices = localPlaylists.map { playlist ->
@@ -5002,7 +5029,7 @@ private fun BitChordApp(
                                 playlist.songs.size,
                                 playlist.songs.size,
                             ),
-                        thumbnailUrl = playlist.songs.firstNotNullOfOrNull { it.thumbnailUrl },
+                        thumbnailUrl = playlist.coverUrl ?: playlist.songs.firstNotNullOfOrNull { it.thumbnailUrl },
                     )
                 }
                 deviceChoices + importedChoices + if (signedIn) playlists else emptyList()
@@ -5014,6 +5041,19 @@ private fun BitChordApp(
                 startCreating = target == null,
                 offline = true,
                 onDismiss = dismiss,
+                isSongInPlaylist = { choice ->
+                    val song = target
+                    if (song == null) false else {
+                        when {
+                            choice.playlistId.startsWith(com.music.bitchord.data.spotify.IMPORTED_PLAYLIST_PREFIX) ->
+                                com.music.bitchord.data.spotify.LocalPlaylistStore.getPlaylist(choice.playlistId)
+                                    ?.songs?.any { it.videoId == song.videoId } == true
+                            else ->
+                                OfflinePlaylists.get(OfflinePlaylists.PREFIX + choice.playlistId)
+                                    ?.songs?.any { it.videoId == song.videoId || (song.localUri != null && it.localUri == song.localUri) } == true
+                        }
+                    }
+                },
                 onAdd = { picked ->
                     target?.let { song ->
                         val deviceIds = offlinePlaylists.mapTo(HashSet()) { it.id }
@@ -5046,8 +5086,9 @@ private fun BitChordApp(
                                 when {
                                     added > 1 -> context.resources.getQuantityString(
                                         R.plurals.added_to_playlists_notice, added, added,
-                                    )
-                                    added == 1 -> context.getString(R.string.song_added_to_playlist)
+                                    ) + ": " + picked.joinToString(", ") { it.title }.take(90)
+                                    added == 1 -> context.getString(R.string.song_added_to_playlist) +
+                                        ": " + picked.joinToString(", ") { it.title }.take(90)
                                     alreadyThere > 0 && failed == 0 -> context.getString(R.string.song_already_in_playlist)
                                     else -> context.getString(R.string.failed)
                                 },
@@ -5151,11 +5192,16 @@ private fun BitChordApp(
             // One of the offline player's own playlists, which are the user's
             // to rename and delete — all but Liked, which is the app's.
             val offlineEditable = OfflinePlaylists.get(target.browseId)?.takeUnless { it.isLiked }
+            val importedEditable = target.browseId?.let {
+                com.music.bitchord.data.spotify.LocalPlaylistStore.getPlaylist(it)
+            }
             BrowseActionsMenu(
                 // The live answer, not the one the target was built with.
                 target = target.copy(
                     playlist = playlist ?: offlineEditable?.let {
                         UserPlaylist(playlistId = it.id, title = it.title, subtitle = "", thumbnailUrl = null)
+                    } ?: importedEditable?.let {
+                        UserPlaylist(playlistId = it.id, title = it.title, subtitle = "", thumbnailUrl = it.coverUrl)
                     },
                 ),
                 onRenameInSheet = {
@@ -5261,6 +5307,13 @@ private fun BitChordApp(
                         OfflinePlaylists.rename(p.browseId, name)
                         viewModel.retitleDetail(p.browseId, name.trim())
                     }
+                } ?: importedEditable?.let { p ->
+                    { name: String ->
+                        browseActions = null
+                        com.music.bitchord.data.spotify.LocalPlaylistStore.renamePlaylist(p.browseId, name)
+                        viewModel.retitleDetail(p.browseId, name.trim())
+                        viewModel.reloadLocalDetail(p.browseId)
+                    }
                 },
                 onReorder = playlist?.let { p ->
                     {
@@ -5297,9 +5350,23 @@ private fun BitChordApp(
                 } ?: offlineEditable?.let { p ->
                     {
                         browseActions = null
-                        // Its page has nothing left to show; take it away too.
                         if (detail?.browseId == p.browseId) viewModel.closeDetail()
                         OfflinePlaylists.delete(p.browseId)
+                    }
+                } ?: importedEditable?.let { p ->
+                    {
+                        browseActions = null
+                        if (detail?.browseId == p.browseId) viewModel.closeDetail()
+                        com.music.bitchord.data.spotify.LocalPlaylistStore.deletePlaylist(p.browseId)
+                    }
+                },
+                onChangeCover = target.browseId?.takeIf {
+                    offlineEditable != null || importedEditable != null
+                }?.let { id ->
+                    {
+                        browseActions = null
+                        playlistCoverTarget = id
+                        playlistCoverPicker.launch(arrayOf("image/*"))
                     }
                 },
                 onDeleteDownload = target.downloadId?.let { id ->

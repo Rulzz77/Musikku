@@ -14,6 +14,7 @@ data class LocalPlaylist(
     val id: String,
     val title: String,
     val songs: List<Song>,
+    val coverUrl: String? = null,
 ) {
     val browseId: String get() = IMPORTED_PLAYLIST_PREFIX + id
 }
@@ -59,7 +60,9 @@ object LocalPlaylistStore {
                     )
                     songs.add(song)
                 }
-                list.add(LocalPlaylist(id, title, songs))
+                val coverUrl = obj.optString("coverUrl", null)
+                    .takeIf { !it.isNullOrBlank() && it != "null" }
+                list.add(LocalPlaylist(id, title, dedupeSongs(songs), coverUrl))
             }
             _playlists.value = list
         }
@@ -107,7 +110,7 @@ object LocalPlaylistStore {
 
     fun savePlaylist(title: String, songs: List<Song>): LocalPlaylist {
         val id = "sp_local_" + System.currentTimeMillis()
-        val playlist = LocalPlaylist(id = id, title = title, songs = songs)
+        val playlist = LocalPlaylist(id = id, title = title.trim(), songs = dedupeSongs(songs))
         val updated = listOf(playlist) + _playlists.value.filterNot { it.id == id }
         _playlists.value = updated
         persist(updated)
@@ -116,6 +119,28 @@ object LocalPlaylistStore {
 
     fun deletePlaylist(id: String) {
         val updated = _playlists.value.filterNot { it.id == id || it.browseId == id || it.id == id.removePrefix("local:playlist:") }
+        _playlists.value = updated
+        persist(updated)
+    }
+
+    fun removeSong(playlistId: String, song: Song) {
+        val cleanId = playlistId.removePrefix(IMPORTED_PLAYLIST_PREFIX)
+        val updated = _playlists.value.map { playlist ->
+            if (playlist.id == cleanId) {
+                playlist.copy(songs = playlist.songs.filterNot { it.videoId == song.videoId })
+            } else playlist
+        }
+        _playlists.value = updated
+        persist(updated)
+    }
+
+    fun updateCover(playlistId: String, coverUrl: String?) {
+        val cleanId = playlistId.removePrefix(IMPORTED_PLAYLIST_PREFIX)
+        val updated = _playlists.value.map { playlist ->
+            if (playlist.id == cleanId) {
+                playlist.copy(coverUrl = coverUrl?.takeIf(String::isNotBlank))
+            } else playlist
+        }
         _playlists.value = updated
         persist(updated)
     }
@@ -144,6 +169,7 @@ object LocalPlaylistStore {
                 val pObj = JSONObject()
                 pObj.put("id", playlist.id)
                 pObj.put("title", playlist.title)
+                pObj.putOpt("coverUrl", playlist.coverUrl)
                 val songsArray = JSONArray()
                 for (song in playlist.songs) {
                     val sObj = JSONObject()
@@ -175,7 +201,18 @@ internal fun appendUniqueImportedTracks(
     existing: List<Song>,
     incoming: List<Song>,
 ): Pair<List<Song>, Int> {
-    val known = existing.mapTo(HashSet()) { it.videoId }
-    val fresh = incoming.filter { it.videoId.isNotBlank() && known.add(it.videoId) }
-    return (existing + fresh) to fresh.size
+    val known = existing.mapNotNullTo(HashSet()) { it.videoId.trim().takeIf(String::isNotEmpty) }
+    val fresh = incoming.filter { song ->
+        val id = song.videoId.trim()
+        id.isNotEmpty() && known.add(id)
+    }
+    return dedupeSongs(existing + fresh) to fresh.size
+}
+
+internal fun dedupeSongs(songs: List<Song>): List<Song> {
+    val seen = HashSet<String>()
+    return songs.filter { song ->
+        val key = song.videoId.trim()
+        key.isNotEmpty() && seen.add(key)
+    }
 }

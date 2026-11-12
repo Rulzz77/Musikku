@@ -128,6 +128,8 @@ fun BrowseActionsMenu(
     isPinned: Boolean = false,
     onTogglePin: (() -> Unit)? = null,
     onRename: ((String) -> Unit)? = null,
+    /** Opens the system photo picker for a device-owned playlist cover. */
+    onChangeCover: (() -> Unit)? = null,
     /**
      * Opens the reorder page for one of the account's own playlists — set
      * under the same rule as [onRename], since YouTube refuses to rearrange a
@@ -250,6 +252,9 @@ fun BrowseActionsMenu(
                         renaming = true
                     }
                 }
+            }
+            onChangeCover?.let {
+                ActionRow(SfIcons.Draw, stringResource(R.string.choose_file), onClick = it)
             }
             onReorder?.let {
                 ActionRow(SfIcons.Reorder, stringResource(R.string.reorder_songs), onClick = it)

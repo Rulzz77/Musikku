@@ -298,6 +298,7 @@ private fun String.looksLikeCredit() = CREDIT_SEPARATOR.containsMatchIn(this)
  * the tint — since that picture runs edge to edge up under the bar. Nothing in
  * either is re-blurred while the page scrolls.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun DetailScreen(
     page: DetailPage,
@@ -606,7 +607,9 @@ fun DetailScreen(
             }
 
             if (searching) {
-                item(key = "search") {
+                // Keep the playlist filter pinned below the top bar while the
+                // track list scrolls; it must not disappear behind the header.
+                stickyHeader(key = "search") {
                     DetailSearchField(
                         query = query,
                         onQueryChange = { query = it },

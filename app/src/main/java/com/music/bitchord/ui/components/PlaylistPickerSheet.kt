@@ -112,6 +112,8 @@ fun PlaylistPickerSheet(
     song: Song? = null,
     startCreating: Boolean = false,
     offline: Boolean = false,
+    /** True when the selected song is already stored in this device playlist. */
+    isSongInPlaylist: (UserPlaylist) -> Boolean = { false },
 ) {
     var creating by remember { mutableStateOf(startCreating) }
     // By id rather than by value: the list is re-fetched under an open sheet,
@@ -224,12 +226,16 @@ fun PlaylistPickerSheet(
                             contentPadding = WindowInsets.navigationBars.asPaddingValues(),
                         ) {
                             items(playlists, key = { it.playlistId }) { playlist ->
+                                val alreadyAdded = song != null && isSongInPlaylist(playlist)
                                 val ticked = playlist.playlistId in selected
                                 PlaylistRow(
                                     playlist = playlist,
-                                    selected = ticked,
+                                    selected = ticked || alreadyAdded,
+                                    alreadyAdded = alreadyAdded,
                                     onClick = {
-                                        selected = if (ticked) selected - playlist.playlistId else selected + playlist.playlistId
+                                        if (!alreadyAdded) {
+                                            selected = if (ticked) selected - playlist.playlistId else selected + playlist.playlistId
+                                        }
                                     },
                                 )
                             }
@@ -285,7 +291,12 @@ private fun SheetTopBar(
 }
 
 @Composable
-private fun PlaylistRow(playlist: UserPlaylist, selected: Boolean, onClick: () -> Unit) {
+private fun PlaylistRow(
+    playlist: UserPlaylist,
+    selected: Boolean,
+    alreadyAdded: Boolean = false,
+    onClick: () -> Unit,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -311,7 +322,15 @@ private fun PlaylistRow(playlist: UserPlaylist, selected: Boolean, onClick: () -
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            if (playlist.subtitle.isNotBlank()) {
+            if (alreadyAdded) {
+                Text(
+                    text = stringResource(R.string.song_already_in_playlist),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            } else if (playlist.subtitle.isNotBlank()) {
                 Text(
                     text = playlist.subtitle,
                     style = MaterialTheme.typography.bodyMedium,

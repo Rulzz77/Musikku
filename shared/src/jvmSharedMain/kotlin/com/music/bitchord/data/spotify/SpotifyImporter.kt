@@ -241,7 +241,11 @@ object SpotifyImporter {
         language: String? = null,
         onProgress: (completed: Int, total: Int) -> Unit,
     ): Pair<List<Song>, List<SpotifyImportTrack>> = coroutineScope {
-        val total = tracks.size
+        // Spotify can repeat entries in its page payload; normalize before resolving.
+        val uniqueTracks = tracks.distinctBy { track ->
+            track.title.normalizedImportKey() + "|" + track.artist.normalizedImportKey()
+        }
+        val total = uniqueTracks.size
         val completedCount = AtomicInteger(0)
         val semaphore = Semaphore(4) // Bounded concurrency for search queries
 
@@ -256,7 +260,7 @@ object SpotifyImporter {
             "English", "Punjabi", "Marathi", "Bengali", "Bhojpuri", "Gujarati"
         )
 
-        val deferredResults = tracks.map { track ->
+        val deferredResults = uniqueTracks.map { track ->
             async(Dispatchers.IO) {
                 semaphore.withPermit {
                     val query = if (cleanLang != null) {
@@ -304,9 +308,17 @@ object SpotifyImporter {
         }
 
         val results = deferredResults.awaitAll()
+        // Different Spotify entries may resolve to the same YouTube upload.
+        val seenVideoIds = HashSet<String>()
         val songs = results.mapNotNull { it.first }
+            .filter { it.videoId.isNotBlank() && seenVideoIds.add(it.videoId) }
         val unmatched = results.mapNotNull { it.second }
+            .distinctBy { it.title.normalizedImportKey() + "|" + it.artist.normalizedImportKey() }
 
         Pair(songs, unmatched)
     }
 }
+
+
+private fun String.normalizedImportKey(): String =
+    lowercase().replace(Regex("[ \\t\\n]+"), " ").trim()

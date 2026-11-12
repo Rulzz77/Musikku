@@ -1286,6 +1286,7 @@
 
     <string name="song_added_to_queue">Song added to queue</string>
     <string name="song_added_to_playlist">Dodano do playlisty</string>
+    <string name="song_removed_from_playlist">Usunięto z playlisty</string>
     <string name="song_already_in_playlist">Już jest na playliście</string>
     <plurals name="add_to_playlists_count">
         <item quantity="one">Dodaj do %1$d playlisty</item>

@@ -109,7 +109,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -779,9 +778,6 @@ private fun BitChordApp(
     val autoplayEnabled = autoplayEnabledFor(partyState, autoplay)
     val partyServerStatus by ListenTogether.serverConnectionState.collectAsStateWithLifecycle()
     val listenBrainzToken by AppSettings.listenBrainzToken.collectAsStateWithLifecycle()
-    // Set when Search is opened, so its top-bar field can take focus.
-    var searchFocusRequested by remember { mutableStateOf(false) }
-    val searchFieldFocus = remember { FocusRequester() }
     // Invalidates an in-flight radio lookup when a later play request wins.
     var playRequestGeneration by remember { mutableIntStateOf(0) }
     // Starting radio from the item already playing must not replace that media
@@ -3493,8 +3489,11 @@ private fun BitChordApp(
                                 onLoadMore = viewModel::loadMoreSearchResults,
                                 listState = searchListState,
                                 scrollResetTrigger = searchScrollReset,
-                                focusRequested = searchFocusRequested,
-                                onFocusHandled = { searchFocusRequested = false },
+                                // Search focus is intentionally user-driven: the field is
+                                // in the animated top-bar accessory, so requesting focus
+                                // during tab navigation can race its attachment.
+                                focusRequested = false,
+                                onFocusHandled = {},
                                 // Search hits are alternatives to each other, not a running
                                 // order — play the one tapped and build a station from it.
                                 onSongClick = { songs, index ->
@@ -3848,28 +3847,10 @@ private fun BitChordApp(
                             // The search field lives up here in the bar, beside the
                             // account photo, so it answers the nav bar's Search tap
                             // itself: focus and keyboard, the way the page used to.
-                            val keyboard = LocalSoftwareKeyboardController.current
-                            LaunchedEffect(searchFocusRequested) {
-                                if (searchFocusRequested) {
-                                    // Wait until the newly inserted top-bar field has
-                                    // attached its focus target before requesting focus.
-                                    withFrameNanos { }
-                                    val focused = runCatching {
-                                        searchFieldFocus.requestFocus()
-                                    }.getOrDefault(false)
-                                    if (focused) {
-                                        runCatching { keyboard?.show() }
-                                    }
-                                    // A focus failure must never take down the app;
-                                    // the visible field remains available for a manual tap.
-                                    searchFocusRequested = false
-                                }
-                            }
                             SearchField(
                                 query = query,
                                 onQueryChange = viewModel::onQueryChange,
                                 onSubmit = viewModel::submitSearch,
-                                focusRequester = searchFieldFocus,
                                 placeholder = org.jetbrains.compose.resources.stringResource(
                                     if (searchSource == SearchSource.LIBRARY) {
                                         SharedRes.string.search_library_hint
@@ -4132,7 +4113,6 @@ private fun BitChordApp(
                                         viewModel.closeMoodGenre()
                                         selectedTab = TAB_SEARCH
                                         viewModel.onQueryChange("")
-                                        searchFocusRequested = true
                                     },
                                 ) {
                                     Icon(

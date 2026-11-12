@@ -45,8 +45,14 @@ jobs:
       - name: Tests
         run: ./gradlew testDevDebugUnitTest
 
+      # APK splitting packages several ABI outputs in parallel. The default
+      # worker count plus a 4 GiB heap can exhaust the runner while packaging;
+      # keep the task graph bounded and give the Gradle daemon enough heap.
       - name: Build the dev APK
-        run: ./gradlew assembleDevDebug
+        run: >-
+          ./gradlew --no-daemon --max-workers=2
+          -Dorg.gradle.jvmargs="-Xmx6g -Dfile.encoding=UTF-8 -Djava.net.preferIPv4Stack=true"
+          assembleDevDebug
 
       - name: Upload the dev APK
         uses: actions/upload-artifact@v4

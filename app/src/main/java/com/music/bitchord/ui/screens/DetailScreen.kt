@@ -75,6 +75,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -1206,7 +1207,10 @@ private fun DetailSearchField(
     val focus = remember { FocusRequester() }
     LaunchedEffect(autoFocus) {
         if (autoFocus) {
-            focus.requestFocus()
+            // The filter is inserted into a LazyColumn item; wait for its
+            // focus target to attach before requesting focus.
+            withFrameNanos { }
+            runCatching { focus.requestFocus() }
             onFocused()
         }
     }

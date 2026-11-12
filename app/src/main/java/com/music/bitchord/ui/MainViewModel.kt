@@ -507,6 +507,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     providerFinished(generation, provider, result)
                 },
                 onSourceCancelled = { provider -> providerCancelled(generation, provider) },
+                allowManualOnlySources = true,
             )
         }
     }

@@ -1162,6 +1162,7 @@
     <string name="cast_connect_failed">Couldn\'t connect to the receiver</string>
     <string name="audio_pipeline_subtitle">Live signal path, decoder to output</string>
     <string name="song_added_to_playlist">Added to playlist</string>
+    <string name="song_removed_from_playlist">Đã xóa khỏi danh sách phát</string>
     <string name="song_already_in_playlist">Already in playlist</string>
     <plurals name="add_to_playlists_count">
         <item quantity="other">Thêm vào %1$d danh sách phát</item>

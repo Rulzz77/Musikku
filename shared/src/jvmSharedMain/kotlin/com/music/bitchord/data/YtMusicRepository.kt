@@ -254,7 +254,7 @@ object YtMusicRepository {
 
         // 3. Any shelf items on Home that have videoId
         val allHomeTrackSongs = shelves.flatMap { shelf ->
-            shelf.items.filterNot { it.isVideo }.mapNotNull { item ->
+            shelf.items.filter { it.isMusic && !it.isVideo }.mapNotNull { item ->
                 item.videoId?.let { vid ->
                     Song(
                         videoId = vid,

@@ -1025,6 +1025,13 @@ private fun BitChordApp(
     val qualityUpgradesInFlight by NerdStats.racingLossless.collectAsStateWithLifecycle()
     val playlists by viewModel.playlists.collectAsStateWithLifecycle()
     val playlistsLoading by viewModel.playlistsLoading.collectAsStateWithLifecycle()
+    val songPlaylistMembership by viewModel.songPlaylistMembership.collectAsStateWithLifecycle()
+
+    // Resolve the current track's membership against the actual YouTube Music
+    // playlist contents; the import-mapping alone misses ordinary playlists.
+    LaunchedEffect(playlistTarget?.videoId, playlists) {
+        viewModel.loadSongPlaylistMembership(playlistTarget, playlists)
+    }
 
     // The Downloads page is a snapshot of the folder, taken when it was opened.
     // Saving a track or deleting one while it is on screen changes what belongs
@@ -4967,9 +4974,10 @@ private fun BitChordApp(
                 onDismiss = dismiss,
                 isSongInPlaylist = { choice ->
                     target?.let { song ->
-                        com.music.bitchord.data.spotify.LocalPlaylistStore.containsRemoteSpotifySong(
-                            choice.browseId, song,
-                        )
+                        choice.browseId in songPlaylistMembership ||
+                            com.music.bitchord.data.spotify.LocalPlaylistStore.containsRemoteSpotifySong(
+                                choice.browseId, song,
+                            )
                     } ?: false
                 },
                 onAdd = { picked ->

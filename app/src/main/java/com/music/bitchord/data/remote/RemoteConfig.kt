@@ -120,11 +120,17 @@ object RemoteConfig {
                     val body = response.body ?: return@withLock false
                     if (body.contentLength() > MAX_CONFIG_BYTES) return@withLock false
 
-                    val raw = body.string()
-                    if (raw.toByteArray(Charsets.UTF_8).size > MAX_CONFIG_BYTES) {
+                    // Read at most one byte beyond the documented limit so a
+                    // bad or unexpectedly large response cannot be buffered whole.
+                    val bytes = body.byteStream().readNBytes(MAX_CONFIG_BYTES.toInt() + 1)
+                    if (bytes.size > MAX_CONFIG_BYTES) return@withLock false
+                    val raw = String(bytes, Charsets.UTF_8)
+                    val parsed = parseRemoteConfig(raw) ?: return@withLock false
+                    // A stale CDN response must never roll back a newer config
+                    // already loaded from disk or from a previous request.
+                    if (parsed.revision < mutableSnapshot.value.revision) {
                         return@withLock false
                     }
-                    val parsed = parseRemoteConfig(raw) ?: return@withLock false
                     mutableSnapshot.value = parsed.copy(
                         loadedFromServer = true,
                         fetchedAtMs = now,

@@ -373,7 +373,7 @@ private fun NewPlaylistForm(
                 Column(Modifier.weight(1f)) {
                     Text(
                         text = stringResource(R.string.new_playlist),
-                        style = MaterialTheme.typography.titleMedium,
+                        style = MaterialTheme.typography.titleLarge,
                         color = MaterialTheme.colorScheme.onBackground,
                     )
                     Text(
@@ -392,7 +392,7 @@ private fun NewPlaylistForm(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 22.dp, vertical = 16.dp)
-                .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(11.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(14.dp))
                 .padding(horizontal = 12.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -519,7 +519,7 @@ internal fun RenamePlaylistForm(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 22.dp, vertical = 16.dp)
-                .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(11.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(14.dp))
                 .padding(horizontal = 12.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {

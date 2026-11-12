@@ -1174,11 +1174,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun removeSongFromPlaylists(
         playlists: List<UserPlaylist>,
         song: Song,
-        onResult: (removed: Int, failed: Int) -> Unit = { _, _ -> },
+        onResult: (removed: List<UserPlaylist>, failed: Int) -> Unit = { _, _ -> },
     ) {
         if (!requireSignIn() || playlists.isEmpty()) return
         viewModelScope.launch {
-            var removed = 0
+            val removed = mutableListOf<UserPlaylist>()
             var failed = 0
             playlists.forEach { playlist ->
                 // playlistEntries preserves duplicate rows and their set-video-ids.
@@ -1199,7 +1199,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
                 YtMusicRepository.removeFromPlaylist(playlist.playlistId, removalIds).fold(
                     onSuccess = {
-                        removed++
+                        removed += playlist
                         libraryStale = true
                         com.music.bitchord.data.spotify.LocalPlaylistStore
                             .removeRemoteSpotifySong(playlist.browseId, song)
@@ -1220,7 +1220,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     onFailure = { failed++ },
                 )
             }
-            onResult(removed, failed)
+            onResult(removed.toList(), failed)
         }
     }
 

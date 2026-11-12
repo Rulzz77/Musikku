@@ -151,9 +151,29 @@ object PaxSenix {
         if (documents.isEmpty()) return parseResponse(raw)
 
         return documents.mapNotNull { document ->
+            val candidate = document as? JsonObject ?: return@mapNotNull null
+            val details = candidate["attributes"] as? JsonObject ?: candidate
+            val candidateTitle = details.firstString(TITLE_KEYS) ?: return@mapNotNull null
+            val candidateArtist = details.firstString(ARTIST_KEYS)
+                ?: details.artistNames().orEmpty()
+            val candidateDurationMs = details.firstLong(DURATION_KEYS).toDurationMs()
+
+            // The generic endpoint can return several songs for one query. A
+            // fuzzy score of zero is not a match: never choose Laut Kidul just
+            // because it shares the artist with Tanpo Tresnamu.
+            if (!lyricsCandidateMatches(
+                    title = title,
+                    artist = artist,
+                    durationMs = durationMs,
+                    candidateTitle = candidateTitle,
+                    candidateArtist = candidateArtist,
+                    candidateDurationMs = candidateDurationMs,
+                    durationToleranceMs = 10_000L,
+                )
+            ) return@mapNotNull null
+
             val lines = parseResponse(document.toString()) ?: return@mapNotNull null
-            val metadataScore = (document as? JsonObject)
-                ?.lyricCandidateScore(title, artist, durationMs) ?: 0
+            val metadataScore = candidate.lyricCandidateScore(title, artist, durationMs)
             ParsedDocument(lines, metadataScore, durationDistance(lines, durationMs))
         }.maxWithOrNull(
             compareBy<ParsedDocument> { it.metadataScore }

@@ -62,4 +62,25 @@ class PaxSenixLyricsMatchTest {
 
         assertNull(lines)
     }
+
+    @Test
+    fun anonymousLyricsAreRejectedWhenTheirRuntimeDoesNotMatch() {
+        val response = """
+            {
+              "lyrics": [
+                "[00:01.00]Laut kidul",
+                "[00:40.00]Laut kidul ends"
+              ]
+            }
+        """.trimIndent()
+
+        val lines = PaxSenix.parseLrcGet(
+            raw = response,
+            title = "Tanpo Tresnamu",
+            artist = "Denny Caknan",
+            durationMs = 200_000L,
+        )
+
+        assertNull(lines)
+    }
 }

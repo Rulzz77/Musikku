@@ -108,6 +108,38 @@ class SearchMediaClassificationTest {
     }
 
     @Test
+    fun musicOnlySearchExcludesPodcastEpisodes() {
+        val page = InnertubeParser.parseSearchPage(
+            response(
+                type = "MUSIC_VIDEO_TYPE_PODCAST_EPISODE",
+                width = 544,
+                height = 306,
+                rowType = "Episode",
+            ),
+            includeAllTrackTypes = true,
+            musicOnly = true,
+        )
+
+        assertTrue(page.rows.isEmpty())
+    }
+
+    @Test
+    fun ordinaryParserCanStillReadPodcastEpisodesOutsideMusicSearch() {
+        val page = InnertubeParser.parseSearchPage(
+            response(
+                type = "MUSIC_VIDEO_TYPE_PODCAST_EPISODE",
+                width = 544,
+                height = 306,
+                rowType = "Episode",
+            ),
+            includeAllTrackTypes = true,
+        )
+
+        assertEquals(1, page.rows.size)
+        assertTrue((page.rows.single() as SearchResult.Track).song.isPodcastEpisode)
+    }
+
+    @Test
     fun unknownDimensionsDoNotHideTrack() {
         val page = InnertubeParser.parseSearchPage(
             response(type = null, width = 0, height = 0),

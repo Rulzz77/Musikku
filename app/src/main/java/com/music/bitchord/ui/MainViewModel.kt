@@ -1029,7 +1029,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             ?.songs as? UiState.Success)?.data
         val known = openSongs
             ?: YtMusicRepository.allSongs(playlist.browseId).getOrNull()
-        if (known?.any { it.videoId == song.videoId } == true) return AddOutcome.ALREADY_THERE
+        val target = TrackMatcher.targetOf(song)
+        if (known?.any { existing ->
+                existing.videoId == song.videoId || TrackMatcher.score(existing, target) != null
+            } == true) return AddOutcome.ALREADY_THERE
         return YtMusicRepository.addToPlaylist(playlist.playlistId, listOf(song.videoId)).fold(
             onSuccess = { added ->
                 libraryStale = true

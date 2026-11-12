@@ -56,12 +56,14 @@ class SearchMediaClassificationTest {
     }
 
     @Test
-    fun restoresPreviousRuleForWidescreenArtworkEvenWhenYouTubeSaysAudio() {
+    fun songsSearchKeepsWidescreenTrackEvenWhenYouTubeSaysAudio() {
         val page = InnertubeParser.parseSearchPage(
             response("MUSIC_VIDEO_TYPE_ATV", width = 544, height = 306),
+            includeAllTrackTypes = true,
         )
 
-        assertTrue(page.rows.isEmpty())
+        assertEquals(1, page.rows.size)
+        assertTrue((page.rows.single() as SearchResult.Track).song.isVideo)
     }
 
     @Test
@@ -88,7 +90,17 @@ class SearchMediaClassificationTest {
     }
 
     @Test
-    fun explicitVideoRowIsFilteredFromSongsEvenWithSquareArtwork() {
+    fun songsSearchKeepsExplicitVideoRowsFromTheMusicCatalogue() {
+        val page = InnertubeParser.parseSearchPage(
+            response(type = null, width = 544, height = 544, rowType = "Video"),
+            includeAllTrackTypes = true,
+        )
+        assertEquals(1, page.rows.size)
+        assertTrue((page.rows.single() as SearchResult.Track).song.isVideo)
+    }
+
+    @Test
+    fun defaultParserStillUsesTheLegacyAudioOnlyRule() {
         val page = InnertubeParser.parseSearchPage(
             response(type = null, width = 544, height = 544, rowType = "Video"),
         )

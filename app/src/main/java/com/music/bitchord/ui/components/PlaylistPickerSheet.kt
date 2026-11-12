@@ -251,6 +251,8 @@ fun PlaylistPickerSheet(
                                     removing = markedForRemoval,
                                     onClick = {
                                         if (alreadyAdded) {
+                                            // A refreshed row must not remain in both the add and remove batches.
+                                            selected = selected - playlist.playlistId
                                             removing = if (markedForRemoval) {
                                                 removing - playlist.playlistId
                                             } else {

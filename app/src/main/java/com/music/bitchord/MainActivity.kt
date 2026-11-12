@@ -4977,7 +4977,6 @@ private fun BitChordApp(
                                         R.plurals.added_to_playlists_notice, added, added,
                                     ) + ": " + picked.joinToString(", ") { it.title }.take(90)
                                     added == 1 -> context.getString(R.string.song_added_to_playlist) +
-                                        ": " + picked.joinToString(", ") { it.title }.take(90) +
                                         ": " + picked.joinToString(", ") { it.title }.take(90)
                                     alreadyThere > 0 && failed == 0 ->
                                         context.getString(R.string.song_already_in_playlist)
@@ -5087,8 +5086,9 @@ private fun BitChordApp(
                                 when {
                                     added > 1 -> context.resources.getQuantityString(
                                         R.plurals.added_to_playlists_notice, added, added,
-                                    )
-                                    added == 1 -> context.getString(R.string.song_added_to_playlist)
+                                    ) + ": " + picked.joinToString(", ") { it.title }.take(90)
+                                    added == 1 -> context.getString(R.string.song_added_to_playlist) +
+                                        ": " + picked.joinToString(", ") { it.title }.take(90)
                                     alreadyThere > 0 && failed == 0 -> context.getString(R.string.song_already_in_playlist)
                                     else -> context.getString(R.string.failed)
                                 },

@@ -778,8 +778,7 @@ private fun BitChordApp(
     val autoplayEnabled = autoplayEnabledFor(partyState, autoplay)
     val partyServerStatus by ListenTogether.serverConnectionState.collectAsStateWithLifecycle()
     val listenBrainzToken by AppSettings.listenBrainzToken.collectAsStateWithLifecycle()
-    // Set each time the search tab is tapped, which SearchScreen uses as a
-    // signal to focus the input field.
+    // Set when Search is opened, so its top-bar field can take focus.
     var searchFocusRequested by remember { mutableStateOf(false) }
     val searchFieldFocus = remember { FocusRequester() }
     // Invalidates an in-flight radio lookup when a later play request wins.
@@ -1354,7 +1353,6 @@ private fun BitChordApp(
     val playLabel = stringResource(R.string.play)
     val exploreLabel = stringResource(R.string.explore)
     val libraryLabel = stringResource(R.string.library)
-    val searchLabel = stringResource(R.string.search)
     val historyLabel = stringResource(R.string.history)
     val replayLabel = stringResource(R.string.replay)
     val queueLabel = stringResource(R.string.queue)
@@ -4107,9 +4105,9 @@ private fun BitChordApp(
                             // Global search lives in the top bar rather than
                             // taking a permanent slot in the bottom navigation.
                             // It is available from every page and opens a fresh,
-                            // focused search; the field itself replaces this icon
-                            // while the Search page is active.
-                            if (selectedTab != TAB_SEARCH) {
+                            // focused search; the field replaces this icon only
+                            // while the Search root is actually visible.
+                            if (!(selectedTab == TAB_SEARCH && route == null && detail == null && selectedMoodGenre == null)) {
                                 IconButton(
                                     onClick = {
                                         navigator.clear()
@@ -4177,8 +4175,7 @@ private fun BitChordApp(
                     viewModel.closeMoodGenre()
                     selectedTab = index
 
-                    // Every search tab tap resets the field, focuses it, and opens
-                    // the keyboard through SearchScreen's focus request.
+                    // Search entry resets the field, focuses it, and opens the keyboard.
                     if (index == TAB_SEARCH) {
                         viewModel.onQueryChange("")
                         searchFocusRequested = true

@@ -31,6 +31,8 @@ data class OfflinePlaylist(
     val title: String,
     /** In the order they were added; the newest like first for [LIKED_ID]. */
     val songs: List<Song>,
+    /** Optional image chosen by the user; null uses the first track's artwork. */
+    val coverUrl: String? = null,
 ) {
     val browseId: String get() = OfflinePlaylists.PREFIX + id
     val isLiked: Boolean get() = id == OfflinePlaylists.LIKED_ID
@@ -168,6 +170,18 @@ object OfflinePlaylists {
         mutate { list -> list.filterNot { it.id == id } }
     }
 
+    /** Changes the artwork of a user-created playlist; Liked keeps its heart. */
+    fun updateCover(browseId: String, coverUrl: String?) {
+        val id = browseId.removePrefix(PREFIX)
+        if (id == LIKED_ID) return
+        mutate { list ->
+            list.map { playlist ->
+                if (playlist.id == id) playlist.copy(coverUrl = coverUrl?.takeIf(String::isNotBlank))
+                else playlist
+            }
+        }
+    }
+
     private inline fun mutate(change: (List<OfflinePlaylist>) -> List<OfflinePlaylist>) {
         synchronized(lock) { publish(change(_playlists.value)) }
     }
@@ -221,6 +235,7 @@ object OfflinePlaylists {
                     id = obj.getString("id"),
                     title = obj.optString("title"),
                     songs = (0 until songs.length()).mapNotNull { songFrom(songs.getJSONObject(it)) },
+                    coverUrl = obj.optString("coverUrl", null).takeIf { !it.isNullOrBlank() && it != "null" },
                 )
             }
         }.getOrElse {
@@ -236,10 +251,12 @@ object OfflinePlaylists {
                 val songs = JSONArray()
                 playlist.songs.forEach { songs.put(it.toJson()) }
                 array.put(
-                    JSONObject()
-                        .put("id", playlist.id)
-                        .put("title", playlist.title)
-                        .put("songs", songs),
+                    JSONObject().apply {
+                        put("id", playlist.id)
+                        put("title", playlist.title)
+                        putOpt("coverUrl", playlist.coverUrl)
+                        put("songs", songs)
+                    },
                 )
             }
             prefs.edit().putString(KEY_PLAYLISTS, array.toString()).apply()
@@ -294,7 +311,7 @@ fun OfflinePlaylist.toGroup(): LocalGroup = LocalGroup(
     browseId = browseId,
     title = title,
     subtitle = "",
-    thumbnailUrl = if (isLiked) null else songs.firstNotNullOfOrNull { it.thumbnailUrl },
+    thumbnailUrl = if (isLiked) null else coverUrl ?: songs.firstNotNullOfOrNull { it.thumbnailUrl },
     type = com.music.bitchord.data.model.BrowseType.PLAYLIST,
     songs = songs,
 )

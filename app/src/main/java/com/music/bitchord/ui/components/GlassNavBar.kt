@@ -73,11 +73,11 @@ import androidx.compose.foundation.layout.fillMaxSize
  * The liquid glass navigation bar: the iOS 26 shape where the now playing
  * controls and the tabs are one component rather than two stacked bars.
  *
- * Expanded, it is a full width now playing pill sitting over the tab pill and a
- * separate circular Search tab. Scrolling down collapses it inline — the tabs
- * fold down to just the selected one, the now playing controls narrow into the
- * gap between it and Search, and the whole thing becomes a single row the width
- * of the screen. Scrolling back up expands it. The fold is driven by
+ * Expanded, it is a full width now playing pill sitting over the Home,
+ * Explore and Library tab pill. Scrolling down collapses it inline — the tabs
+ * fold down to just the selected one and the now playing controls narrow into
+ * the row beside them. Global Search lives in MainActivity's top bar. Scrolling
+ * back up expands it. The fold is driven by
  * [scrollConnection], which the page's scroll has to be dispatched into for any
  * of this to move; see MainActivity's `nestedScroll`.
  *
@@ -86,7 +86,7 @@ import androidx.compose.foundation.layout.fillMaxSize
  * MainActivity draws [MiniPlayer] and [FloatingBottomBar] instead.
  *
  * [song] null means nothing is playing, and the accessory is simply absent: the
- * bar is then the tab pill and Search alone, and the collapse still works.
+ * bar is then only the tab pill, and the collapse still works.
  */
 @Composable
 fun GlassNavBar(

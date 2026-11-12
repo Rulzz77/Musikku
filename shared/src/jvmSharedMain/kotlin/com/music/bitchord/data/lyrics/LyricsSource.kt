@@ -21,6 +21,8 @@ enum class LyricsSource(
      * outright would only mean writing it again if it comes back.
      */
     val hidden: Boolean = false,
+    /** Providers that return lyrics without exposing the matched track identity. */
+    val manualOnly: Boolean = false,
 ) {
     // Declaration order is the default priority — [AppSettings.lyricsSourceOrder]
     // and [AppSettings.lyricsSources] both fall back to [LyricsSource.entries]
@@ -52,13 +54,15 @@ enum class LyricsSource(
     ),
     BETTER_LYRICS(
         label = "BetterLyrics",
-        detail = "Apple Music timings, word by word",
+        detail = "Apple Music timings, word by word; select manually until the provider exposes track identity",
         wordSynced = true,
+        manualOnly = true,
     ),
     BETTER_LYRICS_PORTATO(
         label = "BetterLyrics Portato",
-        detail = "QQ Music karaoke timings through BetterLyrics",
+        detail = "QQ Music karaoke timings; select manually until the provider exposes track identity",
         wordSynced = true,
+        manualOnly = true,
     ),
     PAXSENIX(
         label = "PaxSenix",
@@ -77,8 +81,9 @@ enum class LyricsSource(
     ),
     LYRICS_PLUS(
         label = "LyricsPlus",
-        detail = "Syllable by syllable, on community mirrors",
+        detail = "Syllable timings on community mirrors; select manually until track identity is verifiable",
         wordSynced = true,
+        manualOnly = true,
     ),
     SIMP_MUSIC(
         label = "SimpMusic",
@@ -109,8 +114,9 @@ enum class LyricsSource(
     ),
     KUGOU(
         label = "KuGou",
-        detail = "Whole lines, strong outside the English catalogue",
+        detail = "Whole lines, strong outside the English catalogue; manual selection until a track match can be verified",
         wordSynced = false,
+        manualOnly = true,
     ),
     LRCLIB(
         label = "LRCLIB",
@@ -152,3 +158,22 @@ enum class LyricsSource(
         }
     }
 }
+
+
+/**
+ * The enabled providers for an automatic or explicit lyrics lookup.
+ * Unverified providers remain available through the manual source picker,
+ * but must never silently win the automatic lookup with another song's words.
+ */
+internal fun lyricsSourceSequence(
+    order: List<LyricsSource>,
+    enabledSources: Set<LyricsSource>,
+    allowManualOnlySources: Boolean = false,
+): List<LyricsSource> =
+    (order + LyricsSource.offered)
+        .distinct()
+        .filter { source ->
+            source in enabledSources &&
+                !source.hidden &&
+                (allowManualOnlySources || !source.manualOnly)
+        }

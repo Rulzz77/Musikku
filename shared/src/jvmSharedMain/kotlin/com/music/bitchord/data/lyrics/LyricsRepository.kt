@@ -103,10 +103,10 @@ object LyricsRepository {
         onSourceResult: ((LyricsSource, Result?) -> Unit)? = null,
         /** Lets callers turn a cancelled race loser back into "not fetched". */
         onSourceCancelled: ((LyricsSource) -> Unit)? = null,
+        /** Manual selection may opt into providers whose responses lack track identity. */
+        allowManualOnlySources: Boolean = false,
     ): Result? = coroutineScope {
-        val sequence = (order + LyricsSource.offered)
-            .distinct()
-            .filter { it in sources && !it.hidden }
+        val sequence = lyricsSourceSequence(order, sources, allowManualOnlySources)
 
         // Every source but [SimpMusicLyrics] is asked for a name, and
         // YouTube's is not the name anyone catalogued. Cleaned once, here,

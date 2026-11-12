@@ -763,11 +763,10 @@ object InnertubeParser {
             // is simply absent, which is what makes "remove from playlist"
             // offer itself exactly where it means something.
             setVideoId = renderer.o("playlistItemData").s("playlistSetVideoId"),
-            // Trust YouTube's media-type metadata and explicit row label. Artwork
-            // shape is not a media type: label artists and alternate releases can
-            // use widescreen covers even when the underlying item is audio.
-            // Only the dedicated Videos filter is a fallback when metadata is absent.
-            isVideo = !episode && isVideoTrack(renderer, rowType, videoFallback),
+            // Preserve the previous Songs tab rule: use the explicit row label
+            // and the artwork shape, not musicVideoType (which has mislabeled some
+            // genuine audio catalogue entries and hidden them from general search).
+            isVideo = !episode && isVideoTrack(rowType, thumbnails.isNotSquare(), videoFallback),
             isExplicit = renderer.hasExplicitBadge(),
             // Extract the "Remove from history" feedback token from the row's menu, if present.
             feedbackToken = extractFeedbackToken(renderer),
@@ -889,7 +888,8 @@ object InnertubeParser {
             albumName = credits.albumName,
             // A card's artwork aspect ratio describes its image, not its media.
             // Use the same metadata-first classification as responsive search rows.
-            isVideo = isVideoTrack(renderer, rowType),
+            // Keep the original row-label + artwork heuristic for search results.
+            isVideo = isVideoTrack(rowType, thumbnails.isNotSquare()),
             isExplicit = renderer["subtitleBadges"].hasExplicitBadge(),
         )
     }
@@ -1298,19 +1298,17 @@ object InnertubeParser {
             .o("watchEndpointMusicConfig").s("musicVideoType")
 
     /**
-     * Classify media from YouTube's type metadata, never from cover dimensions.
-     * If a filtered Videos search omitted both signals, its filter is the only
-     * safe fallback; for unfiltered/search-song and browse rows unknown means audio.
+     * The legacy Songs filter used the row label and artwork shape. This is
+     * intentionally restored: YouTube's musicVideoType has mislabeled genuine
+     * catalogue tracks, which then disappeared from Songs while remaining on
+     * artist pages. A dedicated Videos query remains authoritative through
+     * [videoFallback].
      */
-    private fun isVideoTrack(renderer: JsonObject, rowType: String?, videoFallback: Boolean = false): Boolean {
-        val musicVideoType = renderer.musicVideoType()
-        return when {
-            musicVideoType != null -> musicVideoType != MUSIC_VIDEO_TYPE_ATV
-            rowType == "video" -> true
-            rowType == "song" -> false
-            else -> videoFallback
-        }
-    }
+    private fun isVideoTrack(
+        rowType: String?,
+        artworkIsWidescreen: Boolean = false,
+        videoFallback: Boolean = false,
+    ): Boolean = rowType == "video" || artworkIsWidescreen || videoFallback
 
     private const val MUSIC_VIDEO_TYPE_ATV = "MUSIC_VIDEO_TYPE_ATV"
 
@@ -1679,11 +1677,12 @@ object InnertubeParser {
         val thumbnails = renderer.o("thumbnailRenderer").o("musicThumbnailRenderer")
             .o("thumbnail").a("thumbnails")
         val subtitle = renderer.o("subtitle").runs()
-        // A card with no browse target is a playable track, not an album,
-        // playlist or artist. Its artwork ratio is not enough to decide whether
-        // the media is audio or a music video; use YouTube's explicit type only.
-        val isVideo = resolvedBrowseId == null && videoId != null &&
-            isVideoTrack(renderer, rowType = null)
+        // Restore the previous playable-card rule too: a widescreen thumbnail
+        // is treated as a video, with YouTube's 16:9 hint as a fallback.
+        val isVideo = resolvedBrowseId == null && videoId != null && (
+            thumbnails.isNotSquare() ||
+                renderer.s("aspectRatio")?.contains("16_9") == true
+            )
         // An album/playlist billed as a video chart/compilation — "N videos"
         // in the subtitle, or "video" in the card's own title (e.g. "Daily
         // Top Music Videos") — is the same dead-end as in parseBrowseItem.
@@ -1839,5 +1838,18 @@ private fun JsonElement?.firstRunText(): String? =
  * as it trades down, and is what the player calls.
  */
 private fun JsonArray?.best(): String? = this?.lastOrNull().s("url")
+
+/**
+ * The legacy catalog heuristic: square artwork is treated as audio; artwork
+ * with a clearly different aspect ratio is treated as a music video. Missing
+ * dimensions are neutral and never hide a result.
+ */
+private fun JsonArray?.isNotSquare(): Boolean {
+    val last = this?.lastOrNull()
+    val width = last.s("width")?.toDoubleOrNull() ?: return false
+    val height = last.s("height")?.toDoubleOrNull() ?: return false
+    if (width <= 0 || height <= 0) return false
+    return width / height !in 0.85..1.15
+}
 
 

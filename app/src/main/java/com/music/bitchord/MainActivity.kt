@@ -5192,7 +5192,9 @@ private fun BitChordApp(
             // One of the offline player's own playlists, which are the user's
             // to rename and delete — all but Liked, which is the app's.
             val offlineEditable = OfflinePlaylists.get(target.browseId)?.takeUnless { it.isLiked }
-            val importedEditable = com.music.bitchord.data.spotify.LocalPlaylistStore.getPlaylist(target.browseId)
+            val importedEditable = target.browseId?.let {
+                com.music.bitchord.data.spotify.LocalPlaylistStore.getPlaylist(it)
+            }
             BrowseActionsMenu(
                 // The live answer, not the one the target was built with.
                 target = target.copy(

@@ -922,6 +922,64 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _playlistsLoading = MutableStateFlow(false)
     val playlistsLoading: StateFlow<Boolean> = _playlistsLoading.asStateFlow()
 
+    /** Playlist ids known to contain the current picker track. */
+    private val _songPlaylistMembership = MutableStateFlow<Set<String>>(emptySet())
+    val songPlaylistMembership: StateFlow<Set<String>> = _songPlaylistMembership.asStateFlow()
+    private var songPlaylistMembershipJob: Job? = null
+
+    /**
+     * Checks the current track against the account's actual playlist contents.
+     * It walks continuations only until it finds the song (or reaches the end),
+     * so ordinary short playlists cost one request and long playlists stay
+     * correct without pretending the first 100 rows are the whole playlist.
+     */
+    fun loadSongPlaylistMembership(song: Song?, playlists: List<UserPlaylist>) {
+        songPlaylistMembershipJob?.cancel()
+        _songPlaylistMembership.value = emptySet()
+        if (song == null || playlists.isEmpty() || !_signedIn.value || song.videoId.isBlank()) return
+
+        val target = TrackMatcher.targetOf(song)
+        val requestSongId = song.videoId
+        songPlaylistMembershipJob = viewModelScope.launch {
+            val found = linkedSetOf<String>()
+            playlists.forEach { playlist ->
+                val cachedPage = _detailStack.value.firstOrNull { it.browseId == playlist.browseId }
+                    ?.songs as? UiState.Success
+                val onOpenPage = cachedPage?.data?.any { existing ->
+                    existing.videoId == requestSongId || TrackMatcher.score(existing, target) != null
+                } == true
+
+                val contains = if (onOpenPage) {
+                    true
+                } else {
+                    playlistContainsSong(playlist.browseId, requestSongId, target)
+                }
+                if (contains) {
+                    found += playlist.browseId
+                    _songPlaylistMembership.value = found.toSet()
+                }
+            }
+        }
+    }
+
+    private suspend fun playlistContainsSong(
+        browseId: String,
+        videoId: String,
+        target: TrackMatcher.Target,
+    ): Boolean {
+        var page = YtMusicRepository.browseSongs(browseId).getOrNull() ?: return false
+        var pageCount = 0
+        while (true) {
+            if (page.songs.any { existing ->
+                    existing.videoId == videoId || TrackMatcher.score(existing, target) != null
+                }
+            ) return true
+            val token = page.continuation ?: return false
+            if (++pageCount >= YtMusicRepository.MAX_PAGES) return false
+            page = YtMusicRepository.moreSongs(token).getOrNull() ?: return false
+        }
+    }
+
     /** Re-fetched rather than cached for the session: playlists are edited here. */
     fun loadPlaylists() {
         if (!_signedIn.value || _playlistsLoading.value) return

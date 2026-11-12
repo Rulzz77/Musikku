@@ -2,6 +2,7 @@ package com.music.bitchord
 
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.spotify.appendUniqueImportedTracks
+import com.music.bitchord.data.spotify.dedupeSongs
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -42,5 +43,22 @@ class ImportedPlaylistTracksTest {
 
         assertEquals(1, added)
         assertEquals(listOf("valid"), result.map { it.videoId })
+    }
+    @Test
+    fun `saving an imported playlist removes duplicate video ids and blank ids`() {
+        val songs = listOf(song("one"), song("two"), song("one", "Duplicate title"), song(""))
+
+        assertEquals(listOf("one", "two"), dedupeSongs(songs).map { it.videoId })
+    }
+
+    @Test
+    fun `duplicate video ids with surrounding whitespace are not appended twice`() {
+        val existing = listOf(song("known"))
+        val incoming = listOf(song(" known "), song("fresh"))
+
+        val (result, added) = appendUniqueImportedTracks(existing, incoming)
+
+        assertEquals(1, added)
+        assertEquals(listOf("known", "fresh"), result.map { it.videoId })
     }
 }

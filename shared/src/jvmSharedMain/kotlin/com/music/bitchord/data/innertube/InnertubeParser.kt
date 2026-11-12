@@ -60,6 +60,7 @@ object InnertubeParser {
         response: JsonObject,
         includeVideos: Boolean = false,
         includeAllTrackTypes: Boolean = false,
+        musicOnly: Boolean = false,
     ): SearchPage {
         // The "All" tab spreads results across several shelf types (card shelf
         // for the top result, then one shelf per category). Its promoted top
@@ -68,7 +69,7 @@ object InnertubeParser {
         val topResults: List<SearchResult> = if (includeVideos) emptyList() else {
             collectRenderers(response, "musicCardShelfRenderer")
                 .mapNotNull { card ->
-                    parseCardShelfSong(card)?.let(SearchResult::TopTrack)
+                    parseCardShelfSong(card, excludePodcastEpisodes = musicOnly)?.let(SearchResult::TopTrack)
                         ?: parseCardShelfBrowse(card)?.let(SearchResult::Browse)
                 }
         }
@@ -109,7 +110,12 @@ object InnertubeParser {
                     if (seen.add("b:${browse.browseId}")) add(SearchResult.Browse(browse))
                 } else {
                     val fallback = cardCredits.firstOrNull { it.first === renderer }?.second
-                    parseResponsiveListItem(renderer, fallback ?: Credits(), videoFallback = includeVideos)?.let { song ->
+                    parseResponsiveListItem(
+                        renderer,
+                        fallback ?: Credits(),
+                        videoFallback = includeVideos,
+                        excludePodcastEpisodes = musicOnly,
+                    )?.let { song ->
                         // The mixed All page stays music-only; the dedicated Videos
                         // filter is the one place music-video uploads belong.
                         if ((includeAllTrackTypes || song.isVideo == includeVideos) && seen.add("v:${song.videoId}")) {
@@ -293,7 +299,7 @@ object InnertubeParser {
             parseTwoRowItem(item.o("musicTwoRowItemRenderer"))
                 ?: parseResponsiveListItem(item.o("musicResponsiveListItemRenderer"))
                     ?.let { song ->
-                        ShelfItem(song.title, song.artist, song.thumbnailUrl, song.videoId, null, isVideo = song.isVideo)
+                        ShelfItem(song.title, song.artist, song.thumbnailUrl, song.videoId, null, isVideo = song.isVideo, isMusic = !song.isPodcastEpisode)
                     }
                 // A chart row with nothing to play — "Top artists" lists the
                 // artist alone, no track — falls through parseResponsiveListItem
@@ -314,7 +320,7 @@ object InnertubeParser {
         val title = shelf.o("title").runs()
         val items = shelf.a("contents").orEmpty().mapNotNull {
             parseResponsiveListItem(it.o("musicResponsiveListItemRenderer"))
-        }.map { ShelfItem(it.title, it.artist, it.thumbnailUrl, it.videoId, null, isVideo = it.isVideo) }
+        }.map { ShelfItem(it.title, it.artist, it.thumbnailUrl, it.videoId, null, isVideo = it.isVideo, isMusic = !it.isPodcastEpisode) }
         if (items.isEmpty()) return null
         val shelfTitle = title.ifBlank { "For you" }
         return HomeShelf(shelfTitle, items, layout = shelfLayoutFor(shelfTitle, items, fromList = true))
@@ -684,6 +690,8 @@ object InnertubeParser {
         fallback: Credits = Credits(),
         /** The dedicated Videos filter is authoritative when YouTube omits row metadata. */
         videoFallback: Boolean = false,
+        /** Search may request music-only rows without changing podcast/library screens. */
+        excludePodcastEpisodes: Boolean = false,
     ): Song? {
         if (renderer == null) return null
         val videoId = renderer.o("playlistItemData").s("videoId")
@@ -739,6 +747,7 @@ object InnertubeParser {
         // Lab" — and the show links to a podcast page, not an artist, so
         // neither credit reader above finds it and the date stood in instead.
         val episode = rowType == "episode" || renderer.isPodcastEpisode()
+        if (excludePodcastEpisodes && episode) return null
         val show = if (episode) showNameFromRuns(subtitleRuns) else null
 
         val thumbnails = renderer.o("thumbnail").o("musicThumbnailRenderer")
@@ -771,6 +780,7 @@ object InnertubeParser {
             // and the artwork shape, not musicVideoType (which has mislabeled some
             // genuine audio catalogue entries and hidden them from general search).
             isVideo = !episode && isVideoTrack(rowType, thumbnails.isNotSquare(), videoFallback),
+            isPodcastEpisode = episode,
             isExplicit = renderer.hasExplicitBadge(),
             // Extract the "Remove from history" feedback token from the row's menu, if present.
             feedbackToken = extractFeedbackToken(renderer),
@@ -858,7 +868,7 @@ object InnertubeParser {
      * credits are placed directly on the card, so it would otherwise vanish
      * from the All tab while remaining first in the Songs tab.
      */
-    private fun parseCardShelfSong(renderer: JsonObject): Song? {
+    private fun parseCardShelfSong(renderer: JsonObject, excludePodcastEpisodes: Boolean = false): Song? {
         val videoId = renderer.o("onTap").o("watchEndpoint").s("videoId") ?: return null
         val title = renderer.o("title").runs()
         if (title.isBlank()) return null
@@ -869,6 +879,8 @@ object InnertubeParser {
         val duration = parts.lastOrNull()?.takeIf { it.matches(DURATION) }
         val rowType = parts.firstOrNull { it.lowercase(Locale.ROOT) in TYPE_WORDS }
             ?.lowercase(Locale.ROOT)
+        val episode = rowType == "episode" || renderer.isPodcastEpisode()
+        if (excludePodcastEpisodes && episode) return null
         val credits = creditsOf(subtitleRuns)
         val creditedArtists = artistNamesFromRuns(subtitleRuns)
         val artist = parts.firstOrNull {
@@ -893,7 +905,8 @@ object InnertubeParser {
             // A card's artwork aspect ratio describes its image, not its media.
             // Use the same metadata-first classification as responsive search rows.
             // Keep the original row-label + artwork heuristic for search results.
-            isVideo = isVideoTrack(rowType, thumbnails.isNotSquare()),
+            isVideo = !episode && isVideoTrack(rowType, thumbnails.isNotSquare()),
+            isPodcastEpisode = episode,
             isExplicit = renderer["subtitleBadges"].hasExplicitBadge(),
         )
     }

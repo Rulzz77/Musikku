@@ -101,7 +101,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -113,7 +112,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
@@ -4173,10 +4171,9 @@ private fun BitChordApp(
                     viewModel.closeMoodGenre()
                     selectedTab = index
 
-                    // Search entry resets the field, focuses it, and opens the keyboard.
+                    // Search entry resets its query; the user taps the field to type.
                     if (index == TAB_SEARCH) {
                         viewModel.onQueryChange("")
-                        searchFocusRequested = true
                     }
                 }
 

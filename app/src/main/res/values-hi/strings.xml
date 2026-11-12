@@ -1246,6 +1246,7 @@
 
     <string name="song_added_to_queue">Song added to queue</string>
     <string name="song_added_to_playlist">प्लेलिस्ट में जोड़ा गया</string>
+    <string name="song_removed_from_playlist">प्लेलिस्ट से हटाया गया</string>
     <string name="song_already_in_playlist">पहले से प्लेलिस्ट में है</string>
     <plurals name="add_to_playlists_count">
         <item quantity="one">%1$d प्लेलिस्ट में जोड़ें</item>

@@ -530,9 +530,15 @@ private fun BitChordApp(
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
     var playlistCoverTarget by remember { mutableStateOf<String?>(null) }
-    val playlistCoverPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+    val playlistCoverPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         val target = playlistCoverTarget
         if (uri != null && target != null) {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                )
+            }
             com.music.bitchord.data.spotify.LocalPlaylistStore.updateCover(target, uri.toString())
             OfflinePlaylists.updateCover(target, uri.toString())
             viewModel.reloadLocalDetail(target)
@@ -4971,8 +4977,7 @@ private fun BitChordApp(
                                         R.plurals.added_to_playlists_notice, added, added,
                                     )
                                     added == 1 -> context.getString(R.string.song_added_to_playlist) +
-                                        ": " + picked.filter { it.playlistId !in deviceIds || deviceResult.added > 0 }
-                                            .joinToString(", ") { it.title }.take(90)
+                                        ": " + picked.joinToString(", ") { it.title }.take(90)
                                     alreadyThere > 0 && failed == 0 ->
                                         context.getString(R.string.song_already_in_playlist)
                                     else -> context.getString(R.string.failed)
@@ -5358,7 +5363,7 @@ private fun BitChordApp(
                     {
                         browseActions = null
                         playlistCoverTarget = id
-                        playlistCoverPicker.launch("image/*")
+                        playlistCoverPicker.launch(arrayOf("image/*"))
                     }
                 },
                 onDeleteDownload = target.downloadId?.let { id ->

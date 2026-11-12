@@ -48,8 +48,6 @@ data class Song(
     val albumName: String? = null,
     /** A music-video upload rather than the catalogue track. */
     val isVideo: Boolean = false,
-    /** True when the row is a podcast episode rather than a music track. */
-    val isPodcastEpisode: Boolean = false,
     /**
      * True for a video upload and for its manually selected catalogue match.
      * The latter remains video-origin so playback policies such as AutoMix do
@@ -143,6 +141,8 @@ data class Song(
      * non-history rows (e.g. search results, library).
      */
     val feedbackToken: String? = null,
+    /** True when the catalogue row is a podcast episode rather than music. */
+    val isPodcastEpisode: Boolean = false,
 ) {
     /** Legacy derived property: true if and only if [queueTier] is [QueueTier.AUTOPLAY]. */
     val fromAutoplay: Boolean get() = queueTier == QueueTier.AUTOPLAY

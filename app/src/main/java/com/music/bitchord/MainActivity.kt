@@ -3808,9 +3808,9 @@ private fun BitChordApp(
                             detail != null && detailActiveShelf != null -> detailActiveShelf?.title.orEmpty()
                             detail != null -> detail.title
                             selectedMoodGenre != null -> selectedMoodGenre?.title.orEmpty()
-                            else -> tabs[selectedTab].let {
+                            else -> tabs.getOrNull(selectedTab)?.let {
                                 if (it.label == "Play") stringResource(R.string.listen_now) else it.label
-                            }
+                            } ?: searchLabel
                         }
                     },
                     // Every page, in either material, uses separated floating

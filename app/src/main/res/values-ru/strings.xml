@@ -1274,6 +1274,7 @@
 
     <string name="song_added_to_queue">Song added to queue</string>
     <string name="song_added_to_playlist">Добавлено в плейлист</string>
+    <string name="song_removed_from_playlist">Удалено из плейлиста</string>
     <string name="song_already_in_playlist">Уже в плейлисте</string>
     <plurals name="add_to_playlists_count">
         <item quantity="one">Добавить в %1$d плейлист</item>

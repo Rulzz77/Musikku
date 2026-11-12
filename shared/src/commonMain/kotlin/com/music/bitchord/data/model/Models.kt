@@ -141,6 +141,8 @@ data class Song(
      * non-history rows (e.g. search results, library).
      */
     val feedbackToken: String? = null,
+    /** True when the catalogue row is a podcast episode rather than music. */
+    val isPodcastEpisode: Boolean = false,
 ) {
     /** Legacy derived property: true if and only if [queueTier] is [QueueTier.AUTOPLAY]. */
     val fromAutoplay: Boolean get() = queueTier == QueueTier.AUTOPLAY
@@ -410,6 +412,8 @@ data class ShelfItem(
      * picture the player can show. Drawn as a 16:9 card, as the web player does.
      */
     val isVideo: Boolean = false,
+    /** False when this shelf card is a podcast episode, not music. */
+    val isMusic: Boolean = true,
 )
 
 /** How a shelf's items are laid out — the web player's `ShelfLayout`, by the same rules. */

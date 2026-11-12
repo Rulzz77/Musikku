@@ -1225,6 +1225,7 @@
 
     <string name="song_added_to_queue">Song added to queue</string>
     <string name="song_added_to_playlist">Ditambahkan ke playlist</string>
+    <string name="song_removed_from_playlist">Dihapus dari playlist</string>
     <string name="song_already_in_playlist">Sudah ada di playlist</string>
     <plurals name="add_to_playlists_count">
         <item quantity="other">Tambahkan ke %1$d playlist</item>

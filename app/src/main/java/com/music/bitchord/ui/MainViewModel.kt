@@ -922,6 +922,64 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _playlistsLoading = MutableStateFlow(false)
     val playlistsLoading: StateFlow<Boolean> = _playlistsLoading.asStateFlow()
 
+    /** Playlist ids known to contain the current picker track. */
+    private val _songPlaylistMembership = MutableStateFlow<Set<String>>(emptySet())
+    val songPlaylistMembership: StateFlow<Set<String>> = _songPlaylistMembership.asStateFlow()
+    private var songPlaylistMembershipJob: Job? = null
+
+    /**
+     * Checks the current track against the account's actual playlist contents.
+     * It walks continuations only until it finds the song (or reaches the end),
+     * so ordinary short playlists cost one request and long playlists stay
+     * correct without pretending the first 100 rows are the whole playlist.
+     */
+    fun loadSongPlaylistMembership(song: Song?, playlists: List<UserPlaylist>) {
+        songPlaylistMembershipJob?.cancel()
+        _songPlaylistMembership.value = emptySet()
+        if (song == null || playlists.isEmpty() || !_signedIn.value || song.videoId.isBlank()) return
+
+        val target = TrackMatcher.targetOf(song)
+        val requestSongId = song.videoId
+        songPlaylistMembershipJob = viewModelScope.launch {
+            val found = linkedSetOf<String>()
+            playlists.forEach { playlist ->
+                val cachedPage = _detailStack.value.firstOrNull { it.browseId == playlist.browseId }
+                    ?.songs as? UiState.Success
+                val onOpenPage = cachedPage?.data?.any { existing ->
+                    existing.videoId == requestSongId || TrackMatcher.score(existing, target) != null
+                } == true
+
+                val contains = if (onOpenPage) {
+                    true
+                } else {
+                    playlistContainsSong(playlist.browseId, requestSongId, target)
+                }
+                if (contains) {
+                    found += playlist.browseId
+                    _songPlaylistMembership.value = found.toSet()
+                }
+            }
+        }
+    }
+
+    private suspend fun playlistContainsSong(
+        browseId: String,
+        videoId: String,
+        target: TrackMatcher.Target,
+    ): Boolean {
+        var page = YtMusicRepository.browseSongs(browseId).getOrNull() ?: return false
+        var pageCount = 0
+        while (true) {
+            if (page.songs.any { existing ->
+                    existing.videoId == videoId || TrackMatcher.score(existing, target) != null
+                }
+            ) return true
+            val token = page.continuation ?: return false
+            if (++pageCount >= YtMusicRepository.MAX_PAGES) return false
+            page = YtMusicRepository.moreSongs(token).getOrNull() ?: return false
+        }
+    }
+
     /** Re-fetched rather than cached for the session: playlists are edited here. */
     fun loadPlaylists() {
         if (!_signedIn.value || _playlistsLoading.value) return
@@ -1160,6 +1218,67 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 val local = com.music.bitchord.data.spotify.LocalPlaylistStore.savePlaylist(name, songs)
                 onResult?.invoke(local.browseId, local.title, true)
             }
+        }
+    }
+
+    /**
+     * Removes [song] from every playlist selected for removal in the picker.
+     *
+     * The picker only has the song and the playlist headers; YouTube needs the
+     * per-entry set-video-id to remove a row. Read the full playlist first so
+     * duplicate appearances of the same track are all removed, then update any
+     * page already open behind the picker.
+     */
+    fun removeSongFromPlaylists(
+        playlists: List<UserPlaylist>,
+        song: Song,
+        onResult: (removed: List<UserPlaylist>, failed: Int) -> Unit = { _, _ -> },
+    ) {
+        if (!requireSignIn() || playlists.isEmpty()) return
+        viewModelScope.launch {
+            val removed = mutableListOf<UserPlaylist>()
+            var failed = 0
+            playlists.forEach { playlist ->
+                // playlistEntries preserves duplicate rows and their set-video-ids.
+                // Fall back to allSongs for older/unusual playlist responses which
+                // omit one unrelated entry id but still expose the target row.
+                val entries = YtMusicRepository.playlistEntries(playlist.browseId).getOrNull()
+                    ?: YtMusicRepository.allSongs(playlist.browseId).getOrNull()
+                val matches = entries.orEmpty().filter {
+                    it.videoId == song.videoId && !it.setVideoId.isNullOrBlank()
+                }
+                val removalIds = matches.mapNotNull { entry ->
+                    entry.setVideoId?.let { setVideoId -> setVideoId to entry.videoId }
+                }
+                if (removalIds.isEmpty()) {
+                    failed++
+                    return@forEach
+                }
+
+                YtMusicRepository.removeFromPlaylist(playlist.playlistId, removalIds).fold(
+                    onSuccess = {
+                        removed += playlist
+                        libraryStale = true
+                        com.music.bitchord.data.spotify.LocalPlaylistStore
+                            .removeRemoteSpotifySong(playlist.browseId, song)
+                        val removedSetIds = removalIds.mapTo(HashSet()) { it.first }
+                        _detailStack.value = _detailStack.value.map { page ->
+                            val pageSongs = (page.songs as? UiState.Success)?.data
+                            if (page.browseId != playlist.browseId || pageSongs == null) {
+                                page
+                            } else {
+                                page.copy(
+                                    songs = UiState.Success(
+                                        pageSongs.filterNot { it.setVideoId in removedSetIds },
+                                    ),
+                                )
+                            }
+                        }
+                    },
+                    onFailure = { failed++ },
+                )
+            }
+            onResult(removed.toList(), failed)
         }
     }
 

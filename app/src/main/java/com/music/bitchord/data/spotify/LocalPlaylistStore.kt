@@ -186,9 +186,14 @@ object LocalPlaylistStore {
 
     fun removeSong(playlistId: String, song: Song) {
         val cleanId = playlistId.removePrefix(IMPORTED_PLAYLIST_PREFIX)
+        val target = TrackMatcher.targetOf(song)
         val updated = _playlists.value.map { playlist ->
             if (playlist.id == cleanId) {
-                playlist.copy(songs = playlist.songs.filterNot { it.videoId == song.videoId })
+                playlist.copy(
+                    songs = playlist.songs.filterNot { existing ->
+                        existing.videoId == song.videoId || TrackMatcher.score(existing, target) != null
+                    },
+                )
             } else playlist
         }
         _playlists.value = updated

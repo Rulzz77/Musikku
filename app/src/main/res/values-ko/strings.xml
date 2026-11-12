@@ -586,6 +586,7 @@
     </plurals>
     <string name="song_added_to_queue">곡을 대기열에 추가했습니다</string>
     <string name="song_added_to_playlist">재생목록에 추가했습니다</string>
+    <string name="song_removed_from_playlist">재생목록에서 삭제했습니다</string>
     <string name="song_already_in_playlist">이미 재생목록에 있습니다</string>
     <plurals name="add_to_playlists_count">
         <item quantity="one">재생목록 %1$d개에 추가했습니다</item>

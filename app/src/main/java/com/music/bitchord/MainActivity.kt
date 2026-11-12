@@ -1025,6 +1025,13 @@ private fun BitChordApp(
     val qualityUpgradesInFlight by NerdStats.racingLossless.collectAsStateWithLifecycle()
     val playlists by viewModel.playlists.collectAsStateWithLifecycle()
     val playlistsLoading by viewModel.playlistsLoading.collectAsStateWithLifecycle()
+    val songPlaylistMembership by viewModel.songPlaylistMembership.collectAsStateWithLifecycle()
+
+    // Resolve the current track's membership against the actual YouTube Music
+    // playlist contents; the import-mapping alone misses ordinary playlists.
+    LaunchedEffect(playlistTarget?.videoId, playlists) {
+        viewModel.loadSongPlaylistMembership(playlistTarget, playlists)
+    }
 
     // The Downloads page is a snapshot of the folder, taken when it was opened.
     // Saving a track or deleting one while it is on screen changes what belongs
@@ -4967,9 +4974,10 @@ private fun BitChordApp(
                 onDismiss = dismiss,
                 isSongInPlaylist = { choice ->
                     target?.let { song ->
-                        com.music.bitchord.data.spotify.LocalPlaylistStore.containsRemoteSpotifySong(
-                            choice.browseId, song,
-                        )
+                        choice.browseId in songPlaylistMembership ||
+                            com.music.bitchord.data.spotify.LocalPlaylistStore.containsRemoteSpotifySong(
+                                choice.browseId, song,
+                            )
                     } ?: false
                 },
                 onAdd = { picked ->
@@ -4990,6 +4998,19 @@ private fun BitChordApp(
                                     else -> context.getString(R.string.failed)
                                 },
                             )
+                        }
+                    }
+                },
+                onRemove = { picked ->
+                    target?.let { song ->
+                        viewModel.removeSongFromPlaylists(picked, song) { removed, failed ->
+                            if (removed.isNotEmpty()) {
+                                showQueueNotice(
+                                    context.getString(R.string.song_removed_from_playlist) + ": " +
+                                        removed.joinToString(", ") { it.title }.take(90),
+                                )
+                            }
+                            if (failed > 0) showQueueNotice(context.getString(R.string.failed))
                         }
                     }
                 },
@@ -5108,6 +5129,48 @@ private fun BitChordApp(
                             viewModel.addToPlaylists(account, song, report)
                         } else {
                             report(0, 0, 0)
+                        }
+                    }
+                },
+                onRemove = { picked ->
+                    target?.let { song ->
+                        val deviceIds = offlinePlaylists.mapTo(HashSet()) { it.id }
+                        val imported = picked.filter {
+                            it.playlistId.startsWith(com.music.bitchord.data.spotify.IMPORTED_PLAYLIST_PREFIX)
+                        }
+                        val device = picked.filter { it.playlistId in deviceIds }
+                        val account = picked.filter {
+                            it.playlistId !in deviceIds &&
+                                !it.playlistId.startsWith(com.music.bitchord.data.spotify.IMPORTED_PLAYLIST_PREFIX)
+                        }
+
+                        device.forEach { choice ->
+                            val browseId = OfflinePlaylists.PREFIX + choice.playlistId
+                            OfflinePlaylists.remove(browseId, song)
+                            viewModel.reloadLocalDetail(browseId)
+                        }
+                        imported.forEach { choice ->
+                            // LocalPlaylistStore uses its local:playlist id, not a YouTube VL browse id.
+                            com.music.bitchord.data.spotify.LocalPlaylistStore.removeSong(choice.playlistId, song)
+                            viewModel.reloadLocalDetail(choice.playlistId)
+                        }
+
+                        val localRemoved = device + imported
+                        val report: (List<com.music.bitchord.data.model.UserPlaylist>, Int) -> Unit =
+                            { remoteRemoved, failed ->
+                                val removed = localRemoved + remoteRemoved
+                                if (removed.isNotEmpty()) {
+                                    showQueueNotice(
+                                        context.getString(R.string.song_removed_from_playlist) + ": " +
+                                            removed.joinToString(", ") { it.title }.take(90),
+                                    )
+                                }
+                                if (failed > 0) showQueueNotice(context.getString(R.string.failed))
+                            }
+                        if (account.isNotEmpty()) {
+                            viewModel.removeSongFromPlaylists(account, song, report)
+                        } else {
+                            report(emptyList(), 0)
                         }
                     }
                 },

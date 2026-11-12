@@ -114,11 +114,16 @@ fun PlaylistPickerSheet(
     offline: Boolean = false,
     /** True when the selected song is already stored in this device playlist. */
     isSongInPlaylist: (UserPlaylist) -> Boolean = { false },
+    /** Removes the current song from playlists whose existing ticks are cleared. */
+    onRemove: (List<UserPlaylist>) -> Unit = {},
 ) {
     var creating by remember { mutableStateOf(startCreating) }
     // By id rather than by value: the list is re-fetched under an open sheet,
     // and a refreshed row must stay ticked.
     var selected by remember { mutableStateOf(emptySet<String>()) }
+    // Existing rows are checked too. Clearing one schedules a real removal,
+    // rather than silently ignoring the tap as the old picker did.
+    var removing by remember { mutableStateOf(emptySet<String>()) }
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
@@ -169,13 +174,23 @@ fun PlaylistPickerSheet(
                     leadingIcon = SfIcons.Close,
                     leadingDescription = stringResource(R.string.close),
                     onLeading = { closeAfter {} },
-                    confirmDescription = if (selected.isEmpty()) {
-                        stringResource(R.string.add_to_playlist)
-                    } else {
-                        pluralStringResource(R.plurals.add_to_playlists_count, selected.size, selected.size)
+                    confirmDescription = when {
+                        selected.isNotEmpty() && removing.isNotEmpty() ->
+                            "${stringResource(R.string.add_to_playlist)} · ${stringResource(R.string.remove)}"
+                        removing.isNotEmpty() -> stringResource(R.string.remove_from_playlist)
+                        selected.isNotEmpty() ->
+                            pluralStringResource(R.plurals.add_to_playlists_count, selected.size, selected.size)
+                        else -> stringResource(R.string.add_to_playlist)
                     },
-                    confirmEnabled = selected.isNotEmpty(),
-                    onConfirm = { closeAfter { onAdd(playlists.filter { it.playlistId in selected }) } },
+                    confirmEnabled = selected.isNotEmpty() || removing.isNotEmpty(),
+                    onConfirm = {
+                        closeAfter {
+                            val toRemove = playlists.filter { it.playlistId in removing }
+                            val toAdd = playlists.filter { it.playlistId in selected }
+                            if (toRemove.isNotEmpty()) onRemove(toRemove)
+                            if (toAdd.isNotEmpty()) onAdd(toAdd)
+                        }
+                    },
                 )
                 if (song != null) {
                     SheetTrackHeader(song)
@@ -228,13 +243,27 @@ fun PlaylistPickerSheet(
                             items(playlists, key = { it.playlistId }) { playlist ->
                                 val alreadyAdded = song != null && isSongInPlaylist(playlist)
                                 val ticked = playlist.playlistId in selected
+                                val markedForRemoval = playlist.playlistId in removing
                                 PlaylistRow(
                                     playlist = playlist,
-                                    selected = ticked || alreadyAdded,
+                                    selected = (ticked || alreadyAdded) && !markedForRemoval,
                                     alreadyAdded = alreadyAdded,
+                                    removing = markedForRemoval,
                                     onClick = {
-                                        if (!alreadyAdded) {
-                                            selected = if (ticked) selected - playlist.playlistId else selected + playlist.playlistId
+                                        if (alreadyAdded) {
+                                            // A refreshed row must not remain in both the add and remove batches.
+                                            selected = selected - playlist.playlistId
+                                            removing = if (markedForRemoval) {
+                                                removing - playlist.playlistId
+                                            } else {
+                                                removing + playlist.playlistId
+                                            }
+                                        } else {
+                                            selected = if (ticked) {
+                                                selected - playlist.playlistId
+                                            } else {
+                                                selected + playlist.playlistId
+                                            }
                                         }
                                     },
                                 )
@@ -295,6 +324,7 @@ private fun PlaylistRow(
     playlist: UserPlaylist,
     selected: Boolean,
     alreadyAdded: Boolean = false,
+    removing: Boolean = false,
     onClick: () -> Unit,
 ) {
     Row(
@@ -322,7 +352,15 @@ private fun PlaylistRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            if (alreadyAdded) {
+            if (removing) {
+                Text(
+                    text = stringResource(R.string.remove_from_playlist),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            } else if (alreadyAdded) {
                 Text(
                     text = stringResource(R.string.song_already_in_playlist),
                     style = MaterialTheme.typography.bodyMedium,

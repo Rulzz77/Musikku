@@ -216,7 +216,7 @@ object YtMusicRepository {
                 it.title.contains("mix", ignoreCase = true) ||
                 it.title.contains("recommend", ignoreCase = true)
         }
-        val qpSongs = qpShelf?.items?.mapNotNull { item ->
+        val qpSongs = qpShelf?.items?.filter { it.isMusic && !it.isVideo }?.mapNotNull { item ->
             item.videoId?.takeUnless { it in excludeSongIds }?.let { vid ->
                 Song(
                     videoId = vid,
@@ -238,7 +238,7 @@ object YtMusicRepository {
         } else shelves
 
         val homeShelfSongs = candidateShelves.flatMap { shelf ->
-            shelf.items.mapNotNull { item ->
+            shelf.items.filter { it.isMusic && !it.isVideo }.mapNotNull { item ->
                 item.videoId?.takeUnless { it in excludeSongIds }?.let { vid ->
                     Song(
                         videoId = vid,
@@ -254,7 +254,7 @@ object YtMusicRepository {
 
         // 3. Any shelf items on Home that have videoId
         val allHomeTrackSongs = shelves.flatMap { shelf ->
-            shelf.items.mapNotNull { item ->
+            shelf.items.filter { it.isMusic && !it.isVideo }.mapNotNull { item ->
                 item.videoId?.let { vid ->
                     Song(
                         videoId = vid,
@@ -272,7 +272,7 @@ object YtMusicRepository {
         // 4. Explore / New releases
         val explore = runCatching { shelvesOf("FEmusic_new_releases") }.getOrDefault(emptyList())
         val exploreSongs = explore.flatMap { shelf ->
-            shelf.items.mapNotNull { item ->
+            shelf.items.filter { it.isMusic && !it.isVideo }.mapNotNull { item ->
                 item.videoId?.takeUnless { it in excludeSongIds }?.let { vid ->
                     Song(
                         videoId = vid,
@@ -339,10 +339,18 @@ object YtMusicRepository {
     suspend fun searchPage(query: String, filter: SearchFilter, anonymous: Boolean = true): Result<SearchPage> =
         call("search:${filter.name}") {
             InnertubeParser.parseSearchPage(
-                Innertube.search(query, filter.params, anonymous),
+                // Songs uses the unfiltered music catalogue request, then keeps
+                // every playable track row. YouTube's Songs params can omit real
+                // catalogue entries that remain visible on artist pages.
+                Innertube.search(query, if (filter == SearchFilter.SONGS) null else filter.params, anonymous),
                 includeVideos = filter == SearchFilter.VIDEOS,
+                includeAllTrackTypes = filter == SearchFilter.ALL || filter == SearchFilter.SONGS,
+                musicOnly = filter in setOf(SearchFilter.ALL, SearchFilter.SONGS, SearchFilter.VIDEOS),
             ).let { page ->
-                SearchPage(page.rows.distinctBy { it.identityKey() }, page.continuation)
+                val rows = if (filter == SearchFilter.SONGS) {
+                    page.rows.filterIsInstance<SearchResult.Track>()
+                } else page.rows
+                SearchPage(rows.distinctBy { it.identityKey() }, page.continuation)
             }
         }
 
@@ -351,8 +359,13 @@ object YtMusicRepository {
         InnertubeParser.parseSearchPage(
             Innertube.searchContinuation(token),
             includeVideos = filter == SearchFilter.VIDEOS,
+            includeAllTrackTypes = filter == SearchFilter.ALL || filter == SearchFilter.SONGS,
+            musicOnly = filter in setOf(SearchFilter.ALL, SearchFilter.SONGS, SearchFilter.VIDEOS),
         ).let { page ->
-            SearchPage(page.rows.distinctBy { it.identityKey() }, page.continuation)
+            val rows = if (filter == SearchFilter.SONGS) {
+                page.rows.filterIsInstance<SearchResult.Track>()
+            } else page.rows
+            SearchPage(rows.distinctBy { it.identityKey() }, page.continuation)
         }
     }
 
@@ -396,6 +409,8 @@ object YtMusicRepository {
             InnertubeParser.parseSearchPage(
                 Innertube.searchTypeahead(input),
                 includeVideos = false,
+                includeAllTrackTypes = true,
+                musicOnly = true,
             ).let { page ->
                 SearchPage(page.rows.distinctBy { it.identityKey() }, page.continuation)
             }

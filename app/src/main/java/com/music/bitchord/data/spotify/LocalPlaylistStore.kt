@@ -8,12 +8,14 @@ import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONArray
 import org.json.JSONObject
 
+const val IMPORTED_PLAYLIST_PREFIX = "local:playlist:"
+
 data class LocalPlaylist(
     val id: String,
     val title: String,
     val songs: List<Song>,
 ) {
-    val browseId: String get() = "local:playlist:$id"
+    val browseId: String get() = IMPORTED_PLAYLIST_PREFIX + id
 }
 
 object LocalPlaylistStore {
@@ -61,6 +63,46 @@ object LocalPlaylistStore {
             }
             _playlists.value = list
         }
+    }
+
+    data class AddResult(val added: Int, val alreadyThere: Int)
+
+    /**
+     * Adds tracks to Spotify-imported playlists kept on this device.
+     *
+     * A playlist can be selected by its browse id (the value used by the
+     * Library page) or by its stored id. Duplicate video ids are ignored
+     * independently for each playlist, and new tracks keep their selection
+     * order at the end of the existing list.
+     */
+    fun addSongs(playlistIds: Collection<String>, songs: List<Song>): AddResult {
+        val ids = playlistIds.mapNotNull { value ->
+            when {
+                value.startsWith(IMPORTED_PLAYLIST_PREFIX) -> value.removePrefix(IMPORTED_PLAYLIST_PREFIX)
+                value in _playlists.value.map { it.id } -> value
+                else -> null
+            }
+        }.toSet()
+        if (ids.isEmpty() || songs.isEmpty()) return AddResult(0, 0)
+
+        var added = 0
+        var alreadyThere = 0
+        val updated = _playlists.value.map { playlist ->
+            if (playlist.id !in ids) return@map playlist
+            val (combined, count) = appendUniqueImportedTracks(playlist.songs, songs)
+            if (count == 0) {
+                alreadyThere++
+                playlist
+            } else {
+                added++
+                playlist.copy(songs = combined)
+            }
+        }
+        if (added > 0) {
+            _playlists.value = updated
+            persist(updated)
+        }
+        return AddResult(added, alreadyThere)
     }
 
     fun savePlaylist(title: String, songs: List<Song>): LocalPlaylist {
@@ -122,4 +164,18 @@ object LocalPlaylistStore {
             prefs.edit().putString(KEY_PLAYLISTS, jsonArray.toString()).apply()
         }
     }
+}
+
+
+/**
+ * Appends only tracks with a new, non-blank video id.
+ * Kept pure so duplicate handling can be verified without Android preferences.
+ */
+internal fun appendUniqueImportedTracks(
+    existing: List<Song>,
+    incoming: List<Song>,
+): Pair<List<Song>, Int> {
+    val known = existing.mapTo(HashSet()) { it.videoId }
+    val fresh = incoming.filter { it.videoId.isNotBlank() && known.add(it.videoId) }
+    return (existing + fresh) to fresh.size
 }

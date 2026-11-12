@@ -535,7 +535,7 @@ private fun BitChordApp(
         if (uri != null && target != null) {
             com.music.bitchord.data.spotify.LocalPlaylistStore.updateCover(target, uri.toString())
             OfflinePlaylists.updateCover(target, uri.toString())
-            if (topDetail?.browseId == target) viewModel.reloadLocalDetail(target)
+            viewModel.reloadLocalDetail(target)
         }
         playlistCoverTarget = null
     }
@@ -4463,6 +4463,9 @@ private fun BitChordApp(
             // carries the per-entry id a removal is expressed in.
             val editable = viewModel.editablePlaylist(detail?.browseId)
                 ?.takeIf { !fromPlayer && song.setVideoId != null }
+            val importedEditable = detail?.browseId
+                ?.takeIf { !fromPlayer }
+                ?.let { com.music.bitchord.data.spotify.LocalPlaylistStore.getPlaylist(it) }
             // Asked of the cache's index off the main thread as the menu opens,
             // so "Remove from cache" is only offered for a track it holds.
             // Re-asked when the cache changes, which is what drops the row
@@ -4539,6 +4542,12 @@ private fun BitChordApp(
                         {
                             songActions = null
                             OfflinePlaylists.remove(id, song)
+                        }
+                    } ?: importedEditable?.let { playlist ->
+                        {
+                            songActions = null
+                            com.music.bitchord.data.spotify.LocalPlaylistStore.removeSong(playlist.browseId, song)
+                            viewModel.reloadLocalDetail(playlist.browseId)
                         }
                     },
                 onRemoveFromCache = if (inCache) {

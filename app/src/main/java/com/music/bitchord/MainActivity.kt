@@ -529,6 +529,16 @@ private fun BitChordApp(
 ) {
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
+    var playlistCoverTarget by remember { mutableStateOf<String?>(null) }
+    val playlistCoverPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        val target = playlistCoverTarget
+        if (uri != null && target != null) {
+            com.music.bitchord.data.spotify.LocalPlaylistStore.updateCover(target, uri.toString())
+            OfflinePlaylists.updateCover(target, uri.toString())
+            if (topDetail?.browseId == target) viewModel.reloadLocalDetail(target)
+        }
+        playlistCoverTarget = null
+    }
     val hazeState = remember { HazeState() }
     // Recording the backdrop layer costs a draw pass, so it only runs when a
     // liquid-glass surface (the nav bar or artwork-page back button) can sample it.
@@ -1039,7 +1049,7 @@ private fun BitChordApp(
         ShelfItem(
             title = playlist.title,
             subtitle = stringResource(R.string.local_playlist_subtitle, playlist.songs.size),
-            thumbnailUrl = playlist.songs.firstOrNull { !it.thumbnailUrl.isNullOrBlank() }?.thumbnailUrl,
+            thumbnailUrl = playlist.coverUrl ?: playlist.songs.firstOrNull { !it.thumbnailUrl.isNullOrBlank() }?.thumbnailUrl,
             videoId = null,
             browseId = playlist.browseId,
         )
@@ -1050,7 +1060,7 @@ private fun BitChordApp(
         ShelfItem(
             title = playlist.title,
             subtitle = stringResource(R.string.local_playlist_subtitle, playlist.songs.size),
-            thumbnailUrl = playlist.songs.firstOrNull { !it.thumbnailUrl.isNullOrBlank() }?.thumbnailUrl,
+            thumbnailUrl = playlist.coverUrl ?: playlist.songs.firstOrNull { !it.thumbnailUrl.isNullOrBlank() }?.thumbnailUrl,
             videoId = null,
             browseId = playlist.browseId,
         )

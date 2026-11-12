@@ -95,14 +95,14 @@ internal fun lyricsCandidateMatches(
 
 private fun lyricsIdentity(value: String): String =
     java.text.Normalizer.normalize(value, java.text.Normalizer.Form.NFD)
-        .replace(Regex("""\\p{Mn}+"""), "")
+        .replace(Regex("""\p{Mn}+"""), "")
         .lowercase(java.util.Locale.ROOT)
         .map { if (it.isLetterOrDigit()) it else ' ' }
         .joinToString("")
-        .replace(Regex("""\\s+"""), " ")
+        .replace(Regex("""\s+"""), " ")
         .trim()
 
 private fun artistNamesForLyrics(value: String): Set<String> =
     value.split(
-        Regex("""\\s*(?:,|&|;|/|\\s+and\\s+|\\s+x\\s+|\\s+with\\s+|\\s+feat\\.?\\s+|\\s+ft\\.?\\s+)\\s*"""),
+        Regex("""\s*(?:,|&|;|/|\s+and\s+|\s+x\s+|\s+with\s+|\s+feat\.?\s+|\s+ft\.?\s+)\\s*"""),
     ).map(::lyricsIdentity).filter(String::isNotBlank).toSet()

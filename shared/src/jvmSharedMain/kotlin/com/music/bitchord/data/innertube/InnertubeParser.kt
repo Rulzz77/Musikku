@@ -1695,6 +1695,12 @@ object InnertubeParser {
         val thumbnails = renderer.o("thumbnailRenderer").o("musicThumbnailRenderer")
             .o("thumbnail").a("thumbnails")
         val subtitle = renderer.o("subtitle").runs()
+        val pageType = endpoint.o("browseEndpointContextSupportedConfigs")
+            .o("browseEndpointContextMusicConfig").s("pageType").orEmpty()
+        val podcastCard = renderer.isPodcastEpisode() ||
+            "PODCAST" in pageType ||
+            browseId?.startsWith("MPED") == true ||
+            subtitle.split(" • ").any { it.equals("Episode", ignoreCase = true) }
         // Restore the previous playable-card rule too: a widescreen thumbnail
         // is treated as a video, with YouTube's 16:9 hint as a fallback.
         val isVideo = resolvedBrowseId == null && videoId != null && (
@@ -1722,6 +1728,7 @@ object InnertubeParser {
             videoId = videoId,
             browseId = resolvedBrowseId,
             isVideo = isVideo,
+            isMusic = !podcastCard,
         )
     }
 

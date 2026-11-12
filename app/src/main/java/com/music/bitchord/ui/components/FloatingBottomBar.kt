@@ -214,7 +214,11 @@ fun FloatingBottomBar(
     val currentLastIndex by rememberUpdatedState(tabs.lastIndex)
     val currentOnTabSelected by rememberUpdatedState(onTabSelected)
 
-    val pillTargetPx = if (tabStepPx > 0f) {
+    // Search is a top-bar destination, so no bottom tab is selected there.
+    // Keep the indicator hidden rather than letting the -1 sentinel draw it
+    // partly outside the first tab.
+    val hasSelectedTab = selectedIndex in tabs.indices
+    val pillTargetPx = if (tabStepPx > 0f && hasSelectedTab) {
         selectedIndex * tabStepPx + dragOffset
     } else 0f
 
@@ -254,7 +258,7 @@ fun FloatingBottomBar(
             )
             .padding(horizontal = PILL_INSET, vertical = PILL_INSET),
     ) {
-        if (tabWidthPx > 0f) {
+        if (tabWidthPx > 0f && hasSelectedTab) {
             Box(
                 modifier = Modifier
                     .width(with(density) { tabWidthPx.toDp() })
@@ -284,11 +288,11 @@ fun FloatingBottomBar(
                     // first opened on: a drag right of it still landed, while
                     // one to the left clamped back onto it and read as no change.
                     var totalDrag = 0f
-                    var dragStartIndex = currentSelectedIndex
+                    var dragStartIndex = currentSelectedIndex.coerceAtLeast(0)
                     detectHorizontalDragGestures(
                         onDragStart = {
                             totalDrag = 0f
-                            dragStartIndex = currentSelectedIndex
+                            dragStartIndex = currentSelectedIndex.coerceAtLeast(0)
                         },
                         onDragCancel = { dragOffset = 0f },
                         onDragEnd = {

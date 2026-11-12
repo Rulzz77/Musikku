@@ -120,11 +120,20 @@ object RemoteConfig {
                     val body = response.body ?: return@withLock false
                     if (body.contentLength() > MAX_CONFIG_BYTES) return@withLock false
 
-                    // Read at most one byte beyond the documented limit so a
-                    // bad or unexpectedly large response cannot be buffered whole.
-                    val bytes = body.byteStream().readNBytes(MAX_CONFIG_BYTES.toInt() + 1)
-                    if (bytes.size > MAX_CONFIG_BYTES) return@withLock false
-                    val raw = String(bytes, Charsets.UTF_8)
+                    // Bound the read without relying on newer InputStream APIs
+                    // that are not present on every Android version we support.
+                    val input = body.byteStream()
+                    val output = java.io.ByteArrayOutputStream()
+                    val chunk = ByteArray(4 * 1024)
+                    var totalBytes = 0
+                    while (true) {
+                        val count = input.read(chunk)
+                        if (count < 0) break
+                        totalBytes += count
+                        if (totalBytes > MAX_CONFIG_BYTES) return@withLock false
+                        output.write(chunk, 0, count)
+                    }
+                    val raw = String(output.toByteArray(), Charsets.UTF_8)
                     val parsed = parseRemoteConfig(raw) ?: return@withLock false
                     // A stale CDN response must never roll back a newer config
                     // already loaded from disk or from a previous request.

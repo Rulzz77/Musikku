@@ -1360,12 +1360,11 @@ private fun BitChordApp(
     val queueLabel = stringResource(R.string.queue)
     val sharedLinkLabel = stringResource(R.string.shared_link)
     val openedFileLabel = stringResource(R.string.opened_file)
-    val tabs = remember(homeLabel, exploreLabel, libraryLabel, searchLabel) {
+    val tabs = remember(homeLabel, exploreLabel, libraryLabel) {
         listOf(
             BottomTab(homeLabel, BitChordIcons.Home),
             BottomTab(exploreLabel, BitChordIcons.TabExplore),
             BottomTab(libraryLabel, BitChordIcons.TabLibrary),
-            BottomTab(searchLabel, BitChordIcons.TabSearch),
         )
     }
 
@@ -4105,6 +4104,28 @@ private fun BitChordApp(
                                     )
                                 }
                             }
+                            // Global search lives in the top bar rather than
+                            // taking a permanent slot in the bottom navigation.
+                            // It is available from every page and opens a fresh,
+                            // focused search; the field itself replaces this icon
+                            // while the Search page is active.
+                            if (selectedTab != TAB_SEARCH) {
+                                IconButton(
+                                    onClick = {
+                                        navigator.clear()
+                                        viewModel.closeMoodGenre()
+                                        selectedTab = TAB_SEARCH
+                                        viewModel.onQueryChange("")
+                                        searchFocusRequested = true
+                                    },
+                                ) {
+                                    Icon(
+                                        BitChordIcons.Search,
+                                        contentDescription = stringResource(R.string.search),
+                                        tint = MaterialTheme.colorScheme.onSurface,
+                                    )
+                                }
+                            }
                             // Left of the account photo, and only there while
                             // there is a batch to report on — see
                             // [TopBarDownloadButton], which decides that for
@@ -4178,7 +4199,7 @@ private fun BitChordApp(
                     // and the pair folds together on scroll. See [GlassNavBar].
                     GlassNavBar(
                         tabs = tabs,
-                        selectedIndex = selectedTab,
+                        selectedIndex = if (selectedTab == TAB_SEARCH) -1 else selectedTab,
                         onTabSelected = onTabSelected,
                         scrollConnection = navBarScroll,
                         song = player.song,
@@ -4241,7 +4262,7 @@ private fun BitChordApp(
                     }
                     FloatingBottomBar(
                         tabs = tabs,
-                        selectedIndex = selectedTab,
+                        selectedIndex = if (selectedTab == TAB_SEARCH) -1 else selectedTab,
                         hazeState = hazeState,
                         onTabSelected = onTabSelected,
                     )

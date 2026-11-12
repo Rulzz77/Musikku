@@ -353,7 +353,6 @@ private fun ArtworkPageBackButton(
     modifier: Modifier = Modifier,
 ) {
     val shape = CircleShape
-    val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
     val useLiquidGlass = LocalLiquidGlassEnabled.current && isGlassSupported()
     val contentColor = if (useLiquidGlass) {
         glassContentColor()
@@ -489,9 +488,6 @@ private fun artworkPageSurface(
     hazeState: HazeState?,
 ): Modifier {
     val container = MaterialTheme.colorScheme.surface
-    val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
-    val useLiquidGlass = LocalLiquidGlassEnabled.current && isGlassSupported()
-
     return Modifier.lightweightLiquidGlass(
         shape = shape,
         fallbackColor = container,

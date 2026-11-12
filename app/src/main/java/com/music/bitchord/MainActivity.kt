@@ -5142,8 +5142,9 @@ private fun BitChordApp(
                             viewModel.reloadLocalDetail(browseId)
                         }
                         imported.forEach { choice ->
-                            com.music.bitchord.data.spotify.LocalPlaylistStore.removeSong(choice.browseId, song)
-                            viewModel.reloadLocalDetail(choice.browseId)
+                            // LocalPlaylistStore uses its local:playlist id, not a YouTube VL browse id.
+                            com.music.bitchord.data.spotify.LocalPlaylistStore.removeSong(choice.playlistId, song)
+                            viewModel.reloadLocalDetail(choice.playlistId)
                         }
 
                         val localRemoved = device + imported

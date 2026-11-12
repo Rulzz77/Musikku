@@ -4970,7 +4970,9 @@ private fun BitChordApp(
                                     added > 1 -> context.resources.getQuantityString(
                                         R.plurals.added_to_playlists_notice, added, added,
                                     )
-                                    added == 1 -> context.getString(R.string.song_added_to_playlist)
+                                    added == 1 -> context.getString(R.string.song_added_to_playlist) +
+                                        ": " + picked.filter { it.playlistId !in deviceIds || deviceResult.added > 0 }
+                                            .joinToString(", ") { it.title }.take(90)
                                     alreadyThere > 0 && failed == 0 ->
                                         context.getString(R.string.song_already_in_playlist)
                                     else -> context.getString(R.string.failed)
@@ -5005,8 +5007,9 @@ private fun BitChordApp(
                             playlist.songs.size,
                             playlist.songs.size,
                         ),
-                        thumbnailUrl = playlist.songs.firstNotNullOfOrNull { it.thumbnailUrl }
-                            .takeUnless { playlist.isLiked },
+                        thumbnailUrl = if (playlist.isLiked) null else {
+                            playlist.coverUrl ?: playlist.songs.firstNotNullOfOrNull { it.thumbnailUrl }
+                        },
                     )
                 }
                 val importedChoices = localPlaylists.map { playlist ->
@@ -5021,7 +5024,7 @@ private fun BitChordApp(
                                 playlist.songs.size,
                                 playlist.songs.size,
                             ),
-                        thumbnailUrl = playlist.songs.firstNotNullOfOrNull { it.thumbnailUrl },
+                        thumbnailUrl = playlist.coverUrl ?: playlist.songs.firstNotNullOfOrNull { it.thumbnailUrl },
                     )
                 }
                 deviceChoices + importedChoices + if (signedIn) playlists else emptyList()
@@ -5033,6 +5036,19 @@ private fun BitChordApp(
                 startCreating = target == null,
                 offline = true,
                 onDismiss = dismiss,
+                isSongInPlaylist = { choice ->
+                    val song = target
+                    if (song == null) false else {
+                        when {
+                            choice.playlistId.startsWith(com.music.bitchord.data.spotify.IMPORTED_PLAYLIST_PREFIX) ->
+                                com.music.bitchord.data.spotify.LocalPlaylistStore.getPlaylist(choice.playlistId)
+                                    ?.songs?.any { it.videoId == song.videoId } == true
+                            else ->
+                                OfflinePlaylists.get(OfflinePlaylists.PREFIX + choice.playlistId)
+                                    ?.songs?.any { it.videoId == song.videoId || (song.localUri != null && it.localUri == song.localUri) } == true
+                        }
+                    }
+                },
                 onAdd = { picked ->
                     target?.let { song ->
                         val deviceIds = offlinePlaylists.mapTo(HashSet()) { it.id }

@@ -1164,6 +1164,67 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
+     * Removes [song] from every playlist selected for removal in the picker.
+     *
+     * The picker only has the song and the playlist headers; YouTube needs the
+     * per-entry set-video-id to remove a row. Read the full playlist first so
+     * duplicate appearances of the same track are all removed, then update any
+     * page already open behind the picker.
+     */
+    fun removeSongFromPlaylists(
+        playlists: List<UserPlaylist>,
+        song: Song,
+        onResult: (removed: Int, failed: Int) -> Unit = { _, _ -> },
+    ) {
+        if (!requireSignIn() || playlists.isEmpty()) return
+        viewModelScope.launch {
+            var removed = 0
+            var failed = 0
+            playlists.forEach { playlist ->
+                // playlistEntries preserves duplicate rows and their set-video-ids.
+                // Fall back to allSongs for older/unusual playlist responses which
+                // omit one unrelated entry id but still expose the target row.
+                val entries = YtMusicRepository.playlistEntries(playlist.browseId).getOrNull()
+                    ?: YtMusicRepository.allSongs(playlist.browseId).getOrNull()
+                val matches = entries.orEmpty().filter {
+                    it.videoId == song.videoId && !it.setVideoId.isNullOrBlank()
+                }
+                val removalIds = matches.mapNotNull { entry ->
+                    entry.setVideoId?.let { setVideoId -> setVideoId to entry.videoId }
+                }
+                if (removalIds.isEmpty()) {
+                    failed++
+                    return@forEach
+                }
+
+                YtMusicRepository.removeFromPlaylist(playlist.playlistId, removalIds).fold(
+                    onSuccess = {
+                        removed++
+                        libraryStale = true
+                        com.music.bitchord.data.spotify.LocalPlaylistStore
+                            .removeRemoteSpotifySong(playlist.browseId, song)
+                        val removedSetIds = removalIds.mapTo(HashSet()) { it.first }
+                        _detailStack.value = _detailStack.value.map { page ->
+                            val pageSongs = (page.songs as? UiState.Success)?.data
+                            if (page.browseId != playlist.browseId || pageSongs == null) {
+                                page
+                            } else {
+                                page.copy(
+                                    songs = UiState.Success(
+                                        pageSongs.filterNot { it.setVideoId in removedSetIds },
+                                    ),
+                                )
+                            }
+                        }
+                    },
+                    onFailure = { failed++ },
+                )
+            }
+            onResult(removed, failed)
+        }
+    }
+
+    /**
      * Drops [song] from the playlist page it is being read on, and takes the
      * row out from under the reader rather than waiting for a re-fetch.
      */

@@ -137,7 +137,7 @@ fun GlassNavBar(
     }
 
     FloatingTabBar(
-        selectedTabKey = selectedIndex,
+        selectedTabKey = selectedIndex.takeIf { it in tabs.indices },
         scrollConnection = scrollConnection,
         modifier = modifier
             .windowInsetsPadding(floatingBarInsets)

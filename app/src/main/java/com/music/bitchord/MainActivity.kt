@@ -101,6 +101,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -3850,8 +3851,17 @@ private fun BitChordApp(
                             val keyboard = LocalSoftwareKeyboardController.current
                             LaunchedEffect(searchFocusRequested) {
                                 if (searchFocusRequested) {
-                                    searchFieldFocus.requestFocus()
-                                    keyboard?.show()
+                                    // Wait until the newly inserted top-bar field has
+                                    // attached its focus target before requesting focus.
+                                    withFrameNanos { }
+                                    val focused = runCatching {
+                                        searchFieldFocus.requestFocus()
+                                    }.getOrDefault(false)
+                                    if (focused) {
+                                        runCatching { keyboard?.show() }
+                                    }
+                                    // A focus failure must never take down the app;
+                                    // the visible field remains available for a manual tap.
                                     searchFocusRequested = false
                                 }
                             }
@@ -4103,12 +4113,19 @@ private fun BitChordApp(
                                     )
                                 }
                             }
-                            // Global search lives in the top bar rather than
-                            // taking a permanent slot in the bottom navigation.
-                            // It is available from every page and opens a fresh,
-                            // focused search; the field replaces this icon only
-                            // while the Search root is actually visible.
-                            if (!(selectedTab == TAB_SEARCH && route == null && detail == null && selectedMoodGenre == null)) {
+                            // Album/playlist pages and device folders already have
+                            // a contextual search that filters their own track list.
+                            // Avoid showing the catalog-wide Search beside it: two
+                            // magnifiers on one page read as duplicate controls.
+                            val pageHasOwnSearch = detail != null &&
+                                (isReleaseDetail || isLocalDetail) &&
+                                (detail.songs as? UiState.Success)?.data?.isNotEmpty() == true
+                            // Elsewhere, global Search stays in the top bar and opens
+                            // a fresh, focused catalog search. Its field replaces this
+                            // icon only while the Search root is actually visible.
+                            if (!pageHasOwnSearch &&
+                                !(selectedTab == TAB_SEARCH && route == null && detail == null && selectedMoodGenre == null)
+                            ) {
                                 IconButton(
                                     onClick = {
                                         navigator.clear()

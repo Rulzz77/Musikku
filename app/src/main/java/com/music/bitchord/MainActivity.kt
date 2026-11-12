@@ -76,6 +76,7 @@ import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Sort
 import androidx.compose.material.icons.rounded.Upgrade
 import com.music.bitchord.data.listentogether.ServerConnectionState
+import com.music.bitchord.data.remote.RemoteConfig
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -885,6 +886,7 @@ private fun BitChordApp(
             showUpdateDialog = true
         }
     }
+    val remoteConfig by RemoteConfig.snapshot.collectAsStateWithLifecycle()
     val query by viewModel.query.collectAsStateWithLifecycle()
     val results by viewModel.results.collectAsStateWithLifecycle()
     val exploreState by viewModel.explore.collectAsStateWithLifecycle()
@@ -981,6 +983,9 @@ private fun BitChordApp(
     // sort control because the button that opens it sits in the top bar beside
     // it, and reset with the page so a filter never follows you to the next one.
     var detailSearching by rememberSaveable(topDetail?.browseId) { mutableStateOf(false) }
+    LaunchedEffect(remoteConfig.features.playlistSearch) {
+        if (!remoteConfig.features.playlistSearch) detailSearching = false
+    }
     val likeStatuses by viewModel.likeStatuses.collectAsStateWithLifecycle()
     // A device file's heart is the device's Liked playlist, not a YouTube
     // rating: the file has no identity there to rate. One rule for every
@@ -3839,7 +3844,8 @@ private fun BitChordApp(
                     modifier = Modifier.align(Alignment.TopCenter),
                     // Only on the Search tab itself, not on anything pushed over it.
                     accessory = if (
-                        selectedTab == TAB_SEARCH && route == null && detail == null && selectedMoodGenre == null
+                        remoteConfig.features.globalSearch &&
+                            selectedTab == TAB_SEARCH && route == null && detail == null && selectedMoodGenre == null
                     ) {
                         {
                             // The search field lives up here in the bar, beside the
@@ -4003,7 +4009,7 @@ private fun BitChordApp(
                             // Shuffle / Play / Add.
                             if ((isReleaseDetail || isLocalDetail) && detail != null) {
                                 val releaseSongs = (detail.songs as? UiState.Success)?.data.orEmpty()
-                                if (releaseSongs.isNotEmpty()) {
+                                if (remoteConfig.features.playlistSearch && releaseSongs.isNotEmpty()) {
                                     IconButton(onClick = { detailSearching = !detailSearching }) {
                                         Icon(
                                             if (detailSearching) Icons.Rounded.Close else BitChordIcons.Search,
@@ -4096,13 +4102,13 @@ private fun BitChordApp(
                             // a contextual search that filters their own track list.
                             // Avoid showing the catalog-wide Search beside it: two
                             // magnifiers on one page read as duplicate controls.
-                            val pageHasOwnSearch = detail != null &&
+                            val pageHasOwnSearch = remoteConfig.features.playlistSearch && detail != null &&
                                 (isReleaseDetail || isLocalDetail) &&
                                 (detail.songs as? UiState.Success)?.data?.isNotEmpty() == true
                             // Elsewhere, global Search stays in the top bar and opens
                             // a fresh, focused catalog search. Its field replaces this
                             // icon only while the Search root is actually visible.
-                            if (!pageHasOwnSearch &&
+                            if (remoteConfig.features.globalSearch && !pageHasOwnSearch &&
                                 !(selectedTab == TAB_SEARCH && route == null && detail == null && selectedMoodGenre == null)
                             ) {
                                 IconButton(

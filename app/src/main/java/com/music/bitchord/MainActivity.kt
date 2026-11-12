@@ -4113,12 +4113,19 @@ private fun BitChordApp(
                                     )
                                 }
                             }
-                            // Global search lives in the top bar rather than
-                            // taking a permanent slot in the bottom navigation.
-                            // It is available from every page and opens a fresh,
-                            // focused search; the field replaces this icon only
-                            // while the Search root is actually visible.
-                            if (!(selectedTab == TAB_SEARCH && route == null && detail == null && selectedMoodGenre == null)) {
+                            // Album/playlist pages and device folders already have
+                            // a contextual search that filters their own track list.
+                            // Avoid showing the catalog-wide Search beside it: two
+                            // magnifiers on one page read as duplicate controls.
+                            val pageHasOwnSearch = detail != null &&
+                                (isReleaseDetail || isLocalDetail) &&
+                                (detail.songs as? UiState.Success)?.data?.isNotEmpty() == true
+                            // Elsewhere, global Search stays in the top bar and opens
+                            // a fresh, focused catalog search. Its field replaces this
+                            // icon only while the Search root is actually visible.
+                            if (!pageHasOwnSearch &&
+                                !(selectedTab == TAB_SEARCH && route == null && detail == null && selectedMoodGenre == null)
+                            ) {
                                 IconButton(
                                     onClick = {
                                         navigator.clear()

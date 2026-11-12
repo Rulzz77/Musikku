@@ -433,7 +433,7 @@ fun CompactTrackRow(
         Column(Modifier.weight(1f)) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onBackground,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -484,7 +484,7 @@ private fun HomeTitle(
             Icon(
                 painter = painterResource(Res.drawable.ic_logo),
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onBackground,
+                tint = MaterialTheme.colorScheme.primary,
                 modifier = logoModifier,
             )
         }

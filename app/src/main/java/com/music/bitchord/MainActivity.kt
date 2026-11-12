@@ -4993,6 +4993,19 @@ private fun BitChordApp(
                         }
                     }
                 },
+                onRemove = { picked ->
+                    target?.let { song ->
+                        viewModel.removeSongFromPlaylists(picked, song) { removed, failed ->
+                            if (removed.isNotEmpty()) {
+                                showQueueNotice(
+                                    context.getString(R.string.song_removed_from_playlist) + ": " +
+                                        removed.joinToString(", ") { it.title }.take(90),
+                                )
+                            }
+                            if (failed > 0) showQueueNotice(context.getString(R.string.failed))
+                        }
+                    }
+                },
                 onCreate = { title, privacy ->
                     viewModel.createPlaylist(title, privacy, target)
                 },
@@ -5108,6 +5121,47 @@ private fun BitChordApp(
                             viewModel.addToPlaylists(account, song, report)
                         } else {
                             report(0, 0, 0)
+                        }
+                    }
+                },
+                onRemove = { picked ->
+                    target?.let { song ->
+                        val deviceIds = offlinePlaylists.mapTo(HashSet()) { it.id }
+                        val imported = picked.filter {
+                            it.playlistId.startsWith(com.music.bitchord.data.spotify.IMPORTED_PLAYLIST_PREFIX)
+                        }
+                        val device = picked.filter { it.playlistId in deviceIds }
+                        val account = picked.filter {
+                            it.playlistId !in deviceIds &&
+                                !it.playlistId.startsWith(com.music.bitchord.data.spotify.IMPORTED_PLAYLIST_PREFIX)
+                        }
+
+                        device.forEach { choice ->
+                            val browseId = OfflinePlaylists.PREFIX + choice.playlistId
+                            OfflinePlaylists.remove(browseId, song)
+                            viewModel.reloadLocalDetail(browseId)
+                        }
+                        imported.forEach { choice ->
+                            com.music.bitchord.data.spotify.LocalPlaylistStore.removeSong(choice.browseId, song)
+                            viewModel.reloadLocalDetail(choice.browseId)
+                        }
+
+                        val localRemoved = device + imported
+                        val report: (List<com.music.bitchord.data.model.UserPlaylist>, Int) -> Unit =
+                            { remoteRemoved, failed ->
+                                val removed = localRemoved + remoteRemoved
+                                if (removed.isNotEmpty()) {
+                                    showQueueNotice(
+                                        context.getString(R.string.song_removed_from_playlist) + ": " +
+                                            removed.joinToString(", ") { it.title }.take(90),
+                                    )
+                                }
+                                if (failed > 0) showQueueNotice(context.getString(R.string.failed))
+                            }
+                        if (account.isNotEmpty()) {
+                            viewModel.removeSongFromPlaylists(account, song, report)
+                        } else {
+                            report(emptyList(), 0)
                         }
                     }
                 },

@@ -200,8 +200,8 @@ private const val SLEEVE_FRACTION = 0.76f
 /** ...and of its height, so a landscape window still shows the title under it. */
 private const val SLEEVE_MAX_HEIGHT = 0.5f
 
-private val SLEEVE_SHAPE = RoundedCornerShape(12.dp)
-private val SLEEVE_SHADOW = 18.dp
+private val SLEEVE_SHAPE = RoundedCornerShape(18.dp)
+private val SLEEVE_SHADOW = 14.dp
 
 /**
  * The tallest a full-bleed sleeve may be, as a fraction of the page's height.
@@ -218,8 +218,8 @@ private const val FULL_BLEED_FADE_FRACTION = 0.42f
 private val FULL_BLEED_TITLE_OVERLAP = 44.dp
 
 /** Shuffle and Add to Library either side of the release page's Play pill. */
-private val RELEASE_SIDE_BUTTON = 50.dp
-private val RELEASE_ACTION_GAP = 14.dp
+private val RELEASE_SIDE_BUTTON = 48.dp
+private val RELEASE_ACTION_GAP = 10.dp
 
 /** Past this the Play pill stops growing, so a tablet doesn't get a bar. */
 private val RELEASE_ACTIONS_MAX_WIDTH = 420.dp
@@ -1040,7 +1040,7 @@ private fun ReleaseHeader(
             }
         }
 
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(16.dp))
         Text(
             text = page.title,
             style = MaterialTheme.typography.headlineMedium,
@@ -1092,7 +1092,7 @@ private fun ReleaseHeader(
             // Only where YouTube said the release can be saved and the caller
             // is willing to take the write — see [onToggleLibrary].
             val library = page.library?.takeIf { onToggleLibrary != null }
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(16.dp))
             Row(
                 modifier = Modifier
                     .widthIn(max = RELEASE_ACTIONS_MAX_WIDTH)

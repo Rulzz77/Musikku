@@ -1225,6 +1225,7 @@
 
     <string name="song_added_to_queue">Song added to queue</string>
     <string name="song_added_to_playlist">已添加到播放列表</string>
+    <string name="song_removed_from_playlist">已从播放列表中移除</string>
     <string name="song_already_in_playlist">已在播放列表中</string>
     <plurals name="add_to_playlists_count">
         <item quantity="other">添加到 %1$d 个播放列表</item>

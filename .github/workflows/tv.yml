@@ -71,14 +71,14 @@ jobs:
         run: ./gradlew :tv:assembleDevDebug
 
       - name: Upload the TV dev APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: bitchord-tv-dev-debug
           path: tv/build/outputs/apk/dev/debug/*universal*.apk
 
       - name: Upload build reports
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: tv-build-reports
           path: tv/build/reports/

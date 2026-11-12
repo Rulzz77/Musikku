@@ -134,7 +134,12 @@ fun GlassNavBar(
     // A factory, not a value — see the note in FloatingTabBar's header. Each of
     // the three surfaces gets its own glass modifier and so its own shape cache.
     // The theme's own glass tint, as the liquid top bar has it — no white wash.
-    val glassSurface: @Composable () -> Modifier = { Modifier.liquidGlass(shape = pillShape) }
+    val glassSurface: @Composable () -> Modifier = {
+        Modifier.lightweightLiquidGlass(
+            shape = pillShape,
+            fallbackColor = MaterialTheme.colorScheme.surfaceVariant,
+        )
+    }
 
     FloatingTabBar(
         selectedTabKey = selectedIndex,

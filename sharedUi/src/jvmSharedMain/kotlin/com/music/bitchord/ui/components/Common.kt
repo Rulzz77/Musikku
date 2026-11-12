@@ -520,7 +520,7 @@ private fun SongRowContent(
                 liftPadding = PaddingValues(horizontal = PAGE_GUTTER),
             )
             .contextClick(onMore ?: onLongPress)
-            .padding(horizontal = PAGE_GUTTER, vertical = 4.dp),
+            .padding(horizontal = PAGE_GUTTER, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (trackNumber != null) {
@@ -557,8 +557,8 @@ private fun SongRowContent(
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
                         .matchParentSize()
-                        .clip(RoundedCornerShape(8.dp))
-                        .thumbnailBorder(RoundedCornerShape(8.dp))
+                        .clip(RoundedCornerShape(11.dp))
+                        .thumbnailBorder(RoundedCornerShape(11.dp))
                         .background(MaterialTheme.colorScheme.surfaceVariant),
                 )
                 if (searchPlayingStyle && isCurrent && isPlaying) {

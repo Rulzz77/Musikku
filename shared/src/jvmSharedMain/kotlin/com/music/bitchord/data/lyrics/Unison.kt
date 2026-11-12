@@ -49,7 +49,19 @@ object Unison {
         val response = runCatching { lyricsJson.decodeFromString<Response>(body) }.getOrNull()
             ?: return@withContext null
         if (response.success != true) return@withContext null
-        linesOf(response.data ?: return@withContext null)
+        val entry = response.data ?: return@withContext null
+        // Community search may return a nearby title/cover. Do not display its
+        // words unless the entry itself confirms this track and artist.
+        if (!lyricsCandidateMatches(
+                title = title,
+                artist = artist,
+                durationMs = durationMs,
+                candidateTitle = entry.song,
+                candidateArtist = entry.artist,
+                candidateDurationMs = null,
+            )
+        ) return@withContext null
+        linesOf(entry)
     }
 
     /** The three shapes, told apart by what the entry says it is. */

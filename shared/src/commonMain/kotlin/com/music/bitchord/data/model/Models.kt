@@ -48,6 +48,8 @@ data class Song(
     val albumName: String? = null,
     /** A music-video upload rather than the catalogue track. */
     val isVideo: Boolean = false,
+    /** True when the row is a podcast episode rather than a music track. */
+    val isPodcastEpisode: Boolean = false,
     /**
      * True for a video upload and for its manually selected catalogue match.
      * The latter remains video-origin so playback policies such as AutoMix do
@@ -410,6 +412,8 @@ data class ShelfItem(
      * picture the player can show. Drawn as a 16:9 card, as the web player does.
      */
     val isVideo: Boolean = false,
+    /** False when this shelf card is a podcast episode, not music. */
+    val isMusic: Boolean = true,
 )
 
 /** How a shelf's items are laid out — the web player's `ShelfLayout`, by the same rules. */

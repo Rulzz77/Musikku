@@ -32,10 +32,12 @@ object KuGou {
         val keyword = keyword(title, artist, album)
         val seconds = (durationMs / 1000).toInt()
 
+        // Only use lyric candidates reached through a duration-matched audio
+        // fingerprint. The keyword-only fallback can return a cover or a
+        // different song with the same words in its title.
         val candidate = searchSongs(keyword, seconds)?.firstNotNullOfOrNull { hash ->
             searchLyrics(hash = hash)?.firstOrNull()
-        } ?: searchLyrics(keyword = keyword, seconds = seconds)?.firstOrNull()
-            ?: return@withContext null
+        } ?: return@withContext null
 
         val lrc = download(candidate.id, candidate.accesskey) ?: return@withContext null
         LrcLib.parseLrc(lrc).takeIf { it.isNotEmpty() }

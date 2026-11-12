@@ -56,7 +56,11 @@ object InnertubeParser {
      */
     fun parseSearch(response: JsonObject): List<SearchResult> = parseSearchPage(response).rows
 
-    fun parseSearchPage(response: JsonObject, includeVideos: Boolean = false): SearchPage {
+    fun parseSearchPage(
+        response: JsonObject,
+        includeVideos: Boolean = false,
+        includeAllTrackTypes: Boolean = false,
+    ): SearchPage {
         // The "All" tab spreads results across several shelf types (card shelf
         // for the top result, then one shelf per category). Its promoted top
         // result lives on the card itself, not in a responsive row, so read it
@@ -88,7 +92,7 @@ object InnertubeParser {
                     is SearchResult.TopTrack -> {
                         // The mixed All page stays music-only; music-video uploads
                         // belong exclusively to the dedicated Videos tab.
-                        if (!result.song.isVideo && seen.add("v:${result.song.videoId}")) add(result)
+                        if ((!result.song.isVideo || includeAllTrackTypes) && seen.add("v:${result.song.videoId}")) add(result)
                     }
                     is SearchResult.Browse -> {
                         if (seen.add("b:${result.item.browseId}")) add(result)
@@ -108,7 +112,7 @@ object InnertubeParser {
                     parseResponsiveListItem(renderer, fallback ?: Credits(), videoFallback = includeVideos)?.let { song ->
                         // The mixed All page stays music-only; the dedicated Videos
                         // filter is the one place music-video uploads belong.
-                        if (song.isVideo == includeVideos && seen.add("v:${song.videoId}")) {
+                        if ((includeAllTrackTypes || song.isVideo == includeVideos) && seen.add("v:${song.videoId}")) {
                             add(SearchResult.Track(song))
                         }
                     }

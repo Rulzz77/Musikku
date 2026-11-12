@@ -9,16 +9,21 @@ import kotlin.test.assertTrue
 
 class SearchMediaClassificationTest {
 
-    private fun response(type: String?, width: Int, height: Int): kotlinx.serialization.json.JsonObject {
+    private fun response(
+        type: String?,
+        width: Int,
+        height: Int,
+        rowType: String = "Song",
+    ): kotlinx.serialization.json.JsonObject {
         val typeConfig = type?.let {
-            """, "navigationEndpoint": { "watchEndpoint": {
-                "watchEndpointMusicSupportedConfigs": { "watchEndpointMusicConfig": {
-                    "musicVideoType": "$it"
+            \""", \"navigationEndpoint\": { \"watchEndpoint\": {
+                \"watchEndpointMusicSupportedConfigs\": { \"watchEndpointMusicConfig\": {
+                    \"musicVideoType\": \"$it\"
                 } }
-            } }"""
+            } }\"""
         }.orEmpty()
         return Json.parseToJsonElement(
-            """
+            \"\"\"
             {
               "contents": [{
                 "musicResponsiveListItemRenderer": {
@@ -29,7 +34,7 @@ class SearchMediaClassificationTest {
                     } },
                     { "musicResponsiveListItemFlexColumnRenderer": {
                       "text": { "runs": [
-                        { "text": "Song" }, { "text": " • " },
+                        { "text": "$rowType" }, { "text": " • " },
                         { "text": "Example Artist" }, { "text": " • " },
                         { "text": "3:30" }
                       ] }
@@ -41,21 +46,33 @@ class SearchMediaClassificationTest {
                       "width": $width,
                       "height": $height
                     }] }
-                  } }
+                  }
                   $typeConfig
                 }
               }]
             }
-            """.trimIndent(),
+            \"\"\.trimIndent(),
         ).jsonObject
     }
 
     @Test
-    fun audioTrackWithWidescreenArtworkRemainsInSongsSearch() {
+    fun restoresPreviousRuleForWidescreenArtworkEvenWhenYouTubeSaysAudio() {
         val page = InnertubeParser.parseSearchPage(
             response("MUSIC_VIDEO_TYPE_ATV", width = 544, height = 306),
         )
 
+        // The old filter treated widescreen art as video, even if YouTube's
+        // metadata called it an audio track.
+        assertTrue(page.rows.isEmpty())
+    }
+
+    @Test
+    fun restoresPreviousRuleForSquareArtworkEvenWhenYouTubeSaysMusicVideo() {
+        val page = InnertubeParser.parseSearchPage(
+            response("MUSIC_VIDEO_TYPE_OMV", width = 544, height = 544),
+        )
+
+        // This is the regression that hid tracks still visible on artist pages.
         assertEquals(1, page.rows.size)
         val song = (page.rows.single() as SearchResult.Track).song
         assertEquals("track-1", song.videoId)
@@ -63,16 +80,7 @@ class SearchMediaClassificationTest {
     }
 
     @Test
-    fun officialMusicVideoWithSquareArtworkStaysOutOfSongsSearch() {
-        val page = InnertubeParser.parseSearchPage(
-            response("MUSIC_VIDEO_TYPE_OMV", width = 544, height = 544),
-        )
-
-        assertTrue(page.rows.isEmpty())
-    }
-
-    @Test
-    fun explicitVideoSearchIncludesVideoEvenWhenArtworkIsSquare() {
+    fun explicitVideoSearchStillIncludesSquareArtwork() {
         val page = InnertubeParser.parseSearchPage(
             response("MUSIC_VIDEO_TYPE_OMV", width = 544, height = 544),
             includeVideos = true,
@@ -83,12 +91,18 @@ class SearchMediaClassificationTest {
     }
 
     @Test
-    fun missingMediaTypeDoesNotInferVideoFromWidescreenArtwork() {
+    fun explicitVideoRowIsFilteredFromSongsEvenWithSquareArtwork() {
         val page = InnertubeParser.parseSearchPage(
-            response(type = null, width = 544, height = 306),
+            response(type = null, width = 544, height = 544, rowType = "Video"),
         )
+        assertTrue(page.rows.isEmpty())
+    }
 
+    @Test
+    fun unknownDimensionsDoNotHideTrack() {
+        val page = InnertubeParser.parseSearchPage(
+            response(type = null, width = 0, height = 0),
+        )
         assertEquals(1, page.rows.size)
-        assertFalse((page.rows.single() as SearchResult.Track).song.isVideo)
     }
 }

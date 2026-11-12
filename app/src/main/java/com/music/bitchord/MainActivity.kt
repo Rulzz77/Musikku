@@ -4965,6 +4965,13 @@ private fun BitChordApp(
                 song = target,
                 startCreating = target == null,
                 onDismiss = dismiss,
+                isSongInPlaylist = { choice ->
+                    target?.let { song ->
+                        com.music.bitchord.data.spotify.LocalPlaylistStore.containsRemoteSpotifySong(
+                            choice.browseId, song,
+                        )
+                    } ?: false
+                },
                 onAdd = { picked ->
                     target?.let { song ->
                         viewModel.addToPlaylists(picked, song) { added, alreadyThere, failed ->
@@ -5046,11 +5053,13 @@ private fun BitChordApp(
                     if (song == null) false else {
                         when {
                             choice.playlistId.startsWith(com.music.bitchord.data.spotify.IMPORTED_PLAYLIST_PREFIX) ->
-                                com.music.bitchord.data.spotify.LocalPlaylistStore.getPlaylist(choice.playlistId)
-                                    ?.songs?.any { it.videoId == song.videoId } == true
+                                com.music.bitchord.data.spotify.LocalPlaylistStore.containsSong(choice.playlistId, song)
                             else ->
                                 OfflinePlaylists.get(OfflinePlaylists.PREFIX + choice.playlistId)
-                                    ?.songs?.any { it.videoId == song.videoId || (song.localUri != null && it.localUri == song.localUri) } == true
+                                    ?.songs?.any { it.videoId == song.videoId || (song.localUri != null && it.localUri == song.localUri) } == true ||
+                                    com.music.bitchord.data.spotify.LocalPlaylistStore.containsRemoteSpotifySong(
+                                        choice.browseId, song,
+                                    )
                         }
                     }
                 },
@@ -5129,6 +5138,9 @@ private fun BitChordApp(
                             ),
                         )
                         browseId?.let { id ->
+                            if (!savedLocally) {
+                                com.music.bitchord.data.spotify.LocalPlaylistStore.recordRemoteSpotifyImport(id, songs)
+                            }
                             viewModel.openDetail(id, pTitle, "${songs.size} songs", songs.firstOrNull()?.thumbnailUrl)
                         }
                     }

@@ -212,7 +212,7 @@ object LyricsRepository {
             LyricsSource.PAXSENIX_MUSIXMATCH -> PaxSenix.musixmatchLyrics(title, artist, durationMs)
             LyricsSource.KUGOU -> KuGou.lyrics(title, artist, durationMs, album)
             LyricsSource.MEGALOBIZ -> Megalobiz.lyrics(title, artist)
-            LyricsSource.GENIUS -> Genius.lyrics(title, artist)
+            LyricsSource.GENIUS -> Genius.lyrics(title, artist, durationMs)
         }
         return found
     }

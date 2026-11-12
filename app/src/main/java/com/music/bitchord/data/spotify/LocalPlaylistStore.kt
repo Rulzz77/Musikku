@@ -3,6 +3,7 @@ package com.music.bitchord.data.spotify
 import android.content.Context
 import android.content.SharedPreferences
 import com.music.bitchord.data.model.Song
+import com.music.bitchord.data.sources.TrackMatcher
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONArray
@@ -22,15 +23,18 @@ data class LocalPlaylist(
 object LocalPlaylistStore {
     private const val PREF_NAME = "bitchord_local_playlists"
     private const val KEY_PLAYLISTS = "playlists_json"
+    private const val KEY_REMOTE_SPOTIFY_IMPORTS = "remote_spotify_imports_json"
 
     private lateinit var prefs: SharedPreferences
 
     private val _playlists = MutableStateFlow<List<LocalPlaylist>>(emptyList())
     val playlists = _playlists.asStateFlow()
+    private val remoteSpotifyImports = MutableStateFlow<Map<String, Set<String>>>(emptyMap())
 
     fun init(context: Context) {
         prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
         load()
+        loadRemoteSpotifyImports()
     }
 
     private fun load() {
@@ -66,6 +70,63 @@ object LocalPlaylistStore {
             }
             _playlists.value = list
         }
+    }
+
+    private fun loadRemoteSpotifyImports() {
+        if (!this::prefs.isInitialized) return
+        val raw = prefs.getString(KEY_REMOTE_SPOTIFY_IMPORTS, null) ?: return
+        runCatching {
+            val root = JSONObject(raw)
+            remoteSpotifyImports.value = root.keys().asSequence().associateWith { key ->
+                val ids = root.optJSONArray(key) ?: JSONArray()
+                (0 until ids.length()).mapNotNull { ids.optString(it).takeIf(String::isNotBlank) }.toSet()
+            }
+        }
+    }
+
+    private fun persistRemoteSpotifyImports(value: Map<String, Set<String>>) {
+        if (!this::prefs.isInitialized) return
+        runCatching {
+            val root = JSONObject()
+            value.forEach { (id, videoIds) ->
+                root.put(id, JSONArray(videoIds.toList()))
+            }
+            prefs.edit().putString(KEY_REMOTE_SPOTIFY_IMPORTS, root.toString()).apply()
+        }
+    }
+
+    /** Keep the Spotify-to-YouTube mapping for remote playlists, without creating a duplicate Library tile. */
+    fun recordRemoteSpotifyImport(playlistBrowseId: String, songs: List<Song>) {
+        val id = playlistBrowseId.removePrefix("VL").removePrefix("local:playlist:")
+        if (id.isBlank()) return
+        val updated = remoteSpotifyImports.value.toMutableMap()
+        updated[id] = songs.mapNotNullTo(LinkedHashSet()) { it.videoId.trim().takeIf(String::isNotEmpty) }
+        remoteSpotifyImports.value = updated
+        persistRemoteSpotifyImports(updated)
+    }
+
+    fun containsRemoteSpotifySong(playlistBrowseId: String, song: Song): Boolean {
+        val id = playlistBrowseId.removePrefix("VL")
+        return song.videoId.isNotBlank() && song.videoId in remoteSpotifyImports.value[id].orEmpty()
+    }
+
+    fun addRemoteSpotifySong(playlistBrowseId: String, song: Song) {
+        val id = playlistBrowseId.removePrefix("VL")
+        if (id.isBlank() || song.videoId.isBlank()) return
+        val updated = remoteSpotifyImports.value.toMutableMap()
+        updated[id] = updated[id].orEmpty() + song.videoId
+        remoteSpotifyImports.value = updated
+        persistRemoteSpotifyImports(updated)
+    }
+
+    fun removeRemoteSpotifySong(playlistBrowseId: String, song: Song) {
+        val id = playlistBrowseId.removePrefix("VL")
+        val current = remoteSpotifyImports.value[id] ?: return
+        val updated = remoteSpotifyImports.value.toMutableMap()
+        updated[id] = current - song.videoId
+        if (updated[id].isNullOrEmpty()) updated.remove(id)
+        remoteSpotifyImports.value = updated
+        persistRemoteSpotifyImports(updated)
     }
 
     data class AddResult(val added: Int, val alreadyThere: Int)
@@ -159,6 +220,15 @@ object LocalPlaylistStore {
     fun getPlaylist(id: String): LocalPlaylist? {
         val cleanId = id.removePrefix("local:playlist:").removePrefix("VL")
         return _playlists.value.firstOrNull { it.id == cleanId || it.id == id || it.browseId == id }
+    }
+
+    /** Match by video id first, then by the same recording metadata. */
+    fun containsSong(playlistId: String, song: Song): Boolean {
+        val playlist = getPlaylist(playlistId) ?: return false
+        val target = TrackMatcher.targetOf(song)
+        return playlist.songs.any { existing ->
+            existing.videoId == song.videoId || TrackMatcher.score(existing, target) != null
+        }
     }
 
     private fun persist(list: List<LocalPlaylist>) {

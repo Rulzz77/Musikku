@@ -15,7 +15,6 @@ import okhttp3.Request
 import org.jsoup.Jsoup
 import org.jsoup.nodes.TextNode
 import java.net.URLEncoder
-import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 /**
@@ -61,13 +60,13 @@ object Genius {
             .build()
     }
 
-    suspend fun lyrics(title: String, artist: String): List<LyricLine>? = withContext(Dispatchers.IO) {
+    suspend fun lyrics(title: String, artist: String, durationMs: Long = 0L): List<LyricLine>? = withContext(Dispatchers.IO) {
         runCatching {
-            scrapeLyrics(title, artist)
+            scrapeLyrics(title, artist, durationMs)
         }.getOrNull()
     }
 
-    private fun scrapeLyrics(title: String, artist: String): List<LyricLine>? {
+    private fun scrapeLyrics(title: String, artist: String, durationMs: Long): List<LyricLine>? {
         val cleanTitle = cleanQuery(title)
         val cleanArtist = cleanQuery(artist)
 
@@ -124,7 +123,7 @@ object Genius {
         val distinctAttempts = searchAttempts.distinctBy { it.query }
 
         val songUrl = distinctAttempts.asSequence()
-            .mapNotNull { attempt -> searchSongUrl(attempt.query, attempt.title, attempt.artist) }
+            .mapNotNull { attempt -> searchSongUrl(attempt.query, attempt.title, attempt.artist, durationMs) }
             .firstOrNull() ?: return null
 
         val html = fetchHtml(songUrl)
@@ -139,10 +138,10 @@ object Genius {
      * Searches Genius for the track and returns the song's page URL.
      */
     internal fun searchSongUrl(cleanTitle: String, cleanArtist: String): String? {
-        return searchSongUrl("$cleanArtist $cleanTitle".trim(), cleanTitle, cleanArtist)
+        return searchSongUrl("$cleanArtist $cleanTitle".trim(), cleanTitle, cleanArtist, 0L)
     }
 
-    private fun searchSongUrl(query: String, targetTitle: String, targetArtist: String): String? {
+    private fun searchSongUrl(query: String, targetTitle: String, targetArtist: String, durationMs: Long): String? {
         val url = "https://genius.com/api/search/multi?q=${URLEncoder.encode(query, "UTF-8")}"
         val responseBody = httpGet(url) ?: return null
 
@@ -158,7 +157,7 @@ object Genius {
             val hits = songSection["hits"]?.jsonArray ?: return null
             val candidates = hits.mapNotNull { (it as? JsonObject)?.get("result")?.jsonObject }
 
-            val best = bestMatch(candidates, targetTitle, targetArtist)
+            val best = bestMatch(candidates, targetTitle, targetArtist, durationMs)
             best?.get("url")?.jsonPrimitive?.contentOrNull
         }.getOrNull()
     }
@@ -167,38 +166,29 @@ object Genius {
         candidates: List<JsonObject>,
         targetTitle: String,
         targetArtist: String,
+        durationMs: Long,
     ): JsonObject? {
         if (candidates.isEmpty()) return null
-        val normTitle = targetTitle.lowercase(Locale.ROOT)
-        val normArtist = targetArtist.lowercase(Locale.ROOT)
-
         val scored = candidates.mapNotNull { item ->
-            val title = item["title"]?.jsonPrimitive?.contentOrNull?.lowercase(Locale.ROOT) ?: ""
-            val artist = item["artist_names"]?.jsonPrimitive?.contentOrNull?.lowercase(Locale.ROOT) ?: ""
-            var score = 0
+            val title = item["title"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+            val artist = item["artist_names"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+            if (!lyricsCandidateMatches(
+                    title = targetTitle,
+                    artist = targetArtist,
+                    durationMs = durationMs,
+                    candidateTitle = title,
+                    candidateArtist = artist,
+                    candidateDurationMs = null,
+                )
+            ) return@mapNotNull null
 
-            val titleMatches = normTitle.isNotBlank() && (title == normTitle || title.contains(normTitle) || normTitle.contains(title))
-            val artistMatches = normArtist.isNotBlank() && (artist == normArtist || artist.contains(normArtist) || normArtist.contains(artist))
-
-            if (!titleMatches && !artistMatches) return@mapNotNull null
-
-            if (title == normTitle) score += 50
-            else if (titleMatches) score += 25
-
-            if (artistMatches) {
-                if (artist == normArtist) score += 40
-                else score += 20
-            }
-
-            // Penalize translations / instrumentals / reviews unless specifically requested
+            var score = 90
+            // Penalize translations / instrumentals / reviews unless specifically requested.
             val path = item["path"]?.jsonPrimitive?.contentOrNull ?: ""
-            if (path.contains("translation", ignoreCase = true) && !normTitle.contains("translation")) score -= 30
+            if (path.contains("translation", ignoreCase = true) && !targetTitle.contains("translation", ignoreCase = true)) score -= 30
             if (path.contains("türkçe", ignoreCase = true) || path.contains("polskie-tlumaczenie", ignoreCase = true)) score -= 40
             if (path.contains("tracklist", ignoreCase = true) || path.contains("album-art", ignoreCase = true)) score -= 50
-
-            if (score <= 0) return@mapNotNull null
-
-            Pair(item, score)
+            item to score
         }
         return scored.maxByOrNull { it.second }?.first
     }

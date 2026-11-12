@@ -71,7 +71,19 @@ object Musixmatch {
 
     private suspend fun bestTrack(title: String, artist: String, seconds: Int): Track? {
         val tracks = searchTrack(title, artist) ?: return null
-        return tracks.maxByOrNull { score(it, title, artist, seconds) }
+        return tracks
+            .filter { track ->
+                lyricsCandidateMatches(
+                    title = title,
+                    artist = artist,
+                    durationMs = seconds * 1_000L,
+                    candidateTitle = track.trackName,
+                    candidateArtist = track.artistName,
+                    candidateDurationMs = track.trackLength?.toLong()?.times(1_000L),
+                    durationToleranceMs = 3_000L,
+                )
+            }
+            .maxByOrNull { score(it, title, artist, seconds) }
     }
 
     private fun score(track: Track, title: String, artist: String, seconds: Int): Double {

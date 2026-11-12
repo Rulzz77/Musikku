@@ -1029,7 +1029,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             ?.songs as? UiState.Success)?.data
         val known = openSongs
             ?: YtMusicRepository.allSongs(playlist.browseId).getOrNull()
-        if (known?.any { it.videoId == song.videoId } == true) return AddOutcome.ALREADY_THERE
+        val importedAlready = com.music.bitchord.data.spotify.LocalPlaylistStore
+            .containsRemoteSpotifySong(playlist.browseId, song)
+        val target = TrackMatcher.targetOf(song)
+        if (importedAlready || known?.any { existing ->
+                existing.videoId == song.videoId || TrackMatcher.score(existing, target) != null
+            } == true) return AddOutcome.ALREADY_THERE
         return YtMusicRepository.addToPlaylist(playlist.playlistId, listOf(song.videoId)).fold(
             onSuccess = { added ->
                 libraryStale = true
@@ -1037,6 +1042,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 // reachable from a row's own menu on it — so the track goes
                 // into it for the same reason [addSuggestedSong] does.
                 appendToOpenPlaylist(playlist.browseId, song, added[song.videoId])
+                com.music.bitchord.data.spotify.LocalPlaylistStore.addRemoteSpotifySong(playlist.browseId, song)
                 AddOutcome.ADDED
             },
             onFailure = { AddOutcome.FAILED },
@@ -1171,6 +1177,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             ).fold(
                 onSuccess = {
                     libraryStale = true
+                    com.music.bitchord.data.spotify.LocalPlaylistStore.removeRemoteSpotifySong(browseId, song)
                     _detailStack.value = _detailStack.value.map { page ->
                         val songs = (page.songs as? UiState.Success)?.data
                         if (page.browseId != browseId || songs == null) {

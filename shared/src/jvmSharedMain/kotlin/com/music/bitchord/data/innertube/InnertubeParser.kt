@@ -105,7 +105,7 @@ object InnertubeParser {
                     if (seen.add("b:${browse.browseId}")) add(SearchResult.Browse(browse))
                 } else {
                     val fallback = cardCredits.firstOrNull { it.first === renderer }?.second
-                    parseResponsiveListItem(renderer, fallback ?: Credits())?.let { song ->
+                    parseResponsiveListItem(renderer, fallback ?: Credits(), videoFallback = includeVideos)?.let { song ->
                         // The mixed All page stays music-only; the dedicated Videos
                         // filter is the one place music-video uploads belong.
                         if (song.isVideo == includeVideos && seen.add("v:${song.videoId}")) {
@@ -678,6 +678,8 @@ object InnertubeParser {
     private fun parseResponsiveListItem(
         renderer: JsonObject?,
         fallback: Credits = Credits(),
+        /** The dedicated Videos filter is authoritative when YouTube omits row metadata. */
+        videoFallback: Boolean = false,
     ): Song? {
         if (renderer == null) return null
         val videoId = renderer.o("playlistItemData").s("videoId")
@@ -761,12 +763,11 @@ object InnertubeParser {
             // is simply absent, which is what makes "remove from playlist"
             // offer itself exactly where it means something.
             setVideoId = renderer.o("playlistItemData").s("playlistSetVideoId"),
-            // The row type word is the clean signal when present ("All" tab);
-            // otherwise a music-video upload gives itself away with widescreen
-            // art where a catalogue track has square album cover art. Not an
-            // episode, whose art is a widescreen still too: it is listened to,
-            // and a "video" is dropped from the All tab's results.
-            isVideo = !episode && (rowType == "video" || thumbnails.isNotSquare()),
+            // Trust YouTube's media-type metadata and explicit row label. Artwork
+            // shape is not a media type: label artists and alternate releases can
+            // use widescreen covers even when the underlying item is audio.
+            // Only the dedicated Videos filter is a fallback when metadata is absent.
+            isVideo = !episode && isVideoTrack(renderer, rowType, videoFallback),
             isExplicit = renderer.hasExplicitBadge(),
             // Extract the "Remove from history" feedback token from the row's menu, if present.
             feedbackToken = extractFeedbackToken(renderer),
@@ -886,7 +887,9 @@ object InnertubeParser {
             artists = completeArtistCredits(artist.orEmpty(), credits.artists),
             albumId = credits.albumId,
             albumName = credits.albumName,
-            isVideo = rowType == "video" || thumbnails.isNotSquare(),
+            // A card's artwork aspect ratio describes its image, not its media.
+            // Use the same metadata-first classification as responsive search rows.
+            isVideo = isVideoTrack(renderer, rowType),
             isExplicit = renderer["subtitleBadges"].hasExplicitBadge(),
         )
     }
@@ -1294,6 +1297,21 @@ object InnertubeParser {
         o("navigationEndpoint").o("watchEndpoint").o("watchEndpointMusicSupportedConfigs")
             .o("watchEndpointMusicConfig").s("musicVideoType")
 
+    /**
+     * Classify media from YouTube's type metadata, never from cover dimensions.
+     * If a filtered Videos search omitted both signals, its filter is the only
+     * safe fallback; for unfiltered/search-song and browse rows unknown means audio.
+     */
+    private fun isVideoTrack(renderer: JsonObject, rowType: String?, videoFallback: Boolean = false): Boolean {
+        val musicVideoType = renderer.musicVideoType()
+        return when {
+            musicVideoType != null -> musicVideoType != MUSIC_VIDEO_TYPE_ATV
+            rowType == "video" -> true
+            rowType == "song" -> false
+            else -> videoFallback
+        }
+    }
+
     private const val MUSIC_VIDEO_TYPE_ATV = "MUSIC_VIDEO_TYPE_ATV"
 
     /**
@@ -1662,13 +1680,10 @@ object InnertubeParser {
             .o("thumbnail").a("thumbnails")
         val subtitle = renderer.o("subtitle").runs()
         // A card with no browse target is a playable track, not an album,
-        // playlist or artist; widescreen art on one of those means it's a
-        // music-video upload rather than the catalogue track, which the
-        // player can now show — same test as parseResponsiveListItem's.
-        val isVideo = resolvedBrowseId == null && videoId != null && (
-            thumbnails.isNotSquare() ||
-                renderer.s("aspectRatio")?.contains("16_9") == true
-            )
+        // playlist or artist. Its artwork ratio is not enough to decide whether
+        // the media is audio or a music video; use YouTube's explicit type only.
+        val isVideo = resolvedBrowseId == null && videoId != null &&
+            isVideoTrack(renderer, rowType = null)
         // An album/playlist billed as a video chart/compilation — "N videos"
         // in the subtitle, or "video" in the card's own title (e.g. "Daily
         // Top Music Videos") — is the same dead-end as in parseBrowseItem.
@@ -1825,15 +1840,4 @@ private fun JsonElement?.firstRunText(): String? =
  */
 private fun JsonArray?.best(): String? = this?.lastOrNull().s("url")
 
-/**
- * Catalogue art is always square; a music-video upload's thumbnail is
- * widescreen. Missing dimensions default to "square" so a row is never
- * dropped just because the field wasn't present.
- */
-private fun JsonArray?.isNotSquare(): Boolean {
-    val last = this?.lastOrNull()
-    val width = last.s("width")?.toDoubleOrNull() ?: return false
-    val height = last.s("height")?.toDoubleOrNull() ?: return false
-    if (width <= 0 || height <= 0) return false
-    return width / height !in 0.85..1.15
-}
+

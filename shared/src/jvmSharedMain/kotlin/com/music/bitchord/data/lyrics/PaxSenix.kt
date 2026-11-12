@@ -197,7 +197,19 @@ object PaxSenix {
         durationMs: Long,
     ): Candidate? {
         val candidates = buildList { root.collectCandidates(this) }
-        return candidates.map { it to it.score(title, artist, durationMs) }
+        return candidates
+            .filter { candidate ->
+                lyricsCandidateMatches(
+                    title = title,
+                    artist = artist,
+                    durationMs = durationMs,
+                    candidateTitle = candidate.title,
+                    candidateArtist = candidate.artist,
+                    candidateDurationMs = candidate.durationMs,
+                    durationToleranceMs = 10_000L,
+                )
+            }
+            .map { it to it.score(title, artist, durationMs) }
             .maxByOrNull { it.second }
             ?.takeIf { it.second >= MINIMUM_MATCH_SCORE }
             ?.first

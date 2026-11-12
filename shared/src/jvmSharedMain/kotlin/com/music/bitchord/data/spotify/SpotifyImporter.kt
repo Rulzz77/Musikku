@@ -276,8 +276,9 @@ object SpotifyImporter {
                         title = track.title,
                         artist = track.artist,
                     )
-                    val bestMatch = TrackMatcher.best(candidates, target) ?: candidates.firstOrNull()
-
+                    // Never import the search engine's first row as a fallback:
+                    // a popular cover/remix with a similar title is worse than
+                    // leaving this Spotify entry unmatched for the user to review.
                     val matchedSong = if (cleanLang != null && candidates.isNotEmpty()) {
                         val conflictingLangs = knownLanguages.filter { !it.equals(cleanLang, ignoreCase = true) }
                         val nonConflictingCandidates = candidates.filter { candidate ->
@@ -289,10 +290,8 @@ object SpotifyImporter {
                             }
                         }
                         TrackMatcher.best(nonConflictingCandidates, target)
-                            ?: nonConflictingCandidates.firstOrNull()
-                            ?: bestMatch
                     } else {
-                        bestMatch
+                        TrackMatcher.best(candidates, target)
                     }
 
                     val done = completedCount.incrementAndGet()

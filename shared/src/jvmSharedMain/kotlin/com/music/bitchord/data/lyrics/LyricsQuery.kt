@@ -57,3 +57,52 @@ private val CREDITS = listOf(
     ),
     Regex("""\s*[(\[]\s*official\s*[)\]]""", RegexOption.IGNORE_CASE),
 )
+
+/**
+ * Reject a lyrics catalogue hit unless it names the same title and at least
+ * one of the credited artists. A close runtime alone is never enough: common
+ * titles routinely return a different recording or cover.
+ *
+ * [candidateDurationMs] may be absent for providers that do not publish a
+ * runtime. When both sides have one, allow a small service-specific rounding
+ * tolerance (and a little extra for video runtimes) before accepting the hit.
+ */
+internal fun lyricsCandidateMatches(
+    title: String,
+    artist: String,
+    durationMs: Long,
+    candidateTitle: String?,
+    candidateArtist: String?,
+    candidateDurationMs: Long?,
+    durationToleranceMs: Long = 12_000L,
+): Boolean {
+    val wantedTitle = lyricsIdentity(title.forLyricsSearch())
+    val foundTitle = lyricsIdentity(candidateTitle.orEmpty().forLyricsSearch())
+    if (wantedTitle.isBlank() || wantedTitle != foundTitle) return false
+
+    val wantedArtists = artistNamesForLyrics(artist.artistForLyricsSearch())
+    val foundArtists = artistNamesForLyrics(candidateArtist.orEmpty().artistForLyricsSearch())
+    if (wantedArtists.isEmpty() || foundArtists.isEmpty() || wantedArtists.intersect(foundArtists).isEmpty()) {
+        return false
+    }
+
+    if (durationMs > 0L && (candidateDurationMs ?: 0L) > 0L) {
+        val allowed = maxOf(durationToleranceMs, durationMs / 40L)
+        if (kotlin.math.abs(durationMs - candidateDurationMs!!) > allowed) return false
+    }
+    return true
+}
+
+private fun lyricsIdentity(value: String): String =
+    java.text.Normalizer.normalize(value, java.text.Normalizer.Form.NFD)
+        .replace(Regex("""\p{Mn}+"""), "")
+        .lowercase(java.util.Locale.ROOT)
+        .map { if (it.isLetterOrDigit()) it else ' ' }
+        .joinToString("")
+        .replace(Regex("""\s+"""), " ")
+        .trim()
+
+private fun artistNamesForLyrics(value: String): Set<String> =
+    value.split(
+        Regex("""\s*(?:,|&|;|/|\s+and\s+|\s+x\s+|\s+with\s+|\s+feat\.?\s+|\s+ft\.?\s+)\s*"""),
+    ).map(::lyricsIdentity).filter(String::isNotBlank).toSet()

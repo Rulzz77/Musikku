@@ -226,12 +226,8 @@ private val RELEASE_ACTION_GAP = 10.dp
 private val RELEASE_ACTIONS_MAX_WIDTH = 420.dp
 private val PILL_SHAPE = RoundedCornerShape(12.dp)
 
-/**
- * Where the search field sits once it is open — directly under the header,
- * which is item zero. The one place that has to know, so that opening the
- * search can carry the page up to it.
- */
-private const val SEARCH_ITEM_INDEX = 1
+/** Search is the first sticky row, above the release artwork rather than under it. */
+private const val SEARCH_ITEM_INDEX = 0
 
 /** The inset the header text and the action pills share. */
 private val HEADER_GUTTER = PAGE_GUTTER + 8.dp
@@ -585,6 +581,23 @@ fun DetailScreen(
                     // a release header clears the bar itself, see [ReleaseHeader].
                     contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
                 ) {
+            if (searching) {
+                // The search is the first row in the page, not tucked beneath
+                // the large sleeve/photo. It stays pinned under the app bar while
+                // the cover and track list scroll below it.
+                stickyHeader(key = "search") {
+                    DetailSearchField(
+                        query = query,
+                        onQueryChange = { query = it },
+                        onClose = closeSearch,
+                        autoFocus = focusSearch,
+                        onFocused = { focusSearch = false },
+                        palette = palette,
+                        type = page.type,
+                    )
+                }
+            }
+
             item(key = "header") {
                 if (isArtist) {
                     ArtistHeader(page = page, palette = palette, artHeight = artHeight, appleArt = appleArt, signature = signature)
@@ -602,22 +615,6 @@ fun DetailScreen(
                         onArtistClick = onArtistClick.takeIf { folder == null },
                         onToggleLibrary = onToggleLibrary,
                         onDownloadAll = folder?.onDownload?.let { download -> { download(songs) } },
-                    )
-                }
-            }
-
-            if (searching) {
-                // Keep the playlist filter pinned below the top bar while the
-                // track list scrolls; it must not disappear behind the header.
-                stickyHeader(key = "search") {
-                    DetailSearchField(
-                        query = query,
-                        onQueryChange = { query = it },
-                        onClose = closeSearch,
-                        autoFocus = focusSearch,
-                        onFocused = { focusSearch = false },
-                        palette = palette,
-                        type = page.type,
                     )
                 }
             }

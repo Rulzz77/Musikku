@@ -70,7 +70,7 @@ object InnertubeParser {
             collectRenderers(response, "musicCardShelfRenderer")
                 .mapNotNull { card ->
                     parseCardShelfSong(card, excludePodcastEpisodes = musicOnly)?.let(SearchResult::TopTrack)
-                        ?: parseCardShelfBrowse(card)?.let(SearchResult::Browse)
+                        ?: parseCardShelfBrowse(card, musicOnly = musicOnly)?.let(SearchResult::Browse)
                 }
         }
         val rows = collectRenderers(response, "musicResponsiveListItemRenderer")
@@ -105,7 +105,7 @@ object InnertubeParser {
             // Browse rows are tested first: an album row also carries a
             // "play album" videoId in its overlay, so checking for a track
             // first would misread every album as a single song.
-                val browse = parseBrowseItem(renderer)
+                val browse = parseBrowseItem(renderer, musicOnly = musicOnly)
                 if (browse != null) {
                     if (seen.add("b:${browse.browseId}")) add(SearchResult.Browse(browse))
                 } else {
@@ -169,11 +169,12 @@ object InnertubeParser {
         return out
     }
 
-    private fun parseBrowseItem(renderer: JsonObject): BrowseItem? {
+    private fun parseBrowseItem(renderer: JsonObject, musicOnly: Boolean = false): BrowseItem? {
         val endpoint = renderer.o("navigationEndpoint").o("browseEndpoint") ?: return null
         val browseId = endpoint.s("browseId") ?: return null
         val pageType = endpoint.o("browseEndpointContextSupportedConfigs")
             .o("browseEndpointContextMusicConfig").s("pageType").orEmpty()
+        if (musicOnly && ("PODCAST" in pageType || "NON_MUSIC_AUDIO_TRACK" in pageType)) return null
 
         val columns = renderer.a("flexColumns").orEmpty()
         val title = columns.getOrNull(0)
@@ -942,7 +943,7 @@ object InnertubeParser {
     }
 
     /** Artist, album and playlist cards use the same promoted-search container as a song. */
-    private fun parseCardShelfBrowse(renderer: JsonObject): BrowseItem? {
+    private fun parseCardShelfBrowse(renderer: JsonObject, musicOnly: Boolean = false): BrowseItem? {
         val endpoint = renderer.o("onTap").o("browseEndpoint") ?: return null
         val browseId = endpoint.s("browseId") ?: return null
         val pageType = endpoint.o("browseEndpointContextSupportedConfigs")
@@ -952,7 +953,7 @@ object InnertubeParser {
         // big song's own title promotes — "tum hi ho", "o maahi" — while the
         // real track sits in the rows below, so it doesn't get the top slot.
         // Read off the page type rather than the word, which is translated.
-        if ("NON_MUSIC_AUDIO_TRACK" in pageType) return null
+        if ("NON_MUSIC_AUDIO_TRACK" in pageType || (musicOnly && "PODCAST" in pageType)) return null
         val title = renderer.o("title").runs()
         if (title.isBlank()) return null
         val subtitle = renderer.o("subtitle").runs()

@@ -441,24 +441,37 @@ object YtMusicRepository {
         val target = TrackMatcher.targetOf(song)
         var searchFailed = false
         for (query in TrackMatcher.queries(target)) {
-            val candidates = search(query, SearchFilter.SONGS)
-                .onFailure { searchFailed = true }
-                .getOrNull()
-                ?.filterIsInstance<SearchResult.Track>()
-                ?.map { it.song }
-                .orEmpty()
-            TrackMatcher.best(candidates, target)?.let { match ->
-                Log.d(TAG, "audio switch: '${song.title}' -> '${match.title}' ($query)")
-                audioVersionCache[song.videoId] = match
-                return match
-            }
-            // Music-video timing is visual timing, not the audio release's
-            // timing. The manual switch may therefore use the exact official
-            // song/artist match even when the video has a long intro or outro.
-            TrackMatcher.bestOfficialAudioForVideo(candidates, target)?.let { match ->
-                Log.d(TAG, "audio switch: accepted video/runtime drift '${song.title}' -> '${match.title}' ($query)")
-                audioVersionCache[song.videoId] = match
-                return match
+            // Search pages are deliberately loaded on demand in the UI, but an
+            // audio-version lookup is a bounded background operation: the exact
+            // official track can sit below the first page of popular results.
+            val candidatesById = LinkedHashMap<String, Song>()
+            var page = searchPage(query, SearchFilter.SONGS)
+            if (page.isFailure) searchFailed = true
+            var pageData = page.getOrNull()
+            var pageNumber = 0
+            while (pageData != null && pageNumber < 3) {
+                pageData.rows.filterIsInstance<SearchResult.Track>()
+                    .map { it.song }
+                    .forEach { candidatesById.putIfAbsent(it.videoId, it) }
+                val candidates = candidatesById.values.toList()
+                TrackMatcher.best(candidates, target)?.let { match ->
+                    Log.d(TAG, "audio switch: '${song.title}' -> '${match.title}' ($query; page ${pageNumber + 1})")
+                    audioVersionCache[song.videoId] = match
+                    return match
+                }
+                // Music-video timing is visual timing, not the audio release's
+                // timing. The manual switch may therefore use the exact official
+                // song/artist match even when the video has a long intro or outro.
+                TrackMatcher.bestOfficialAudioForVideo(candidates, target)?.let { match ->
+                    Log.d(TAG, "audio switch: accepted video/runtime drift '${song.title}' -> '${match.title}' ($query; page ${pageNumber + 1})")
+                    audioVersionCache[song.videoId] = match
+                    return match
+                }
+                val token = pageData.continuation ?: break
+                pageNumber++
+                page = searchContinuation(token, SearchFilter.SONGS)
+                if (page.isFailure) searchFailed = true
+                pageData = page.getOrNull()
             }
         }
         Log.w(TAG, "audio switch: no official song match for '${song.title}' by '${song.artist}'")

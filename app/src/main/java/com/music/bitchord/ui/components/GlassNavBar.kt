@@ -73,11 +73,11 @@ import androidx.compose.foundation.layout.fillMaxSize
  * The liquid glass navigation bar: the iOS 26 shape where the now playing
  * controls and the tabs are one component rather than two stacked bars.
  *
- * Expanded, it is a full width now playing pill sitting over the tab pill and a
- * separate circular Search tab. Scrolling down collapses it inline — the tabs
- * fold down to just the selected one, the now playing controls narrow into the
- * gap between it and Search, and the whole thing becomes a single row the width
- * of the screen. Scrolling back up expands it. The fold is driven by
+ * Expanded, it is a full width now playing pill sitting over the Home,
+ * Explore and Library tab pill. Scrolling down collapses it inline — the tabs
+ * fold down to just the selected one and the now playing controls narrow into
+ * the row beside them. Global Search lives in MainActivity's top bar. Scrolling
+ * back up expands it. The fold is driven by
  * [scrollConnection], which the page's scroll has to be dispatched into for any
  * of this to move; see MainActivity's `nestedScroll`.
  *
@@ -86,7 +86,7 @@ import androidx.compose.foundation.layout.fillMaxSize
  * MainActivity draws [MiniPlayer] and [FloatingBottomBar] instead.
  *
  * [song] null means nothing is playing, and the accessory is simply absent: the
- * bar is then the tab pill and Search alone, and the collapse still works.
+ * bar is then only the tab pill, and the collapse still works.
  */
 @Composable
 fun GlassNavBar(
@@ -125,11 +125,6 @@ fun GlassNavBar(
     // Held through a state that is always current instead, which also keeps the
     // handler out of the key.
     val currentOnTabSelected by rememberUpdatedState(onTabSelected)
-
-    // Search is the odd one out in the iOS 26 layout: a circle of its own beside
-    // the pill rather than a quarter of it. It is the last tab in BitChord's
-    // order, which is where the shape wants it anyway.
-    val standaloneIndex = tabs.lastIndex
 
     // A factory, not a value — see the note in FloatingTabBar's header. Each of
     // the three surfaces gets its own glass modifier and so its own shape cache.
@@ -239,46 +234,31 @@ fun GlassNavBar(
                 if (!isSelected) haptics.play(Haptic.Select)
                 currentOnTabSelected(index)
             }
-            if (index == standaloneIndex) {
-                standaloneTab(
-                    key = index,
-                    icon = {
-                        Icon(
-                            imageVector = tab.icon,
-                            contentDescription = tab.label,
-                            tint = tint,
-                            modifier = Modifier.size(TAB_ICON_SIZE),
-                        )
-                    },
-                    onClick = onClick,
-                )
-            } else {
-                tab(
-                    key = index,
-                    icon = {
-                        Icon(
-                            imageVector = tab.icon,
-                            contentDescription = tab.label,
-                            tint = tint,
-                            modifier = Modifier.size(TAB_ICON_SIZE),
-                        )
-                    },
-                    title = {
-                        Text(
-                            text = tab.label,
-                            style = tabLabelStyle(),
-                            color = tint,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            // The library's Tab stacks the glyph and the label
-                            // with nothing between them; the plain bar spaces
-                            // them, and this is where that gap goes.
-                            modifier = Modifier.padding(top = TAB_ICON_LABEL_GAP),
-                        )
-                    },
-                    onClick = onClick,
-                )
-            }
+            tab(
+                key = index,
+                icon = {
+                    Icon(
+                        imageVector = tab.icon,
+                        contentDescription = tab.label,
+                        tint = tint,
+                        modifier = Modifier.size(TAB_ICON_SIZE),
+                    )
+                },
+                title = {
+                    Text(
+                        text = tab.label,
+                        style = tabLabelStyle(),
+                        color = tint,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        // The library's Tab stacks the glyph and the label
+                        // with nothing between them; the plain bar spaces
+                        // them, and this is where that gap goes.
+                        modifier = Modifier.padding(top = TAB_ICON_LABEL_GAP),
+                    )
+                },
+                onClick = onClick,
+            )
         }
     }
 }

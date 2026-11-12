@@ -339,11 +339,17 @@ object YtMusicRepository {
     suspend fun searchPage(query: String, filter: SearchFilter, anonymous: Boolean = true): Result<SearchPage> =
         call("search:${filter.name}") {
             InnertubeParser.parseSearchPage(
-                Innertube.search(query, filter.params, anonymous),
+                // Songs uses the unfiltered music catalogue request, then keeps
+                // every playable track row. YouTube's Songs params can omit real
+                // catalogue entries that remain visible on artist pages.
+                Innertube.search(query, if (filter == SearchFilter.SONGS) null else filter.params, anonymous),
                 includeVideos = filter == SearchFilter.VIDEOS,
                 includeAllTrackTypes = filter == SearchFilter.ALL || filter == SearchFilter.SONGS,
             ).let { page ->
-                SearchPage(page.rows.distinctBy { it.identityKey() }, page.continuation)
+                val rows = if (filter == SearchFilter.SONGS) {
+                    page.rows.filterIsInstance<SearchResult.Track>()
+                } else page.rows
+                SearchPage(rows.distinctBy { it.identityKey() }, page.continuation)
             }
         }
 
@@ -354,7 +360,10 @@ object YtMusicRepository {
             includeVideos = filter == SearchFilter.VIDEOS,
             includeAllTrackTypes = filter == SearchFilter.ALL || filter == SearchFilter.SONGS,
         ).let { page ->
-            SearchPage(page.rows.distinctBy { it.identityKey() }, page.continuation)
+            val rows = if (filter == SearchFilter.SONGS) {
+                page.rows.filterIsInstance<SearchResult.Track>()
+            } else page.rows
+            SearchPage(rows.distinctBy { it.identityKey() }, page.continuation)
         }
     }
 

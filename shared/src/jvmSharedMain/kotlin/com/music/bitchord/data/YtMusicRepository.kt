@@ -272,7 +272,7 @@ object YtMusicRepository {
         // 4. Explore / New releases
         val explore = runCatching { shelvesOf("FEmusic_new_releases") }.getOrDefault(emptyList())
         val exploreSongs = explore.flatMap { shelf ->
-            shelf.items.mapNotNull { item ->
+            shelf.items.filter { it.isMusic && !it.isVideo }.mapNotNull { item ->
                 item.videoId?.takeUnless { it in excludeSongIds }?.let { vid ->
                     Song(
                         videoId = vid,
@@ -345,6 +345,7 @@ object YtMusicRepository {
                 Innertube.search(query, if (filter == SearchFilter.SONGS) null else filter.params, anonymous),
                 includeVideos = filter == SearchFilter.VIDEOS,
                 includeAllTrackTypes = filter == SearchFilter.ALL || filter == SearchFilter.SONGS,
+                musicOnly = filter in setOf(SearchFilter.ALL, SearchFilter.SONGS, SearchFilter.VIDEOS),
             ).let { page ->
                 val rows = if (filter == SearchFilter.SONGS) {
                     page.rows.filterIsInstance<SearchResult.Track>()
@@ -359,6 +360,7 @@ object YtMusicRepository {
             Innertube.searchContinuation(token),
             includeVideos = filter == SearchFilter.VIDEOS,
             includeAllTrackTypes = filter == SearchFilter.ALL || filter == SearchFilter.SONGS,
+            musicOnly = filter in setOf(SearchFilter.ALL, SearchFilter.SONGS, SearchFilter.VIDEOS),
         ).let { page ->
             val rows = if (filter == SearchFilter.SONGS) {
                 page.rows.filterIsInstance<SearchResult.Track>()
@@ -408,6 +410,7 @@ object YtMusicRepository {
                 Innertube.searchTypeahead(input),
                 includeVideos = false,
                 includeAllTrackTypes = true,
+                musicOnly = true,
             ).let { page ->
                 SearchPage(page.rows.distinctBy { it.identityKey() }, page.continuation)
             }

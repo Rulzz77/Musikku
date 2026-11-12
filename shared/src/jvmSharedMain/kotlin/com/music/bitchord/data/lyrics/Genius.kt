@@ -15,7 +15,6 @@ import okhttp3.Request
 import org.jsoup.Jsoup
 import org.jsoup.nodes.TextNode
 import java.net.URLEncoder
-import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 /**

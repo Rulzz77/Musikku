@@ -5056,7 +5056,10 @@ private fun BitChordApp(
                                 com.music.bitchord.data.spotify.LocalPlaylistStore.containsSong(choice.playlistId, song)
                             else ->
                                 OfflinePlaylists.get(OfflinePlaylists.PREFIX + choice.playlistId)
-                                    ?.songs?.any { it.videoId == song.videoId || (song.localUri != null && it.localUri == song.localUri) } == true
+                                    ?.songs?.any { it.videoId == song.videoId || (song.localUri != null && it.localUri == song.localUri) } == true ||
+                                    com.music.bitchord.data.spotify.LocalPlaylistStore.containsRemoteSpotifySong(
+                                        choice.browseId, song,
+                                    )
                         }
                     }
                 },

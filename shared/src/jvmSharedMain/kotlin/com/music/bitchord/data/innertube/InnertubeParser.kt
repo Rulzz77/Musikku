@@ -763,13 +763,9 @@ object InnertubeParser {
             // is simply absent, which is what makes "remove from playlist"
             // offer itself exactly where it means something.
             setVideoId = renderer.o("playlistItemData").s("playlistSetVideoId"),
-            // Trust YouTube's media-type metadata and explicit row label. Artwork
-            // shape is not a media type: label artists and alternate releases can
-            // use widescreen covers even when the underlying item is audio.
-            // Only the dedicated Videos filter is a fallback when metadata is absent.
-            // Match the pre-0.1.19 Songs filter: explicit Video rows and widescreen
-            // thumbnails are filtered out. Some catalog tracks are mislabeled
-            // by musicVideoType, so that metadata must not override this rule.
+            // Preserve the previous Songs tab rule: use the explicit row label
+            // and the artwork shape, not musicVideoType (which has mislabeled some
+            // genuine audio catalogue entries and hidden them from general search).
             isVideo = !episode && isVideoTrack(rowType, thumbnails.isNotSquare(), videoFallback),
             isExplicit = renderer.hasExplicitBadge(),
             // Extract the "Remove from history" feedback token from the row's menu, if present.

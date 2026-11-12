@@ -1069,7 +1069,7 @@ private fun BitChordApp(
     val downloadIdFor: (String?) -> String? = { id ->
         id?.let { Downloads.recordIdOf(it) ?: it }?.takeIf { it in savedCollections }
     }
-    LaunchedEffect(savedDownloads, savedCollections, topDetail?.browseId) {
+    LaunchedEffect(savedDownloads, savedCollections, localPlaylists, topDetail?.browseId) {
         val openPage = topDetail ?: return@LaunchedEffect
         val open = openPage.browseId
         // A downloaded playlist's page is a snapshot of the same folder and goes
@@ -4957,8 +4957,8 @@ private fun BitChordApp(
                 offlinePlaylistTarget = null
                 creatingOfflinePlaylist = false
             }
-            val choices = remember(offlinePlaylists) {
-                offlinePlaylists.map { playlist ->
+            val choices = remember(offlinePlaylists, localPlaylists, playlists, signedIn) {
+                val deviceChoices = offlinePlaylists.map { playlist ->
                     UserPlaylist(
                         playlistId = playlist.id,
                         title = playlist.title,
@@ -4971,6 +4971,22 @@ private fun BitChordApp(
                             .takeUnless { playlist.isLiked },
                     )
                 }
+                val importedChoices = localPlaylists.map { playlist ->
+                    UserPlaylist(
+                        // The full browse id keeps this store's ids distinct
+                        // from both device-created and account playlists.
+                        playlistId = playlist.browseId,
+                        title = playlist.title,
+                        subtitle = context.getString(R.string.spotify) + " · " +
+                            context.resources.getQuantityString(
+                                R.plurals.song_count_plural,
+                                playlist.songs.size,
+                                playlist.songs.size,
+                            ),
+                        thumbnailUrl = playlist.songs.firstNotNullOfOrNull { it.thumbnailUrl },
+                    )
+                }
+                deviceChoices + importedChoices + if (signedIn) playlists else emptyList()
             }
             PlaylistPickerSheet(
                 playlists = choices,
@@ -4981,17 +4997,49 @@ private fun BitChordApp(
                 onDismiss = dismiss,
                 onAdd = { picked ->
                     target?.let { song ->
-                        val result = OfflinePlaylists.add(picked.mapTo(HashSet()) { it.playlistId }, listOf(song))
-                        showQueueNotice(
-                            when {
-                                result.added > 1 -> context.resources.getQuantityString(
-                                    R.plurals.added_to_playlists_notice, result.added, result.added,
-                                )
-                                result.added == 1 -> context.getString(R.string.song_added_to_playlist)
-                                result.alreadyThere > 0 -> context.getString(R.string.song_already_in_playlist)
-                                else -> context.getString(R.string.failed)
-                            },
+                        val deviceIds = offlinePlaylists.mapTo(HashSet()) { it.id }
+                        val imported = picked.filter {
+                            it.playlistId.startsWith(com.music.bitchord.data.spotify.IMPORTED_PLAYLIST_PREFIX)
+                        }
+                        val device = picked.filter { it.playlistId in deviceIds }
+                        val account = picked.filter {
+                            it.playlistId !in deviceIds &&
+                                !it.playlistId.startsWith(com.music.bitchord.data.spotify.IMPORTED_PLAYLIST_PREFIX)
+                        }
+
+                        val deviceResult = OfflinePlaylists.add(
+                            device.mapTo(HashSet()) { it.playlistId },
+                            listOf(song),
                         )
+                        val importedResult = com.music.bitchord.data.spotify.LocalPlaylistStore.addSongs(
+                            imported.map { it.playlistId },
+                            listOf(song),
+                        )
+                        val localAdded = deviceResult.added + importedResult.added
+                        val localAlready = deviceResult.alreadyThere + importedResult.alreadyThere
+
+                        val report: (Int, Int, Int) -> Unit = { remoteAdded, remoteAlready, remoteFailed ->
+                            val added = localAdded + remoteAdded
+                            val alreadyThere = localAlready + remoteAlready
+                            val localFailed = (device.size + imported.size - localAdded - localAlready).coerceAtLeast(0)
+                            val failed = localFailed + remoteFailed
+                            showQueueNotice(
+                                when {
+                                    added > 1 -> context.resources.getQuantityString(
+                                        R.plurals.added_to_playlists_notice, added, added,
+                                    )
+                                    added == 1 -> context.getString(R.string.song_added_to_playlist)
+                                    alreadyThere > 0 && failed == 0 -> context.getString(R.string.song_already_in_playlist)
+                                    else -> context.getString(R.string.failed)
+                                },
+                            )
+                        }
+
+                        if (account.isNotEmpty()) {
+                            viewModel.addToPlaylists(account, song, report)
+                        } else {
+                            report(0, 0, 0)
+                        }
                     }
                 },
                 onCreate = { title, _ ->

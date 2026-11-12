@@ -254,7 +254,7 @@ fun BrowseActionsMenu(
                 }
             }
             onChangeCover?.let {
-                ActionRow(SfIcons.Draw, "Change playlist cover", onClick = it)
+                ActionRow(SfIcons.Draw, stringResource(R.string.choose_file), onClick = it)
             }
             onReorder?.let {
                 ActionRow(SfIcons.Reorder, stringResource(R.string.reorder_songs), onClick = it)

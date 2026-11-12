@@ -3,6 +3,7 @@ package com.music.bitchord.data.spotify
 import android.content.Context
 import android.content.SharedPreferences
 import com.music.bitchord.data.model.Song
+import com.music.bitchord.data.sources.TrackMatcher
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONArray
@@ -159,6 +160,15 @@ object LocalPlaylistStore {
     fun getPlaylist(id: String): LocalPlaylist? {
         val cleanId = id.removePrefix("local:playlist:").removePrefix("VL")
         return _playlists.value.firstOrNull { it.id == cleanId || it.id == id || it.browseId == id }
+    }
+
+    /** Match by video id first, then by the same recording metadata. */
+    fun containsSong(playlistId: String, song: Song): Boolean {
+        val playlist = getPlaylist(playlistId) ?: return false
+        val target = TrackMatcher.targetOf(song)
+        return playlist.songs.any { existing ->
+            existing.videoId == song.videoId || TrackMatcher.score(existing, target) != null
+        }
     }
 
     private fun persist(list: List<LocalPlaylist>) {

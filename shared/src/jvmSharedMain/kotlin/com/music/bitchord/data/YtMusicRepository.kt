@@ -216,7 +216,7 @@ object YtMusicRepository {
                 it.title.contains("mix", ignoreCase = true) ||
                 it.title.contains("recommend", ignoreCase = true)
         }
-        val qpSongs = qpShelf?.items?.filterNot { it.isVideo }?.mapNotNull { item ->
+        val qpSongs = qpShelf?.items?.filter { it.isMusic && !it.isVideo }?.mapNotNull { item ->
             item.videoId?.takeUnless { it in excludeSongIds }?.let { vid ->
                 Song(
                     videoId = vid,
@@ -238,7 +238,7 @@ object YtMusicRepository {
         } else shelves
 
         val homeShelfSongs = candidateShelves.flatMap { shelf ->
-            shelf.items.filterNot { it.isVideo }.mapNotNull { item ->
+            shelf.items.filter { it.isMusic && !it.isVideo }.mapNotNull { item ->
                 item.videoId?.takeUnless { it in excludeSongIds }?.let { vid ->
                     Song(
                         videoId = vid,

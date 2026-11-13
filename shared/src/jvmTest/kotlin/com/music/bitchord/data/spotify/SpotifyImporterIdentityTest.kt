@@ -341,6 +341,29 @@ class SpotifyImporterIdentityTest {
 
 
     @Test
+    fun spotifyImportAcceptsSecondarySpotifySingerCreditOnlyWithExactRuntime() {
+        val target = TrackMatcher.Target(
+            title = "Budak Saha",
+            artist = "Gasentra Pajampangan, Friska",
+            durationSec = 287,
+            requiredArtistName = "Gasentra Pajampangan",
+            requireSharedArtist = true,
+            requireExactTitle = true,
+        )
+        val singerFiledByYouTube = Song(
+            videoId = "budak-saha-friska-gasentra",
+            title = "Budak Saha",
+            artist = "Friska Gasentra",
+            thumbnailUrl = null,
+            durationText = "4:47",
+        )
+
+        assertNotNull(TrackMatcher.best(listOf(singerFiledByYouTube), target))
+        assertNull(TrackMatcher.best(listOf(singerFiledByYouTube.copy(durationText = "4:35")), target))
+        assertNull(TrackMatcher.best(listOf(singerFiledByYouTube.copy(durationText = null)), target))
+    }
+
+    @Test
     fun spotifyImportSeparatesDjKoploFromOriginalAndBreakbeat() {
         val target = TrackMatcher.Target(
             title = "Satu Rasa (DJ Koplo)",

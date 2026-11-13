@@ -472,6 +472,7 @@ class SpotifyImporterIdentityTest {
         val reorderedButUnrelated = canonical.copy(
             videoId = "misread-artist",
             artist = "Wind Fire Earth",
+            artists = listOf(ArtistRef(name = "Wind Fire Earth", browseId = null)),
         )
 
         assertNotNull(TrackMatcher.best(listOf(canonical), target))

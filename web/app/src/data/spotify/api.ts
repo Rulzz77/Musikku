@@ -1,5 +1,5 @@
 import type { SpotifyPlaylist, SpotifyTrack } from '@bitchord/shared/bridge';
-import { best, type MatchCandidate } from '@/data/match/trackMatcher';
+import { best, primaryArtist, queries, type MatchCandidate, type MatchTarget } from '@/data/match/trackMatcher';
 import { searchSongs } from '@/data/music/api';
 import type { Track } from '@/data/music/types';
 import { getBridge } from '@/extension/bridge';
@@ -18,14 +18,32 @@ function bridge() {
   return b;
 }
 
+/**
+ * Move through the raw Spotify page size, not only its parsed track count.
+ * A zero-sized page before the advertised total means the playlist is partial.
+ */
+export function nextSpotifyPageOffset(offset: number, total: number, raw: number): number | null {
+  if (!Number.isInteger(offset) || !Number.isInteger(total) || !Number.isInteger(raw) || offset < 0 || total < 0 || raw < 0) {
+    throw new Error('Spotify returned invalid pagination metadata');
+  }
+  if (raw === 0) {
+    if (offset < total) throw new Error(`Spotify pagination stopped at ${offset} of ${total} entries`);
+    return null;
+  }
+  const next = offset + raw;
+  if (next <= offset) throw new Error('Spotify pagination did not advance');
+  return next < total ? next : null;
+}
+
 /** Every playlist in the library, Liked Songs first, however many pages it takes. */
 export async function fetchSpotifyPlaylists(): Promise<SpotifyPlaylist[]> {
   const out: SpotifyPlaylist[] = [];
   for (let offset = 0; ; ) {
     const page = await bridge().call('spotify.playlists', { offset }, { timeoutMs: 30_000 });
     out.push(...page.items);
-    offset += page.raw;
-    if (page.raw === 0 || offset >= page.total) break;
+    const next = nextSpotifyPageOffset(offset, page.total, page.raw);
+    if (next === null) break;
+    offset = next;
   }
   return out;
 }
@@ -40,9 +58,10 @@ export async function fetchSpotifyTracks(playlistId: string, onPage: (soFar: Spo
   for (let offset = 0; ; ) {
     const page = await bridge().call('spotify.tracks', { playlistId, offset }, { timeoutMs: 30_000 });
     out.push(...page.items);
-    offset += page.raw;
     onPage([...out], page.total);
-    if (page.raw === 0 || offset >= page.total) break;
+    const next = nextSpotifyPageOffset(offset, page.total, page.raw);
+    if (next === null) break;
+    offset = next;
   }
   return out;
 }
@@ -76,23 +95,47 @@ export function candidateOf(track: Track): MatchCandidate {
 const matched = new Map<string, Track | null>();
 
 /**
- * The YouTube Music song that is [track], or null if there is none:
- * the best candidate by title, artist, length and album, and failing that
- * the search's first hit (SpotifyImporter.matchTrack).
+ * The YouTube Music counterpart of a Spotify row, or null when no result
+ * passes the same title/version/lead-artist checks used by Android.
+ *
+ * Search several normalized queries, accumulate candidates, and never take
+ * the first search row as a fallback. A cover or unrelated remix is safer as
+ * an unmatched row than as a silently incorrect import.
  */
 export async function matchToYouTube(track: SpotifyTrack): Promise<Track | null> {
   if (matched.has(track.id)) return matched.get(track.id)!;
-  const query = [track.title, track.artist].filter((s) => s.trim()).join(' ');
-  const candidates = await searchSongs(query);
-  const target = {
+
+  const leadArtist = track.leadArtist?.trim() || primaryArtist(track.artist);
+  const target: MatchTarget = {
     title: track.title,
     artist: track.artist,
+    requiredArtistName: leadArtist || null,
+    requireSharedArtist: !!track.artist.trim(),
+    requireExactTitle: true,
     durationSec: track.durationMs > 0 ? Math.round(track.durationMs / 1000) : null,
     album: track.album,
   };
-  const scored = best(candidates.map((c) => ({ ...candidateOf(c), track: c })), target);
-  const found = scored?.track ?? candidates[0] ?? null;
-  const result = found && { ...found, thumbnail: found.thumbnail ?? track.imageUrl };
+  const baseQueries = queries(target);
+  const albumQuery = track.album?.trim() && baseQueries[0] ? `${baseQueries[0]} ${track.album.trim()}` : null;
+  const searchTerms = [...new Set([...baseQueries, ...(albumQuery ? [albumQuery] : [])])];
+  const candidates = new Map<string, Track>();
+  let searchFailure: unknown = null;
+
+  for (const query of searchTerms) {
+    try {
+      const rows = await searchSongs(query);
+      for (const row of rows) {
+        if (row.videoId?.trim()) candidates.set(row.videoId, row);
+      }
+    } catch (error) {
+      searchFailure ??= error;
+    }
+  }
+
+  const scored = best([...candidates.values()].map((candidate) => ({ ...candidateOf(candidate), track: candidate })), target);
+  if (!scored && searchFailure) throw searchFailure;
+  const found = scored?.track ?? null;
+  const result = found ? { ...found, thumbnail: found.thumbnail ?? track.imageUrl } : null;
   matched.set(track.id, result);
   return result;
 }

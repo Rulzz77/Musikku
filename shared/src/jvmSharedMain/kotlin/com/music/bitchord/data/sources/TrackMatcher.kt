@@ -89,7 +89,10 @@ object TrackMatcher {
     fun queries(target: Target): List<String> {
         val title = searchableTitle(target.title, target.artist)
         if (title.isBlank()) return emptyList()
-        val artist = primaryArtist(target.artist)
+        val artist = target.requiredArtistName
+            ?.takeIf { it.isNotBlank() }
+            ?.let(::normalize)
+            ?: primaryArtist(target.artist)
         val out = if (artist.isBlank()) mutableListOf(title) else mutableListOf("$title $artist", title)
         // The other script, asked once and without the artist: a pure-katakana
         // title ("コイコガレ") never meets its romaji-filed row ("Koi Kogare")

@@ -32,6 +32,7 @@ export function nextSpotifyPageOffset(offset: number, total: number, raw: number
   }
   const next = offset + raw;
   if (next <= offset) throw new Error('Spotify pagination did not advance');
+  if (next > total) throw new Error(`Spotify returned ${next} entries for a list that reports ${total}`);
   return next < total ? next : null;
 }
 

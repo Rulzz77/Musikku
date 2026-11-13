@@ -161,20 +161,34 @@ object SpotifyImporter {
      * search's first hit.
      */
     suspend fun matchTrack(track: SpotifyTrack): Song? {
-        val query = listOf(track.title, track.artist).filter { it.isNotBlank() }.joinToString(" ")
-        val candidates = YtMusicRepository.search(query, SearchFilter.SONGS).getOrNull()
-            ?.filterIsInstance<SearchResult.Track>()
-            ?.map { it.song }
-            .orEmpty()
-        return TrackMatcher.best(
-            candidates,
-            TrackMatcher.Target(
-                title = track.title,
-                artist = track.artist,
-                durationSec = track.durationMs.takeIf { it > 0 }?.div(1000),
-                album = track.album,
-            ),
-        ) ?: candidates.firstOrNull()
+        val target = TrackMatcher.Target(
+            title = track.title,
+            artist = track.artist,
+            durationSec = track.durationMs.takeIf { it > 0 }?.div(1000),
+            album = track.album,
+        )
+        return TrackMatcher.best(searchCandidates(target), target)
+    }
+
+    /**
+     * Spotify and YouTube Music often format the same credit differently.
+     * Search the normalized title + primary artist first, then the title alone,
+     * and rank the combined catalogue results instead of trusting one query's
+     * first row. This also lets bracketed film/version packaging be removed by
+     * TrackMatcher before the request reaches YouTube Music.
+     */
+    private suspend fun searchCandidates(target: TrackMatcher.Target): List<Song> {
+        val found = LinkedHashMap<String, Song>()
+        for (query in TrackMatcher.queries(target)) {
+            val songs = YtMusicRepository.search(query, SearchFilter.SONGS).getOrNull()
+                ?.filterIsInstance<SearchResult.Track>()
+                ?.map { it.song }
+                .orEmpty()
+            songs.forEach { song ->
+                if (song.videoId.isNotBlank()) found.putIfAbsent(song.videoId, song)
+            }
+        }
+        return found.values.toList()
     }
 
     /** Tracks the embed page lists before it cuts off. */
@@ -263,36 +277,27 @@ object SpotifyImporter {
         val deferredResults = uniqueTracks.map { track ->
             async(Dispatchers.IO) {
                 semaphore.withPermit {
-                    val query = if (cleanLang != null) {
-                        "${track.title} ${track.artist} $cleanLang".trim()
-                    } else {
-                        "${track.title} ${track.artist}".trim()
-                    }
-
-                    val searchResult = YtMusicRepository.search(query, SearchFilter.SONGS).getOrNull()
-                    val candidates = searchResult?.filterIsInstance<SearchResult.Track>()?.map { it.song }.orEmpty()
-
                     val target = TrackMatcher.Target(
                         title = track.title,
                         artist = track.artist,
                     )
+                    val candidates = searchCandidates(target).let { found ->
+                        if (cleanLang == null) found else {
+                            val conflictingLangs = knownLanguages.filter { !it.equals(cleanLang, ignoreCase = true) }
+                            found.filter { candidate ->
+                                val meta = "${candidate.title} ${candidate.artist} ${candidate.albumName.orEmpty()}".lowercase()
+                                !conflictingLangs.any {
+                                    meta.contains("(${it.lowercase()})") ||
+                                        meta.contains("${it.lowercase()} version") ||
+                                        meta.contains("${it.lowercase()} song")
+                                }
+                            }
+                        }
+                    }
                     // Never import the search engine's first row as a fallback:
                     // a popular cover/remix with a similar title is worse than
                     // leaving this Spotify entry unmatched for the user to review.
-                    val matchedSong = if (cleanLang != null && candidates.isNotEmpty()) {
-                        val conflictingLangs = knownLanguages.filter { !it.equals(cleanLang, ignoreCase = true) }
-                        val nonConflictingCandidates = candidates.filter { candidate ->
-                            val meta = "${candidate.title} ${candidate.artist} ${candidate.albumName.orEmpty()}".lowercase()
-                            !conflictingLangs.any {
-                                meta.contains("(${it.lowercase()})") ||
-                                meta.contains("${it.lowercase()} version") ||
-                                meta.contains("${it.lowercase()} song")
-                            }
-                        }
-                        TrackMatcher.best(nonConflictingCandidates, target)
-                    } else {
-                        TrackMatcher.best(candidates, target)
-                    }
+                    val matchedSong = TrackMatcher.best(candidates, target)
 
                     val done = completedCount.incrementAndGet()
                     onProgress(done, total)

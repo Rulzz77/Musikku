@@ -165,7 +165,7 @@ class PlaylistJob {
 const jobs = new Map<string, PlaylistJob>();
 
 /** Per account and playlist: another account's rows are never shown. */
-export function useSpotifyRows(playlistId: string): SpotifyRows & { retry: () => void } {
+export function useSpotifyRows(playlistId: string): SpotifyRows & { retry: () => void; retryMissing: () => void } {
   const auth = useSpotifyAuth();
   const account = auth.state === 'ready' && auth.auth.signedIn ? (auth.auth.user?.name ?? '?') : null;
   const key = `${account}|${playlistId}`;

@@ -231,7 +231,7 @@ export function score(candidate: MatchCandidate, target: MatchTarget): number | 
   const requiredArtistMatched = requiredArtist
     ? candidateArtistKeys(candidate).has(artistIdentityKey(requiredArtist))
     : false;
-  if (requiredArtist && (!artistIdentityKey(requiredArtist) || !requiredArtistMatched)) return null;
+  if (requiredArtist && !artistIdentityKey(requiredArtist)) return null;
   if (!requiredArtist && target.requireSharedArtist &&
     (!artistNames(target.artist ?? '').length || !artistNames(candidate.artist).length || creditedArtist === null)) return null;
   const duration = durationScore(
@@ -240,6 +240,13 @@ export function score(candidate: MatchCandidate, target: MatchTarget): number | 
     creditedArtist !== null || requiredArtistMatched,
   );
   if (duration === null) return null;
+  // Spotify may put a label/producer first and the actual singer second
+  // (e.g. "Gasentra Pajampangan, Friska"), while YouTube Music files the
+  // recording under "Friska Gasentra". Allow that alternate Spotify credit
+  // only with an exact title, a shared credited artist, and runtime within
+  // three seconds; this cannot turn a loose cover/remix into a match.
+  if (requiredArtist && !requiredArtistMatched &&
+    !(creditedArtist !== null && withinSeconds(candidate, target, DURATION_TIGHT_SEC))) return null;
   const artist = creditedArtist ?? (requiredArtistMatched
     ? ARTIST_EXACT
     : !target.isVideo && withinSeconds(candidate, target, CREDIT_OVERRIDE_SEC) ? CREDITS_DISAGREE : null);

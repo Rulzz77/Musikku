@@ -171,6 +171,7 @@ object SpotifyImporter {
             artist = track.artist,
             durationSec = track.durationMs.takeIf { it > 0 }?.div(1000),
             album = track.album,
+            requireSharedArtist = true,
         )
         return TrackMatcher.best(searchCandidates(target), target)
     }
@@ -182,7 +183,7 @@ object SpotifyImporter {
      * first row. This also lets bracketed film/version packaging be removed by
      * TrackMatcher before the request reaches YouTube Music.
      */
-    private const val MAX_CANDIDATE_SEARCH_PAGES = 3
+    private const val MAX_CANDIDATE_SEARCH_PAGES = 5
 
     /**
      * Search the Songs catalogue first, then music-video uploads if no safe
@@ -192,7 +193,21 @@ object SpotifyImporter {
      */
     private suspend fun searchCandidates(target: TrackMatcher.Target, suffix: String? = null): List<Song> {
         val found = LinkedHashMap<String, Song>()
-        val queries = TrackMatcher.queries(target)
+        val baseQueries = TrackMatcher.queries(target)
+        // Try an album-qualified variant before falling back to a broad title
+        // query. This helps regional tracks whose artist/title search is sparse
+        // without ever relaxing the final artist and recording checks.
+        val albumQuery = target.album?.trim()?.takeIf { it.isNotBlank() }
+            ?.let { album -> baseQueries.firstOrNull()?.let { "$it $album" } }
+        val queries = (baseQueries + listOfNotNull(albumQuery))
+            .distinct()
+            .let { all ->
+                if (albumQuery == null || all.size < 3) all
+                else all.toMutableList().apply {
+                    remove(albumQuery)
+                    add((baseQueries.firstOrNull()?.let { 1 } ?: 0).coerceAtMost(size), albumQuery)
+                }
+            }
         for (filter in listOf(SearchFilter.SONGS, SearchFilter.VIDEOS)) {
             for (baseQuery in queries) {
                 val query = listOf(baseQuery, suffix?.takeIf { it.isNotBlank() })
@@ -318,6 +333,7 @@ object SpotifyImporter {
                         artist = track.artist,
                         durationSec = track.durationMs?.takeIf { it > 0 }?.div(1000)?.toInt(),
                         album = track.album,
+                        requireSharedArtist = true,
                     )
                     val candidates = searchCandidates(target, cleanLang).let { found ->
                         if (cleanLang == null) found else {

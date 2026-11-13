@@ -1,9 +1,52 @@
 package com.music.bitchord.data.spotify
 
+import com.music.bitchord.data.model.Song
+import com.music.bitchord.data.sources.TrackMatcher
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 
 class SpotifyImporterIdentityTest {
+
+    @Test
+    fun spotifyImportRejectsDifferentSingerEvenWhenTitleAndDurationMatch() {
+        val target = TrackMatcher.Target(
+            title = "Dumes",
+            artist = "Guyon Waton",
+            durationSec = 210,
+            requireSharedArtist = true,
+        )
+        val cover = Song(
+            videoId = "cover-upload",
+            title = "Dumes",
+            artist = "Different Singer",
+            thumbnailUrl = null,
+            durationText = "3:30",
+        )
+
+        assertNull(TrackMatcher.best(listOf(cover), target))
+    }
+
+    @Test
+    fun spotifyImportAcceptsTheRequestedSingerWithMatchingRecording() {
+        val target = TrackMatcher.Target(
+            title = "Dumes",
+            artist = "Guyon Waton",
+            durationSec = 210,
+            requireSharedArtist = true,
+        )
+        val original = Song(
+            videoId = "original-upload",
+            title = "Dumes",
+            artist = "Guyon Waton",
+            thumbnailUrl = null,
+            durationText = "3:30",
+        )
+
+        assertNotNull(TrackMatcher.best(listOf(original), target))
+    }
+
 
     @Test
     fun sameTitleAndArtistWithDifferentSpotifyIdsAreKept() {

@@ -118,9 +118,8 @@ export async function searchSongs(query: string): Promise<Track[]> {
   // Same mixed search response consumed by SearchPage, including promoted
   // cards and tracks nested under an artist's card.
   const results = mapSearch(search);
-  add([...results.songs, ...results.videos].map(asTrack).filter((track): track is Track => !!track));
+  add(results.songs.map(asTrack).filter((track): track is Track => !!track));
   add(mapPlaylistTracks(search.songs?.contents ?? []));
-  add(mapPlaylistTracks(search.videos?.contents ?? []));
 
   // Follow the Songs filter's own continuation; YouTube can put a regional
   // release below the first visible page. Keep this bounded per track.

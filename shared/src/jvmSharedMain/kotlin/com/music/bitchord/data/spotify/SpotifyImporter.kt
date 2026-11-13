@@ -196,6 +196,7 @@ object SpotifyImporter {
      * stays bounded so a long playlist cannot overwhelm the service.
      */
     private const val MAX_CANDIDATE_SEARCH_PAGES = 5
+    private const val MIN_PAGES_TO_COMPARE_AFTER_MATCH = 3
 
     private val artistPageLocks = ConcurrentHashMap<String, Mutex>()
     private val artistSongCache = object : LinkedHashMap<String, List<Song>>(16, 0.75f, true) {
@@ -286,11 +287,13 @@ object SpotifyImporter {
                     pagesRead++
 
                     // The normal Search screen shows the same authenticated
-                    // ALL catalogue. Once that exact title/artist/version
-                    // candidate is verified, further pages and alternate
-                    // query spellings cannot improve identity; stop here to
-                    // avoid flooding Innertube during playlist imports.
-                    if (filter == SearchFilter.ALL && hasAudioMatch()) {
+                    // ALL catalogue. Once a strict match appears, read up to
+                    // three pages of that query so a canonical album row can
+                    // outrank an earlier near-runtime upload, then stop before
+                    // spending requests on every other spelling.
+                    if (filter == SearchFilter.ALL && hasAudioMatch() &&
+                        pagesRead >= MIN_PAGES_TO_COMPARE_AFTER_MATCH
+                    ) {
                         DebugLog.d(
                             "SpotifyImport",
                             "Matched '${target.title}' by '${target.artist}' after ${successfulRequests} search requests",
@@ -310,7 +313,13 @@ object SpotifyImporter {
                         },
                     ) ?: break
                 }
-                if (filter == SearchFilter.ALL && hasAudioMatch()) break
+                if (filter == SearchFilter.ALL && hasAudioMatch()) {
+                    DebugLog.d(
+                        "SpotifyImport",
+                        "Stopped after verified match for '${target.title}' by '${target.artist}'",
+                    )
+                    break
+                }
                 if (filter == SearchFilter.VIDEOS &&
                     bestSpotifyImportMatch(found.values.toList(), target) != null
                 ) break

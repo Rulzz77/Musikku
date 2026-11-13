@@ -53,6 +53,22 @@ describe('Spotify import safety', () => {
     await expect(matchToYouTube(spotifyTrack())).resolves.toBeNull();
   });
 
+  it('searches the original Spotify title and lead artist before normalized terms', async () => {
+    const correct = youtubeTrack('tanpo-correct', 'Tanpo Tresnamu', 'Denny Caknan');
+    mocks.searchSongs.mockImplementation(async (query: string) =>
+      query === 'Tanpo Tresnamu (Official Audio) Denny Caknan' ? [correct] : [],
+    );
+
+    await expect(matchToYouTube(spotifyTrack({
+      id: 'spotify-tanpo',
+      title: 'Tanpo Tresnamu (Official Audio)',
+      artist: 'Denny Caknan',
+      leadArtist: 'Denny Caknan',
+    }))).resolves.toMatchObject({ videoId: 'tanpo-correct' });
+    expect(mocks.searchSongs).toHaveBeenCalledTimes(1);
+    expect(mocks.searchSongs).toHaveBeenCalledWith('Tanpo Tresnamu (Official Audio) Denny Caknan');
+  });
+
   it('accepts a verified title, primary artist and runtime match', async () => {
     const correct = youtubeTrack('correct-song', 'Dumes', 'Guyon Waton');
     mocks.searchSongs.mockResolvedValue([correct]);

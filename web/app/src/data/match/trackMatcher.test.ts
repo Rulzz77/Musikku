@@ -64,12 +64,27 @@ describe('TrackMatcher', () => {
       artist: 'Gasentra Pajampangan, Friska',
       durationSec: 287,
       requiredArtistName: 'Gasentra Pajampangan',
+      artistCredits: ['Gasentra Pajampangan', 'Friska'],
       requireSharedArtist: true,
       requireExactTitle: true,
     };
     expect(best([song('Budak Saha', 'Friska Gasentra', '4:47')], target)).not.toBeNull();
     expect(best([song('Budak Saha', 'Friska Gasentra', '4:35')], target)).toBeNull();
     expect(best([song('Budak Saha', 'Friska Gasentra')], target)).toBeNull();
+  });
+
+  it('keeps commas inside one structured Spotify artist name', () => {
+    const target = {
+      title: 'September',
+      artist: 'Earth, Wind & Fire, Guest Artist',
+      artistCredits: ['Earth, Wind & Fire', 'Guest Artist'],
+      requiredArtistName: 'Earth, Wind & Fire',
+      requireSharedArtist: true,
+      requireExactTitle: true,
+      durationSec: 215,
+    };
+    expect(best([song('September', 'Earth, Wind & Fire', '3:35')], target)).not.toBeNull();
+    expect(best([song('September', 'Wind Fire Earth', '3:35')], target)).toBeNull();
   });
 
   it('accepts a composer credit against a singer credit on an exact runtime, and only then', () => {

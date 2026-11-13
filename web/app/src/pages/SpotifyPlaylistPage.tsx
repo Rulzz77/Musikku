@@ -75,6 +75,12 @@ export default function SpotifyPlaylistPage() {
         </div>
       )}
       <TrackList tracks={rows.rows} variant="playlist" source={context.source} />
+      {rows.status === 'ready' && missing.length > 0 && (
+        <div role="status" className={detailFooter}>
+          <p>{missing.length} Spotify tracks have no safe YouTube Music match yet.</p>
+          <button type="button" onClick={rows.retryMissing}>Retry unmatched tracks</button>
+        </div>
+      )}
       <footer className={detailFooter}>
         <p>From Spotify. Songs are matched to YouTube Music by title, artist and length.</p>
       </footer>

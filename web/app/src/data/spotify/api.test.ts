@@ -98,6 +98,22 @@ describe('Spotify import safety', () => {
     expect(mocks.searchSongs).toHaveBeenCalledWith('Budak Saha Friska');
   });
 
+  it('matches an exact structured secondary Spotify credit at the same runtime', async () => {
+    const secondary = { ...youtubeTrack('secondary-credit-only', 'Budak Saha', 'Friska'), durationSec: 287 };
+    mocks.searchSongs.mockImplementation(async (query: string) =>
+      query === 'Budak Saha Friska' ? [secondary] : [],
+    );
+    await expect(matchToYouTube(spotifyTrack({
+      id: 'spotify-secondary-credit',
+      title: 'Budak Saha',
+      artist: 'Gasentra Pajampangan, Friska',
+      leadArtist: 'Gasentra Pajampangan',
+      artistCredits: ['Gasentra Pajampangan', 'Friska'],
+      durationMs: 287_000,
+    }))).resolves.toMatchObject({ videoId: 'secondary-credit-only' });
+    expect(mocks.searchSongs).toHaveBeenCalledWith('Budak Saha Friska');
+  });
+
   it('accepts a verified title, primary artist and runtime match', async () => {
     const correct = youtubeTrack('correct-song', 'Dumes', 'Guyon Waton');
     mocks.searchSongs.mockResolvedValue([correct]);

@@ -84,7 +84,7 @@ class SpotifyImporterIdentityTest {
             title = "Back In Black",
             artist = "AC/DC",
             thumbnailUrl = null,
-            durationText = "4:15",
+            durationText = "4:20",
         )
         val xTarget = TrackMatcher.Target(
             title = "Renegades",

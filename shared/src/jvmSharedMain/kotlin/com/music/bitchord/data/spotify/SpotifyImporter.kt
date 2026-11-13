@@ -172,6 +172,8 @@ object SpotifyImporter {
             durationSec = track.durationMs.takeIf { it > 0 }?.div(1000),
             album = track.album,
             requireSharedArtist = true,
+            requirePrimaryArtist = true,
+            requireExactTitle = true,
         )
         return TrackMatcher.best(searchCandidates(target), target)
     }
@@ -226,14 +228,19 @@ object SpotifyImporter {
                         if (candidate != null && id.isNotEmpty()) found.putIfAbsent(id, candidate)
                     }
                     pagesRead++
-                    if (TrackMatcher.best(found.values.toList(), target) != null) break
+                    // Do not stop at the first acceptable row. A popular
+                    // alternate upload can appear before the canonical release
+                    // or before an album-qualified result on later pages.
                     val continuation = page.continuation ?: break
                     page = YtMusicRepository.searchContinuation(continuation, filter).getOrNull() ?: break
                 }
             }
-            // Don't spend extra requests on music-video results when the Songs
-            // catalogue has already yielded a verified same-track candidate.
-            if (TrackMatcher.best(found.values.toList(), target) != null) break
+            // Search all Songs queries before evaluating the best candidate.
+            // Only skip the Videos catalogue after the complete Songs pass
+            // has been collected and ranked.
+            if (filter == SearchFilter.SONGS &&
+                TrackMatcher.best(found.values.toList(), target) != null
+            ) break
         }
         return found.values.toList()
     }

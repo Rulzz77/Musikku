@@ -146,7 +146,7 @@ object SpotifyImporter {
                         // whole subtitle rather than truncating a valid name at
                         // its own comma (for example, "Earth, Wind & Fire").
                         leadArtist = artistNames.firstOrNull()
-                            ?: artists.trim().takeIf { it.isNotBlank() },
+                            ?: artists.substringBefore(",").trim().takeIf { it.isNotBlank() },
                     ))
                 }
             }

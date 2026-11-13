@@ -205,7 +205,7 @@ class SpotifyImporterIdentityTest {
     }
 
     @Test
-    fun spotifyImportPrefersAudioWhenA matchingVideoIsAlsoPresent() {
+    fun spotifyImportPrefersAudioWhenAMatchingVideoIsAlsoPresent() {
         val target = TrackMatcher.Target(
             title = "Dumes",
             artist = "Guyon Waton",

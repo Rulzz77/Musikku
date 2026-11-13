@@ -272,7 +272,7 @@ object TrackMatcher {
                 // commas; split only those boundaries here so names containing
                 // "x", slash, or "and" remain intact.
                 candidate.artist.split(",").forEach { add(artistIdentityKey(it)) }
-                artistNames(candidate.artist).forEach { add(it.joinToString(" ")) }
+                artistNames(candidate.artist).forEach { add(it.joinToString("")) }
             }
             expectedNames.any { it.isNotBlank() && it in candidateNames }
                 .also { matched -> if (!matched) return null }

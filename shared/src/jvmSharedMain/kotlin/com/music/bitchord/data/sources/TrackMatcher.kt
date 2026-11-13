@@ -770,7 +770,11 @@ object TrackMatcher {
     }
 
     private fun artistSpacedKey(value: String): String =
-        normalize(value).replace(NON_ALNUM, " ").replace(Regex("\\s+"), " ").trim()
+        Normalizer.normalize(normalize(value), Normalizer.Form.NFKD)
+            .replace(Regex("\\p{M}+"), "")
+            .replace(NON_ALNUM, " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
 
     /** Normalize one complete artist name without splitting collaboration words. */
     private fun artistIdentityKey(value: String): String =

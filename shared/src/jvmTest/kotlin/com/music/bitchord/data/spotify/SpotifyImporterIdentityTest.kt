@@ -1,7 +1,14 @@
 package com.music.bitchord.data.spotify
 
+import com.music.bitchord.data.model.ArtistRef
+import com.music.bitchord.data.model.BrowseItem
+import com.music.bitchord.data.model.BrowseType
+import com.music.bitchord.data.model.SearchResult
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.sources.TrackMatcher
+import com.music.bitchord.data.innertube.InnertubeParser
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -9,6 +16,53 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class SpotifyImporterIdentityTest {
+
+    @Test
+    fun allSearchParserPreservesPromotedTrackForSpotifyImport() {
+        val response = Json.parseToJsonElement(
+            """
+            {
+              "contents": [{
+                "musicCardShelfRenderer": {
+                  "onTap": { "watchEndpoint": { "videoId": "promoted-track" } },
+                  "title": { "runs": [{ "text": "Tanpo Tresnamu" }] },
+                  "subtitle": { "runs": [
+                    { "text": "Song" },
+                    { "text": " • " },
+                    { "text": "Denny Caknan" },
+                    { "text": " • " },
+                    { "text": "4:12" }
+                  ] },
+                  "thumbnail": { "musicThumbnailRenderer": {
+                    "thumbnail": { "thumbnails": [{
+                      "url": "https://example.invalid/cover.jpg",
+                      "width": 544,
+                      "height": 544
+                    }] }
+                  } }
+                }
+              }]
+            }
+            """.trimIndent(),
+        ).jsonObject
+
+        val result = InnertubeParser.parseSearchPage(response).rows.single()
+        assertTrue(result is SearchResult.TopTrack)
+        assertEquals("promoted-track", spotifyImportCandidate(result)?.videoId)
+    }
+
+    @Test
+    fun spotifyImportCanUsePromotedTopTrackFromAllSearch() {
+        val promoted = Song(
+            videoId = "promoted-track",
+            title = "Tanpo Tresnamu",
+            artist = "Denny Caknan",
+            thumbnailUrl = null,
+            durationText = "4:12",
+        )
+
+        assertEquals(promoted, spotifyImportCandidate(SearchResult.TopTrack(promoted)))
+    }
 
     @Test
     fun spotifyImportRejectsDifferentSingerEvenWhenTitleAndDurationMatch() {
@@ -114,6 +168,133 @@ class SpotifyImporterIdentityTest {
         assertNotNull(TrackMatcher.best(listOf(xAmbassadors), xTarget))
         assertNull(TrackMatcher.best(listOf(unrelatedBandWithSimilarName), xTarget))
         assertTrue(TrackMatcher.queries(xTarget).first().contains("x ambassadors"))
+    }
+
+    @Test
+    fun spotifyImportMatchesLongArtistNamesWhenYouTubeDropsSpaces() {
+        val target = TrackMatcher.Target(
+            title = "Dumes",
+            artist = "Guyon Waton",
+            durationSec = 210,
+            requiredArtistName = "Guyon Waton",
+            requireExactTitle = true,
+        )
+        val youtubeSpelling = Song(
+            videoId = "compact-artist-upload",
+            title = "Dumes",
+            artist = "GUYONWATON",
+            thumbnailUrl = null,
+            durationText = "3:30",
+        )
+        assertNotNull(TrackMatcher.best(listOf(youtubeSpelling), target))
+        val collaborationCredit = youtubeSpelling.copy(
+            videoId = "collaboration-upload",
+            artist = "GUYONWATON x Denny Caknan",
+        )
+        assertNotNull(TrackMatcher.best(listOf(collaborationCredit), target))
+
+        val ndxTarget = TrackMatcher.Target(
+            title = "Kimcil Kepolen",
+            artist = "NDX A.K.A.",
+            durationSec = 230,
+            requiredArtistName = "NDX A.K.A.",
+            requireExactTitle = true,
+        )
+        val ndxSpelling = youtubeSpelling.copy(
+            videoId = "ndx-upload",
+            title = "Kimcil Kepolen",
+            artist = "NDXAKA",
+            durationText = "3:50",
+        )
+        assertNotNull(TrackMatcher.best(listOf(ndxSpelling), ndxTarget))
+
+        val accentTarget = TrackMatcher.Target(
+            title = "Halo",
+            artist = "Beyoncé",
+            durationSec = 260,
+            requiredArtistName = "Beyoncé",
+            requireExactTitle = true,
+        )
+        val unaccentedCredit = youtubeSpelling.copy(
+            videoId = "beyonce-upload",
+            title = "Halo",
+            artist = "Beyonce",
+            durationText = "4:20",
+        )
+        assertNotNull(TrackMatcher.best(listOf(unaccentedCredit), accentTarget))
+    }
+
+    @Test
+    fun artistPageFallbackOnlyUsesTheExactRequestedPerformer() {
+        val correctArtist = SearchResult.Browse(
+            BrowseItem(
+                browseId = "artist-guyon-waton",
+                title = "GUYONWATON",
+                subtitle = "Artist",
+                thumbnailUrl = null,
+                type = BrowseType.ARTIST,
+            ),
+        )
+        val partialName = SearchResult.Browse(
+            BrowseItem(
+                browseId = "artist-waton",
+                title = "Waton",
+                subtitle = "Artist",
+                thumbnailUrl = null,
+                type = BrowseType.ARTIST,
+            ),
+        )
+        val album = SearchResult.Browse(
+            BrowseItem(
+                browseId = "album-guyon",
+                title = "Guyon Waton",
+                subtitle = "Album",
+                thumbnailUrl = null,
+                type = BrowseType.ALBUM,
+            ),
+        )
+
+        assertEquals(
+            "artist-guyon-waton",
+            spotifyArtistBrowseId(correctArtist, "Guyon Waton"),
+        )
+        assertNull(spotifyArtistBrowseId(partialName, "Guyon Waton"))
+        assertNull(spotifyArtistBrowseId(album, "Guyon Waton"))
+
+        val matchingTrack = Song(
+            videoId = "artist-track",
+            title = "Dumes",
+            artist = "GUYONWATON",
+            thumbnailUrl = null,
+            artistId = "artist-from-track-credit",
+            artists = listOf(ArtistRef(name = "GUYONWATON", browseId = "artist-from-track-credit")),
+        )
+        assertEquals(
+            "artist-from-track-credit",
+            spotifyArtistBrowseId(matchingTrack, "Guyon Waton"),
+        )
+    }
+
+    @Test
+    fun spotifyImportPrefersAudioWhenAMatchingVideoIsAlsoPresent() {
+        val target = TrackMatcher.Target(
+            title = "Dumes",
+            artist = "Guyon Waton",
+            durationSec = 210,
+            requiredArtistName = "Guyon Waton",
+            requireExactTitle = true,
+        )
+        val video = Song(
+            videoId = "video-copy",
+            title = "Dumes",
+            artist = "Guyon Waton",
+            thumbnailUrl = null,
+            durationText = "3:30",
+            isVideo = true,
+        )
+        val audio = video.copy(videoId = "audio-copy", isVideo = false)
+
+        assertEquals(audio, bestSpotifyImportMatch(listOf(video, audio), target))
     }
 
     @Test

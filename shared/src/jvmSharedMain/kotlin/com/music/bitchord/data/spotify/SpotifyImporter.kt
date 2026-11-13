@@ -2,6 +2,7 @@ package com.music.bitchord.data.spotify
 
 import com.music.bitchord.data.Http
 import com.music.bitchord.data.YtMusicRepository
+import com.music.bitchord.data.model.BrowseType
 import com.music.bitchord.data.model.SearchFilter
 import com.music.bitchord.data.model.SearchResult
 import com.music.bitchord.data.model.Song
@@ -10,9 +11,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -22,6 +26,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
 /** Single track metadata extracted from a Spotify playlist. */
@@ -180,30 +185,57 @@ object SpotifyImporter {
                 ?: track.artist.substringBefore(",").trim().takeIf { it.isNotBlank() },
             requireExactTitle = true,
         )
-        return TrackMatcher.best(searchCandidates(target), target)
+        return bestSpotifyImportMatch(searchCandidates(target), target)
     }
 
     /**
-     * Spotify and YouTube Music often format the same credit differently.
-     * Search the normalized title + primary artist first, then the title alone,
-     * and rank the combined catalogue results instead of trusting one query's
-     * first row. This also lets bracketed film/version packaging be removed by
-     * TrackMatcher before the request reaches YouTube Music.
+     * Search budget per query. The unfiltered music catalogue can contain
+     * promoted cards and regional releases below the first shelf; pagination
+     * stays bounded so a long playlist cannot overwhelm the service.
      */
     private const val MAX_CANDIDATE_SEARCH_PAGES = 5
 
+    private val artistPageLocks = ConcurrentHashMap<String, Mutex>()
+    private val artistSongCache = object : LinkedHashMap<String, List<Song>>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<Song>>?): Boolean =
+            size > 32
+    }
+
     /**
-     * Search the Songs catalogue first, then music-video uploads if no safe
-     * match exists. Each query can walk a few continuation pages, because
-     * regional tracks are often below the first popular results. Ranking is
-     * still strict: a broader search never means accepting an arbitrary row.
+     * Reuse the artist catalogue between tracks in the same Spotify playlist.
+     * A per-artist mutex prevents six parallel track lookups from fetching the
+     * same large discography at once.
+     */
+    private suspend fun artistSongs(browseId: String): Result<List<Song>> {
+        val lock = artistPageLocks.computeIfAbsent(browseId) { Mutex() }
+        return lock.withLock {
+            synchronized(artistSongCache) {
+                artistSongCache[browseId]?.let { return@withLock Result.success(it) }
+            }
+            YtMusicRepository.artistPage(browseId).map { it.songs }.onSuccess { songs ->
+                if (songs.isNotEmpty()) {
+                    synchronized(artistSongCache) { artistSongCache[browseId] = songs }
+                }
+            }
+        }
+    }
+
+    /**
+     * Search the same authenticated YouTube Music catalogue as the manual
+     * Search screen. Gather promoted tracks and normal track rows, but keep
+     * artist cards too: when a track is missing from global search, the
+     * artist's own Top Songs catalogue is a second, more specific source.
+     *
+     * Audio matches are always preferred. A music video is a fallback only
+     * after the audio catalogue and the matching artist page have been tried.
      */
     private suspend fun searchCandidates(target: TrackMatcher.Target, suffix: String? = null): List<Song> {
         val found = LinkedHashMap<String, Song>()
+        val artistBrowseIds = LinkedHashSet<String>()
+        val failures = mutableListOf<String>()
+        var successfulRequests = 0
+
         val baseQueries = TrackMatcher.queries(target)
-        // Try an album-qualified variant before falling back to a broad title
-        // query. This helps regional tracks whose artist/title search is sparse
-        // without ever relaxing the final artist and recording checks.
         val albumQuery = target.album?.trim()?.takeIf { it.isNotBlank() }
             ?.let { album -> baseQueries.firstOrNull()?.let { "$it $album" } }
         val queries = (baseQueries + listOfNotNull(albumQuery))
@@ -212,40 +244,107 @@ object SpotifyImporter {
                 if (albumQuery == null || all.size < 3) all
                 else all.toMutableList().apply {
                     remove(albumQuery)
-                    add((baseQueries.firstOrNull()?.let { 1 } ?: 0).coerceAtMost(size), albumQuery)
+                    add(1.coerceAtMost(size), albumQuery)
                 }
             }
-        for (filter in listOf(SearchFilter.SONGS, SearchFilter.VIDEOS)) {
+
+        suspend fun searchFilter(filter: SearchFilter) {
             for (baseQuery in queries) {
                 val query = listOf(baseQuery, suffix?.takeIf { it.isNotBlank() })
                     .filterNotNull()
                     .joinToString(" ")
-                var page = YtMusicRepository.searchPage(query, filter).getOrNull() ?: continue
+                // Manual Search uses the authenticated endpoint. Starting the
+                // import anonymously caused the same query to return a
+                // different catalogue, and its continuation then switched
+                // back to the authenticated endpoint halfway through.
+                val firstPage = YtMusicRepository.searchPage(
+                    query = query,
+                    filter = filter,
+                    anonymous = false,
+                ).fold(
+                    onSuccess = { successfulRequests++; it },
+                    onFailure = { failure ->
+                        failures += "search '$query' (${filter.name}): ${failure.message}"
+                        null
+                    },
+                ) ?: continue
+
+                var page = firstPage
                 var pagesRead = 0
                 while (pagesRead < MAX_CANDIDATE_SEARCH_PAGES) {
                     page.rows.forEach { row ->
-                        val candidate = when (row) {
-                            is SearchResult.Track -> row.song
-                            is SearchResult.TopTrack -> row.song
-                            is SearchResult.Browse -> null
+                        when (row) {
+                            is SearchResult.Browse -> {
+                                spotifyArtistBrowseId(row, target.requiredArtistName)
+                                    ?.let(artistBrowseIds::add)
+                            }
+                            else -> {
+                                val candidate = spotifyImportCandidate(row)
+                                val id = candidate?.videoId?.trim().orEmpty()
+                                if (candidate != null && id.isNotEmpty()) {
+                                    found.putIfAbsent(id, candidate)
+                                    spotifyArtistBrowseId(candidate, target.requiredArtistName)
+                                        ?.let(artistBrowseIds::add)
+                                }
+                            }
                         }
-                        val id = candidate?.videoId?.trim().orEmpty()
-                        if (candidate != null && id.isNotEmpty()) found.putIfAbsent(id, candidate)
                     }
                     pagesRead++
-                    // Do not stop at the first acceptable row. A popular
-                    // alternate upload can appear before the canonical release
-                    // or before an album-qualified result on later pages.
                     val continuation = page.continuation ?: break
-                    page = YtMusicRepository.searchContinuation(continuation, filter).getOrNull() ?: break
+                    page = YtMusicRepository.searchContinuation(continuation, filter).fold(
+                        onSuccess = { successfulRequests++; it },
+                        onFailure = { failure ->
+                            failures += "continuation '$query' (${filter.name}): ${failure.message}"
+                            null
+                        },
+                    ) ?: break
                 }
             }
-            // Search all Songs queries before evaluating the best candidate.
-            // Only skip the Videos catalogue after the complete Songs pass
-            // has been collected and ranked.
-            if (filter == SearchFilter.SONGS &&
-                TrackMatcher.best(found.values.toList(), target) != null
-            ) break
+        }
+
+        // ALL includes both Track and the promoted TopTrack that the ordinary
+        // Search screen displays. Keep artist cards for the targeted fallback.
+        searchFilter(SearchFilter.ALL)
+
+        fun hasAudioMatch(): Boolean =
+            bestSpotifyImportMatch(found.values.filterNot { it.isVideo }, target) != null
+
+        if (!hasAudioMatch()) {
+            for (browseId in artistBrowseIds) {
+                artistSongs(browseId).fold(
+                    onSuccess = { songs ->
+                        successfulRequests++
+                        songs.forEach { song ->
+                            val id = song.videoId.trim()
+                            if (id.isNotEmpty()) found.putIfAbsent(id, song)
+                        }
+                    },
+                    onFailure = { failure ->
+                        failures += "artist page '$browseId': ${failure.message}"
+                    },
+                )
+                if (hasAudioMatch()) break
+            }
+        }
+
+        // Only fall back to the dedicated Videos search when neither the
+        // general catalogue nor the artist's own catalogue found a recording.
+        if (bestSpotifyImportMatch(found.values.toList(), target) == null) {
+            searchFilter(SearchFilter.VIDEOS)
+        }
+
+        val match = bestSpotifyImportMatch(found.values.toList(), target)
+        // A transport/API failure is not proof that a song is absent. Propagate
+        // an incomplete lookup so the UI can leave the row retryable instead
+        // of permanently labelling it as missing.
+        if (match == null && failures.isNotEmpty()) {
+            throw IllegalStateException(
+                "Spotify lookup incomplete ($successfulRequests successful requests): " +
+                    failures.take(3).joinToString("; "),
+            )
+        }
+        if (match == null && successfulRequests == 0 && queries.isNotEmpty()) {
+            throw IllegalStateException("Spotify lookup returned no usable YouTube Music response")
         }
         return found.values.toList()
     }
@@ -324,7 +423,7 @@ object SpotifyImporter {
         val uniqueTracks = distinctSpotifyImportTracks(tracks)
         val total = uniqueTracks.size
         val completedCount = AtomicInteger(0)
-        val semaphore = Semaphore(4) // Bounded concurrency for search queries
+        val semaphore = Semaphore(3) // Keep YouTube search bursts below the rate-limit threshold.
 
         val cleanLang = language?.trim()?.takeIf {
             !it.equals("No Preference", ignoreCase = true) &&
@@ -350,23 +449,32 @@ object SpotifyImporter {
                             ?: track.artist.substringBefore(",").trim().takeIf { it.isNotBlank() },
                         requireExactTitle = true,
                     )
-                    val candidates = searchCandidates(target, cleanLang).let { found ->
-                        if (cleanLang == null) found else {
-                            val conflictingLangs = knownLanguages.filter { !it.equals(cleanLang, ignoreCase = true) }
-                            found.filter { candidate ->
-                                val meta = "${candidate.title} ${candidate.artist} ${candidate.albumName.orEmpty()}".lowercase()
-                                !conflictingLangs.any {
-                                    meta.contains("(${it.lowercase()})") ||
-                                        meta.contains("${it.lowercase()} version") ||
-                                        meta.contains("${it.lowercase()} song")
+                    val candidates = try {
+                        searchCandidates(target, cleanLang).let { found ->
+                            if (cleanLang == null) found else {
+                                val conflictingLangs = knownLanguages.filter { !it.equals(cleanLang, ignoreCase = true) }
+                                found.filter { candidate ->
+                                    val meta = "${candidate.title} ${candidate.artist} ${candidate.albumName.orEmpty()}".lowercase()
+                                    !conflictingLangs.any {
+                                        meta.contains("(${it.lowercase()})") ||
+                                            meta.contains("${it.lowercase()} version") ||
+                                            meta.contains("${it.lowercase()} song")
+                                    }
                                 }
                             }
                         }
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        // One unavailable search must not abort the entire
+                        // playlist import. This Spotify row stays in the
+                        // unmatched result set for a later retry/review.
+                        emptyList()
                     }
                     // Never import the search engine's first row as a fallback:
                     // a popular cover/remix with a similar title is worse than
                     // leaving this Spotify entry unmatched for the user to review.
-                    val matchedSong = TrackMatcher.best(candidates, target)
+                    val matchedSong = bestSpotifyImportMatch(candidates, target)
 
                     val done = completedCount.incrementAndGet()
                     onProgress(done, total)
@@ -391,6 +499,36 @@ object SpotifyImporter {
     }
 }
 
+
+/** Converts playable rows from both mixed and filtered YouTube Music search pages. */
+internal fun spotifyImportCandidate(row: SearchResult): Song? = when (row) {
+    is SearchResult.Track -> row.song
+    is SearchResult.TopTrack -> row.song
+    is SearchResult.Browse -> null
+}
+
+/** Artist cards are used only when the complete requested performer matches. */
+internal fun spotifyArtistBrowseId(row: SearchResult, expectedArtist: String?): String? {
+    val item = (row as? SearchResult.Browse)?.item ?: return null
+    if (item.type != BrowseType.ARTIST) return null
+    val expected = expectedArtist?.takeIf { it.isNotBlank() } ?: return null
+    return item.browseId.takeIf { TrackMatcher.sameArtistIdentity(expected, item.title) }
+}
+
+/** A matching song row can expose the artist page id even without an artist card. */
+internal fun spotifyArtistBrowseId(song: Song, expectedArtist: String?): String? {
+    val browseId = song.artistId?.takeIf { it.isNotBlank() } ?: return null
+    val expected = expectedArtist?.takeIf { it.isNotBlank() } ?: return null
+    val lead = song.artists.firstOrNull()?.name?.takeIf { it.isNotBlank() } ?: song.artist
+    return browseId.takeIf { TrackMatcher.sameArtistIdentity(expected, lead) }
+}
+
+/** Prefer an audio catalogue recording over an equally valid music-video upload. */
+internal fun bestSpotifyImportMatch(candidates: List<Song>, target: TrackMatcher.Target): Song? {
+    val audio = candidates.filterNot { it.isVideo }
+    return TrackMatcher.best(audio, target)
+        ?: TrackMatcher.best(candidates.filter { it.isVideo }, target)
+}
 
 internal fun distinctSpotifyImportTracks(tracks: List<SpotifyImportTrack>): List<SpotifyImportTrack> =
     tracks.distinctBy { track ->

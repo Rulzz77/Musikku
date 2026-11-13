@@ -272,7 +272,7 @@ object TrackMatcher {
                 // commas; split only those boundaries here so names containing
                 // "x", slash, or "and" remain intact.
                 candidate.artist.split(",").forEach { add(artistIdentityKey(it)) }
-                artistNames(candidate.artist).forEach { add(it.joinToString(" ")) }
+                artistNames(candidate.artist).forEach { add(it.joinToString("")) }
             }
             expectedNames.any { it.isNotBlank() && it in candidateNames }
                 .also { matched -> if (!matched) return null }
@@ -747,9 +747,40 @@ object TrackMatcher {
         .filter { it.isNotEmpty() }
         .toSet()
 
-    /** Normalize one complete artist name without splitting collaboration words or punctuation. */
+    /**
+     * Whether two catalogue credits are the same complete artist name.
+     *
+     * Exact punctuation/spacing normalization is preferred. A compact alias is
+     * also accepted for longer names because YouTube frequently drops spaces
+     * from channel and artist credits ("GUYONWATON" vs "Guyon Waton").
+     * Short names do not get compact matching: it is too easy for initials or
+     * unrelated short names to collide.
+     */
+    fun sameArtistIdentity(first: String, second: String): Boolean {
+        val firstSpaced = artistSpacedKey(first)
+        val secondSpaced = artistSpacedKey(second)
+        if (firstSpaced.isBlank() || secondSpaced.isBlank()) return false
+        if (firstSpaced == secondSpaced) return true
+
+        val firstCompact = artistIdentityKey(first)
+        val secondCompact = artistIdentityKey(second)
+        return firstCompact.length >= COMPACT_ARTIST_MIN_LENGTH &&
+            secondCompact.length >= COMPACT_ARTIST_MIN_LENGTH &&
+            firstCompact == secondCompact
+    }
+
+    private fun artistSpacedKey(value: String): String =
+        Normalizer.normalize(normalize(value), Normalizer.Form.NFKD)
+            .replace(Regex("\\p{M}+"), "")
+            .replace(NON_ALNUM, " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+
+    /** Normalize one complete artist name without splitting collaboration words. */
     private fun artistIdentityKey(value: String): String =
-        normalize(value).replace(NON_ALNUM, " ").replace(Regex("\\s+"), " ").trim()
+        artistSpacedKey(value).filter { it.isLetterOrDigit() }
+
+    private const val COMPACT_ARTIST_MIN_LENGTH = 6
 
     private fun sameArtist(a: List<String>, b: List<String>) = runOf(a, b) || runOf(b, a)
 

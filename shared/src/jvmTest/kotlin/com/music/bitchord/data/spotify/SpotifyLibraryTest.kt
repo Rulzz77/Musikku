@@ -73,6 +73,53 @@ class SpotifyLibraryTest {
         val track = parseTrackPage(root).first.single()
         assertEquals("Earth, Wind & Fire, Guest Artist", track.artist)
         assertEquals("Earth, Wind & Fire", track.leadArtist)
+        assertEquals(listOf("Earth, Wind & Fire", "Guest Artist"), track.artistCredits)
+    }
+
+    @Test
+    fun likedSongsPreserveStructuredArtistNamesAndPrimaryCredit() {
+        val root = json.parseToJsonElement(
+            """
+            {"data":{"me":{"library":{"tracks":{"totalCount":1,"items":[
+              {"track":{"_uri":"spotify:track:liked1","data":{
+                "name":"September",
+                "artists":{"items":[
+                  {"profile":{"name":"Earth, Wind & Fire"}},
+                  {"profile":{"name":"Guest Artist"}}
+                ]},
+                "albumOfTrack":{"name":"Greatest Hits"},
+                "trackDuration":{"totalMilliseconds":215000}
+              }}}
+            ]}}}}}
+            """.trimIndent(),
+        ).jsonObject
+
+        val track = parseLikedPage(root).first.single()
+        assertEquals("September", track.title)
+        assertEquals("Earth, Wind & Fire", track.leadArtist)
+        assertEquals(listOf("Earth, Wind & Fire", "Guest Artist"), track.artistCredits)
+    }
+
+    @Test
+    fun tracksAcceptArtistArraysAsWellAsItemsWrappers() {
+        val root = json.parseToJsonElement(
+            """
+            {"data":{"playlistV2":{"content":{"totalCount":1,"items":[
+              {"itemV2":{"data":{
+                "name":"Song","uri":"spotify:track:array-artists",
+                "artists":[
+                  {"profile":{"name":"The Band"}},
+                  {"name":"Guest"}
+                ],
+                "duration":{"totalMilliseconds":180000}
+              }}}
+            ]}}}}
+            """.trimIndent(),
+        ).jsonObject
+
+        val track = parseTrackPage(root).first.single()
+        assertEquals(listOf("The Band", "Guest"), track.artistCredits)
+        assertEquals("The Band", track.leadArtist)
     }
 
     @Test

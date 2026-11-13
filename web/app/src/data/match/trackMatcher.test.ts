@@ -58,6 +58,89 @@ describe('TrackMatcher', () => {
     expect(matches(song('Numb / Encore', 'Jay-Z & Linkin Park'), 'Numb / Encore', 'Linkin Park')).toBe(true);
   });
 
+  it('accepts a secondary Spotify singer credit only with an exact runtime', () => {
+    const target = {
+      title: 'Budak Saha',
+      artist: 'Gasentra Pajampangan, Friska',
+      durationSec: 287,
+      requiredArtistName: 'Gasentra Pajampangan',
+      artistCredits: ['Gasentra Pajampangan', 'Friska'],
+      requireSharedArtist: true,
+      requireExactTitle: true,
+    };
+    expect(best([song('Budak Saha', 'Friska Gasentra', '4:47')], target)).not.toBeNull();
+    expect(best([song('Budak Saha', 'Friska', '4:47')], target)).not.toBeNull();
+    expect(best([song('Budak Saha', 'Friska', '4:35')], target)).toBeNull();
+    expect(best([song('Budak Saha', 'Denny Caknan', '4:47')], target)).toBeNull();
+    expect(best([song('Budak Saha', 'Friska Gasentra', '4:35')], target)).toBeNull();
+    expect(best([song('Budak Saha', 'Friska Gasentra')], target)).toBeNull();
+  });
+
+  it('preserves real song titles containing the word with', () => {
+    expect(best([song('With or Without You', 'U2', '3:30')], {
+      title: 'With or Without You',
+      artist: 'U2',
+      durationSec: 210,
+      requiredArtistName: 'U2',
+      requireSharedArtist: true,
+      requireExactTitle: true,
+    })).not.toBeNull();
+    expect(best([song('Dancing With Myself', 'Billy Idol', '3:30')], {
+      title: 'Dancing With Myself',
+      artist: 'Billy Idol',
+      durationSec: 210,
+      requiredArtistName: 'Billy Idol',
+      requireSharedArtist: true,
+      requireExactTitle: true,
+    })).not.toBeNull();
+  });
+
+  it('strips with only when the suffix is a credited artist', () => {
+    const target = {
+      title: 'Song',
+      artist: 'Lead, Guest Artist',
+      artistCredits: ['Lead', 'Guest Artist'],
+      durationSec: 200,
+      requiredArtistName: 'Lead',
+      requireSharedArtist: true,
+      requireExactTitle: true,
+    };
+    expect(best([song('Song with Guest Artist', 'Lead', '3:20')], target)).not.toBeNull();
+    expect(best([song('Song with Guest Artist', 'Lead', '3:20')], {
+      ...target,
+      artist: 'Lead',
+      artistCredits: ['Lead'],
+    })).toBeNull();
+  });
+
+  it('keeps a song title after a featured-artist prefix in YouTube metadata', () => {
+    const target = {
+      title: 'Bubrah',
+      artist: 'Northsle, Agiff',
+      durationSec: 200,
+      requiredArtistName: 'Northsle',
+      requireSharedArtist: true,
+      requireExactTitle: true,
+    };
+    // The byline may carry only the lead even when the title includes the guest.
+    expect(best([song('Northsle feat. Agiff - Bubrah', 'Northsle', '3:20')], target)).not.toBeNull();
+    expect(best([song('Northsle feat. Agiff - Bubrah', 'Unrelated Singer', '3:20')], target)).toBeNull();
+  });
+
+  it('keeps commas inside one structured Spotify artist name', () => {
+    const target = {
+      title: 'September',
+      artist: 'Earth, Wind & Fire, Guest Artist',
+      artistCredits: ['Earth, Wind & Fire', 'Guest Artist'],
+      requiredArtistName: 'Earth, Wind & Fire',
+      requireSharedArtist: true,
+      requireExactTitle: true,
+      durationSec: 215,
+    };
+    expect(best([song('September', 'Earth, Wind & Fire', '3:35')], target)).not.toBeNull();
+    expect(best([song('September', 'Wind Fire Earth', '3:35')], target)).toBeNull();
+  });
+
   it('accepts a composer credit against a singer credit on an exact runtime, and only then', () => {
     expect(matches(song('Jhak Maar Ke', 'Neeraj Shridhar', '3:53'), 'Jhak Maar Ke', 'Pritam', 233)).toBe(true);
     expect(matches(song('Jhak Maar Ke', 'Leo Lz Mix', '4:01'), 'Jhak Maar Ke', 'Pritam', 233)).toBe(false);

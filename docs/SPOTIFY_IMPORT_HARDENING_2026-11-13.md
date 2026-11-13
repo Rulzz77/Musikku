@@ -11,11 +11,15 @@ This note records the safety rules shared by the Android and Web Spotify import 
 
 ## Matching Spotify rows to YouTube Music
 
-- Use the cleaned title, exact primary Spotify artist credit, runtime, album, and recording/version markers.
+- Use the cleaned title, Spotify's structured artist credits, runtime, album, and recording/version markers. The primary artist remains preferred. When it differs, an exact full-name match to another structured Spotify performer is accepted only with an exact title/version match and runtime within three seconds. A flattened alias combining meaningful tokens from at least two distinct Spotify credits uses the same guard. Do not split display strings to invent artist identities.
 - Keep DJ styles and language versions distinct, but do not interpret generic genre/packaging words such as “House Music” as an alternate recording unless the label identifies a DJ/edit take.
 - Prefer audio catalogue results. Never substitute the first search hit when no candidate passes identity checks.
 - Keep temporary search failures retryable; only a completed search with no safe match is labelled missing.
-- Preserve structured artist names so names containing commas (for example, “Earth, Wind & Fire”) are not split into separate people.
+- Preserve structured artist names end-to-end across public playlist links, Spotify Library, Liked Songs, and the Web extension. Names containing commas (for example, “Earth, Wind & Fire”) remain one artist.
+- Search the raw title with the full credit and each individual credited artist (bounded to the first three query variants); use every credited performer and every matching structured YouTube artist browse id for artist-page fallback discovery on Android and Web.
+- Web import also opens up to three YouTube Music artist pages when global Search returns no safe match; artist cards must identify a structured Spotify credit or a catalogue alias sharing that complete credit, and every returned song still passes the strict track matcher.
+- Recognize upload titles where the credited performers precede the song (for example, “Lead feat. Guest - Song”) without weakening the final artist check.
+- Treat `feat`, `ft`, `featuring`, or `with` as a credit suffix only when the following name matches a known artist credit. Words such as “With” inside real song titles must remain part of the title.
 
 ## Saving the destination playlist
 
@@ -26,4 +30,4 @@ This note records the safety rules shared by the Android and Web Spotify import 
 
 ## Regression coverage
 
-The Kotlin and TypeScript tests cover premature empty pages, inconsistent page totals, strict title/artist identity, DJ/genre separation, language versions, temporary search failures, and duplicate-safe import behaviour.
+The Kotlin and TypeScript tests cover premature empty pages, inconsistent page totals, structured artist credits, comma-containing artist names, composite performer aliases with strict runtime checks, featured-artist title prefixes, real titles containing “with”, strict title/artist identity, DJ/genre separation, language versions, temporary search failures, and duplicate-safe import behaviour.

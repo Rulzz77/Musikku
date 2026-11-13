@@ -1737,10 +1737,10 @@ class SourcesTest {
     fun `matches the plain Mayonaka row across the wave-dash spellings`() {
         // Mixed kanji+kana titles keep their two as-written queries: the
         // transliteration is partial (kanji has no reading) and is not asked.
-        // ("with me" is eaten as a feat. marker on both sides alike; the wave
-        // dash is a word break, so the query keeps "stay" a separate word.)
+        // "with me" is part of the title, not a featuring credit: it remains
+        // in the query. The wave dash is a word break, so "stay" stays separate.
         assertEquals(
-            listOf("真夜中のドア stay miki matsubara", "真夜中のドア stay"),
+            listOf("真夜中のドア stay with me miki matsubara", "真夜中のドア stay with me"),
             TrackMatcher.queries(
                 TrackMatcher.Target(
                     "真夜中のドア〜stay with me - Mayonaka no Door~stay with me",

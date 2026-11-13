@@ -58,6 +58,8 @@ object TrackMatcher {
         val requiredArtistName: String? = null,
         /** Spotify imports must match the same title identity, not a longer title containing it. */
         val requireExactTitle: Boolean = false,
+        /** Original Spotify credits, kept as separate names (commas may belong inside a name). */
+        val artistCredits: List<String> = emptyList(),
     )
 
     fun targetOf(song: Song) = Target(
@@ -215,7 +217,15 @@ object TrackMatcher {
      */
     fun score(candidate: Song, target: Target): Int? {
         val wanted = parseTitle(target.title, target.artist)
-        val got = parseTitle(candidate.title, candidate.artist)
+        // A YouTube title can put a featured performer before the song
+        // ("Lead feat. Guest - Title") while its structured byline carries
+        // only the lead. Use Spotify's complete credit as extra parsing
+        // context for this prefix only; actual artist acceptance below still
+        // requires the primary credit or a guarded composite alias.
+        val candidateTitleArtist = if (target.requireExactTitle) {
+            listOf(candidate.artist, target.artist).filter { it.isNotBlank() }.distinct().joinToString(", ")
+        } else candidate.artist
+        val got = parseTitle(candidate.title, candidateTitleArtist)
         if (wanted.core.isBlank() || got.core.isBlank()) return null
         // Same word, different script: katakana vs romaji is bridged by
         // Hepburn transliteration; kanji has no algorithmic reading and stays
@@ -260,25 +270,47 @@ object TrackMatcher {
         // Match the complete first credited artist name against one complete
         // candidate credit instead of accepting a partial token overlap.
         val requiredArtist = target.requiredArtistName?.takeIf { it.isNotBlank() }
+        val candidateNames = buildSet {
+            add(artistIdentityKey(candidate.artist))
+            candidate.artists.forEach { add(artistIdentityKey(it.name)) }
+            // YouTube commonly serializes multiple billed artists with
+            // commas; split only those boundaries here so names containing
+            // "x", slash, or "and" remain intact.
+            candidate.artist.split(",").forEach { add(artistIdentityKey(it)) }
+            artistNames(candidate.artist).forEach { add(it.joinToString("")) }
+        }
         val requiredArtistMatched = if (requiredArtist != null) {
             // Keep this as one complete name. Splitting the required artist
             // with collaboration separators would turn names such as
             // "X Ambassadors" into the unrelated name "Ambassadors".
             val expectedNames = setOf(artistIdentityKey(requiredArtist))
-            val candidateNames = buildSet {
-                add(artistIdentityKey(candidate.artist))
-                candidate.artists.forEach { add(artistIdentityKey(it.name)) }
-                // YouTube commonly serializes multiple billed artists with
-                // commas; split only those boundaries here so names containing
-                // "x", slash, or "and" remain intact.
-                candidate.artist.split(",").forEach { add(artistIdentityKey(it)) }
-                artistNames(candidate.artist).forEach { add(it.joinToString("")) }
-            }
             expectedNames.any { it.isNotBlank() && it in candidateNames }
-                .also { matched -> if (!matched) return null }
         } else {
             false
         }
+        val spotifyCredits = target.artistCredits.ifEmpty {
+            artistNames(target.artist).map { it.joinToString(" ") }
+        }
+        // A secondary contributor is still an official Spotify performer.
+        // Accept an exact full-name match to another structured Spotify credit,
+        // but only with exact title/version and runtime within three seconds.
+        // Never split the display string to guess the identity: "Earth, Wind &
+        // Fire" must remain one artist.
+        val secondarySpotifyArtistMatched = requiredArtist != null &&
+            target.artistCredits.drop(1).any { credit ->
+                val key = artistIdentityKey(credit)
+                key.isNotBlank() && key in candidateNames
+            }
+        val compositeArtistAlias = requiredArtist != null && !requiredArtistMatched &&
+            !secondarySpotifyArtistMatched &&
+            sharesCompositeSpotifyCredit(
+                spotifyCredits,
+                listOf(candidate.artist) + candidate.artists.map { it.name },
+            )
+        if (requiredArtist != null && !requiredArtistMatched &&
+            !secondarySpotifyArtistMatched && !compositeArtistAlias
+        ) return null
+        if (requiredArtist != null && artistIdentityKey(requiredArtist).isBlank()) return null
         if (requiredArtist == null && target.requireSharedArtist &&
             (artistNames(target.artist).isEmpty() ||
                 artistNames(candidate.artist).isEmpty() ||
@@ -295,9 +327,19 @@ object TrackMatcher {
             // the only way through the wider window. Exact title/version plus
             // a shared artist is strong enough; a different artist still gets
             // the ordinary 30-second ceiling below.
-            allowVideoDrift = creditedArtist != null || requiredArtistMatched,
+            allowVideoDrift = creditedArtist != null || requiredArtistMatched ||
+                secondarySpotifyArtistMatched || compositeArtistAlias,
         ) ?: return null
-        val artist = creditedArtist ?: ARTIST_EXACT.takeIf { requiredArtistMatched }
+        // A secondary structured Spotify credit or a flattened composite alias
+        // may differ from the primary credit, but must still have near-identical
+        // runtime. This protects against covers and different takes with the
+        // same title while handling catalogues that file the vocalist alone.
+        if ((secondarySpotifyArtistMatched || compositeArtistAlias) &&
+            !withinSeconds(candidate, target, DURATION_TIGHT_SEC)
+        ) return null
+        val artist = creditedArtist
+            ?: ARTIST_EXACT.takeIf { requiredArtistMatched }
+            ?: ARTIST_SHARED.takeIf { secondarySpotifyArtistMatched || compositeArtistAlias }
         // The credits don't merely differ in spelling, they name different
         // people — and sometimes that is because they are describing the
         // same recording from different ends of it. Film catalogues are
@@ -473,9 +515,14 @@ object TrackMatcher {
             }
         }
 
-        // A feat. credit belongs to the artist field wherever a catalogue
-        // chooses to print it.
-        text = text.replace(FEATURING, " ")
+        // "With" can be part of a real title ("With or Without You",
+        // "Dancing With Myself"). Strip a feat/with suffix only when every
+        // name after its marker is present in the known artist credits.
+        val creditSuffix = CREDIT_MARKER.findAll(text).lastOrNull { marker ->
+            marker.range.first > 0 &&
+                isArtistName(text.substring(marker.range.last + 1).trim(), artist)
+        }
+        if (creditSuffix != null) text = text.substring(0, creditSuffix.range.first).trim()
 
         // DJ edits are often appended without brackets ("Song DJ Koplo Remix").
         // Pull only known version-shaped suffixes into the identity markers.
@@ -606,12 +653,19 @@ object TrackMatcher {
     /** Whether [text] is nothing but (part of) [artist] — the "Artist - Title" upload shape. */
     private fun isArtistName(text: String, artist: String): Boolean {
         if (artist.isBlank()) return false
+        // Some regional uploads put every performer before the title:
+        // "Artist feat. Collaborator - Song". Treat the credit marker as
+        // punctuation only for this prefix check; the rest of the title parser
+        // must retain feature words inside an actual song title.
+        val creditJoiners = setOf("feat", "ft", "featuring", "with")
         val words =
-            text.split(WORD_SPLIT).map { it.replace(NON_ALNUM, "") }.filter { it.isNotEmpty() }
+            text.split(WORD_SPLIT)
+                .map { it.replace(NON_ALNUM, "") }
+                .filter { it.isNotEmpty() && it !in creditJoiners }
         if (words.isEmpty()) return false
         val credited = normalize(artist).split(WORD_SPLIT)
             .map { it.replace(NON_ALNUM, "") }
-            .filter { it.isNotEmpty() }
+            .filter { it.isNotEmpty() && it !in creditJoiners }
             .toSet()
         return words.all { it in credited }
     }
@@ -772,6 +826,36 @@ object TrackMatcher {
         }
         .filter { it.isNotEmpty() }
         .toSet()
+
+    /**
+     * A catalogue can flatten a performer alias across multiple Spotify
+     * credits, e.g. Spotify "Gasentra Pajampangan, Friska" vs YouTube
+     * "Friska Gasentra". A secondary artist alone is not enough: the
+     * candidate's one display name must combine meaningful tokens from at
+     * least two distinct Spotify credits.
+     */
+    private fun sharesCompositeSpotifyCredit(targetCredits: List<String>, candidateCredits: List<String>): Boolean {
+        val ignored = setOf("the", "and", "feat", "featuring", "ft", "with", "vs", "dj", "band", "music", "official")
+        fun tokens(name: String): Set<String> = normalize(name)
+            .split(WORD_SPLIT)
+            .map { it.replace(NON_ALNUM, "") }
+            .filter { it.length > 1 && it !in ignored }
+            .toSet()
+
+        // These are Spotify's original artist objects, not a comma-split
+        // reconstruction of the display line. "Earth, Wind & Fire" stays one
+        // credit even though its name contains the usual joiner characters.
+        val sourceGroups = targetCredits.map(::tokens).filter { it.isNotEmpty() }
+        if (sourceGroups.size < 2) return false
+        val sourceTokens = sourceGroups.flatten().toSet()
+        return candidateCredits.asSequence()
+            .map(::tokens)
+            .any { meaningful ->
+                meaningful.size >= 2 &&
+                    meaningful.all { it in sourceTokens } &&
+                    sourceGroups.count { group -> meaningful.any { it in group } } >= 2
+            }
+    }
 
     /**
      * Whether two catalogue credits are the same complete artist name.
@@ -960,7 +1044,7 @@ object TrackMatcher {
 
     private val BRACKETED = Regex("""[(\[]([^()\[\]]*)[)\]]""")
     private val DASH = Regex("""\s+[-–—|]+\s+""")
-    private val FEATURING = Regex("""\b(feat|ft|featuring|with)\b.*""")
+    private val CREDIT_MARKER = Regex("""\b(?:feat\.?|ft\.?|featuring|with)(?=\s|$)""", RegexOption.IGNORE_CASE)
     /**
      * The Portuguese spelling of the same credit, see [parseTitle]. Only the
      * dotted form and an explicit `part esp.` count: an undotted `part` is

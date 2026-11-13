@@ -1,6 +1,6 @@
 import type { SpotifyPlaylist, SpotifyTrack } from '@bitchord/shared/bridge';
 import { best, primaryArtist, queries, type MatchCandidate, type MatchTarget } from '@/data/match/trackMatcher';
-import { searchSongs, SearchSongsIncompleteError } from '@/data/music/api';
+import { fetchArtist, searchSpotifySongs, SearchSongsIncompleteError } from '@/data/music/api';
 import type { Track } from '@/data/music/types';
 import { getBridge } from '@/extension/bridge';
 
@@ -72,7 +72,9 @@ export function pendingTrack(track: SpotifyTrack, unavailable: 'matching' | 'mis
   return {
     videoId: `spotify:${track.id}`,
     title: track.title,
-    artists: track.artist ? track.artist.split(', ').map((name) => ({ name, id: null })) : [],
+    artists: track.artistCredits?.length
+      ? track.artistCredits.map((name) => ({ name, id: null }))
+      : track.artist ? track.artist.split(', ').map((name) => ({ name, id: null })) : [],
     album: track.album ? { name: track.album, id: null } : null,
     durationSec: track.durationMs > 0 ? Math.round(track.durationMs / 1000) : null,
     explicit: false,
@@ -116,6 +118,7 @@ export async function matchToYouTube(track: SpotifyTrack): Promise<Track | null>
   const target: MatchTarget = {
     title: track.title,
     artist: track.artist,
+    artistCredits: track.artistCredits?.length ? track.artistCredits : undefined,
     requiredArtistName: leadArtist || null,
     requireSharedArtist: !!track.artist.trim(),
     requireExactTitle: true,
@@ -132,19 +135,25 @@ export async function matchToYouTube(track: SpotifyTrack): Promise<Track | null>
   const searchTerms = [...new Set([
     rawTitle && rawLeadArtist ? `${rawTitle} ${rawLeadArtist}` : '',
     rawTitle && rawArtists ? `${rawTitle} ${rawArtists}` : '',
+    ...(track.artistCredits ?? []).slice(0, 3).map((artist) => rawTitle && artist.trim() ? `${rawTitle} ${artist.trim()}` : ''),
     rawTitle,
     ...baseQueries,
     ...(albumQuery ? [albumQuery] : []),
   ].map((query) => query.replace(/\s+/g, ' ').trim()).filter(Boolean))];
   const candidates = new Map<string, Track>();
+  const artistPageIds = new Set<string>();
+  const expectedArtistNames = track.artistCredits?.length
+    ? track.artistCredits
+    : [leadArtist].filter(Boolean);
   let searchFailure: unknown = null;
 
   for (const query of searchTerms) {
     try {
-      const rows = await searchSongs(query);
-      for (const row of rows) {
+      const result = await searchSpotifySongs(query, expectedArtistNames);
+      for (const row of result.tracks) {
         if (row.videoId?.trim()) candidates.set(row.videoId, row);
       }
+      result.artistIds.forEach((id) => artistPageIds.add(id));
       // Raw Spotify title + lead artist is the same natural query a listener
       // enters in Search. Once that yields a strictly verified match, don't
       // spend more requests on normalized variants for this playlist row.
@@ -154,8 +163,26 @@ export async function matchToYouTube(track: SpotifyTrack): Promise<Track | null>
         for (const candidate of error.candidates) {
           if (candidate.videoId?.trim()) candidates.set(candidate.videoId, candidate);
         }
+        error.artistIds.forEach((id) => artistPageIds.add(id));
       }
       searchFailure ??= error;
+    }
+  }
+
+  // Android also opens each exact artist page when global Search misses a
+  // track. Mirror that here, but only for artist cards whose names match one
+  // of Spotify's structured credits, and keep the number of pages bounded.
+  if (!best([...candidates.values()].map((candidate) => candidateOf(candidate)), target)) {
+    for (const artistId of [...artistPageIds].slice(0, 3)) {
+      try {
+        const page = await fetchArtist(artistId);
+        for (const candidate of page.topSongs) {
+          if (candidate.videoId?.trim()) candidates.set(candidate.videoId, candidate);
+        }
+        if (best([...candidates.values()].map((candidate) => candidateOf(candidate)), target)) break;
+      } catch (error) {
+        searchFailure ??= error;
+      }
     }
   }
 

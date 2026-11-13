@@ -276,6 +276,24 @@ class SpotifyImporterIdentityTest {
     }
 
     @Test
+    fun artistPageFallbackFindsTheMatchingSecondaryStructuredYoutubeCredit() {
+        val song = Song(
+            videoId = "secondary-artist-page-song",
+            title = "Budak Saha",
+            artist = "Primary Label, Friska",
+            thumbnailUrl = null,
+            artistId = "UCprimary",
+            artists = listOf(
+                ArtistRef(name = "Primary Label", browseId = "UCprimary"),
+                ArtistRef(name = "Friska", browseId = "UCfriska"),
+            ),
+        )
+
+        assertEquals("UCfriska", spotifyArtistBrowseId(song, "Friska"))
+        assertNull(spotifyArtistBrowseId(song, "Unrelated Singer"))
+    }
+
+    @Test
     fun spotifyImportPrefersAudioWhenAMatchingVideoIsAlsoPresent() {
         val target = TrackMatcher.Target(
             title = "Dumes",
@@ -339,6 +357,160 @@ class SpotifyImporterIdentityTest {
         assertNotNull(TrackMatcher.best(listOf(original), target))
     }
 
+
+    @Test
+    fun spotifyImportAcceptsSecondarySpotifySingerCreditOnlyWithExactRuntime() {
+        val target = TrackMatcher.Target(
+            title = "Budak Saha",
+            artist = "Gasentra Pajampangan, Friska",
+            durationSec = 287,
+            requiredArtistName = "Gasentra Pajampangan",
+            requireSharedArtist = true,
+            requireExactTitle = true,
+            artistCredits = listOf("Gasentra Pajampangan", "Friska"),
+        )
+        val singerFiledByYouTube = Song(
+            videoId = "budak-saha-friska-gasentra",
+            title = "Budak Saha",
+            artist = "Friska Gasentra",
+            thumbnailUrl = null,
+            durationText = "4:47",
+        )
+
+        assertNotNull(TrackMatcher.best(listOf(singerFiledByYouTube), target))
+        // An exact full-name match to another structured Spotify performer is
+        // accepted only while title/version and runtime remain identical.
+        assertNotNull(TrackMatcher.best(listOf(singerFiledByYouTube.copy(
+            videoId = "budak-saha-friska-only",
+            artist = "Friska",
+        )), target))
+        assertNull(TrackMatcher.best(listOf(singerFiledByYouTube.copy(
+            videoId = "budak-saha-friska-only-too-long",
+            artist = "Friska",
+            durationText = "4:35",
+        )), target))
+        assertNull(TrackMatcher.best(listOf(singerFiledByYouTube.copy(
+            videoId = "budak-saha-unrelated",
+            artist = "Denny Caknan",
+        )), target))
+        assertNull(TrackMatcher.best(listOf(singerFiledByYouTube.copy(durationText = "4:35")), target))
+        assertNull(TrackMatcher.best(listOf(singerFiledByYouTube.copy(durationText = null)), target))
+    }
+
+    @Test
+    fun spotifyImportPreservesRealTitlesContainingWith() {
+        val withOrWithout = TrackMatcher.Target(
+            title = "With or Without You",
+            artist = "U2",
+            durationSec = 210,
+            requiredArtistName = "U2",
+            requireSharedArtist = true,
+            requireExactTitle = true,
+        )
+        val u2 = Song(
+            videoId = "with-or-without-you",
+            title = "With or Without You",
+            artist = "U2",
+            thumbnailUrl = null,
+            durationText = "3:30",
+        )
+        val dancingWithMyself = u2.copy(
+            videoId = "dancing-with-myself",
+            title = "Dancing With Myself",
+            artist = "Billy Idol",
+        )
+        val dancingTarget = withOrWithout.copy(
+            title = "Dancing With Myself",
+            artist = "Billy Idol",
+            requiredArtistName = "Billy Idol",
+        )
+
+        assertNotNull(TrackMatcher.best(listOf(u2), withOrWithout))
+        assertNotNull(TrackMatcher.best(listOf(dancingWithMyself), dancingTarget))
+    }
+
+    @Test
+    fun spotifyImportStripsWithOnlyWhenTheSuffixIsACreditedArtist() {
+        val withGuest = TrackMatcher.Target(
+            title = "Song",
+            artist = "Lead, Guest Artist",
+            durationSec = 200,
+            requiredArtistName = "Lead",
+            requireSharedArtist = true,
+            requireExactTitle = true,
+            artistCredits = listOf("Lead", "Guest Artist"),
+        )
+        val candidate = Song(
+            videoId = "song-with-guest",
+            title = "Song with Guest Artist",
+            artist = "Lead",
+            thumbnailUrl = null,
+            durationText = "3:20",
+        )
+        assertNotNull(TrackMatcher.best(listOf(candidate), withGuest))
+
+        val noGuestCredit = withGuest.copy(
+            artist = "Lead",
+            artistCredits = listOf("Lead"),
+        )
+        assertNull(TrackMatcher.best(listOf(candidate), noGuestCredit))
+    }
+
+    @Test
+    fun spotifyImportKeepsSongTitleAfterFeaturedArtistPrefix() {
+        val target = TrackMatcher.Target(
+            title = "Bubrah",
+            artist = "Northsle, Agiff",
+            durationSec = 200,
+            requiredArtistName = "Northsle",
+            requireSharedArtist = true,
+            requireExactTitle = true,
+        )
+        val prefixedUpload = Song(
+            videoId = "northsle-agiff-bubrah",
+            title = "Northsle feat. Agiff - Bubrah",
+            // YouTube's structured byline sometimes carries only the lead.
+            artist = "Northsle",
+            thumbnailUrl = null,
+            durationText = "3:20",
+        )
+        val unrelatedSinger = prefixedUpload.copy(
+            videoId = "unrelated-singer",
+            artist = "Unrelated Singer",
+        )
+
+        assertNotNull(TrackMatcher.best(listOf(prefixedUpload), target))
+        assertNull(TrackMatcher.best(listOf(unrelatedSinger), target))
+    }
+
+    @Test
+    fun spotifyImportDoesNotSplitCommasInsideStructuredArtistNames() {
+        val target = TrackMatcher.Target(
+            title = "September",
+            artist = "Earth, Wind & Fire, Guest Artist",
+            durationSec = 215,
+            requiredArtistName = "Earth, Wind & Fire",
+            requireSharedArtist = true,
+            requireExactTitle = true,
+            artistCredits = listOf("Earth, Wind & Fire", "Guest Artist"),
+        )
+        val canonical = Song(
+            videoId = "earth-wind-fire-september",
+            title = "September",
+            artist = "Earth, Wind & Fire",
+            thumbnailUrl = null,
+            durationText = "3:35",
+            artists = listOf(ArtistRef(name = "Earth, Wind & Fire", browseId = "earth-wind-fire")),
+        )
+        val reorderedButUnrelated = canonical.copy(
+            videoId = "misread-artist",
+            artist = "Wind Fire Earth",
+            artists = listOf(ArtistRef(name = "Wind Fire Earth", browseId = null)),
+        )
+
+        assertNotNull(TrackMatcher.best(listOf(canonical), target))
+        assertNull(TrackMatcher.best(listOf(reorderedButUnrelated), target))
+    }
 
     @Test
     fun spotifyImportSeparatesDjKoploFromOriginalAndBreakbeat() {

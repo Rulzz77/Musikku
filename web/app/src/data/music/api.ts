@@ -2,6 +2,7 @@ import type { YTMusic, YTNodes } from 'youtubei.js/web';
 import type { Candidate } from '@/playback/queue/builder';
 import { getInnertube, getMusicClient, getSignedInnertube } from '@/playback/youtube/innertube';
 import { isExactArtistMatch, normalizedArtistName } from '@/lib/artistCredits';
+import { sharesArtist } from '@/data/match/trackMatcher';
 import { LIBRARY_SECTIONS, LIKED_MUSIC_PLAYLIST, type LibrarySection } from './library';
 import {
   mapAlbum,
@@ -89,20 +90,27 @@ export async function fetchSearch(query: string): Promise<SearchResults> {
  * the error remains available so an unsuccessful match can be retried.
  */
 export class SearchSongsIncompleteError extends Error {
-  constructor(readonly candidates: Track[], cause: unknown) {
+  constructor(
+    readonly candidates: Track[],
+    cause: unknown,
+    readonly artistIds: string[] = [],
+  ) {
     super(`YouTube Music search was incomplete: ${String(cause)}`);
     this.name = 'SearchSongsIncompleteError';
   }
 }
 
+interface SpotifySearchPage {
+  tracks: Track[];
+  /** Artist browse ids whose displayed names match an actual Spotify credit. */
+  artistIds: string[];
+}
+
 /**
- * All playable tracks Search shows for [query], not just the first Songs shelf.
- *
- * Spotify matching used to call the filtered Songs endpoint and read only its
- * first page. That missed promoted track cards and any valid song below that
- * first page, even though the normal Search screen had already surfaced it.
+ * Search the same mixed + Songs-filtered catalogue as SearchPage, retaining
+ * exact Spotify-credit artist cards for the artist-page fallback.
  */
-export async function searchSongs(query: string): Promise<Track[]> {
+async function searchSongsInternal(query: string, expectedArtists: string[] = []): Promise<SpotifySearchPage> {
   const yt = await getMusicClient();
   const search = await yt.music.search(query);
   const found = new Map<string, Track>();
@@ -132,6 +140,12 @@ export async function searchSongs(query: string): Promise<Track[]> {
   const results = mapSearch(search);
   add(results.songs.map(asTrack).filter((track): track is Track => !!track));
   add(mapPlaylistTracks(search.songs?.contents ?? []));
+  const artistIds = [...new Set(results.artists
+    .filter((artist) => expectedArtists.some((expected) =>
+      isExactArtistMatch(artist.title, expected) || sharesArtist(expected, artist.title),
+    ))
+    .map((artist) => artist.id)
+    .filter(Boolean))];
 
   // Follow the Songs filter's own continuation; YouTube can put a regional
   // release below the first visible page. Keep this bounded per track.
@@ -144,11 +158,28 @@ export async function searchSongs(query: string): Promise<Track[]> {
       continuation = continuation.has_continuation ? await continuation.getContinuation() : null;
     }
   } catch (error) {
-    if (found.size > 0) throw new SearchSongsIncompleteError([...found.values()], error);
+    if (found.size > 0 || artistIds.length > 0) {
+      throw new SearchSongsIncompleteError([...found.values()], error, artistIds);
+    }
     throw error;
   }
 
-  return [...found.values()];
+  return { tracks: [...found.values()], artistIds };
+}
+
+/** Every playable track Search shows for [query], including bounded Songs continuations. */
+export async function searchSongs(query: string): Promise<Track[]> {
+  return (await searchSongsInternal(query)).tracks;
+}
+
+/**
+ * Spotify-specific variant: in addition to visible songs, return artist-page
+ * candidates only when the search card is an exact match for a structured
+ * Spotify credit. This mirrors Android's artist Top Songs fallback without
+ * browsing unrelated artists.
+ */
+export async function searchSpotifySongs(query: string, expectedArtists: string[]): Promise<SpotifySearchPage> {
+  return searchSongsInternal(query, expectedArtists);
 }
 
 export async function fetchSuggestions(input: string): Promise<Suggestions> {

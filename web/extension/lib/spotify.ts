@@ -403,9 +403,11 @@ function sized(sources: unknown, min = 300): string | null {
 }
 
 function artistNamesOf(data: unknown): string[] {
-  return arr(path(data, 'artists', 'items'))
-    .map((a) => str(path(a, 'profile', 'name')) ?? str(path(a, 'name')))
-    .filter((n): n is string => !!n?.trim());
+  const artists = path(data, 'artists');
+  const items = Array.isArray(artists) ? artists : arr(path(artists, 'items'));
+  return [...new Set(items
+    .map((a) => (str(path(a, 'profile', 'name')) ?? str(path(a, 'name')))?.trim())
+    .filter((name): name is string => !!name))];
 }
 
 function artistsOf(data: unknown): string {
@@ -416,11 +418,13 @@ function trackOf(data: unknown, uri: string | null): SpotifyTrack | null {
   const title = str(path(data, 'name'))?.trim();
   if (!title || !uri) return null;
   const album = obj(path(data, 'albumOfTrack'));
+  const artistCredits = artistNamesOf(data);
   return {
     id: uri.split(':').pop()!,
     title,
-    artist: artistsOf(data),
-    leadArtist: artistNamesOf(data)[0] ?? null,
+    artist: artistCredits.join(', '),
+    leadArtist: artistCredits[0] ?? null,
+    artistCredits,
     album: str(album?.name) ?? null,
     durationMs: num(path(data, 'trackDuration', 'totalMilliseconds')) ?? num(path(data, 'duration', 'totalMilliseconds')) ?? 0,
     imageUrl: sized(path(album, 'coverArt', 'sources')),

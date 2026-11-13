@@ -38,6 +38,8 @@ data class SpotifyImportTrack(
     val album: String? = null,
     val spotifyId: String? = null,
     val leadArtist: String? = null,
+    /** Original Spotify artist objects, kept separately from the display string. */
+    val artistCredits: List<String> = emptyList(),
 )
 
 /** The result of fetching and resolving a Spotify playlist's tracks. */
@@ -135,7 +137,8 @@ object SpotifyImporter {
                     ?: obj["name"]?.jsonPrimitive?.content
                     ?: continue
                 val artistNames = obj.spotifyArtistNames()
-                val artists = obj.spotifyArtistCredit().ifBlank { artistNames.joinToString(", ") }
+                val artists = artistNames.takeIf { it.isNotEmpty() }?.joinToString(", ")
+                    ?: obj.spotifyArtistCredit()
                 if (title.isNotBlank()) {
                     tracks.add(SpotifyImportTrack(
                         title = title.trim(),
@@ -148,6 +151,7 @@ object SpotifyImporter {
                         // structured credits, matching the established import behavior.
                         leadArtist = artistNames.firstOrNull()
                             ?: artists.substringBefore(",").trim().takeIf { it.isNotBlank() },
+                        artistCredits = artistNames,
                     ))
                 }
             }
@@ -186,6 +190,7 @@ object SpotifyImporter {
             requiredArtistName = track.leadArtist
                 ?: track.artist.substringBefore(",").trim().takeIf { it.isNotBlank() },
             requireExactTitle = true,
+            artistCredits = track.artistCredits,
         )
         return bestSpotifyImportMatch(searchCandidates(target), target)
     }
@@ -270,16 +275,18 @@ object SpotifyImporter {
                     page.rows.forEach { row ->
                         when (row) {
                             is SearchResult.Browse -> {
-                                spotifyArtistBrowseId(row, target.requiredArtistName)
-                                    ?.let(artistBrowseIds::add)
+                                spotifyImportArtistCredits(target).forEach { expectedArtist ->
+                                    spotifyArtistBrowseId(row, expectedArtist)?.let(artistBrowseIds::add)
+                                }
                             }
                             else -> {
                                 val candidate = spotifyImportCandidate(row)
                                 val id = candidate?.videoId?.trim().orEmpty()
                                 if (candidate != null && id.isNotEmpty()) {
                                     found.putIfAbsent(id, candidate)
-                                    spotifyArtistBrowseId(candidate, target.requiredArtistName)
-                                        ?.let(artistBrowseIds::add)
+                                    spotifyImportArtistCredits(target).forEach { expectedArtist ->
+                                        spotifyArtistBrowseId(candidate, expectedArtist)?.let(artistBrowseIds::add)
+                                    }
                                 }
                             }
                         }
@@ -430,7 +437,8 @@ object SpotifyImporter {
                 val title = data["name"]?.jsonPrimitive?.content?.trim().orEmpty()
                 if (title.isEmpty()) continue
                 val artistNames = data.spotifyArtistNames()
-                val artist = data.spotifyArtistCredit().ifBlank { artistNames.joinToString(", ") }
+                val artist = artistNames.takeIf { it.isNotEmpty() }?.joinToString(", ")
+                    ?: data.spotifyArtistCredit()
                 out.add(SpotifyImportTrack(
                     title = title,
                     artist = artist,
@@ -439,6 +447,7 @@ object SpotifyImporter {
                     spotifyId = data.spotifyTrackId(),
                     leadArtist = artistNames.firstOrNull()
                         ?: artist.substringBefore(",").trim().takeIf { it.isNotBlank() },
+                    artistCredits = artistNames,
                 ))
             }
             offset += items.size
@@ -492,6 +501,7 @@ object SpotifyImporter {
                         requiredArtistName = track.leadArtist
                             ?: track.artist.substringBefore(",").trim().takeIf { it.isNotBlank() },
                         requireExactTitle = true,
+                        artistCredits = track.artistCredits,
                     )
                     val candidates = try {
                         searchCandidates(target, cleanLang).let { found ->
@@ -555,20 +565,30 @@ internal fun spotifyImportCandidate(row: SearchResult): Song? = when (row) {
     is SearchResult.Browse -> null
 }
 
+/** Structured Spotify credits, or a conservative display-line fallback for old callers. */
+internal fun spotifyImportArtistCredits(target: TrackMatcher.Target): List<String> =
+    target.artistCredits.ifEmpty {
+        TrackMatcher.artistNames(target.artist).map { it.joinToString(" ") }
+    }.map(String::trim).filter(String::isNotBlank).distinct()
+
 /** Artist cards are used only when the complete requested performer matches. */
 internal fun spotifyArtistBrowseId(row: SearchResult, expectedArtist: String?): String? {
     val item = (row as? SearchResult.Browse)?.item ?: return null
     if (item.type != BrowseType.ARTIST) return null
     val expected = expectedArtist?.takeIf { it.isNotBlank() } ?: return null
-    return item.browseId.takeIf { TrackMatcher.sameArtistIdentity(expected, item.title) }
+    return item.browseId.takeIf { TrackMatcher.sharesArtist(expected, item.title) }
 }
 
 /** A matching song row can expose the artist page id even without an artist card. */
 internal fun spotifyArtistBrowseId(song: Song, expectedArtist: String?): String? {
-    val browseId = song.artistId?.takeIf { it.isNotBlank() } ?: return null
     val expected = expectedArtist?.takeIf { it.isNotBlank() } ?: return null
+    // Search rows may expose browse ids for more than the first credited singer.
+    song.artists.firstOrNull { artist ->
+        artist.browseId?.isNotBlank() == true && TrackMatcher.sharesArtist(expected, artist.name)
+    }?.browseId?.takeIf { it.isNotBlank() }?.let { return it }
+    val browseId = song.artistId?.takeIf { it.isNotBlank() } ?: return null
     val lead = song.artists.firstOrNull()?.name?.takeIf { it.isNotBlank() } ?: song.artist
-    return browseId.takeIf { TrackMatcher.sameArtistIdentity(expected, lead) }
+    return browseId.takeIf { TrackMatcher.sharesArtist(expected, lead) }
 }
 
 /** Prefer an audio catalogue recording over an equally valid music-video upload. */
@@ -598,7 +618,12 @@ internal fun spotifyImportSearchQueries(target: TrackMatcher.Target): List<Strin
         // Spotify's untouched title plus its exact first credited performer.
         if (rawTitle.isNotBlank() && leadArtist.isNotBlank()) add("$rawTitle $leadArtist")
         if (rawTitle.isNotBlank() && fullArtist.isNotBlank()) add("$rawTitle $fullArtist")
-        if (rawTitle.isNotBlank()) add(rawTitle)
+        if (rawTitle.isNotBlank()) {
+            target.artistCredits.take(3).forEach { credit ->
+                if (credit.isNotBlank()) add("$rawTitle $credit")
+            }
+            add(rawTitle)
+        }
         addAll(normalized)
         if (album.isNotBlank() && normalized.firstOrNull() != null) {
             add("${normalized.first()} $album")

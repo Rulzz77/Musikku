@@ -33,6 +33,8 @@ export interface MatchTarget {
   isVideo?: boolean;
   /** Spotify imports can require the exact primary credited artist. */
   requiredArtistName?: string | null;
+  /** Original Spotify artist names in order; commas inside a name are not delimiters. */
+  artistCredits?: string[];
   /** Refuse partial-title containment for Spotify track identity. */
   requireExactTitle?: boolean;
   /** Refuse unrelated credits when the source supplied an artist. */
@@ -67,7 +69,7 @@ const DASH_PASSES = 3;
 const BRACKETED = /[([]([^()[\]]*)[)\]]/g;
 const BRACKETED_TEST = /[([]([^()[\]]*)[)\]]/;
 const DASH = /\s+[-–—|]+\s+/;
-const FEATURING = /\b(feat|ft|featuring|with)\b.*/g;
+const CREDIT_MARKER = /\b(?:feat\.?|ft\.?|featuring|with)(?=\s|$)/gi;
 const WORD_SPLIT = /[\s.·~〜]+/u;
 const NON_ALNUM = /[^\p{L}\p{N}]/gu;
 const LATIN = /[a-z0-9]/;
@@ -209,7 +211,14 @@ export function ranked<T extends MatchCandidate>(candidates: T[], target: MatchT
 /** How confident this is the same recording, or null when it is not one. */
 export function score(candidate: MatchCandidate, target: MatchTarget): number | null {
   const wanted = parseTitle(target.title, target.artist ?? '');
-  const got = parseTitle(candidate.title, candidate.artist);
+  // A YouTube title can put a featured performer before the song
+  // ("Lead feat. Guest - Title") while its structured byline carries only
+  // the lead. Spotify's full credit is extra parsing context for that prefix;
+  // the actual artist acceptance below remains strict.
+  const candidateTitleArtist = target.requireExactTitle
+    ? [candidate.artist, target.artist ?? ''].filter(Boolean).join(', ')
+    : candidate.artist;
+  const got = parseTitle(candidate.title, candidateTitleArtist);
   if (!wanted.core.trim() || !got.core.trim()) return null;
   const exactIdentity =
     wanted.core === got.core ||
@@ -228,21 +237,41 @@ export function score(candidate: MatchCandidate, target: MatchTarget): number | 
 
   const creditedArtist = artistScore(target.artist ?? '', candidate.artist);
   const requiredArtist = target.requiredArtistName?.trim();
-  const requiredArtistMatched = requiredArtist
-    ? candidateArtistKeys(candidate).has(artistIdentityKey(requiredArtist))
-    : false;
-  if (requiredArtist && (!artistIdentityKey(requiredArtist) || !requiredArtistMatched)) return null;
+  const candidateNames = candidateArtistKeys(candidate);
+  const requiredArtistKey = requiredArtist ? artistIdentityKey(requiredArtist) : '';
+  const requiredArtistMatched = !!requiredArtistKey && candidateNames.has(requiredArtistKey);
+  const spotifyCredits = target.artistCredits?.length
+    ? target.artistCredits
+    : artistNames(target.artist ?? '').map((words) => words.join(' '));
+  const secondarySpotifyArtistMatched = !!requiredArtist && !requiredArtistMatched &&
+    (target.artistCredits ?? []).slice(1).some((credit) => {
+      const key = artistIdentityKey(credit);
+      return !!key && candidateNames.has(key);
+    });
+  const compositeArtistAlias = !!requiredArtist && !requiredArtistMatched && !secondarySpotifyArtistMatched &&
+    sharesCompositeSpotifyCredit(
+      spotifyCredits,
+      [candidate.artist, ...(candidate.artistCredits ?? [])],
+    );
+  if (requiredArtist && !requiredArtistMatched && !secondarySpotifyArtistMatched && !compositeArtistAlias) return null;
+  if (requiredArtist && !requiredArtistKey) return null;
   if (!requiredArtist && target.requireSharedArtist &&
     (!artistNames(target.artist ?? '').length || !artistNames(candidate.artist).length || creditedArtist === null)) return null;
   const duration = durationScore(
     target.durationSec ?? null,
     positive(candidate.durationSec),
-    creditedArtist !== null || requiredArtistMatched,
+    creditedArtist !== null || requiredArtistMatched || secondarySpotifyArtistMatched || compositeArtistAlias,
   );
   if (duration === null) return null;
+  // A direct secondary credit or a flattened artist alias must still have
+  // near-identical runtime to protect against same-title covers and other takes.
+  if ((secondarySpotifyArtistMatched || compositeArtistAlias) &&
+    !withinSeconds(candidate, target, DURATION_TIGHT_SEC)) return null;
   const artist = creditedArtist ?? (requiredArtistMatched
     ? ARTIST_EXACT
-    : !target.isVideo && withinSeconds(candidate, target, CREDIT_OVERRIDE_SEC) ? CREDITS_DISAGREE : null);
+    : secondarySpotifyArtistMatched || compositeArtistAlias
+      ? ARTIST_SHARED
+      : !target.isVideo && withinSeconds(candidate, target, CREDIT_OVERRIDE_SEC) ? CREDITS_DISAGREE : null);
   if (artist === null) return null;
   const explicit = explicitScore(target.isExplicit ?? null, candidate.explicit ?? null);
   if (explicit === null) return null;
@@ -327,7 +356,14 @@ export function parseTitle(raw: string, artist = ''): TitleParts {
     }
   }
 
-  text = text.replace(FEATURING, ' ');
+  // "With" can be part of a real title ("With or Without You",
+  // "Dancing With Myself"). Strip a feat/with suffix only when the words
+  // after its marker are actually present in the known artist credits.
+  const creditSuffix = [...text.matchAll(CREDIT_MARKER)].reverse().find((match) => {
+    const markerIndex = match.index ?? 0;
+    return markerIndex > 0 && isArtistName(text.slice(markerIndex + match[0].length).trim(), artist);
+  });
+  if (creditSuffix?.index != null) text = text.slice(0, creditSuffix.index).trim();
 
   // DJ edits often arrive as an unbracketed suffix ("Song DJ Koplo Remix").
   const trailingMix = TRAILING_MIX_LABEL.exec(text);
@@ -405,9 +441,13 @@ export function isTranslationMatch(wanted: TitleParts, got: TitleParts): boolean
 
 function isArtistName(text: string, artist: string): boolean {
   if (!artist.trim()) return false;
-  const words = wordsOf(text);
+  // Regional uploads sometimes prefix the title with every performer:
+  // "Artist feat. Collaborator - Song". Ignore the feature joiner only
+  // while testing whether the dash prefix is a complete artist credit.
+  const creditJoiners = new Set(['feat', 'ft', 'featuring', 'with']);
+  const words = wordsOf(text).filter((word) => !creditJoiners.has(word));
   if (!words.length) return false;
-  const credited = new Set(wordsOf(normalize(artist)));
+  const credited = new Set(wordsOf(normalize(artist)).filter((word) => !creditJoiners.has(word)));
   return words.every((w) => credited.has(w));
 }
 
@@ -568,6 +608,26 @@ export function artistNames(value: string): string[][] {
     if (words.length) seen.set(words.join(' '), words);
   }
   return [...seen.values()];
+}
+
+/** A candidate alias must combine meaningful tokens from multiple Spotify credits. */
+function sharesCompositeSpotifyCredit(targetCredits: string[], candidateCredits: string[]): boolean {
+  const ignored = new Set(['the', 'and', 'feat', 'featuring', 'ft', 'with', 'vs', 'dj', 'band', 'music', 'official']);
+  const tokens = (name: string) => new Set(
+    name.normalize('NFKC').toLowerCase().split(WORD_SPLIT).map(strip)
+      .filter((word) => [...word].length > 1 && !ignored.has(word)),
+  );
+  // Use Spotify's original artist objects: an artist literally named
+  // "Earth, Wind & Fire" stays one credit rather than three false identities.
+  const sourceGroups = targetCredits.map(tokens).filter((words) => words.size > 0);
+  if (sourceGroups.length < 2) return false;
+  const sourceTokens = new Set(sourceGroups.flatMap((group) => [...group]));
+  return candidateCredits.some((credit) => {
+    const meaningful = tokens(credit);
+    return meaningful.size >= 2 &&
+      [...meaningful].every((word) => sourceTokens.has(word)) &&
+      sourceGroups.filter((group) => [...meaningful].some((word) => group.has(word))).length >= 2;
+  });
 }
 
 const sameArtist = (a: string[], b: string[]) => runOf(a, b) || runOf(b, a);

@@ -430,6 +430,32 @@ class SpotifyImporterIdentityTest {
     }
 
     @Test
+    fun genericGenreLabelsDoNotBecomeAlternateVersionsWithoutAnEditMarker() {
+        val target = TrackMatcher.Target(
+            title = "Song",
+            artist = "Band",
+            durationSec = 210,
+            requiredArtistName = "Band",
+            requireSharedArtist = true,
+            requireExactTitle = true,
+        )
+        val houseMusic = Song(
+            videoId = "house-music",
+            title = "Song (House Music)",
+            artist = "Band",
+            thumbnailUrl = null,
+            durationText = "3:30",
+        )
+        assertNotNull(TrackMatcher.best(listOf(houseMusic), target))
+
+        val djTarget = target.copy(title = "Song (DJ House Remix)")
+        val original = houseMusic.copy(videoId = "original", title = "Song")
+        val djHouse = houseMusic.copy(videoId = "dj-house", title = "Song (DJ House Remix)")
+        assertNull(TrackMatcher.best(listOf(original), djTarget))
+        assertEquals(djHouse, TrackMatcher.best(listOf(original, djHouse), djTarget))
+    }
+
+    @Test
     fun missingSpotifyIdsUseDurationAndAlbumToKeepDistinctVersions() {
         val tracks = listOf(
             SpotifyImportTrack("Dumes", "Guyon Waton", durationMs = 210_000, album = "Album A"),

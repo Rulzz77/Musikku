@@ -560,7 +560,7 @@ object TrackMatcher {
         if (marks.isNotEmpty() || carriesDjStyle || hasLanguageVersion || speedUp) {
             versions += marks
             if (hasLanguageVersion) versions += languageMarks
-            if (speedUp) versions += "speedup"
+            if (speedUp) versions += "sped"
             // "DJ" is often the credited artist ("DJ Snake - Title"), not a
             // remix. Keep the DJ name only when the segment also signals a take.
             if (dj >= 0 && (carriesDjStyle || marks.any { it in MIX_LABEL_MARKERS })) {

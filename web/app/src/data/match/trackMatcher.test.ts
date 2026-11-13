@@ -132,6 +132,7 @@ describe('TrackMatcher', () => {
 
   it('does not collapse sped-up and slowed edits into one recording', () => {
     expect(matches(song('Roses (Slowed + Reverb)', 'Saint Jhn', '2:30'), 'Roses (Sped Up)', 'Saint Jhn', 150)).toBe(false);
+    expect(matches(song('Roses (Speed Up)', 'Saint Jhn', '2:30'), 'Roses (Sped Up)', 'Saint Jhn', 150)).toBe(true);
   });
 
   it('keeps generic genre packaging out of version identity unless it names an edit', () => {

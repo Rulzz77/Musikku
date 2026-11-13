@@ -172,7 +172,7 @@ object SpotifyImporter {
         val target = TrackMatcher.Target(
             title = track.title,
             artist = track.artist,
-            durationSec = track.durationMs?.takeIf { it > 0 }?.div(1000)?.toInt(),
+            durationSec = track.durationMs.takeIf { it > 0 }?.div(1000),
             album = track.album,
         )
         return TrackMatcher.best(searchCandidates(target), target)

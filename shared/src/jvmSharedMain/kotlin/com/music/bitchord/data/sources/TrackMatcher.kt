@@ -257,7 +257,7 @@ object TrackMatcher {
         // Match the complete first credited artist name against one complete
         // candidate credit instead of accepting a partial token overlap.
         val requiredArtist = target.requiredArtistName?.takeIf { it.isNotBlank() }
-        if (requiredArtist != null) {
+        val requiredArtistMatched = if (requiredArtist != null) {
             val expectedNames = buildSet {
                 add(artistIdentityKey(requiredArtist))
                 artistNames(requiredArtist).singleOrNull()?.let { add(it.joinToString(" ")) }
@@ -267,8 +267,12 @@ object TrackMatcher {
                 candidate.artists.forEach { add(artistIdentityKey(it.name)) }
                 artistNames(candidate.artist).forEach { add(it.joinToString(" ")) }
             }
-            if (expectedNames.none { it.isNotBlank() && it in candidateNames }) return null
-        } else if (target.requireSharedArtist &&
+            expectedNames.any { it.isNotBlank() && it in candidateNames }
+                .also { matched -> if (!matched) return null }
+        } else {
+            false
+        }
+        if (requiredArtist == null && target.requireSharedArtist &&
             (artistNames(target.artist).isEmpty() ||
                 artistNames(candidate.artist).isEmpty() ||
                 creditedArtist == null)
@@ -284,9 +288,9 @@ object TrackMatcher {
             // the only way through the wider window. Exact title/version plus
             // a shared artist is strong enough; a different artist still gets
             // the ordinary 30-second ceiling below.
-            allowVideoDrift = creditedArtist != null,
+            allowVideoDrift = creditedArtist != null || requiredArtistMatched,
         ) ?: return null
-        val artist = creditedArtist
+        val artist = creditedArtist ?: ARTIST_EXACT.takeIf { requiredArtistMatched }
         // The credits don't merely differ in spelling, they name different
         // people — and sometimes that is because they are describing the
         // same recording from different ends of it. Film catalogues are

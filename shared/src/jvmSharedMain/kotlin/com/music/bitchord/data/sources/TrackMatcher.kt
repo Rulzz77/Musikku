@@ -477,6 +477,13 @@ object TrackMatcher {
         // chooses to print it.
         text = text.replace(FEATURING, " ")
 
+        // DJ edits are often appended without brackets ("Song DJ Koplo Remix").
+        // Pull only known version-shaped suffixes into the identity markers.
+        TRAILING_MIX_LABEL.find(text)?.let { match ->
+            classify(match.groupValues[1], versions, context)
+            text = text.substring(0, match.range.first)
+        }
+
         // CJK languages do not use spaces between
         // words. Standard word splitting and non-alphanumeric filtering fragment
         // these titles into empty or broken strings, so CJK titles keep their
@@ -542,6 +549,13 @@ object TrackMatcher {
         val marks = words.filter { it in VERSION_WORDS }
         if (marks.isNotEmpty()) {
             versions += marks
+            // Preserve the remixer identity after "DJ", not just the generic
+            // word "remix". Different DJ edits should not collapse together.
+            val dj = words.indexOf("dj")
+            if (dj >= 0) versions += words.drop(dj).filter { it !in NOISE_WORDS }
+            // The language descriptor is part of a version label:
+            // "Hindi Version" and "English Version" are different recordings.
+            versions += words.filter { it in VERSION_DESCRIPTORS }
             return
         }
         // A single CJK syllable is a whole title: the length gate exists
@@ -999,20 +1013,44 @@ object TrackMatcher {
     private val VERSION_WORDS = setOf(
         "remix", "remixes", "rmx", "refix", "flip", "bootleg", "mashup", "medley",
         "live", "concert", "unplugged", "acoustic", "instrumental", "karaoke",
-        // A stem is not the song. "Vocals Only", "Acapella", "Backing Track"
-        // and friends carry the right title and the right artist and are not
-        // remotely the recording anybody asked for.
         "vocals", "vocal", "acapella", "acappella", "backing", "stems", "stem",
         "cover", "demo", "reprise", "remake", "rework", "extended", "edit",
         "version", "mix", "dub", "vip", "session", "sessions",
-        "sped", "slowed", "reverb", "nightcore", "lofi", "orchestral", "symphonic",
+        "sped", "speed", "slowed", "slow", "reverb", "nightcore", "lofi", "orchestral", "symphonic",
+        // Indonesian DJ styles and common electronic/dance edits.
+        "dj", "koplo", "kentrung", "funkot", "breakbeat", "dangdut",
+        "jedag", "jedug", "jedagjedug", "bass", "boosted", "house", "techno",
+        "trance", "dubstep", "reggae", "disco", "club", "funky", "tiktok", "viral",
+        // Language-tagged versions.
+        "english", "hindi", "bengali", "punjabi", "tamil", "telugu", "malayalam",
+        "kannada", "marathi", "gujarati", "bhojpuri", "urdu", "arabic", "japanese",
+        "korean", "mandarin", "cantonese", "chinese", "spanish", "french",
+        "portuguese", "italian", "german", "russian", "turkish", "thai",
+        "indonesian", "javanese", "sundanese", "jawa", "sunda",
         "part", "pt", "chapter",
-        // Non-Latin spellings of the same takes. Without these a `カバー` or
-        // `カラオケ` row carries no version marker and scores as the original.
         "カバー", "カラオケ", "リミックス", "ライブ", "アコースティック",
         "インスト", "バージョン", "歌ってみた", "踊ってみた", "弾いてみた",
         "翻唱", "现场", "混音",
         "커버", "라이브", "리믹스",
+    )
+
+    private val VERSION_DESCRIPTORS = setOf(
+        "english", "hindi", "bengali", "punjabi", "tamil", "telugu", "malayalam",
+        "kannada", "marathi", "gujarati", "bhojpuri", "urdu", "arabic", "japanese",
+        "korean", "mandarin", "cantonese", "chinese", "spanish", "french",
+        "portuguese", "italian", "german", "russian", "turkish", "thai",
+        "indonesian", "javanese", "sundanese", "jawa", "sunda",
+    )
+
+    private val TRAILING_MIX_LABEL = Regex(
+        """\\s+(dj(?:\\s+[\\p{L}\\p{N}]+){0,3}\\s+(?:remix|mix|edit|version)|""" +
+            """dj\\s+(?:koplo|kentrung|funkot|breakbeat|dangdut|jedag(?:[\\s-]*jedug)?)(?:\\s+(?:remix|mix|edit|version))?|""" +
+            """(?:koplo|kentrung|funkot|breakbeat|dangdut|jedag[\\s-]*jedug|bass\\s+boosted|""" +
+            """sped\\s+up|speed\\s+up|slowed(?:\\s*\\+\\s*|\\s+)reverb|nightcore|""" +
+            """english|hindi|bengali|punjabi|tamil|telugu|malayalam|kannada|marathi|japanese|korean|""" +
+            """spanish|french|portuguese|italian|german|russian|turkish|thai)""" +
+            """(?:\\s+(?:remix|mix|edit|version))?)$""",
+        RegexOption.IGNORE_CASE,
     )
 
     /**
@@ -1024,6 +1062,8 @@ object TrackMatcher {
      */
     private val TRAILING_TAKES = setOf(
         "instrumental", "karaoke", "acapella", "acappella", "remix", "rmx", "nightcore",
+        "koplo", "kentrung", "funkot", "breakbeat", "dangdut", "jedag", "jedug",
+        "bass", "boosted", "sped", "speed", "slowed", "slow", "reverb",
     )
 
     /**

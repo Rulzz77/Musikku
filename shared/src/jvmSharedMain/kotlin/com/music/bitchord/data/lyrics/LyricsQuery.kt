@@ -48,7 +48,9 @@ private val CREDITS = listOf(
     Regex("""\s*[(\[]\s*(feat|ft|featuring|with)\b[^)\]]*[)\]]""", RegexOption.IGNORE_CASE),
     // The same, unbracketed and running to the end of the title.
     Regex("""\s+(feat|ft|featuring)\.?\s+.*$""", RegexOption.IGNORE_CASE),
-    // How the upload was labelled, not what was recorded.
+    // Soundtrack/source context is packaging, not a different recording.
+    Regex("""\s*[(\[]\s*(from|taken\s+from)\b[^)\]]*[)\]]""", RegexOption.IGNORE_CASE),
+    // Upload packaging only. Do not strip arbitrary brackets: DJ/remix labels matter.
     Regex(
         """\s*[(\[]\s*(official\s*)?(music\s*)?""" +
             """(video|audio|visuali[sz]er|lyrics?\s*video|lyrics?|m/?v|hd|hq|4k|full\s*song)""" +
@@ -56,6 +58,8 @@ private val CREDITS = listOf(
         RegexOption.IGNORE_CASE,
     ),
     Regex("""\s*[(\[]\s*official\s*[)\]]""", RegexOption.IGNORE_CASE),
+    // Upload labels can also follow a dash or pipe.
+    Regex("""\s*(?:\||[-–—])\s*(?:official\s*)?(?:music\s*)?(?:video|audio|visuali[sz]er|lyrics?\s*video|lyrics?|m/?v|hd|hq|4k|full\s*song)\s*$""", RegexOption.IGNORE_CASE),
 )
 
 /**

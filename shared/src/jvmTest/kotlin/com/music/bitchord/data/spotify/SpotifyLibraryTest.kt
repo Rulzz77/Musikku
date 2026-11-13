@@ -84,6 +84,9 @@ class SpotifyLibraryTest {
         kotlin.test.assertFailsWith<IllegalStateException> {
             nextSpotifyPageOffset(100, 250, 0)
         }
+        kotlin.test.assertFailsWith<IllegalStateException> {
+            nextSpotifyPageOffset(0, 50, 100)
+        }
     }
 
     @Test

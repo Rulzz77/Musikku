@@ -296,6 +296,18 @@ export function mapArtist(id: string, artist: Pick<YTMusic.Artist, 'header' | 's
  * sections of every kind, interleaved. Apple groups results by kind, so they
  * are grouped here, in the order YouTube ranked them.
  */
+const SEARCH_TYPE_WORDS = new Set(['song', 'video', 'album', 'single', 'ep', 'playlist', 'artist']);
+const SEARCH_DURATION = /^\\d{1,2}:\\d{2}(?::\\d{2})?$/;
+const SEARCH_TALLY = /^\\d[\\d,.]*\\s*(?:plays|views|listeners|subscribers|monthly audience)$/i;
+
+/** The artist segment of a promoted card subtitle such as "Song • Artist • 3:42". */
+function cardArtist(subtitle: string): string | null {
+  const parts = subtitle.split(' • ').map((part) => part.trim()).filter(Boolean);
+  return parts.find((part) =>
+    !SEARCH_TYPE_WORDS.has(part.toLowerCase()) && !SEARCH_DURATION.test(part) && !SEARCH_TALLY.test(part),
+  ) ?? null;
+}
+
 export function mapSearch(search: { contents?: readonly unknown[] | null }): SearchResults {
   const results: SearchResults = { top: [], songs: [], artists: [], albums: [], playlists: [], videos: [] };
   const seen = new Set<string>();
@@ -318,15 +330,18 @@ export function mapSearch(search: { contents?: readonly unknown[] | null }): Sea
       const link = linkOf(card.on_tap);
       const videoId = (card.on_tap?.payload as { videoId?: string } | undefined)?.videoId;
       const id = link?.browseId ?? videoId;
+      let kind: ItemKind | null = null;
+      let title = text(card.title);
       if (id) {
         const subtitle = text(card.subtitle);
-        const kind = kindOf(/^Artist/i.test(subtitle) ? 'artist' : /^Album|^Single|^EP/i.test(subtitle) ? 'album' : /^Playlist/i.test(subtitle) ? 'playlist' : videoId ? (/^Video/i.test(subtitle) ? 'video' : 'song') : undefined, id);
+        kind = kindOf(/^Artist/i.test(subtitle) ? 'artist' : /^Album|^Single|^EP/i.test(subtitle) ? 'album' : /^Playlist/i.test(subtitle) ? 'playlist' : videoId ? (/^Video/i.test(subtitle) ? 'video' : 'song') : undefined, id);
+        const creditedArtist = kind === 'song' || kind === 'video' ? cardArtist(subtitle) : null;
         const item: MusicItem = {
           kind,
           id,
-          title: text(card.title),
+          title,
           subtitle,
-          artists: [],
+          artists: creditedArtist ? [{ name: creditedArtist, id: null }] : [],
           album: null,
           thumbnail: thumbnailOf(card),
           wide: false,
@@ -336,7 +351,18 @@ export function mapSearch(search: { contents?: readonly unknown[] | null }): Sea
         results.top.push(item);
         add(item);
       }
-      for (const inner of card.contents ?? []) add(mapItem(inner));
+      // An artist card bills its promoted song rows to the artist in its
+      // header. YouTube often omits that credit from each child row, so copy
+      // only this explicit page-level credit onto children that have none.
+      const cardIsArtist = kind === 'artist';
+      const cardArtistName = cardIsArtist ? title : '';
+      for (const inner of card.contents ?? []) {
+        let item = mapItem(inner);
+        if (item && cardArtistName && (item.kind === 'song' || item.kind === 'video') && !item.artists.length) {
+          item = { ...item, artists: [{ name: cardArtistName, id: link?.browseId ?? null }] };
+        }
+        add(item);
+      }
       continue;
     }
     for (const node of ((section.contents as unknown[] | undefined) ?? [])) add(mapItem(node));

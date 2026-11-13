@@ -403,9 +403,11 @@ function sized(sources: unknown, min = 300): string | null {
 }
 
 function artistNamesOf(data: unknown): string[] {
-  return arr(path(data, 'artists', 'items'))
-    .map((a) => str(path(a, 'profile', 'name')) ?? str(path(a, 'name')))
-    .filter((n): n is string => !!n?.trim());
+  const artists = path(data, 'artists');
+  const items = Array.isArray(artists) ? artists : arr(path(artists, 'items'));
+  return [...new Set(items
+    .map((a) => (str(path(a, 'profile', 'name')) ?? str(path(a, 'name')))?.trim())
+    .filter((name): name is string => !!name))];
 }
 
 function artistsOf(data: unknown): string {

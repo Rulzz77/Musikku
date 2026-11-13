@@ -622,12 +622,19 @@ object TrackMatcher {
     /** Whether [text] is nothing but (part of) [artist] — the "Artist - Title" upload shape. */
     private fun isArtistName(text: String, artist: String): Boolean {
         if (artist.isBlank()) return false
+        // Some regional uploads put every performer before the title:
+        // "Artist feat. Collaborator - Song". Treat the credit marker as
+        // punctuation only for this prefix check; the rest of the title parser
+        // must retain feature words inside an actual song title.
+        val creditJoiners = setOf("feat", "ft", "featuring", "with")
         val words =
-            text.split(WORD_SPLIT).map { it.replace(NON_ALNUM, "") }.filter { it.isNotEmpty() }
+            text.split(WORD_SPLIT)
+                .map { it.replace(NON_ALNUM, "") }
+                .filter { it.isNotEmpty() && it !in creditJoiners }
         if (words.isEmpty()) return false
         val credited = normalize(artist).split(WORD_SPLIT)
             .map { it.replace(NON_ALNUM, "") }
-            .filter { it.isNotEmpty() }
+            .filter { it.isNotEmpty() && it !in creditJoiners }
             .toSet()
         return words.all { it in credited }
     }

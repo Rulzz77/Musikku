@@ -75,5 +75,6 @@ describe('Spotify import safety', () => {
     expect(nextSpotifyPageOffset(100, 250, 100)).toBe(200);
     expect(nextSpotifyPageOffset(200, 250, 100)).toBeNull();
     expect(() => nextSpotifyPageOffset(100, 250, 0)).toThrow('stopped at 100 of 250');
+    expect(() => nextSpotifyPageOffset(0, 50, 100)).toThrow('reports 50');
   });
 });

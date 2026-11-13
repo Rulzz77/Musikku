@@ -390,6 +390,58 @@ class SpotifyImporterIdentityTest {
     }
 
     @Test
+    fun spotifyImportDoesNotTreatDjArtistPrefixAsARecordingVersion() {
+        val target = TrackMatcher.Target(
+            title = "Taki Taki",
+            artist = "DJ Snake",
+            durationSec = 212,
+            requiredArtistName = "DJ Snake",
+            requireSharedArtist = true,
+            requireExactTitle = true,
+        )
+        val artistPrefixedUpload = Song(
+            videoId = "dj-snake-taki-taki",
+            title = "DJ Snake - Taki Taki (Official Audio)",
+            artist = "DJ Snake",
+            thumbnailUrl = null,
+            durationText = "3:32",
+        )
+
+        assertNotNull(TrackMatcher.best(listOf(artistPrefixedUpload), target))
+
+        val remixTarget = target.copy(title = "Taki Taki (DJ Snake Remix)")
+        val original = artistPrefixedUpload.copy(videoId = "original", title = "Taki Taki")
+        val remix = artistPrefixedUpload.copy(videoId = "remix", title = "Taki Taki (DJ Snake Remix)")
+        assertNull(TrackMatcher.best(listOf(original), remixTarget))
+        assertNotNull(TrackMatcher.best(listOf(remix), remixTarget))
+    }
+
+    @Test
+    fun languageNamesInOrdinaryPackagingDoNotBecomeVersionMarkers() {
+        val target = TrackMatcher.Target(
+            title = "Song",
+            artist = "Band",
+            durationSec = 210,
+            requiredArtistName = "Band",
+            requireSharedArtist = true,
+            requireExactTitle = true,
+        )
+        val packaging = Song(
+            videoId = "hindi-medium-packaging",
+            title = "Song (Hindi Medium)",
+            artist = "Band",
+            thumbnailUrl = null,
+            durationText = "3:30",
+        )
+        val hindiVersion = packaging.copy(videoId = "hindi-version", title = "Song (Hindi Version)")
+
+        assertNotNull(TrackMatcher.best(listOf(packaging), target))
+        val versionTarget = target.copy(title = "Song (Hindi Version)")
+        assertNull(TrackMatcher.best(listOf(packaging), versionTarget))
+        assertNotNull(TrackMatcher.best(listOf(hindiVersion), versionTarget))
+    }
+
+    @Test
     fun spotifyImportDoesNotTreatSlowedAndSpedUpAsTheSameVersion() {
         val target = TrackMatcher.Target(
             title = "Roses (Sped Up)",

@@ -2,9 +2,21 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SpotifyTrack } from '@bitchord/shared/bridge';
 import type { Track } from '@/data/music/types';
 
-const mocks = vi.hoisted(() => ({ searchSongs: vi.fn() }));
-vi.mock('@/data/music/api', () => ({ searchSongs: mocks.searchSongs }));
+const mocks = vi.hoisted(() => {
+  class PartialSearchError extends Error {
+    constructor(readonly candidates: unknown[], cause: unknown) {
+      super(`YouTube Music search was incomplete: ${String(cause)}`);
+      this.name = 'SearchSongsIncompleteError';
+    }
+  }
+  return { searchSongs: vi.fn(), SearchSongsIncompleteError: PartialSearchError };
+});
+vi.mock('@/data/music/api', () => ({
+  searchSongs: mocks.searchSongs,
+  SearchSongsIncompleteError: mocks.SearchSongsIncompleteError,
+}));
 
+import { SearchSongsIncompleteError } from '@/data/music/api';
 import { clearCachedSpotifyMatch, matchToYouTube, nextSpotifyPageOffset } from './api';
 
 function spotifyTrack(overrides: Partial<SpotifyTrack> = {}): SpotifyTrack {
@@ -53,12 +65,40 @@ describe('Spotify import safety', () => {
     await expect(matchToYouTube(spotifyTrack())).resolves.toBeNull();
   });
 
+  it('searches the original Spotify title and lead artist before normalized terms', async () => {
+    const correct = youtubeTrack('tanpo-correct', 'Tanpo Tresnamu', 'Denny Caknan');
+    mocks.searchSongs.mockImplementation(async (query: string) =>
+      query === 'Tanpo Tresnamu (Official Audio) Denny Caknan' ? [correct] : [],
+    );
+
+    await expect(matchToYouTube(spotifyTrack({
+      id: 'spotify-tanpo',
+      title: 'Tanpo Tresnamu (Official Audio)',
+      artist: 'Denny Caknan',
+      leadArtist: 'Denny Caknan',
+    }))).resolves.toMatchObject({ videoId: 'tanpo-correct' });
+    expect(mocks.searchSongs).toHaveBeenCalledTimes(1);
+    expect(mocks.searchSongs).toHaveBeenCalledWith('Tanpo Tresnamu (Official Audio) Denny Caknan');
+  });
+
   it('accepts a verified title, primary artist and runtime match', async () => {
     const correct = youtubeTrack('correct-song', 'Dumes', 'Guyon Waton');
     mocks.searchSongs.mockResolvedValue([correct]);
 
     await expect(matchToYouTube(spotifyTrack({ id: 'spotify-correct' }))).resolves.toMatchObject({
       videoId: 'correct-song',
+    });
+  });
+
+  it('uses visible first-page results when a later Songs page fails', async () => {
+    const correct = youtubeTrack('partial-visible-match', 'Dumes', 'Guyon Waton');
+    mocks.searchSongs.mockRejectedValue(new SearchSongsIncompleteError(
+      [correct],
+      new Error('continuation unavailable'),
+    ));
+
+    await expect(matchToYouTube(spotifyTrack({ id: 'spotify-partial-page' }))).resolves.toMatchObject({
+      videoId: 'partial-visible-match',
     });
   });
 

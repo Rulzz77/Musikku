@@ -298,6 +298,27 @@ class SpotifyImporterIdentityTest {
     }
 
     @Test
+    fun spotifyImportSearchIncludesOriginalSpotifyTitleAndFullArtistText() {
+        val target = TrackMatcher.Target(
+            title = "Tanpo Tresnamu (Official Audio)",
+            artist = "Denny Caknan, Yeni Inka",
+            durationSec = 252,
+            album = "Album Contoh",
+            requiredArtistName = "Denny Caknan",
+            requireExactTitle = true,
+        )
+
+        val queries = spotifyImportSearchQueries(target)
+
+        assertEquals("Tanpo Tresnamu (Official Audio) Denny Caknan", queries.first())
+        assertTrue("Tanpo Tresnamu (Official Audio) Denny Caknan, Yeni Inka" in queries)
+        assertTrue("Tanpo Tresnamu (Official Audio) Denny Caknan" in queries)
+        assertTrue("Tanpo Tresnamu (Official Audio)" in queries)
+        assertTrue(TrackMatcher.queries(target).all { it in queries })
+        assertEquals(queries.size, queries.distinct().size)
+    }
+
+    @Test
     fun spotifyImportAcceptsTheRequestedSingerWithMatchingRecording() {
         val target = TrackMatcher.Target(
             title = "Dumes",

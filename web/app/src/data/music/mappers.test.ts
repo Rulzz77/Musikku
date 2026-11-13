@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { YTMusic } from 'youtubei.js';
-import { firstBrowseArtwork, mapAlbum, mapArtist, mapCategories, mapHome, mapPlaylist, mapSearch, mapShelves, mapSuggestions } from './mappers';
+import { firstBrowseArtwork, mapAlbum, mapArtist, mapCategories, mapHome, mapPlaylist, mapSearch, mapShelves, mapSuggestions, mapTrack } from './mappers';
 import type { BrowsePage } from './types';
 
 // Real responses captured by web/scripts/capture-fixtures.mjs (prompt §0:
@@ -98,6 +98,19 @@ describe('artist', () => {
   });
 });
 
+describe('track mapping', () => {
+  it('keeps the author credit when YouTube omits structured artists', () => {
+    const track = mapTrack({
+      type: 'MusicResponsiveListItem',
+      id: 'author-credit-track',
+      title: 'Tanpo Tresnamu',
+      author: { name: 'Denny Caknan', channel_id: 'UCdenny' },
+    } as never);
+
+    expect(track?.artists).toEqual([{ name: 'Denny Caknan', id: 'UCdenny' }]);
+  });
+});
+
 describe('search', () => {
   it('groups results by kind behind a top result', () => {
     const results = mapSearch(new YTMusic.Search(response('search-all'), actions, { is_filtered: false } as never));
@@ -105,6 +118,8 @@ describe('search', () => {
     expect(results.top[0]!.title).not.toBe('');
     expect(results.songs.length).toBeGreaterThan(0);
     expect(results.albums.length + results.playlists.length).toBeGreaterThan(0);
+    const artistCardSong = results.songs.find((item) => item.title === 'You And Whose Army?');
+    expect(artistCardSong?.artists.map((artist) => artist.name)).toContain('Radiohead');
     const ids = [...results.songs, ...results.albums, ...results.artists, ...results.playlists, ...results.videos].map((i) => i.id);
     expect(new Set(ids).size).toBe(ids.length);
   });

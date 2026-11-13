@@ -1,6 +1,6 @@
 import type { SpotifyPlaylist, SpotifyTrack } from '@bitchord/shared/bridge';
 import { best, primaryArtist, queries, type MatchCandidate, type MatchTarget } from '@/data/match/trackMatcher';
-import { searchSongs } from '@/data/music/api';
+import { searchSongs, SearchSongsIncompleteError } from '@/data/music/api';
 import type { Track } from '@/data/music/types';
 import { getBridge } from '@/extension/bridge';
 
@@ -123,8 +123,19 @@ export async function matchToYouTube(track: SpotifyTrack): Promise<Track | null>
     album: track.album,
   };
   const baseQueries = queries(target);
-  const albumQuery = track.album?.trim() && baseQueries[0] ? `${baseQueries[0]} ${track.album.trim()}` : null;
-  const searchTerms = [...new Set([...baseQueries, ...(albumQuery ? [albumQuery] : [])])];
+  const rawTitle = track.title.trim();
+  const rawLeadArtist = leadArtist.trim();
+  const rawArtists = track.artist.trim();
+  const albumQuery = track.album?.trim() && rawTitle && rawLeadArtist
+    ? `${rawTitle} ${rawLeadArtist} ${track.album.trim()}`
+    : null;
+  const searchTerms = [...new Set([
+    rawTitle && rawLeadArtist ? `${rawTitle} ${rawLeadArtist}` : '',
+    rawTitle && rawArtists ? `${rawTitle} ${rawArtists}` : '',
+    rawTitle,
+    ...baseQueries,
+    ...(albumQuery ? [albumQuery] : []),
+  ].map((query) => query.replace(/\s+/g, ' ').trim()).filter(Boolean))];
   const candidates = new Map<string, Track>();
   let searchFailure: unknown = null;
 
@@ -134,7 +145,16 @@ export async function matchToYouTube(track: SpotifyTrack): Promise<Track | null>
       for (const row of rows) {
         if (row.videoId?.trim()) candidates.set(row.videoId, row);
       }
+      // Raw Spotify title + lead artist is the same natural query a listener
+      // enters in Search. Once that yields a strictly verified match, don't
+      // spend more requests on normalized variants for this playlist row.
+      if (best([...candidates.values()].map((candidate) => candidateOf(candidate)), target)) break;
     } catch (error) {
+      if (error instanceof SearchSongsIncompleteError) {
+        for (const candidate of error.candidates) {
+          if (candidate.videoId?.trim()) candidates.set(candidate.videoId, candidate);
+        }
+      }
       searchFailure ??= error;
     }
   }

@@ -157,7 +157,7 @@ export function mapTrack(node: unknown): Track | null {
   return {
     videoId: n.id,
     title: n.title ?? '',
-    artists: artistsOf(n.artists ?? n.authors),
+    artists: artistsOf(n.artists ?? n.authors ?? (n.author ? [n.author] : undefined)),
     album: n.album ? { name: n.album.name, id: n.album.id ?? null } : null,
     durationSec: n.duration?.seconds ?? null,
     explicit: explicitOf(n.badges),

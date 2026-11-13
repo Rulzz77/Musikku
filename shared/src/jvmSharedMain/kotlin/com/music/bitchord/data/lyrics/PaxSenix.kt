@@ -146,48 +146,61 @@ object PaxSenix {
     ): List<LyricLine>? {
         val root = runCatching { lyricsJson.parseToJsonElement(raw) }.getOrNull()
             ?: return null
-        val payload = (root as? JsonObject)?.get("lyrics")
-        val documents = (payload as? JsonArray).orEmpty()
-        if (documents.isEmpty()) return parseResponse(raw)
+        val wrapper = root as? JsonObject ?: return null
+        val payload = wrapper["lyrics"]
+        val documents = payload as? JsonArray
 
-        return documents.mapNotNull { document ->
-            // Older PaxSenix responses sometimes expose anonymous LRC documents
-            // as JSON strings rather than objects with title/artist metadata.
-            // Keep supporting that wire format, but only accept a document
-            // whose final timestamp is close to the requested track runtime.
-            if (document is JsonPrimitive && document.isString) {
-                if (durationMs <= 0L) return@mapNotNull null
-                val lrc = document.contentOrNull ?: return@mapNotNull null
-                val lines = parseResponse(lrc) ?: return@mapNotNull null
-                val distance = durationDistance(lines, durationMs)
-                val allowedDistance = maxOf(20_000L, durationMs / 10L)
-                if (distance > allowedDistance) return@mapNotNull null
-                return@mapNotNull ParsedDocument(lines, metadataScore = 0, distance)
-            }
-
-            val candidate = document as? JsonObject ?: return@mapNotNull null
-            val details = candidate["attributes"] as? JsonObject ?: candidate
-            val candidateTitle = details.firstString(TITLE_KEYS) ?: return@mapNotNull null
+        fun JsonObject.identifiesRequestedTrack(): Boolean {
+            val details = this["attributes"] as? JsonObject ?: this
+            val candidateTitle = details.firstString(TITLE_KEYS) ?: return false
             val candidateArtist = details.firstString(ARTIST_KEYS)
                 ?: details.artistNames().orEmpty()
-            val candidateDurationMs = details.firstLong(DURATION_KEYS).toDurationMs()
+            return lyricsCandidateMatches(
+                title = title,
+                artist = artist,
+                durationMs = durationMs,
+                candidateTitle = candidateTitle,
+                candidateArtist = candidateArtist,
+                candidateDurationMs = details.firstLong(DURATION_KEYS).toDurationMs(),
+                durationToleranceMs = 10_000L,
+            )
+        }
 
-            // Metadata-bearing candidates must identify the same recording;
-            // a shared artist or similar runtime is never enough on its own.
-            if (!lyricsCandidateMatches(
-                    title = title,
-                    artist = artist,
-                    durationMs = durationMs,
-                    candidateTitle = candidateTitle,
-                    candidateArtist = candidateArtist,
-                    candidateDurationMs = candidateDurationMs,
-                    durationToleranceMs = 10_000L,
-                )
-            ) return@mapNotNull null
+        // Some API responses wrap one document directly instead of returning
+        // an array. It is safe only when the wrapper itself identifies the song.
+        if (documents.isNullOrEmpty()) {
+            if (!wrapper.identifiesRequestedTrack()) return null
+            return parseResponse(raw)
+        }
 
-            val lines = parseResponse(document.toString()) ?: return@mapNotNull null
-            val metadataScore = candidate.lyricCandidateScore(title, artist, durationMs)
-            ParsedDocument(lines, metadataScore, durationDistance(lines, durationMs))
+        return documents.mapNotNull { document ->
+            when (document) {
+                is JsonPrimitive -> {
+                    // Legacy string-only entries have no track identity. Runtime
+                    // proximity alone is not proof: unrelated/DJ edits can be
+                    // almost exactly the same length.
+                    if (!document.isString || !wrapper.identifiesRequestedTrack()) {
+                        return@mapNotNull null
+                    }
+                    val lrc = document.contentOrNull ?: return@mapNotNull null
+                    val lines = parseResponse(lrc) ?: return@mapNotNull null
+                    ParsedDocument(
+                        lines = lines,
+                        metadataScore = 0,
+                        durationDistanceMs = durationDistance(lines, durationMs),
+                    )
+                }
+                is JsonObject -> {
+                    if (!document.identifiesRequestedTrack()) return@mapNotNull null
+                    val lines = parseResponse(document.toString()) ?: return@mapNotNull null
+                    ParsedDocument(
+                        lines = lines,
+                        metadataScore = document.lyricCandidateScore(title, artist, durationMs),
+                        durationDistanceMs = durationDistance(lines, durationMs),
+                    )
+                }
+                else -> null
+            }
         }.maxWithOrNull(
             compareBy<ParsedDocument> { it.metadataScore }
                 .thenBy { -it.durationDistanceMs }

@@ -360,6 +360,15 @@ class SpotifyImporterIdentityTest {
         )
 
         assertNotNull(TrackMatcher.best(listOf(singerFiledByYouTube), target))
+        // Some catalogues display only the second credited Spotify performer.
+        assertNotNull(TrackMatcher.best(listOf(singerFiledByYouTube.copy(
+            videoId = "budak-saha-friska-only",
+            artist = "Friska",
+        )), target))
+        assertNull(TrackMatcher.best(listOf(singerFiledByYouTube.copy(
+            videoId = "budak-saha-unrelated",
+            artist = "Denny Caknan",
+        )), target))
         assertNull(TrackMatcher.best(listOf(singerFiledByYouTube.copy(durationText = "4:35")), target))
         assertNull(TrackMatcher.best(listOf(singerFiledByYouTube.copy(durationText = null)), target))
     }

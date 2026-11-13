@@ -1,6 +1,7 @@
 package com.music.bitchord.data.lyrics
 
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 

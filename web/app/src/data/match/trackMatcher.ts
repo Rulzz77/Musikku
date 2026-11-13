@@ -211,7 +211,14 @@ export function ranked<T extends MatchCandidate>(candidates: T[], target: MatchT
 /** How confident this is the same recording, or null when it is not one. */
 export function score(candidate: MatchCandidate, target: MatchTarget): number | null {
   const wanted = parseTitle(target.title, target.artist ?? '');
-  const got = parseTitle(candidate.title, candidate.artist);
+  // A YouTube title can put a featured performer before the song
+  // ("Lead feat. Guest - Title") while its structured byline carries only
+  // the lead. Spotify's full credit is extra parsing context for that prefix;
+  // the actual artist acceptance below remains strict.
+  const candidateTitleArtist = target.requireExactTitle
+    ? [candidate.artist, target.artist ?? ''].filter(Boolean).join(', ')
+    : candidate.artist;
+  const got = parseTitle(candidate.title, candidateTitleArtist);
   if (!wanted.core.trim() || !got.core.trim()) return null;
   const exactIdentity =
     wanted.core === got.core ||

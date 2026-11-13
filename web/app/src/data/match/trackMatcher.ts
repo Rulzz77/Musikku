@@ -69,7 +69,7 @@ const DASH_PASSES = 3;
 const BRACKETED = /[([]([^()[\]]*)[)\]]/g;
 const BRACKETED_TEST = /[([]([^()[\]]*)[)\]]/;
 const DASH = /\s+[-–—|]+\s+/;
-const FEATURING = /\b(feat|ft|featuring|with)\b.*/g;
+const CREDIT_MARKER = /\b(?:feat\.?|ft\.?|featuring|with)(?=\s|$)/gi;
 const WORD_SPLIT = /[\s.·~〜]+/u;
 const NON_ALNUM = /[^\p{L}\p{N}]/gu;
 const LATIN = /[a-z0-9]/;
@@ -346,7 +346,14 @@ export function parseTitle(raw: string, artist = ''): TitleParts {
     }
   }
 
-  text = text.replace(FEATURING, ' ');
+  // "With" can be part of a real title ("With or Without You",
+  // "Dancing With Myself"). Strip a feat/with suffix only when the words
+  // after its marker are actually present in the known artist credits.
+  const creditSuffix = [...text.matchAll(CREDIT_MARKER)].reverse().find((match) => {
+    const markerIndex = match.index ?? 0;
+    return markerIndex > 0 && isArtistName(text.slice(markerIndex + match[0].length).trim(), artist);
+  });
+  if (creditSuffix?.index != null) text = text.slice(0, creditSuffix.index).trim();
 
   // DJ edits often arrive as an unbracketed suffix ("Song DJ Koplo Remix").
   const trailingMix = TRAILING_MIX_LABEL.exec(text);

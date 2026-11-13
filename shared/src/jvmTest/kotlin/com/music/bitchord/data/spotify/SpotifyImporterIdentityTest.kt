@@ -186,6 +186,11 @@ class SpotifyImporterIdentityTest {
             durationText = "3:30",
         )
         assertNotNull(TrackMatcher.best(listOf(youtubeSpelling), target))
+        val collaborationCredit = youtubeSpelling.copy(
+            videoId = "collaboration-upload",
+            artist = "GUYONWATON x Denny Caknan",
+        )
+        assertNotNull(TrackMatcher.best(listOf(collaborationCredit), target))
 
         val ndxTarget = TrackMatcher.Target(
             title = "Kimcil Kepolen",

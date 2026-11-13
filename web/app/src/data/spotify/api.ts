@@ -86,6 +86,7 @@ export function candidateOf(track: Track): MatchCandidate {
   return {
     title: track.title,
     artist: track.artists.map((a) => a.name).join(', '),
+    artistCredits: track.artists.map((a) => a.name),
     durationSec: track.durationSec,
     album: track.album?.name ?? null,
     explicit: track.explicit,

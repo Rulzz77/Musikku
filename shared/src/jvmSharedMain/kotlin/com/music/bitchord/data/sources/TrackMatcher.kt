@@ -275,10 +275,10 @@ object TrackMatcher {
                 artistNames(candidate.artist).forEach { add(it.joinToString("")) }
             }
             expectedNames.any { it.isNotBlank() && it in candidateNames }
-                .also { matched -> if (!matched) return null }
         } else {
             false
         }
+        if (requiredArtist != null && artistIdentityKey(requiredArtist).isBlank()) return null
         if (requiredArtist == null && target.requireSharedArtist &&
             (artistNames(target.artist).isEmpty() ||
                 artistNames(candidate.artist).isEmpty() ||
@@ -297,6 +297,16 @@ object TrackMatcher {
             // the ordinary 30-second ceiling below.
             allowVideoDrift = creditedArtist != null || requiredArtistMatched,
         ) ?: return null
+        // Spotify may put a label/producer first and the actual singer second
+        // (for example "Gasentra Pajampangan, Friska"), while YouTube Music
+        // files the same recording under "Friska Gasentra". Accept that
+        // alternate Spotify credit only when the exact title already matched,
+        // the candidate shares a credited Spotify artist, and runtimes agree
+        // within three seconds. A loose runtime or an unrelated featured
+        // artist can never bypass the explicit lead-artist requirement.
+        if (requiredArtist != null && !requiredArtistMatched &&
+            !(creditedArtist != null && withinSeconds(candidate, target, DURATION_TIGHT_SEC))
+        ) return null
         val artist = creditedArtist ?: ARTIST_EXACT.takeIf { requiredArtistMatched }
         // The credits don't merely differ in spelling, they name different
         // people — and sometimes that is because they are describing the

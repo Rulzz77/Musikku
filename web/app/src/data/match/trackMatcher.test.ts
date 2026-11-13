@@ -73,6 +73,19 @@ describe('TrackMatcher', () => {
     expect(best([song('Budak Saha', 'Friska Gasentra')], target)).toBeNull();
   });
 
+  it('keeps a song title after a featured-artist prefix in YouTube metadata', () => {
+    const target = {
+      title: 'Bubrah',
+      artist: 'Northsle, Agiff',
+      durationSec: 200,
+      requiredArtistName: 'Northsle',
+      requireSharedArtist: true,
+      requireExactTitle: true,
+    };
+    expect(best([song('Northsle feat. Agiff - Bubrah', 'Northsle, Agiff', '3:20')], target)).not.toBeNull();
+    expect(best([song('Northsle feat. Agiff - Bubrah', 'Northsle', '3:20')], target)).toBeNull();
+  });
+
   it('keeps commas inside one structured Spotify artist name', () => {
     const target = {
       title: 'September',

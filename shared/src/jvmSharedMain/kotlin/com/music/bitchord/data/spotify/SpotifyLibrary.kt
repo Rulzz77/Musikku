@@ -38,6 +38,8 @@ data class SpotifyTrack(
     val album: String?,
     val durationMs: Int,
     val imageUrl: String?,
+    /** Exact first artist supplied by Spotify; avoids splitting names such as "Earth, Wind & Fire". */
+    val leadArtist: String? = null,
 )
 
 object SpotifyLibrary {
@@ -251,9 +253,10 @@ internal fun parseTrackPage(root: JsonObject): Triple<List<SpotifyTrack>, Int, I
         val title = data.str("name").orEmpty()
         if (title.isBlank()) return@mapNotNull null
         val uri = data.str("uri") ?: data.str("_uri") ?: return@mapNotNull null
-        val artist = data.obj("artists")?.arr("items").orEmpty().mapNotNull { artist ->
+        val artistNames = data.obj("artists")?.arr("items").orEmpty().mapNotNull { artist ->
             artist.jsonObject.obj("profile")?.str("name")?.takeIf { it.isNotBlank() }
-        }.joinToString(", ")
+        }
+        val artist = artistNames.joinToString(", ")
         val album = data.obj("albumOfTrack")
         SpotifyTrack(
             id = uri.substringAfterLast(":"),
@@ -262,6 +265,7 @@ internal fun parseTrackPage(root: JsonObject): Triple<List<SpotifyTrack>, Int, I
             album = album?.str("name"),
             durationMs = data.obj("duration")?.int("totalMilliseconds") ?: 0,
             imageUrl = album?.obj("coverArt")?.arr("sources")?.lastUrl(),
+            leadArtist = artistNames.firstOrNull(),
         )
     }
     return Triple(items, content.int("totalCount") ?: rawItems.size, rawItems.size)
@@ -279,15 +283,17 @@ internal fun parseLikedPage(root: JsonObject): Triple<List<SpotifyTrack>, Int, I
         if (title.isBlank()) return@mapNotNull null
         val uri = wrapper.str("_uri") ?: data.str("uri") ?: return@mapNotNull null
         val album = data.obj("albumOfTrack")
+        val artistNames = data.obj("artists")?.arr("items").orEmpty().mapNotNull { artist ->
+            artist.jsonObject.obj("profile")?.str("name")?.takeIf { it.isNotBlank() }
+        }
         SpotifyTrack(
             id = uri.substringAfterLast(":"),
             title = title,
-            artist = data.obj("artists")?.arr("items").orEmpty().mapNotNull { artist ->
-                artist.jsonObject.obj("profile")?.str("name")?.takeIf { it.isNotBlank() }
-            }.joinToString(", "),
+            artist = artistNames.joinToString(", "),
             album = album?.str("name"),
             durationMs = (data.obj("trackDuration") ?: data.obj("duration"))?.int("totalMilliseconds") ?: 0,
             imageUrl = album?.obj("coverArt")?.arr("sources")?.lastUrl(),
+            leadArtist = artistNames.firstOrNull(),
         )
     }
     return Triple(items, tracks.int("totalCount") ?: rawItems.size, rawItems.size)

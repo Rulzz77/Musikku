@@ -54,8 +54,8 @@ object TrackMatcher {
         val isVideo: Boolean = false,
         /** Imports with a known credited performer must not substitute another singer on runtime alone. */
         val requireSharedArtist: Boolean = false,
-        /** Spotify imports require the lead performer, not merely any shared featured artist. */
-        val requirePrimaryArtist: Boolean = false,
+        /** Spotify's exact lead performer name, when the source exposes structured artist credits. */
+        val requiredArtistName: String? = null,
         /** Spotify imports must match the same title identity, not a longer title containing it. */
         val requireExactTitle: Boolean = false,
     )
@@ -256,12 +256,19 @@ object TrackMatcher {
         // share a secondary name while replacing the requested lead singer.
         // Match the complete first credited artist name against one complete
         // candidate credit instead of accepting a partial token overlap.
-        if (target.requirePrimaryArtist) {
-            val leadArtist = artistNames(primaryArtist(target.artist)).singleOrNull()
-            if (leadArtist == null || leadArtist !in artistNames(candidate.artist)) return null
-        }
-        // Runtime by itself must not let another performer through.
-        if (target.requireSharedArtist &&
+        val requiredArtist = target.requiredArtistName?.takeIf { it.isNotBlank() }
+        if (requiredArtist != null) {
+            val expectedNames = buildSet {
+                add(artistIdentityKey(requiredArtist))
+                artistNames(requiredArtist).singleOrNull()?.let { add(it.joinToString(" ")) }
+            }
+            val candidateNames = buildSet {
+                add(artistIdentityKey(candidate.artist))
+                candidate.artists.forEach { add(artistIdentityKey(it.name)) }
+                artistNames(candidate.artist).forEach { add(it.joinToString(" ")) }
+            }
+            if (expectedNames.none { it.isNotBlank() && it in candidateNames }) return null
+        } else if (target.requireSharedArtist &&
             (artistNames(target.artist).isEmpty() ||
                 artistNames(candidate.artist).isEmpty() ||
                 creditedArtist == null)
@@ -728,6 +735,10 @@ object TrackMatcher {
         }
         .filter { it.isNotEmpty() }
         .toSet()
+
+    /** Normalize one complete artist name without splitting collaboration words or punctuation. */
+    private fun artistIdentityKey(value: String): String =
+        normalize(value).replace(NON_ALNUM, " ").replace(Regex("\\s+"), " ").trim()
 
     private fun sameArtist(a: List<String>, b: List<String>) = runOf(a, b) || runOf(b, a)
 

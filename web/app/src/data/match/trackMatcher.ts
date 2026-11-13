@@ -243,31 +243,26 @@ export function score(candidate: MatchCandidate, target: MatchTarget): number | 
   const spotifyCredits = target.artistCredits?.length
     ? target.artistCredits
     : artistNames(target.artist ?? '').map((words) => words.join(' '));
-  // Some catalogues file the same track under Spotify's second credited
-  // singer alone. Only an exact full secondary credit can qualify, and only
-  // with an exact title/version and runtime within three seconds.
-  const secondaryArtistMatched = !!requiredArtist && !requiredArtistMatched &&
-    spotifyCredits.slice(1).some((credit) => candidateNames.has(artistIdentityKey(credit)));
   const compositeArtistAlias = !!requiredArtist && !requiredArtistMatched &&
     sharesCompositeSpotifyCredit(
       spotifyCredits,
       [candidate.artist, ...(candidate.artistCredits ?? [])],
     );
-  const alternateSpotifyArtist = secondaryArtistMatched || compositeArtistAlias;
-  if (requiredArtist && !requiredArtistMatched && !alternateSpotifyArtist) return null;
+  if (requiredArtist && !requiredArtistMatched && !compositeArtistAlias) return null;
   if (requiredArtist && !requiredArtistKey) return null;
   if (!requiredArtist && target.requireSharedArtist &&
     (!artistNames(target.artist ?? '').length || !artistNames(candidate.artist).length || creditedArtist === null)) return null;
   const duration = durationScore(
     target.durationSec ?? null,
     positive(candidate.durationSec),
-    creditedArtist !== null || requiredArtistMatched || alternateSpotifyArtist,
+    creditedArtist !== null || requiredArtistMatched || compositeArtistAlias,
   );
   if (duration === null) return null;
-  // A second credited singer or a flattened display alias remains high
-  // confidence only with exact title/version and runtime within three seconds.
-  if (alternateSpotifyArtist && !withinSeconds(candidate, target, DURATION_TIGHT_SEC)) return null;
-  const artist = creditedArtist ?? (requiredArtistMatched || alternateSpotifyArtist
+  // A flattened display alias may combine meaningful tokens from multiple
+  // Spotify credits, but only the full composite alias is trusted, and only
+  // when title identity is exact and runtime is within three seconds.
+  if (compositeArtistAlias && !withinSeconds(candidate, target, DURATION_TIGHT_SEC)) return null;
+  const artist = creditedArtist ?? (requiredArtistMatched || compositeArtistAlias
     ? ARTIST_EXACT
     : !target.isVideo && withinSeconds(candidate, target, CREDIT_OVERRIDE_SEC) ? CREDITS_DISAGREE : null);
   if (artist === null) return null;

@@ -73,6 +73,7 @@ class SpotifyLibraryTest {
         val track = parseTrackPage(root).first.single()
         assertEquals("Earth, Wind & Fire, Guest Artist", track.artist)
         assertEquals("Earth, Wind & Fire", track.leadArtist)
+        assertEquals(listOf("Earth, Wind & Fire", "Guest Artist"), track.artistCredits)
     }
 
     @Test

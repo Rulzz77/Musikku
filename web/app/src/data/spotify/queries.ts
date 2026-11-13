@@ -51,6 +51,8 @@ class PlaylistJob {
   private source: SpotifyTrack[] = [];
   private readonly listeners = new Set<() => void>();
   private fetching = false;
+  private fetchFailed = false;
+  private generation = 0;
   private readonly inFlight = new Set<number>();
 
   constructor(private readonly playlistId: string) {}
@@ -69,23 +71,44 @@ class PlaylistJob {
 
   retry() {
     if (this.state.status !== 'error') return;
-    this.emit({ status: 'loading', error: null });
+    // Ignore late callbacks from the failed attempt. A fetch failure restarts
+    // the full page read; a match failure retries only rows still pending.
+    this.generation++;
+    this.inFlight.clear();
+    this.fetching = false;
+    if (this.fetchFailed) {
+      this.source = [];
+      this.fetchFailed = false;
+      this.emit({ status: 'loading', error: null, rows: [], total: 0 });
+    } else {
+      this.emit({ status: 'loading', error: null });
+    }
     this.start();
   }
 
   private start() {
     if (this.state.status === 'loading' && !this.fetching && !this.source.length) {
       this.fetching = true;
+      const generation = this.generation;
       fetchSpotifyTracks(this.playlistId, (soFar, total) => {
+        if (generation !== this.generation) return;
         this.source = soFar;
         // Rows already matched keep their match; new ones join as pending.
         const rows = soFar.map((t, i) => this.state.rows[i] ?? pendingTrack(t));
         this.emit({ rows, total });
         this.pump();
       })
-        .then(() => this.emit({ status: 'ready' }))
-        .catch((error: unknown) => this.emit({ status: this.source.length ? 'ready' : 'error', error }))
-        .finally(() => (this.fetching = false));
+        .then(() => {
+          if (generation === this.generation) this.emit({ status: 'ready' });
+        })
+        .catch((error: unknown) => {
+          if (generation !== this.generation) return;
+          this.fetchFailed = true;
+          this.emit({ status: 'error', error });
+        })
+        .finally(() => {
+          if (generation === this.generation) this.fetching = false;
+        });
       return;
     }
     this.pump();
@@ -93,19 +116,25 @@ class PlaylistJob {
 
   /** Keeps up to MATCH_PARALLELISM lookups going, in order, while someone is looking. */
   private pump() {
+    if (this.state.status === 'error') return;
     while (this.inFlight.size < MATCH_PARALLELISM && this.listeners.size > 0) {
       const index = this.state.rows.findIndex((r, i) => r.unavailable === 'matching' && !this.inFlight.has(i));
       if (index < 0) return;
       this.inFlight.add(index);
       const track = this.source[index]!;
+      const generation = this.generation;
       void matchToYouTube(track)
-        .catch(() => null)
         .then((found) => {
+          if (generation !== this.generation) return;
           const rows = [...this.state.rows];
           rows[index] = found ?? pendingTrack(track, 'missing');
           this.emit({ rows });
         })
+        .catch((error: unknown) => {
+          if (generation === this.generation) this.emit({ status: 'error', error });
+        })
         .finally(() => {
+          if (generation !== this.generation) return;
           this.inFlight.delete(index);
           this.pump();
         });

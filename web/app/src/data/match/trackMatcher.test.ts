@@ -58,6 +58,20 @@ describe('TrackMatcher', () => {
     expect(matches(song('Numb / Encore', 'Jay-Z & Linkin Park'), 'Numb / Encore', 'Linkin Park')).toBe(true);
   });
 
+  it('accepts a secondary Spotify singer credit only with an exact runtime', () => {
+    const target = {
+      title: 'Budak Saha',
+      artist: 'Gasentra Pajampangan, Friska',
+      durationSec: 287,
+      requiredArtistName: 'Gasentra Pajampangan',
+      requireSharedArtist: true,
+      requireExactTitle: true,
+    };
+    expect(best([song('Budak Saha', 'Friska Gasentra', '4:47')], target)).not.toBeNull();
+    expect(best([song('Budak Saha', 'Friska Gasentra', '4:35')], target)).toBeNull();
+    expect(best([song('Budak Saha', 'Friska Gasentra')], target)).toBeNull();
+  });
+
   it('accepts a composer credit against a singer credit on an exact runtime, and only then', () => {
     expect(matches(song('Jhak Maar Ke', 'Neeraj Shridhar', '3:53'), 'Jhak Maar Ke', 'Pritam', 233)).toBe(true);
     expect(matches(song('Jhak Maar Ke', 'Leo Lz Mix', '4:01'), 'Jhak Maar Ke', 'Pritam', 233)).toBe(false);

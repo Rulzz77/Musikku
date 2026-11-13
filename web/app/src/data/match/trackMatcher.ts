@@ -33,6 +33,8 @@ export interface MatchTarget {
   isVideo?: boolean;
   /** Spotify imports can require the exact primary credited artist. */
   requiredArtistName?: string | null;
+  /** Original Spotify artist names in order; commas inside a name are not delimiters. */
+  artistCredits?: string[];
   /** Refuse partial-title containment for Spotify track identity. */
   requireExactTitle?: boolean;
   /** Refuse unrelated credits when the source supplied an artist. */
@@ -232,7 +234,10 @@ export function score(candidate: MatchCandidate, target: MatchTarget): number | 
     ? candidateArtistKeys(candidate).has(artistIdentityKey(requiredArtist))
     : false;
   const compositeArtistAlias = !!requiredArtist && !requiredArtistMatched &&
-    sharesCompositeSpotifyCredit(target.artist ?? '', [candidate.artist, ...(candidate.artistCredits ?? [])]);
+    sharesCompositeSpotifyCredit(
+      target.artistCredits?.length ? target.artistCredits : artistNames(target.artist ?? '').map((words) => words.join(' ')),
+      [candidate.artist, ...(candidate.artistCredits ?? [])],
+    );
   if (requiredArtist && !requiredArtistMatched && !compositeArtistAlias) return null;
   if (requiredArtist && !artistIdentityKey(requiredArtist)) return null;
   if (!requiredArtist && target.requireSharedArtist &&
@@ -578,18 +583,22 @@ export function artistNames(value: string): string[][] {
 }
 
 /** A candidate alias must combine meaningful tokens from multiple Spotify credits. */
-function sharesCompositeSpotifyCredit(targetArtist: string, candidateCredits: string[]): boolean {
+function sharesCompositeSpotifyCredit(targetCredits: string[], candidateCredits: string[]): boolean {
   const ignored = new Set(['the', 'and', 'feat', 'featuring', 'ft', 'with', 'vs', 'dj', 'band', 'music', 'official']);
-  const sourceGroups = artistNames(targetArtist)
-    .map((words) => words.filter((word) => !ignored.has(word)))
-    .filter((words) => words.length > 0);
+  const tokens = (name: string) => new Set(
+    name.normalize('NFKC').toLowerCase().split(WORD_SPLIT).map(strip)
+      .filter((word) => [...word].length > 1 && !ignored.has(word)),
+  );
+  // Use Spotify's original artist objects: an artist literally named
+  // "Earth, Wind & Fire" stays one credit rather than three false identities.
+  const sourceGroups = targetCredits.map(tokens).filter((words) => words.size > 0);
   if (sourceGroups.length < 2) return false;
-  const sourceTokens = new Set(sourceGroups.flat());
-  return candidateCredits.flatMap((credit) => artistNames(credit)).some((words) => {
-    const meaningful = [...new Set(words.filter((word) => !ignored.has(word)))];
-    return meaningful.length >= 2 &&
-      meaningful.every((word) => sourceTokens.has(word)) &&
-      sourceGroups.filter((group) => meaningful.some((word) => group.includes(word))).length >= 2;
+  const sourceTokens = new Set(sourceGroups.flatMap((group) => [...group]));
+  return candidateCredits.some((credit) => {
+    const meaningful = tokens(credit);
+    return meaningful.size >= 2 &&
+      [...meaningful].every((word) => sourceTokens.has(word)) &&
+      sourceGroups.filter((group) => [...meaningful].some((word) => group.has(word))).length >= 2;
   });
 }
 

@@ -29,6 +29,12 @@ export interface MatchTarget {
   isExplicit?: boolean | null;
   /** Music-video timing includes visual intros/outros that catalogue audio omits. */
   isVideo?: boolean;
+  /** Spotify imports can require the exact primary credited artist. */
+  requiredArtistName?: string | null;
+  /** Refuse partial-title containment for Spotify track identity. */
+  requireExactTitle?: boolean;
+  /** Refuse unrelated credits when the source supplied an artist. */
+  requireSharedArtist?: boolean;
 }
 
 interface TitleParts {
@@ -82,8 +88,7 @@ const VERSION_WORDS = new Set([
   'sped', 'speed', 'slowed', 'slow', 'reverb', 'nightcore', 'lofi', 'orchestral', 'symphonic',
   // Indonesian DJ styles and common electronic/dance edits.
   'dj', 'koplo', 'kentrung', 'funkot', 'breakbeat', 'dangdut',
-  'jedag', 'jedug', 'jedagjedug', 'bass', 'boosted', 'house', 'techno',
-  'trance', 'dubstep', 'reggae', 'disco', 'club', 'funky', 'tiktok', 'viral',
+  'jedag', 'jedug', 'jedagjedug', 'boosted',
   // Language-tagged versions.
   'english', 'hindi', 'bengali', 'punjabi', 'tamil', 'telugu', 'malayalam',
   'kannada', 'marathi', 'gujarati', 'bhojpuri', 'urdu', 'arabic', 'japanese',
@@ -96,6 +101,12 @@ const VERSION_WORDS = new Set([
   '翻唱', '现场', '混音',
   '커버', '라이브', '리믹스',
 ]);
+const DJ_STYLE_WORDS = new Set([
+  'koplo', 'kentrung', 'funkot', 'breakbeat', 'dangdut', 'jedag', 'jedug', 'jedagjedug',
+  'bass', 'boosted', 'house', 'techno', 'trance', 'dubstep', 'reggae', 'disco',
+  'club', 'funky', 'tiktok', 'viral',
+]);
+const MIX_LABEL_MARKERS = new Set(['remix', 'remixes', 'rmx', 'mix', 'edit', 'version']);
 const VERSION_DESCRIPTORS = new Set([
   'english', 'hindi', 'bengali', 'punjabi', 'tamil', 'telugu', 'malayalam',
   'kannada', 'marathi', 'gujarati', 'bhojpuri', 'urdu', 'arabic', 'japanese',
@@ -104,11 +115,11 @@ const VERSION_DESCRIPTORS = new Set([
   'indonesian', 'javanese', 'sundanese', 'jawa', 'sunda',
 ]);
 const TRAILING_MIX_LABEL =
-  /\s+(dj(?:\s+[\p{L}\p{N}]+){0,3}\s+(?:remix|mix|edit|version)|dj\s+(?:koplo|kentrung|funkot|breakbeat|dangdut|jedag(?:[\s-]*jedug)?)(?:\s+(?:remix|mix|edit|version))?|(?:koplo|kentrung|funkot|breakbeat|dangdut|jedag[\s-]*jedug|bass\s+boosted|sped\s+up|speed\s+up|slowed(?:\s*\+\s*|\s+)reverb|nightcore|english|hindi|bengali|punjabi|tamil|telugu|malayalam|kannada|marathi|japanese|korean|spanish|french|portuguese|italian|german|russian|turkish|thai)(?:\s+(?:remix|mix|edit|version))?)$/iu;
+  /\s+(dj(?:\s+[\p{L}\p{N}]+){0,3}\s+(?:remix|mix|edit|version)|dj\s+(?:koplo|kentrung|funkot|breakbeat|dangdut|jedag(?:[\s-]*jedug)?|bass|boosted|house|techno|trance|dubstep|reggae|disco|club|funky|tiktok|viral)(?:\s+(?:remix|mix|edit|version))?|(?:koplo|kentrung|funkot|breakbeat|dangdut|jedag[\s-]*jedug|bass\s+boosted|(?:house|techno|trance|dubstep|reggae|disco|club|funky|tiktok|viral)\s+(?:remix|mix|edit|version)|sped\s+up|speed\s+up|slowed(?:\s*\+\s*|\s+)reverb|nightcore|english|hindi|bengali|punjabi|tamil|telugu|malayalam|kannada|marathi|japanese|korean|spanish|french|portuguese|italian|german|russian|turkish|thai)(?:\s+(?:remix|mix|edit|version))?)$/iu;
 const TRAILING_TAKES = new Set([
   'instrumental', 'karaoke', 'acapella', 'acappella', 'remix', 'rmx', 'nightcore',
   'koplo', 'kentrung', 'funkot', 'breakbeat', 'dangdut', 'jedag', 'jedug',
-  'bass', 'boosted', 'sped', 'speed', 'slowed', 'slow', 'reverb',
+  'sped', 'slowed', 'reverb',
 ]);
 const NOVOCAL_TAKES = new Set(['instrumental', 'karaoke', 'acapella', 'acappella', 'backing', 'stems', 'stem']);
 const NEUTRAL_SEGMENTS = new Set([
@@ -157,7 +168,7 @@ export function normalize(text: string): string {
 export function queries(target: MatchTarget): string[] {
   const title = searchableTitle(target.title, target.artist ?? '');
   if (!title.trim()) return [];
-  const artist = primaryArtist(target.artist ?? '');
+  const artist = target.requiredArtistName?.trim() || primaryArtist(target.artist ?? '');
   const out = artist ? [`${title} ${artist}`, title] : [title];
   const latin = romajiOf(title).trim();
   const otherScript =
@@ -204,11 +215,14 @@ export function score(candidate: MatchCandidate, target: MatchTarget): number | 
   const wanted = parseTitle(target.title, target.artist ?? '');
   const got = parseTitle(candidate.title, candidate.artist);
   if (!wanted.core.trim() || !got.core.trim()) return null;
-  const isTitleMatch =
+  const exactIdentity =
     wanted.core === got.core ||
     romajiOf(wanted.core) === romajiOf(got.core) ||
-    isTranslationMatch(wanted, got) ||
-    (!([...wanted.core].length <= 3 || [...got.core].length <= 3) &&
+    isTranslationMatch(wanted, got);
+  const isTitleMatch =
+    exactIdentity ||
+    (!target.requireExactTitle &&
+      [...wanted.core].length > 3 && [...got.core].length > 3 &&
       (wanted.core.includes(got.core) || got.core.includes(wanted.core)));
   if (!isTitleMatch) return null;
 
@@ -217,11 +231,22 @@ export function score(candidate: MatchCandidate, target: MatchTarget): number | 
   if (!sameSet(wanted.versions, effectiveVersions)) return null;
 
   const creditedArtist = artistScore(target.artist ?? '', candidate.artist);
-  const duration = durationScore(target.durationSec ?? null, positive(candidate.durationSec), creditedArtist !== null);
+  const requiredArtist = target.requiredArtistName?.trim();
+  const requiredArtistMatched = requiredArtist
+    ? candidateArtistKeys(candidate.artist).has(artistIdentityKey(requiredArtist))
+    : false;
+  if (requiredArtist && (!artistIdentityKey(requiredArtist) || !requiredArtistMatched)) return null;
+  if (!requiredArtist && target.requireSharedArtist &&
+    (!artistNames(target.artist ?? '').length || !artistNames(candidate.artist).length || creditedArtist === null)) return null;
+  const duration = durationScore(
+    target.durationSec ?? null,
+    positive(candidate.durationSec),
+    creditedArtist !== null || requiredArtistMatched,
+  );
   if (duration === null) return null;
-  const artist =
-    creditedArtist ??
-    (!target.isVideo && withinSeconds(candidate, target, CREDIT_OVERRIDE_SEC) ? CREDITS_DISAGREE : null);
+  const artist = creditedArtist ?? (requiredArtistMatched
+    ? ARTIST_EXACT
+    : !target.isVideo && withinSeconds(candidate, target, CREDIT_OVERRIDE_SEC) ? CREDITS_DISAGREE : null);
   if (artist === null) return null;
   const explicit = explicitScore(target.isExplicit ?? null, candidate.explicit ?? null);
   if (explicit === null) return null;
@@ -335,12 +360,13 @@ function classify(segment: string, versions: Set<string>, context: Set<string>):
   if (!words.length) return;
   if (NEUTRAL_SEGMENTS.has(words.join(''))) return;
   const marks = words.filter((w) => VERSION_WORDS.has(w));
-  if (marks.length) {
+  const dj = words.indexOf('dj');
+  const carriesDjStyle = words.some((w) => DJ_STYLE_WORDS.has(w)) &&
+    (dj >= 0 || marks.some((w) => MIX_LABEL_MARKERS.has(w)));
+  if (marks.length || carriesDjStyle) {
     marks.forEach((m) => versions.add(m));
-    // Keep the remixer identity after "DJ", not just the generic remix label.
-    const dj = words.indexOf('dj');
     if (dj >= 0) words.slice(dj).filter((w) => !NOISE_WORDS.has(w)).forEach((w) => versions.add(w));
-    // The language descriptor is part of a version label.
+    else if (carriesDjStyle) words.filter((w) => DJ_STYLE_WORDS.has(w)).forEach((w) => versions.add(w));
     words.filter((w) => VERSION_DESCRIPTORS.has(w)).forEach((w) => versions.add(w));
     return;
   }
@@ -498,6 +524,24 @@ export function romajiOf(text: string): string {
 }
 
 // ── Artist ─────────────────────────────────────────────────────────────────
+
+function artistIdentityKey(value: string): string {
+  return normalize(value)
+    .normalize('NFKD')
+    .replace(/\p{M}+/gu, '')
+    .replace(NON_ALNUM, ' ')
+    .replace(/\s+/gu, ' ')
+    .trim()
+    .replaceAll(' ', '');
+}
+
+function candidateArtistKeys(value: string): Set<string> {
+  return new Set([
+    artistIdentityKey(value),
+    ...artistNames(value).map((name) => artistIdentityKey(name.join(' '))),
+    ...value.split(',').map(artistIdentityKey),
+  ].filter(Boolean));
+}
 
 function artistScore(wanted: string, got: string): number | null {
   const want = artistNames(wanted);

@@ -5,6 +5,9 @@ import com.music.bitchord.data.model.BrowseType
 import com.music.bitchord.data.model.SearchResult
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.sources.TrackMatcher
+import com.music.bitchord.data.innertube.InnertubeParser
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -12,6 +15,40 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class SpotifyImporterIdentityTest {
+
+    @Test
+    fun allSearchParserPreservesPromotedTrackForSpotifyImport() {
+        val response = Json.parseToJsonElement(
+            """
+            {
+              "contents": [{
+                "musicCardShelfRenderer": {
+                  "onTap": { "watchEndpoint": { "videoId": "promoted-track" } },
+                  "title": { "runs": [{ "text": "Tanpo Tresnamu" }] },
+                  "subtitle": { "runs": [
+                    { "text": "Song" },
+                    { "text": " • " },
+                    { "text": "Denny Caknan" },
+                    { "text": " • " },
+                    { "text": "4:12" }
+                  ] },
+                  "thumbnail": { "musicThumbnailRenderer": {
+                    "thumbnail": { "thumbnails": [{
+                      "url": "https://example.invalid/cover.jpg",
+                      "width": 544,
+                      "height": 544
+                    }] }
+                  } }
+                }
+              }]
+            }
+            """.trimIndent(),
+        ).jsonObject
+
+        val result = InnertubeParser.parseSearchPage(response).rows.single()
+        assertTrue(result is SearchResult.TopTrack)
+        assertEquals("promoted-track", spotifyImportCandidate(result)?.videoId)
+    }
 
     @Test
     fun spotifyImportCanUsePromotedTopTrackFromAllSearch() {

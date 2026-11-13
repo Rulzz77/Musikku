@@ -177,9 +177,10 @@ object SpotifyImporter {
      * first row. This also lets bracketed film/version packaging be removed by
      * TrackMatcher before the request reaches YouTube Music.
      */
-    private suspend fun searchCandidates(target: TrackMatcher.Target): List<Song> {
+    private suspend fun searchCandidates(target: TrackMatcher.Target, suffix: String? = null): List<Song> {
         val found = LinkedHashMap<String, Song>()
-        for (query in TrackMatcher.queries(target)) {
+        for (baseQuery in TrackMatcher.queries(target)) {
+            val query = listOf(baseQuery, suffix?.takeIf { it.isNotBlank() }).filterNotNull().joinToString(" ")
             val songs = YtMusicRepository.search(query, SearchFilter.SONGS).getOrNull()
                 ?.filterIsInstance<SearchResult.Track>()
                 ?.map { it.song }
@@ -281,7 +282,7 @@ object SpotifyImporter {
                         title = track.title,
                         artist = track.artist,
                     )
-                    val candidates = searchCandidates(target).let { found ->
+                    val candidates = searchCandidates(target, cleanLang).let { found ->
                         if (cleanLang == null) found else {
                             val conflictingLangs = knownLanguages.filter { !it.equals(cleanLang, ignoreCase = true) }
                             found.filter { candidate ->

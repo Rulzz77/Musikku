@@ -72,7 +72,9 @@ export function pendingTrack(track: SpotifyTrack, unavailable: 'matching' | 'mis
   return {
     videoId: `spotify:${track.id}`,
     title: track.title,
-    artists: track.artist ? track.artist.split(', ').map((name) => ({ name, id: null })) : [],
+    artists: track.artistCredits?.length
+      ? track.artistCredits.map((name) => ({ name, id: null }))
+      : track.artist ? track.artist.split(', ').map((name) => ({ name, id: null })) : [],
     album: track.album ? { name: track.album, id: null } : null,
     durationSec: track.durationMs > 0 ? Math.round(track.durationMs / 1000) : null,
     explicit: false,
@@ -116,6 +118,7 @@ export async function matchToYouTube(track: SpotifyTrack): Promise<Track | null>
   const target: MatchTarget = {
     title: track.title,
     artist: track.artist,
+    artistCredits: track.artistCredits?.length ? track.artistCredits : undefined,
     requiredArtistName: leadArtist || null,
     requireSharedArtist: !!track.artist.trim(),
     requireExactTitle: true,
@@ -132,6 +135,7 @@ export async function matchToYouTube(track: SpotifyTrack): Promise<Track | null>
   const searchTerms = [...new Set([
     rawTitle && rawLeadArtist ? `${rawTitle} ${rawLeadArtist}` : '',
     rawTitle && rawArtists ? `${rawTitle} ${rawArtists}` : '',
+    ...(track.artistCredits ?? []).slice(0, 3).map((artist) => rawTitle && artist.trim() ? `${rawTitle} ${artist.trim()}` : ''),
     rawTitle,
     ...baseQueries,
     ...(albumQuery ? [albumQuery] : []),

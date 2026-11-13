@@ -29,12 +29,56 @@ class SpotifyImporterIdentityTest {
     }
 
     @Test
+    fun spotifyImportRejectsSecondaryArtistOnlyEvenWhenTitleAndDurationMatch() {
+        val target = TrackMatcher.Target(
+            title = "Dumes",
+            artist = "Guyon Waton, Denny Caknan",
+            durationSec = 210,
+            requireSharedArtist = true,
+            requirePrimaryArtist = true,
+            requireExactTitle = true,
+        )
+        val secondaryArtistOnly = Song(
+            videoId = "secondary-artist-upload",
+            title = "Dumes",
+            artist = "Denny Caknan",
+            thumbnailUrl = null,
+            durationText = "3:30",
+        )
+
+        assertNull(TrackMatcher.best(listOf(secondaryArtistOnly), target))
+    }
+
+    @Test
+    fun spotifyImportRejectsLongerTitleContainingRequestedTitle() {
+        val target = TrackMatcher.Target(
+            title = "Dumes",
+            artist = "Guyon Waton",
+            durationSec = 210,
+            requireSharedArtist = true,
+            requirePrimaryArtist = true,
+            requireExactTitle = true,
+        )
+        val differentSong = Song(
+            videoId = "longer-title-upload",
+            title = "Dumes Bersama",
+            artist = "Guyon Waton",
+            thumbnailUrl = null,
+            durationText = "3:30",
+        )
+
+        assertNull(TrackMatcher.best(listOf(differentSong), target))
+    }
+
+    @Test
     fun spotifyImportAcceptsTheRequestedSingerWithMatchingRecording() {
         val target = TrackMatcher.Target(
             title = "Dumes",
             artist = "Guyon Waton",
             durationSec = 210,
             requireSharedArtist = true,
+            requirePrimaryArtist = true,
+            requireExactTitle = true,
         )
         val original = Song(
             videoId = "original-upload",

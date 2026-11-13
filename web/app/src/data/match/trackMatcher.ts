@@ -15,6 +15,8 @@ export interface MatchCandidate {
   title: string;
   /** Credited artists, as one string ("A, B & C"). */
   artist: string;
+  /** Structured credits preserve a single artist name that itself contains commas. */
+  artistCredits?: string[];
   durationSec: number | null;
   album: string | null;
   explicit?: boolean | null;
@@ -233,7 +235,7 @@ export function score(candidate: MatchCandidate, target: MatchTarget): number | 
   const creditedArtist = artistScore(target.artist ?? '', candidate.artist);
   const requiredArtist = target.requiredArtistName?.trim();
   const requiredArtistMatched = requiredArtist
-    ? candidateArtistKeys(candidate.artist).has(artistIdentityKey(requiredArtist))
+    ? candidateArtistKeys(candidate).has(artistIdentityKey(requiredArtist))
     : false;
   if (requiredArtist && (!artistIdentityKey(requiredArtist) || !requiredArtistMatched)) return null;
   if (!requiredArtist && target.requireSharedArtist &&
@@ -535,9 +537,11 @@ function artistIdentityKey(value: string): string {
     .replaceAll(' ', '');
 }
 
-function candidateArtistKeys(value: string): Set<string> {
+function candidateArtistKeys(candidate: MatchCandidate): Set<string> {
+  const value = candidate.artist;
   return new Set([
     artistIdentityKey(value),
+    ...(candidate.artistCredits ?? []).map(artistIdentityKey),
     ...artistNames(value).map((name) => artistIdentityKey(name.join(' '))),
     ...value.split(',').map(artistIdentityKey),
   ].filter(Boolean));

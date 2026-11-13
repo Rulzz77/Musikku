@@ -402,11 +402,14 @@ function sized(sources: unknown, min = 300): string | null {
   return (list.find((s) => s.width >= min) ?? list.at(-1))?.url ?? null;
 }
 
-function artistsOf(data: unknown): string {
+function artistNamesOf(data: unknown): string[] {
   return arr(path(data, 'artists', 'items'))
-    .map((a) => str(path(a, 'profile', 'name')))
-    .filter((n): n is string => !!n?.trim())
-    .join(', ');
+    .map((a) => str(path(a, 'profile', 'name')) ?? str(path(a, 'name')))
+    .filter((n): n is string => !!n?.trim());
+}
+
+function artistsOf(data: unknown): string {
+  return artistNamesOf(data).join(', ');
 }
 
 function trackOf(data: unknown, uri: string | null): SpotifyTrack | null {
@@ -417,6 +420,7 @@ function trackOf(data: unknown, uri: string | null): SpotifyTrack | null {
     id: uri.split(':').pop()!,
     title,
     artist: artistsOf(data),
+    leadArtist: artistNamesOf(data)[0] ?? null,
     album: str(album?.name) ?? null,
     durationMs: num(path(data, 'trackDuration', 'totalMilliseconds')) ?? num(path(data, 'duration', 'totalMilliseconds')) ?? 0,
     imageUrl: sized(path(album, 'coverArt', 'sources')),
@@ -453,7 +457,7 @@ export function parseTrackPage(root: Json): SpotifyPage<SpotifyTrack> {
   const raw = arr(content.items);
   const items = raw.flatMap((entry) => {
     const data = path(entry, 'itemV2', 'data');
-    const track = trackOf(data, str(path(data, 'uri')) ?? str(path(data, '_uri')));
+    const track = trackOf(data, str(path(data, 'uri')) ?? str(path(data, '_uri')) ?? str(path(data, 'id')));
     return track ? [track] : [];
   });
   return { items, total: num(content.totalCount) ?? raw.length, raw: raw.length };
@@ -466,7 +470,7 @@ export function parseLikedPage(root: Json): SpotifyPage<SpotifyTrack> {
   const items = raw.flatMap((entry) => {
     const wrapper = path(entry, 'track');
     const data = path(wrapper, 'data');
-    const track = trackOf(data, str(path(wrapper, '_uri')) ?? str(path(data, 'uri')));
+    const track = trackOf(data, str(path(wrapper, '_uri')) ?? str(path(data, 'uri')) ?? str(path(data, 'id')));
     return track ? [track] : [];
   });
   return { items, total: num(tracks.totalCount) ?? raw.length, raw: raw.length };

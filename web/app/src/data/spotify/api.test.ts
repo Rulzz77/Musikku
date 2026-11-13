@@ -73,7 +73,7 @@ describe('Spotify import safety', () => {
   it('rejects a zero-sized page before Spotify reports the playlist complete', () => {
     expect(nextSpotifyPageOffset(0, 250, 100)).toBe(100);
     expect(nextSpotifyPageOffset(100, 250, 100)).toBe(200);
-    expect(nextSpotifyPageOffset(200, 250, 100)).toBeNull();
+    expect(nextSpotifyPageOffset(200, 250, 50)).toBeNull();
     expect(() => nextSpotifyPageOffset(100, 250, 0)).toThrow('stopped at 100 of 250');
     expect(() => nextSpotifyPageOffset(0, 50, 100)).toThrow('reports 50');
   });

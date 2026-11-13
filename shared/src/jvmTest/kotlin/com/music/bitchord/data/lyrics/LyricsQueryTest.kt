@@ -22,6 +22,36 @@ class LyricsQueryTest {
     }
 
     @Test
+    fun stripsSoundtrackAndUploadPackagingButKeepsDjEdition() {
+        assertEquals(
+            "Dracula",
+            """Dracula (From "Satyamev Jayate") [Official Audio]""".forLyricsSearch(),
+        )
+        assertEquals(
+            "Banyu Langit (DJ Koplo Remix)",
+            "Banyu Langit (DJ Koplo Remix) [Official Audio]".forLyricsSearch(),
+        )
+        assertEquals(
+            "Sewu Kuto [DJ Breakbeat]",
+            "Sewu Kuto [DJ Breakbeat] - Official Video".forLyricsSearch(),
+        )
+    }
+
+    @Test
+    fun djVersionCannotMatchOriginalLyricsEvenWithSameRuntime() {
+        assertFalse(
+            lyricsCandidateMatches(
+                title = "Banyu Langit (DJ Koplo)",
+                artist = "Didi Kempot",
+                durationMs = 244_000L,
+                candidateTitle = "Banyu Langit",
+                candidateArtist = "Didi Kempot",
+                candidateDurationMs = 244_000L,
+            ),
+        )
+    }
+
+    @Test
     fun rejectsDifferentTitleEvenWhenArtistAndDurationMatch() {
         assertFalse(
             lyricsCandidateMatches(

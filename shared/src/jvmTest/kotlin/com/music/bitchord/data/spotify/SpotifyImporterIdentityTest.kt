@@ -35,7 +35,7 @@ class SpotifyImporterIdentityTest {
             artist = "Guyon Waton, Denny Caknan",
             durationSec = 210,
             requireSharedArtist = true,
-            requirePrimaryArtist = true,
+            requiredArtistName = "Guyon Waton",
             requireExactTitle = true,
         )
         val secondaryArtistOnly = Song(
@@ -56,7 +56,7 @@ class SpotifyImporterIdentityTest {
             artist = "Guyon Waton",
             durationSec = 210,
             requireSharedArtist = true,
-            requirePrimaryArtist = true,
+            requiredArtistName = "Guyon Waton",
             requireExactTitle = true,
         )
         val differentSong = Song(
@@ -71,13 +71,48 @@ class SpotifyImporterIdentityTest {
     }
 
     @Test
+    fun spotifyImportMatchesWholeLeadArtistNamesWithPunctuation() {
+        val acdcTarget = TrackMatcher.Target(
+            title = "Back In Black",
+            artist = "AC/DC",
+            durationSec = 255,
+            requiredArtistName = "AC/DC",
+            requireExactTitle = true,
+        )
+        val acdc = Song(
+            videoId = "acdc-upload",
+            title = "Back In Black",
+            artist = "AC/DC",
+            thumbnailUrl = null,
+            durationText = "4:15",
+        )
+        val xTarget = TrackMatcher.Target(
+            title = "Renegades",
+            artist = "X Ambassadors",
+            durationSec = 195,
+            requiredArtistName = "X Ambassadors",
+            requireExactTitle = true,
+        )
+        val xAmbassadors = Song(
+            videoId = "x-ambassadors-upload",
+            title = "Renegades",
+            artist = "X Ambassadors",
+            thumbnailUrl = null,
+            durationText = "3:15",
+        )
+
+        assertNotNull(TrackMatcher.best(listOf(acdc), acdcTarget))
+        assertNotNull(TrackMatcher.best(listOf(xAmbassadors), xTarget))
+    }
+
+    @Test
     fun spotifyImportAcceptsTheRequestedSingerWithMatchingRecording() {
         val target = TrackMatcher.Target(
             title = "Dumes",
             artist = "Guyon Waton",
             durationSec = 210,
             requireSharedArtist = true,
-            requirePrimaryArtist = true,
+            requiredArtistName = "Guyon Waton",
             requireExactTitle = true,
         )
         val original = Song(

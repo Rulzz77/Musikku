@@ -231,23 +231,23 @@ export function score(candidate: MatchCandidate, target: MatchTarget): number | 
   const requiredArtistMatched = requiredArtist
     ? candidateArtistKeys(candidate).has(artistIdentityKey(requiredArtist))
     : false;
+  const compositeArtistAlias = !!requiredArtist && !requiredArtistMatched &&
+    sharesCompositeSpotifyCredit(target.artist ?? '', [candidate.artist, ...(candidate.artistCredits ?? [])]);
+  if (requiredArtist && !requiredArtistMatched && !compositeArtistAlias) return null;
   if (requiredArtist && !artistIdentityKey(requiredArtist)) return null;
   if (!requiredArtist && target.requireSharedArtist &&
     (!artistNames(target.artist ?? '').length || !artistNames(candidate.artist).length || creditedArtist === null)) return null;
   const duration = durationScore(
     target.durationSec ?? null,
     positive(candidate.durationSec),
-    creditedArtist !== null || requiredArtistMatched,
+    creditedArtist !== null || requiredArtistMatched || compositeArtistAlias,
   );
   if (duration === null) return null;
-  // Spotify may put a label/producer first and the actual singer second
-  // (e.g. "Gasentra Pajampangan, Friska"), while YouTube Music files the
-  // recording under "Friska Gasentra". Allow that alternate Spotify credit
-  // only with an exact title, a shared credited artist, and runtime within
-  // three seconds; this cannot turn a loose cover/remix into a match.
-  if (requiredArtist && !requiredArtistMatched &&
-    !(creditedArtist !== null && withinSeconds(candidate, target, DURATION_TIGHT_SEC))) return null;
-  const artist = creditedArtist ?? (requiredArtistMatched
+  // A flattened display alias may combine meaningful tokens from multiple
+  // Spotify credits, but only the full composite alias is trusted, and only
+  // when title identity is exact and runtime is within three seconds.
+  if (compositeArtistAlias && !withinSeconds(candidate, target, DURATION_TIGHT_SEC)) return null;
+  const artist = creditedArtist ?? (requiredArtistMatched || compositeArtistAlias
     ? ARTIST_EXACT
     : !target.isVideo && withinSeconds(candidate, target, CREDIT_OVERRIDE_SEC) ? CREDITS_DISAGREE : null);
   if (artist === null) return null;
@@ -575,6 +575,22 @@ export function artistNames(value: string): string[][] {
     if (words.length) seen.set(words.join(' '), words);
   }
   return [...seen.values()];
+}
+
+/** A candidate alias must combine meaningful tokens from multiple Spotify credits. */
+function sharesCompositeSpotifyCredit(targetArtist: string, candidateCredits: string[]): boolean {
+  const ignored = new Set(['the', 'and', 'feat', 'featuring', 'ft', 'with', 'vs', 'dj', 'band', 'music', 'official']);
+  const sourceGroups = artistNames(targetArtist)
+    .map((words) => words.filter((word) => !ignored.has(word)))
+    .filter((words) => words.length > 0);
+  if (sourceGroups.length < 2) return false;
+  const sourceTokens = new Set(sourceGroups.flat());
+  return candidateCredits.flatMap((credit) => artistNames(credit)).some((words) => {
+    const meaningful = [...new Set(words.filter((word) => !ignored.has(word)))];
+    return meaningful.length >= 2 &&
+      meaningful.every((word) => sourceTokens.has(word)) &&
+      sourceGroups.filter((group) => meaningful.some((word) => group.includes(word))).length >= 2;
+  });
 }
 
 const sameArtist = (a: string[], b: string[]) => runOf(a, b) || runOf(b, a);

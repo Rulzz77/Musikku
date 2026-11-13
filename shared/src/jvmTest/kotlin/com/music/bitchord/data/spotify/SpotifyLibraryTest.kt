@@ -101,6 +101,28 @@ class SpotifyLibraryTest {
     }
 
     @Test
+    fun tracksAcceptArtistArraysAsWellAsItemsWrappers() {
+        val root = json.parseToJsonElement(
+            """
+            {"data":{"playlistV2":{"content":{"totalCount":1,"items":[
+              {"itemV2":{"data":{
+                "name":"Song","uri":"spotify:track:array-artists",
+                "artists":[
+                  {"profile":{"name":"The Band"}},
+                  {"name":"Guest"}
+                ],
+                "duration":{"totalMilliseconds":180000}
+              }}}
+            ]}}}}
+            """.trimIndent(),
+        ).jsonObject
+
+        val track = parseTrackPage(root).first.single()
+        assertEquals(listOf("The Band", "Guest"), track.artistCredits)
+        assertEquals("The Band", track.leadArtist)
+    }
+
+    @Test
     fun spotifyPagingRejectsPrematureEmptyPages() {
         assertEquals(100, nextSpotifyPageOffset(0, 250, 100))
         assertEquals(200, nextSpotifyPageOffset(100, 250, 100))

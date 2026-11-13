@@ -448,18 +448,27 @@ object SpotifyImporter {
                             ?: track.artist.substringBefore(",").trim().takeIf { it.isNotBlank() },
                         requireExactTitle = true,
                     )
-                    val candidates = searchCandidates(target, cleanLang).let { found ->
-                        if (cleanLang == null) found else {
-                            val conflictingLangs = knownLanguages.filter { !it.equals(cleanLang, ignoreCase = true) }
-                            found.filter { candidate ->
-                                val meta = "${candidate.title} ${candidate.artist} ${candidate.albumName.orEmpty()}".lowercase()
-                                !conflictingLangs.any {
-                                    meta.contains("(${it.lowercase()})") ||
-                                        meta.contains("${it.lowercase()} version") ||
-                                        meta.contains("${it.lowercase()} song")
+                    val candidates = try {
+                        searchCandidates(target, cleanLang).let { found ->
+                            if (cleanLang == null) found else {
+                                val conflictingLangs = knownLanguages.filter { !it.equals(cleanLang, ignoreCase = true) }
+                                found.filter { candidate ->
+                                    val meta = "${candidate.title} ${candidate.artist} ${candidate.albumName.orEmpty()}".lowercase()
+                                    !conflictingLangs.any {
+                                        meta.contains("(${it.lowercase()})") ||
+                                            meta.contains("${it.lowercase()} version") ||
+                                            meta.contains("${it.lowercase()} song")
+                                    }
                                 }
                             }
                         }
+                    } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        // One unavailable search must not abort the entire
+                        // playlist import. This Spotify row stays in the
+                        // unmatched result set for a later retry/review.
+                        emptyList()
                     }
                     // Never import the search engine's first row as a fallback:
                     // a popular cover/remix with a similar title is worse than

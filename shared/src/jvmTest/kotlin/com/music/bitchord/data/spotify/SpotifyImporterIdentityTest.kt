@@ -310,6 +310,7 @@ class SpotifyImporterIdentityTest {
 
         val queries = spotifyImportSearchQueries(target)
 
+        assertEquals("Tanpo Tresnamu (Official Audio) Denny Caknan", queries.first())
         assertTrue("Tanpo Tresnamu (Official Audio) Denny Caknan, Yeni Inka" in queries)
         assertTrue("Tanpo Tresnamu (Official Audio) Denny Caknan" in queries)
         assertTrue("Tanpo Tresnamu (Official Audio)" in queries)

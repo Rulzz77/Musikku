@@ -76,6 +76,20 @@ class SpotifyLibraryTest {
     }
 
     @Test
+    fun spotifyPagingRejectsPrematureEmptyPages() {
+        assertEquals(100, nextSpotifyPageOffset(0, 250, 100))
+        assertEquals(200, nextSpotifyPageOffset(100, 250, 100))
+        assertEquals(null, nextSpotifyPageOffset(200, 250, 50))
+        assertEquals(null, nextSpotifyPageOffset(0, 0, 0))
+        kotlin.test.assertFailsWith<IllegalStateException> {
+            nextSpotifyPageOffset(100, 250, 0)
+        }
+        kotlin.test.assertFailsWith<IllegalStateException> {
+            nextSpotifyPageOffset(0, 50, 100)
+        }
+    }
+
+    @Test
     fun playlistIdsComeFromLinksAndUris() {
         val id = "37i9dQZF1DXcBWIGoYBM5M"
         assertEquals(id, SpotifyImporter.extractPlaylistId("https://open.spotify.com/playlist/$id"))

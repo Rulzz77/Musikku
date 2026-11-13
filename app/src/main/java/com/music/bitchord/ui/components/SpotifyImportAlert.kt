@@ -86,6 +86,50 @@ fun SpotifyImportAlert(
     var status by remember { mutableStateOf<String?>(null) }
     var failed by remember { mutableStateOf(false) }
     var unmatched by remember { mutableStateOf<List<SpotifyImportTrack>?>(null) }
+    var importTitle by remember { mutableStateOf<String?>(null) }
+    var resolvedSongs by remember { mutableStateOf<List<Song>>(emptyList()) }
+    var submitted by remember { mutableStateOf(false) }
+
+    fun effectiveLanguage(): String? = if (selectedLanguage == "Manual / Other") {
+        customLanguageInput.trim().ifBlank { null }
+    } else selectedLanguage
+
+    fun finishImport() {
+        val title = importTitle ?: return
+        if (submitted || resolvedSongs.isEmpty()) return
+        submitted = true
+        onImported(title, privacy, resolvedSongs)
+        onDismiss()
+    }
+
+    fun retryMissing() {
+        val missed = unmatched.orEmpty()
+        if (missed.isEmpty() || working) return
+        working = true
+        failed = false
+        status = context.getString(R.string.spotify_import_matching, 0, missed.size)
+        scope.launch {
+            try {
+                val (newSongs, stillMissing) = SpotifyImporter.resolveToSongs(missed, effectiveLanguage()) { done, total ->
+                    status = context.getString(R.string.spotify_import_matching, done, total)
+                }
+                val knownIds = resolvedSongs.mapNotNullTo(HashSet()) { it.videoId.takeIf(String::isNotBlank) }
+                val uniqueSongs = newSongs.filter { song ->
+                    song.videoId.isNotBlank() && knownIds.add(song.videoId)
+                }
+                resolvedSongs = resolvedSongs + uniqueSongs
+                unmatched = stillMissing
+                if (stillMissing.isEmpty()) finishImport()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                status = context.getString(R.string.spotify_import_failed, e.message.orEmpty())
+                failed = true
+            } finally {
+                working = false
+            }
+        }
+    }
 
     fun start() {
         val id = SpotifyImporter.extractPlaylistId(link)
@@ -94,23 +138,20 @@ fun SpotifyImportAlert(
             failed = true
             return
         }
-        val effectiveLanguage = if (selectedLanguage == "Manual / Other") {
-            customLanguageInput.trim().ifBlank { null }
-        } else {
-            selectedLanguage
-        }
         working = true
         failed = false
         status = context.getString(R.string.spotify_import_fetching)
         scope.launch {
             try {
                 val (name, tracks) = SpotifyImporter.fetchPlaylistTracks(id)
-                val (songs, missed) = SpotifyImporter.resolveToSongs(tracks, effectiveLanguage) { done, total ->
+                val (songs, missed) = SpotifyImporter.resolveToSongs(tracks, effectiveLanguage()) { done, total ->
                     status = context.getString(R.string.spotify_import_matching, done, total)
                 }
-                if (songs.isEmpty()) error(context.getString(R.string.spotify_import_none))
-                onImported(name, privacy, songs)
-                if (missed.isEmpty()) onDismiss() else unmatched = missed
+                if (songs.isEmpty() && missed.isEmpty()) error(context.getString(R.string.spotify_import_none))
+                importTitle = name
+                resolvedSongs = songs
+                unmatched = missed
+                if (missed.isEmpty()) finishImport()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -121,7 +162,11 @@ fun SpotifyImportAlert(
         }
     }
 
-    AlertScaffold(hazeState = hazeState, onDismiss = { if (!working) onDismiss() }) {
+    AlertScaffold(hazeState = hazeState, onDismiss = {
+        if (!working) {
+            if (unmatched != null && resolvedSongs.isNotEmpty()) finishImport() else onDismiss()
+        }
+    }) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -139,7 +184,8 @@ fun SpotifyImportAlert(
             val missed = unmatched
             if (missed != null) {
                 Text(
-                    text = stringResource(R.string.spotify_import_unmatched, missed.size),
+                    text = if ((working || failed) && status != null) status.orEmpty()
+                    else stringResource(R.string.spotify_import_unmatched, missed.size),
                     modifier = Modifier.padding(top = 4.dp, bottom = 10.dp),
                     style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp, lineHeight = 17.sp),
                     color = MaterialTheme.colorScheme.onSurface,
@@ -280,7 +326,19 @@ fun SpotifyImportAlert(
         }
         AlertRule()
         if (unmatched != null) {
-            AlertAction(label = stringResource(R.string.done), emphasised = true, onClick = onDismiss)
+            AlertAction(
+                label = "Retry missing tracks",
+                emphasised = false,
+                onClick = ::retryMissing,
+                enabled = !working && unmatched.orEmpty().isNotEmpty(),
+            )
+            AlertRule()
+            AlertAction(
+                label = "Import matched tracks",
+                emphasised = true,
+                onClick = ::finishImport,
+                enabled = !working && resolvedSongs.isNotEmpty(),
+            )
         } else {
             AlertAction(
                 label = stringResource(R.string.spotify_import_button),

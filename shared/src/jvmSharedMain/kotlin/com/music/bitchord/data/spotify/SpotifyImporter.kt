@@ -142,8 +142,11 @@ object SpotifyImporter {
                         durationMs = obj.spotifyDurationMs(),
                         album = obj.spotifyAlbumName(),
                         spotifyId = obj.spotifyTrackId(),
+                        // If Spotify omitted structured artist credits, keep the
+                        // whole subtitle rather than truncating a valid name at
+                        // its own comma (for example, "Earth, Wind & Fire").
                         leadArtist = artistNames.firstOrNull()
-                            ?: artists.substringBefore(",").trim().takeIf { it.isNotBlank() },
+                            ?: artists.trim().takeIf { it.isNotBlank() },
                     ))
                 }
             }
@@ -152,19 +155,17 @@ object SpotifyImporter {
                 error("No tracks found in public Spotify playlist.")
             }
 
-            // The embed page stops at its first 100 tracks. The web player's
-            // own query, with the anonymous token the embed hands out, pages
-            // through the rest; if it refuses, the 100 already read stand.
-            if (tracks.size >= EMBED_TRACK_LIMIT) {
+            // The embed page stops at its first 100 raw entries. Never report a
+            // successful partial import when the continuation request fails.
+            // Offset is the raw embed count, not the number of rows we could parse.
+            if (trackListJson.size >= EMBED_TRACK_LIMIT) {
                 val token = props?.get("state")?.jsonObject
                     ?.get("settings")?.jsonObject
                     ?.get("session")?.jsonObject
                     ?.get("accessToken")?.jsonPrimitive?.content
-                if (token != null) {
-                    runCatching { fetchRemainingTracks(playlistId, token, tracks.size) }
-                        .getOrNull()
-                        ?.let { tracks.addAll(it) }
-                }
+                    ?.takeIf { it.isNotBlank() }
+                    ?: error("Spotify only exposed the first 100 tracks and no continuation token. Please retry the import.")
+                tracks.addAll(fetchRemainingTracks(playlistId, token, trackListJson.size))
             }
 
             Pair(playlistTitle, tracks)
@@ -384,8 +385,16 @@ object SpotifyImporter {
             }
             val content = json.parseToJsonElement(body).jsonObject["data"]?.jsonObject
                 ?.get("playlistV2")?.jsonObject?.get("content")?.jsonObject
-                ?: break
-            val items = content["items"]?.jsonArray ?: break
+                ?: error("Spotify continuation response was incomplete")
+            val total = content["totalCount"]?.jsonPrimitive?.content?.toIntOrNull()
+                ?: error("Spotify continuation response did not include the playlist total")
+            if (offset >= total) break
+            val items = content["items"]?.jsonArray
+                ?: error("Spotify continuation page did not include track entries")
+            if (items.isEmpty()) {
+                error("Spotify stopped returning tracks at $offset of $total. Import was not completed.")
+            }
+            val previousOffset = offset
             for (item in items) {
                 val data = item.jsonObject["itemV2"]?.jsonObject?.get("data")?.jsonObject ?: continue
                 val title = data["name"]?.jsonPrimitive?.content?.trim().orEmpty()
@@ -402,9 +411,11 @@ object SpotifyImporter {
                         ?: artist.substringBefore(",").trim().takeIf { it.isNotBlank() },
                 ))
             }
-            val total = content["totalCount"]?.jsonPrimitive?.content?.toIntOrNull() ?: break
             offset += items.size
-            if (items.isEmpty() || offset >= total) break
+            if (offset <= previousOffset) {
+                error("Spotify continuation did not advance; refusing an incomplete playlist import.")
+            }
+            if (offset >= total) break
         }
         return out
     }
@@ -432,8 +443,11 @@ object SpotifyImporter {
         }
 
         val knownLanguages = listOf(
-            "Tamil", "Telugu", "Kannada", "Malayalam", "Hindi",
-            "English", "Punjabi", "Marathi", "Bengali", "Bhojpuri", "Gujarati"
+            "Tamil", "Telugu", "Kannada", "Malayalam", "Hindi", "English",
+            "Punjabi", "Marathi", "Bengali", "Bhojpuri", "Gujarati", "Urdu",
+            "Arabic", "Japanese", "Korean", "Mandarin", "Cantonese", "Chinese",
+            "Spanish", "French", "Portuguese", "Italian", "German", "Russian",
+            "Turkish", "Thai", "Indonesian", "Javanese", "Sundanese",
         )
 
         val deferredResults = uniqueTracks.map { track ->

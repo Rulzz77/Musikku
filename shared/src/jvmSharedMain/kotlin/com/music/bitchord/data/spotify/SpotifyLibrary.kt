@@ -81,8 +81,7 @@ object SpotifyLibrary {
         while (true) {
             val (items, total, raw) = playlistPage(headers, offset)
             collected += items
-            offset += raw
-            if (raw == 0 || offset >= total) break
+            offset = nextSpotifyPageOffset(offset, total, raw) ?: break
         }
         // Liked Songs is not a playlist to Spotify's library query, so it is
         // always offered first rather than depending on it turning up there.
@@ -108,9 +107,8 @@ object SpotifyLibrary {
                 trackPage(headers, playlistId, offset)
             }
             collected += items
-            offset += raw
             onPage(collected.toList())
-            if (raw == 0 || offset >= total) break
+            offset = nextSpotifyPageOffset(offset, total, raw) ?: break
         }
         collected
     }
@@ -243,6 +241,19 @@ internal fun parsePlaylistPage(root: JsonObject): Triple<List<SpotifyPlaylist>, 
     return Triple(items, library.int("totalCount") ?: rawItems.size, rawItems.size)
 }
 
+/** Computes the next offset and refuses a page that silently stops before its advertised total. */
+internal fun nextSpotifyPageOffset(offset: Int, total: Int, raw: Int): Int? {
+    require(offset >= 0 && total >= 0) { "Spotify returned an invalid page offset or total" }
+    require(raw >= 0) { "Spotify returned a negative page size" }
+    if (raw == 0) {
+        if (offset < total) error("Spotify pagination stopped at $offset of $total entries")
+        return null
+    }
+    val next = offset + raw
+    if (next > total) error("Spotify returned $next entries for a playlist that reports $total")
+    return next.takeIf { it < total }
+}
+
 /** The tracks kept, the playlist's total, and how many entries the page held before filtering. */
 internal fun parseTrackPage(root: JsonObject): Triple<List<SpotifyTrack>, Int, Int> {
     val content = root.obj("data")?.obj("playlistV2")?.obj("content")
@@ -252,9 +263,10 @@ internal fun parseTrackPage(root: JsonObject): Triple<List<SpotifyTrack>, Int, I
         val data = element.jsonObject.obj("itemV2")?.obj("data") ?: return@mapNotNull null
         val title = data.str("name").orEmpty()
         if (title.isBlank()) return@mapNotNull null
-        val uri = data.str("uri") ?: data.str("_uri") ?: return@mapNotNull null
+        val uri = data.str("uri") ?: data.str("_uri") ?: data.str("id") ?: return@mapNotNull null
         val artistNames = data.obj("artists")?.arr("items").orEmpty().mapNotNull { artist ->
-            artist.jsonObject.obj("profile")?.str("name")?.takeIf { it.isNotBlank() }
+            val item = artist.jsonObject
+            (item.obj("profile")?.str("name") ?: item.str("name"))?.takeIf { it.isNotBlank() }
         }
         val artist = artistNames.joinToString(", ")
         val album = data.obj("albumOfTrack")
@@ -281,10 +293,11 @@ internal fun parseLikedPage(root: JsonObject): Triple<List<SpotifyTrack>, Int, I
         val data = wrapper.obj("data") ?: return@mapNotNull null
         val title = data.str("name").orEmpty()
         if (title.isBlank()) return@mapNotNull null
-        val uri = wrapper.str("_uri") ?: data.str("uri") ?: return@mapNotNull null
+        val uri = wrapper.str("_uri") ?: data.str("uri") ?: data.str("id") ?: return@mapNotNull null
         val album = data.obj("albumOfTrack")
         val artistNames = data.obj("artists")?.arr("items").orEmpty().mapNotNull { artist ->
-            artist.jsonObject.obj("profile")?.str("name")?.takeIf { it.isNotBlank() }
+            val item = artist.jsonObject
+            (item.obj("profile")?.str("name") ?: item.str("name"))?.takeIf { it.isNotBlank() }
         }
         SpotifyTrack(
             id = uri.substringAfterLast(":"),

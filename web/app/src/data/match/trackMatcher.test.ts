@@ -91,6 +91,62 @@ describe('TrackMatcher', () => {
     expect(matches(song('Creep (Live)', 'Radiohead'), 'Creep [Live]', 'Radiohead')).toBe(true);
   });
 
+  it('keeps Indonesian DJ edits separate from the original and other DJ styles', () => {
+    expect(matches(song('Satu Rasa', 'Band Contoh', '3:30'), 'Satu Rasa (DJ Koplo)', 'Band Contoh', 210)).toBe(false);
+    expect(matches(song('Satu Rasa (DJ Breakbeat)', 'Band Contoh', '3:30'), 'Satu Rasa (DJ Koplo)', 'Band Contoh', 210)).toBe(false);
+    expect(matches(song('Satu Rasa (DJ Koplo)', 'Band Contoh', '3:30'), 'Satu Rasa (DJ Koplo)', 'Band Contoh', 210)).toBe(true);
+  });
+
+  it('recognizes unbracketed DJ suffixes without matching the studio original', () => {
+    expect(matches(song('Satu Rasa', 'Band Contoh', '3:30'), 'Satu Rasa DJ Koplo Remix', 'Band Contoh', 210)).toBe(false);
+    expect(matches(song('Satu Rasa DJ Koplo Remix', 'Band Contoh', '3:30'), 'Satu Rasa DJ Koplo Remix', 'Band Contoh', 210)).toBe(true);
+  });
+
+  it('keeps language-specific versions separate for non-Javanese tracks', () => {
+    expect(matches(song('Butter', 'BTS', '2:44'), 'Butter (Japanese Version)', 'BTS', 164)).toBe(false);
+    expect(matches(song('Butter (Korean Version)', 'BTS', '2:44'), 'Butter (Japanese Version)', 'BTS', 164)).toBe(false);
+    expect(matches(song('Butter (Japanese Version)', 'BTS', '2:44'), 'Butter (Japanese Version)', 'BTS', 164)).toBe(true);
+  });
+
+  it('does not collapse sped-up and slowed edits into one recording', () => {
+    expect(matches(song('Roses (Slowed + Reverb)', 'Saint Jhn', '2:30'), 'Roses (Sped Up)', 'Saint Jhn', 150)).toBe(false);
+  });
+
+  it('keeps generic genre packaging out of version identity unless it names an edit', () => {
+    expect(matches(song('Song (House Music)', 'Band', '3:30'), 'Song', 'Band', 210)).toBe(true);
+    expect(matches(song('Song', 'Band', '3:30'), 'Song (DJ House Remix)', 'Band', 210)).toBe(false);
+    expect(matches(song('Song (DJ House Remix)', 'Band', '3:30'), 'Song (DJ House Remix)', 'Band', 210)).toBe(true);
+  });
+
+  it('applies strict title and full lead-artist identity for Spotify imports', () => {
+    const target = {
+      title: 'Dumes',
+      artist: 'Guyon Waton, Denny Caknan',
+      requiredArtistName: 'Guyon Waton',
+      requireSharedArtist: true,
+      requireExactTitle: true,
+      durationSec: 210,
+    };
+    expect(best([song('Dumes Bersama', 'Guyon Waton', '3:30')], target)).toBeNull();
+    expect(best([song('Dumes', 'Denny Caknan', '3:30')], target)).toBeNull();
+
+    const credit = {
+      title: 'September',
+      artist: 'Earth, Wind & Fire, Guest Artist',
+      artistCredits: ['Earth, Wind & Fire', 'Guest Artist'],
+      durationSec: 215,
+      album: 'Greatest Hits',
+    };
+    expect(best([credit], {
+      title: 'September',
+      artist: 'Earth, Wind & Fire, Guest Artist',
+      requiredArtistName: 'Earth, Wind & Fire',
+      requireSharedArtist: true,
+      requireExactTitle: true,
+      durationSec: 215,
+    })).toBe(credit);
+  });
+
   it('treats an album or radio version as the plain track', () => {
     expect(matches(song('Africa', 'Toto'), 'Africa (Album Version)', 'Toto')).toBe(true);
     expect(matches(song('Clocks', 'Coldplay'), 'Clocks (Radio Edit)', 'Coldplay')).toBe(true);

@@ -37,6 +37,7 @@ export default function SpotifyPlaylistPage() {
   if (!info.data || (rows.status === 'loading' && !rows.rows.length)) return <PlaylistSkeleton />;
 
   const playable = rows.rows.filter((t) => !t.unavailable);
+  const videoIds = [...new Set(playable.map((t) => t.videoId).filter(Boolean))];
   const missing = rows.rows.filter((t) => t.unavailable === 'missing');
   const total = Math.max(rows.total, info.data.total);
   const meta = [
@@ -65,9 +66,21 @@ export default function SpotifyPlaylistPage() {
         canPlay={playable.length > 0}
         onPlay={() => playList(playable, 0, context)}
         onShuffle={() => shuffleList(playable, context)}
-        extra={<ImportButton title={info.data.name} videoIds={playable.map((t) => t.videoId)} ready={rows.matching === 0} />}
+        extra={<ImportButton title={info.data.name} videoIds={videoIds} ready={rows.status === 'ready' && rows.matching === 0} />}
       />
+      {rows.status === 'error' && (
+        <div role="status" className={detailFooter}>
+          <p>Spotify loading or matching was interrupted. The playlist is not ready to import yet.</p>
+          <button type="button" onClick={rows.retry}>Retry Spotify import</button>
+        </div>
+      )}
       <TrackList tracks={rows.rows} variant="playlist" source={context.source} />
+      {rows.status === 'ready' && missing.length > 0 && (
+        <div role="status" className={detailFooter}>
+          <p>{missing.length} Spotify tracks have no safe YouTube Music match yet.</p>
+          <button type="button" onClick={rows.retryMissing}>Retry unmatched tracks</button>
+        </div>
+      )}
       <footer className={detailFooter}>
         <p>From Spotify. Songs are matched to YouTube Music by title, artist and length.</p>
       </footer>
@@ -80,8 +93,9 @@ function ImportButton({ title, videoIds, ready }: { title: string; videoIds: str
   const ytSignedIn = useSignedIn();
   const navigate = useNavigate();
   const [confirming, setConfirming] = useState(false);
+  const uniqueVideoIds = [...new Set(videoIds.filter(Boolean))];
   const create = useMutation({
-    mutationFn: () => createPlaylist(title, videoIds, 'Imported from Spotify with BitChord'),
+    mutationFn: () => createPlaylist(title, uniqueVideoIds, 'Imported from Spotify with BitChord'),
     onSuccess: (playlistId) => navigate(`/playlist/${encodeURIComponent(`VL${playlistId}`)}`),
   });
   if (!ytSignedIn) return null;
@@ -99,7 +113,7 @@ function ImportButton({ title, videoIds, ready }: { title: string; videoIds: str
       className={confirming ? detailButton.pill : detailButton.circle}
       aria-label={label}
       title={label}
-      disabled={!ready || !videoIds.length || create.isPending}
+      disabled={!ready || !uniqueVideoIds.length || create.isPending}
       onClick={() => (confirming ? (setConfirming(false), create.mutate()) : setConfirming(true))}
       onBlur={() => setConfirming(false)}
     >

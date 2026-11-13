@@ -3,7 +3,7 @@ import { useSyncExternalStore } from 'react';
 import type { SpotifyTrack } from '@bitchord/shared/bridge';
 import type { Track } from '@/data/music/types';
 import { useSpotifyAuth, useSpotifySignedIn } from '@/extension/useSpotifyAuth';
-import { fetchSpotifyPlaylistInfo, fetchSpotifyPlaylists, fetchSpotifyTracks, matchToYouTube, pendingTrack } from './api';
+import { clearCachedSpotifyMatch, fetchSpotifyPlaylistInfo, fetchSpotifyPlaylists, fetchSpotifyTracks, matchToYouTube, pendingTrack } from './api';
 
 export function useSpotifyPlaylists() {
   const signedIn = useSpotifySignedIn();
@@ -51,6 +51,8 @@ class PlaylistJob {
   private source: SpotifyTrack[] = [];
   private readonly listeners = new Set<() => void>();
   private fetching = false;
+  private fetchFailed = false;
+  private generation = 0;
   private readonly inFlight = new Set<number>();
 
   constructor(private readonly playlistId: string) {}
@@ -67,25 +69,61 @@ class PlaylistJob {
     this.listeners.forEach((l) => l());
   }
 
+  retryMissing() {
+    if (this.state.status !== 'ready') return;
+    const rows = [...this.state.rows];
+    let changed = false;
+    this.source.forEach((track, index) => {
+      if (rows[index]?.unavailable !== 'missing') return;
+      clearCachedSpotifyMatch(track.id);
+      rows[index] = pendingTrack(track);
+      changed = true;
+    });
+    if (!changed) return;
+    this.emit({ status: 'loading', error: null, rows });
+    this.pump();
+  }
+
   retry() {
     if (this.state.status !== 'error') return;
-    this.emit({ status: 'loading', error: null });
+    // Ignore late callbacks from the failed attempt. A fetch failure restarts
+    // the full page read; a match failure retries only rows still pending.
+    this.generation++;
+    this.inFlight.clear();
+    this.fetching = false;
+    if (this.fetchFailed) {
+      this.source = [];
+      this.fetchFailed = false;
+      this.emit({ status: 'loading', error: null, rows: [], total: 0 });
+    } else {
+      this.emit({ status: 'loading', error: null });
+    }
     this.start();
   }
 
   private start() {
     if (this.state.status === 'loading' && !this.fetching && !this.source.length) {
       this.fetching = true;
+      const generation = this.generation;
       fetchSpotifyTracks(this.playlistId, (soFar, total) => {
+        if (generation !== this.generation) return;
         this.source = soFar;
         // Rows already matched keep their match; new ones join as pending.
         const rows = soFar.map((t, i) => this.state.rows[i] ?? pendingTrack(t));
         this.emit({ rows, total });
         this.pump();
       })
-        .then(() => this.emit({ status: 'ready' }))
-        .catch((error: unknown) => this.emit({ status: this.source.length ? 'ready' : 'error', error }))
-        .finally(() => (this.fetching = false));
+        .then(() => {
+          if (generation === this.generation) this.emit({ status: 'ready' });
+        })
+        .catch((error: unknown) => {
+          if (generation !== this.generation) return;
+          this.fetchFailed = true;
+          this.emit({ status: 'error', error });
+        })
+        .finally(() => {
+          if (generation === this.generation) this.fetching = false;
+        });
       return;
     }
     this.pump();
@@ -93,19 +131,30 @@ class PlaylistJob {
 
   /** Keeps up to MATCH_PARALLELISM lookups going, in order, while someone is looking. */
   private pump() {
+    if (this.state.status === 'error') return;
     while (this.inFlight.size < MATCH_PARALLELISM && this.listeners.size > 0) {
       const index = this.state.rows.findIndex((r, i) => r.unavailable === 'matching' && !this.inFlight.has(i));
-      if (index < 0) return;
+      if (index < 0) {
+        if (!this.fetching && this.inFlight.size === 0 && this.state.status === 'loading') {
+          this.emit({ status: 'ready', error: null });
+        }
+        return;
+      }
       this.inFlight.add(index);
       const track = this.source[index]!;
+      const generation = this.generation;
       void matchToYouTube(track)
-        .catch(() => null)
         .then((found) => {
+          if (generation !== this.generation) return;
           const rows = [...this.state.rows];
           rows[index] = found ?? pendingTrack(track, 'missing');
           this.emit({ rows });
         })
+        .catch((error: unknown) => {
+          if (generation === this.generation) this.emit({ status: 'error', error });
+        })
         .finally(() => {
+          if (generation !== this.generation) return;
           this.inFlight.delete(index);
           this.pump();
         });
@@ -116,7 +165,7 @@ class PlaylistJob {
 const jobs = new Map<string, PlaylistJob>();
 
 /** Per account and playlist: another account's rows are never shown. */
-export function useSpotifyRows(playlistId: string): SpotifyRows & { retry: () => void } {
+export function useSpotifyRows(playlistId: string): SpotifyRows & { retry: () => void; retryMissing: () => void } {
   const auth = useSpotifyAuth();
   const account = auth.state === 'ready' && auth.auth.signedIn ? (auth.auth.user?.name ?? '?') : null;
   const key = `${account}|${playlistId}`;
@@ -127,7 +176,11 @@ export function useSpotifyRows(playlistId: string): SpotifyRows & { retry: () =>
   }
   const current = job;
   const state = useSyncExternalStore(account ? current.subscribe : noSubscribe, () => current.state);
-  return { ...state, retry: () => current.retry() };
+  return {
+    ...state,
+    retry: () => current.retry(),
+    retryMissing: () => current.retryMissing(),
+  };
 }
 
 const noSubscribe = () => () => undefined;

@@ -262,9 +262,10 @@ internal fun parseTrackPage(root: JsonObject): Triple<List<SpotifyTrack>, Int, I
         val data = element.jsonObject.obj("itemV2")?.obj("data") ?: return@mapNotNull null
         val title = data.str("name").orEmpty()
         if (title.isBlank()) return@mapNotNull null
-        val uri = data.str("uri") ?: data.str("_uri") ?: return@mapNotNull null
+        val uri = data.str("uri") ?: data.str("_uri") ?: data.str("id") ?: return@mapNotNull null
         val artistNames = data.obj("artists")?.arr("items").orEmpty().mapNotNull { artist ->
-            artist.jsonObject.obj("profile")?.str("name")?.takeIf { it.isNotBlank() }
+            val item = artist.jsonObject
+            (item.obj("profile")?.str("name") ?: item.str("name"))?.takeIf { it.isNotBlank() }
         }
         val artist = artistNames.joinToString(", ")
         val album = data.obj("albumOfTrack")
@@ -291,10 +292,11 @@ internal fun parseLikedPage(root: JsonObject): Triple<List<SpotifyTrack>, Int, I
         val data = wrapper.obj("data") ?: return@mapNotNull null
         val title = data.str("name").orEmpty()
         if (title.isBlank()) return@mapNotNull null
-        val uri = wrapper.str("_uri") ?: data.str("uri") ?: return@mapNotNull null
+        val uri = wrapper.str("_uri") ?: data.str("uri") ?: data.str("id") ?: return@mapNotNull null
         val album = data.obj("albumOfTrack")
         val artistNames = data.obj("artists")?.arr("items").orEmpty().mapNotNull { artist ->
-            artist.jsonObject.obj("profile")?.str("name")?.takeIf { it.isNotBlank() }
+            val item = artist.jsonObject
+            (item.obj("profile")?.str("name") ?: item.str("name"))?.takeIf { it.isNotBlank() }
         }
         SpotifyTrack(
             id = uri.substringAfterLast(":"),

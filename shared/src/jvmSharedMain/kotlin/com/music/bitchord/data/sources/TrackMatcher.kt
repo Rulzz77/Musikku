@@ -497,9 +497,14 @@ object TrackMatcher {
             }
         }
 
-        // A feat. credit belongs to the artist field wherever a catalogue
-        // chooses to print it.
-        text = text.replace(FEATURING, " ")
+        // "With" can be part of a real title ("With or Without You",
+        // "Dancing With Myself"). Strip a feat/with suffix only when every
+        // name after its marker is present in the known artist credits.
+        val creditSuffix = CREDIT_MARKER.findAll(text).lastOrNull { marker ->
+            marker.range.first > 0 &&
+                isArtistName(text.substring(marker.range.last + 1).trim(), artist)
+        }
+        if (creditSuffix != null) text = text.substring(0, creditSuffix.range.first).trim()
 
         // DJ edits are often appended without brackets ("Song DJ Koplo Remix").
         // Pull only known version-shaped suffixes into the identity markers.
@@ -1021,7 +1026,7 @@ object TrackMatcher {
 
     private val BRACKETED = Regex("""[(\[]([^()\[\]]*)[)\]]""")
     private val DASH = Regex("""\s+[-–—|]+\s+""")
-    private val FEATURING = Regex("""\b(feat|ft|featuring|with)\b.*""")
+    private val CREDIT_MARKER = Regex("""\b(?:feat\.?|ft\.?|featuring|with)(?=\s|$)""", RegexOption.IGNORE_CASE)
     /**
      * The Portuguese spelling of the same credit, see [parseTitle]. Only the
      * dotted form and an explicit `part esp.` count: an undotted `part` is

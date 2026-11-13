@@ -53,6 +53,29 @@ class SpotifyLibraryTest {
     }
 
     @Test
+    fun tracksPreserveFirstSpotifyArtistEvenWhenTheNameContainsAComma() {
+        val root = json.parseToJsonElement(
+            """
+            {"data":{"playlistV2":{"content":{"totalCount":1,"items":[
+              {"itemV2":{"data":{
+                "name":"September","uri":"spotify:track:t2",
+                "artists":{"items":[
+                  {"uri":"spotify:artist:earth","profile":{"name":"Earth, Wind & Fire"}},
+                  {"uri":"spotify:artist:guest","profile":{"name":"Guest Artist"}}
+                ]},
+                "albumOfTrack":{"name":"Greatest Hits"},
+                "duration":{"totalMilliseconds":215000}
+              }}}
+            ]}}}}
+            """.trimIndent(),
+        ).jsonObject
+
+        val track = parseTrackPage(root).first.single()
+        assertEquals("Earth, Wind & Fire, Guest Artist", track.artist)
+        assertEquals("Earth, Wind & Fire", track.leadArtist)
+    }
+
+    @Test
     fun playlistIdsComeFromLinksAndUris() {
         val id = "37i9dQZF1DXcBWIGoYBM5M"
         assertEquals(id, SpotifyImporter.extractPlaylistId("https://open.spotify.com/playlist/$id"))

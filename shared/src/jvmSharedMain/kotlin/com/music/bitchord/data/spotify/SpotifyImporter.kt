@@ -31,6 +31,7 @@ data class SpotifyImportTrack(
     val durationMs: Long? = null,
     val album: String? = null,
     val spotifyId: String? = null,
+    val leadArtist: String? = null,
 )
 
 /** The result of fetching and resolving a Spotify playlist's tracks. */
@@ -127,7 +128,8 @@ object SpotifyImporter {
                 val title = obj["title"]?.jsonPrimitive?.content
                     ?: obj["name"]?.jsonPrimitive?.content
                     ?: continue
-                val artists = obj.spotifyArtistCredit()
+                val artistNames = obj.spotifyArtistNames()
+                val artists = obj.spotifyArtistCredit().ifBlank { artistNames.joinToString(", ") }
                 if (title.isNotBlank()) {
                     tracks.add(SpotifyImportTrack(
                         title = title.trim(),
@@ -135,6 +137,8 @@ object SpotifyImporter {
                         durationMs = obj.spotifyDurationMs(),
                         album = obj.spotifyAlbumName(),
                         spotifyId = obj.spotifyTrackId(),
+                        leadArtist = artistNames.firstOrNull()
+                            ?: artists.substringBefore(",").trim().takeIf { it.isNotBlank() },
                     ))
                 }
             }
@@ -172,6 +176,9 @@ object SpotifyImporter {
             durationSec = track.durationMs.takeIf { it > 0 }?.div(1000),
             album = track.album,
             requireSharedArtist = true,
+            requiredArtistName = track.leadArtist
+                ?: track.artist.substringBefore(",").trim().takeIf { it.isNotBlank() },
+            requireExactTitle = true,
         )
         return TrackMatcher.best(searchCandidates(target), target)
     }
@@ -226,14 +233,19 @@ object SpotifyImporter {
                         if (candidate != null && id.isNotEmpty()) found.putIfAbsent(id, candidate)
                     }
                     pagesRead++
-                    if (TrackMatcher.best(found.values.toList(), target) != null) break
+                    // Do not stop at the first acceptable row. A popular
+                    // alternate upload can appear before the canonical release
+                    // or before an album-qualified result on later pages.
                     val continuation = page.continuation ?: break
                     page = YtMusicRepository.searchContinuation(continuation, filter).getOrNull() ?: break
                 }
             }
-            // Don't spend extra requests on music-video results when the Songs
-            // catalogue has already yielded a verified same-track candidate.
-            if (TrackMatcher.best(found.values.toList(), target) != null) break
+            // Search all Songs queries before evaluating the best candidate.
+            // Only skip the Videos catalogue after the complete Songs pass
+            // has been collected and ranked.
+            if (filter == SearchFilter.SONGS &&
+                TrackMatcher.best(found.values.toList(), target) != null
+            ) break
         }
         return found.values.toList()
     }
@@ -279,16 +291,16 @@ object SpotifyImporter {
                 val data = item.jsonObject["itemV2"]?.jsonObject?.get("data")?.jsonObject ?: continue
                 val title = data["name"]?.jsonPrimitive?.content?.trim().orEmpty()
                 if (title.isEmpty()) continue
-                val artist = data["artists"]?.jsonObject?.get("items")?.jsonArray
-                    ?.mapNotNull { it.jsonObject["profile"]?.jsonObject?.get("name")?.jsonPrimitive?.content }
-                    ?.joinToString(", ")
-                    .orEmpty()
+                val artistNames = data.spotifyArtistNames()
+                val artist = data.spotifyArtistCredit().ifBlank { artistNames.joinToString(", ") }
                 out.add(SpotifyImportTrack(
                     title = title,
-                    artist = data.spotifyArtistCredit().ifBlank { artist },
+                    artist = artist,
                     durationMs = data.spotifyDurationMs(),
                     album = data.spotifyAlbumName(),
                     spotifyId = data.spotifyTrackId(),
+                    leadArtist = artistNames.firstOrNull()
+                        ?: artist.substringBefore(",").trim().takeIf { it.isNotBlank() },
                 ))
             }
             val total = content["totalCount"]?.jsonPrimitive?.content?.toIntOrNull() ?: break
@@ -334,6 +346,9 @@ object SpotifyImporter {
                         durationSec = track.durationMs?.takeIf { it > 0 }?.div(1000)?.toInt(),
                         album = track.album,
                         requireSharedArtist = true,
+                        requiredArtistName = track.leadArtist
+                            ?: track.artist.substringBefore(",").trim().takeIf { it.isNotBlank() },
+                        requireExactTitle = true,
                     )
                     val candidates = searchCandidates(target, cleanLang).let { found ->
                         if (cleanLang == null) found else {
@@ -395,22 +410,26 @@ private fun JsonObject.spotifyTrackId(): String? {
     return raw.substringAfterLast(':').substringAfterLast('/').takeIf { it.isNotBlank() }
 }
 
-private fun JsonObject.spotifyArtistCredit(): String {
-    val subtitle = this["subtitle"]?.let {
-        runCatching { it.jsonPrimitive.content.trim() }.getOrNull()
-    }
-    if (!subtitle.isNullOrBlank()) return subtitle
-    val artists = this["artists"] ?: return ""
+private fun JsonObject.spotifyArtistNames(): List<String> {
+    val artists = this["artists"] ?: return emptyList()
     val items = runCatching { artists.jsonArray }.getOrNull()
         ?: runCatching { artists.jsonObject["items"]?.jsonArray }.getOrNull()
-        ?: return ""
+        ?: return emptyList()
     return items.mapNotNull { element ->
         runCatching {
             val artist = element.jsonObject
             val profile = artist["profile"]?.jsonObject
             (artist["name"] ?: profile?.get("name"))?.jsonPrimitive?.content?.trim()
         }.getOrNull()?.takeIf { it.isNotBlank() }
-    }.distinct().joinToString(", ")
+    }.distinct()
+}
+
+private fun JsonObject.spotifyArtistCredit(): String {
+    val subtitle = this["subtitle"]?.let {
+        runCatching { it.jsonPrimitive.content.trim() }.getOrNull()
+    }
+    if (!subtitle.isNullOrBlank()) return subtitle
+    return spotifyArtistNames().joinToString(", ")
 }
 
 private fun JsonObject.spotifyDurationMs(): Long? {

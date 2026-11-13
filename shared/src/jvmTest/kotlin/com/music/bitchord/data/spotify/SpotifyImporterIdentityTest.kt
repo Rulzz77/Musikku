@@ -6,6 +6,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class SpotifyImporterIdentityTest {
 
@@ -29,12 +30,101 @@ class SpotifyImporterIdentityTest {
     }
 
     @Test
+    fun spotifyImportRejectsSecondaryArtistOnlyEvenWhenTitleAndDurationMatch() {
+        val target = TrackMatcher.Target(
+            title = "Dumes",
+            artist = "Guyon Waton, Denny Caknan",
+            durationSec = 210,
+            requireSharedArtist = true,
+            requiredArtistName = "Guyon Waton",
+            requireExactTitle = true,
+        )
+        val secondaryArtistOnly = Song(
+            videoId = "secondary-artist-upload",
+            title = "Dumes",
+            artist = "Denny Caknan",
+            thumbnailUrl = null,
+            durationText = "3:30",
+        )
+
+        assertNull(TrackMatcher.best(listOf(secondaryArtistOnly), target))
+    }
+
+    @Test
+    fun spotifyImportRejectsLongerTitleContainingRequestedTitle() {
+        val target = TrackMatcher.Target(
+            title = "Dumes",
+            artist = "Guyon Waton",
+            durationSec = 210,
+            requireSharedArtist = true,
+            requiredArtistName = "Guyon Waton",
+            requireExactTitle = true,
+        )
+        val differentSong = Song(
+            videoId = "longer-title-upload",
+            title = "Dumes Bersama",
+            artist = "Guyon Waton",
+            thumbnailUrl = null,
+            durationText = "3:30",
+        )
+
+        assertNull(TrackMatcher.best(listOf(differentSong), target))
+    }
+
+    @Test
+    fun spotifyImportMatchesWholeLeadArtistNamesWithPunctuation() {
+        val acdcTarget = TrackMatcher.Target(
+            title = "Back In Black",
+            artist = "AC/DC",
+            durationSec = 255,
+            requiredArtistName = "AC/DC",
+            requireExactTitle = true,
+        )
+        val acdc = Song(
+            videoId = "acdc-upload",
+            title = "Back In Black",
+            artist = "AC/DC",
+            thumbnailUrl = null,
+            durationText = "4:20",
+        )
+        val xTarget = TrackMatcher.Target(
+            title = "Renegades",
+            artist = "X Ambassadors",
+            durationSec = 195,
+            requiredArtistName = "X Ambassadors",
+            requireExactTitle = true,
+        )
+        val xAmbassadors = Song(
+            videoId = "x-ambassadors-upload",
+            title = "Renegades",
+            artist = "X Ambassadors",
+            thumbnailUrl = null,
+            durationText = "3:15",
+        )
+
+        val unrelatedBandWithSimilarName = Song(
+            videoId = "ambassadors-upload",
+            title = "Renegades",
+            artist = "Ambassadors",
+            thumbnailUrl = null,
+            durationText = "3:15",
+        )
+
+        assertNotNull(TrackMatcher.best(listOf(acdc), acdcTarget))
+        assertNotNull(TrackMatcher.best(listOf(xAmbassadors), xTarget))
+        assertNull(TrackMatcher.best(listOf(unrelatedBandWithSimilarName), xTarget))
+        assertTrue(TrackMatcher.queries(xTarget).first().contains("x ambassadors"))
+    }
+
+    @Test
     fun spotifyImportAcceptsTheRequestedSingerWithMatchingRecording() {
         val target = TrackMatcher.Target(
             title = "Dumes",
             artist = "Guyon Waton",
             durationSec = 210,
             requireSharedArtist = true,
+            requiredArtistName = "Guyon Waton",
+            requireExactTitle = true,
         )
         val original = Song(
             videoId = "original-upload",

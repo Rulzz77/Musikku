@@ -2,9 +2,21 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SpotifyTrack } from '@bitchord/shared/bridge';
 import type { Track } from '@/data/music/types';
 
-const mocks = vi.hoisted(() => ({ searchSongs: vi.fn() }));
-vi.mock('@/data/music/api', () => ({ searchSongs: mocks.searchSongs }));
+const mocks = vi.hoisted(() => {
+  class PartialSearchError extends Error {
+    constructor(readonly candidates: unknown[], cause: unknown) {
+      super(`YouTube Music search was incomplete: ${String(cause)}`);
+      this.name = 'SearchSongsIncompleteError';
+    }
+  }
+  return { searchSongs: vi.fn(), SearchSongsIncompleteError: PartialSearchError };
+});
+vi.mock('@/data/music/api', () => ({
+  searchSongs: mocks.searchSongs,
+  SearchSongsIncompleteError: mocks.SearchSongsIncompleteError,
+}));
 
+import { SearchSongsIncompleteError } from '@/data/music/api';
 import { clearCachedSpotifyMatch, matchToYouTube, nextSpotifyPageOffset } from './api';
 
 function spotifyTrack(overrides: Partial<SpotifyTrack> = {}): SpotifyTrack {
@@ -79,7 +91,6 @@ describe('Spotify import safety', () => {
   });
 
   it('uses visible first-page results when a later Songs page fails', async () => {
-    const { SearchSongsIncompleteError } = await import('@/data/music/api');
     const correct = youtubeTrack('partial-visible-match', 'Dumes', 'Guyon Waton');
     mocks.searchSongs.mockRejectedValue(new SearchSongsIncompleteError(
       [correct],

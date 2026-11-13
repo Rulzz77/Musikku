@@ -40,6 +40,8 @@ data class SpotifyTrack(
     val imageUrl: String?,
     /** Exact first artist supplied by Spotify; avoids splitting names such as "Earth, Wind & Fire". */
     val leadArtist: String? = null,
+    /** Original structured artist names; never reconstruct these by splitting the display string. */
+    val artistCredits: List<String> = emptyList(),
 )
 
 object SpotifyLibrary {
@@ -278,6 +280,7 @@ internal fun parseTrackPage(root: JsonObject): Triple<List<SpotifyTrack>, Int, I
             durationMs = data.obj("duration")?.int("totalMilliseconds") ?: 0,
             imageUrl = album?.obj("coverArt")?.arr("sources")?.lastUrl(),
             leadArtist = artistNames.firstOrNull(),
+            artistCredits = artistNames,
         )
     }
     return Triple(items, content.int("totalCount") ?: rawItems.size, rawItems.size)
@@ -307,6 +310,7 @@ internal fun parseLikedPage(root: JsonObject): Triple<List<SpotifyTrack>, Int, I
             durationMs = (data.obj("trackDuration") ?: data.obj("duration"))?.int("totalMilliseconds") ?: 0,
             imageUrl = album?.obj("coverArt")?.arr("sources")?.lastUrl(),
             leadArtist = artistNames.firstOrNull(),
+            artistCredits = artistNames,
         )
     }
     return Triple(items, tracks.int("totalCount") ?: rawItems.size, rawItems.size)

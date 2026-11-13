@@ -1,5 +1,6 @@
 package com.music.bitchord.data.spotify
 
+import com.music.bitchord.data.model.SearchResult
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.sources.TrackMatcher
 import kotlin.test.Test
@@ -9,6 +10,19 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class SpotifyImporterIdentityTest {
+
+    @Test
+    fun spotifyImportCanUsePromotedTopTrackFromAllSearch() {
+        val promoted = Song(
+            videoId = "promoted-track",
+            title = "Tanpo Tresnamu",
+            artist = "Denny Caknan",
+            thumbnailUrl = null,
+            durationText = "4:12",
+        )
+
+        assertEquals(promoted, spotifyImportCandidate(SearchResult.TopTrack(promoted)))
+    }
 
     @Test
     fun spotifyImportRejectsDifferentSingerEvenWhenTitleAndDurationMatch() {

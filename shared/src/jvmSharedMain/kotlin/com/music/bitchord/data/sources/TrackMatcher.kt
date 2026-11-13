@@ -217,7 +217,15 @@ object TrackMatcher {
      */
     fun score(candidate: Song, target: Target): Int? {
         val wanted = parseTitle(target.title, target.artist)
-        val got = parseTitle(candidate.title, candidate.artist)
+        // A YouTube title can put a featured performer before the song
+        // ("Lead feat. Guest - Title") while its structured byline carries
+        // only the lead. Use Spotify's complete credit as extra parsing
+        // context for this prefix only; actual artist acceptance below still
+        // requires the primary credit or a guarded composite alias.
+        val candidateTitleArtist = if (target.requireExactTitle) {
+            listOf(candidate.artist, target.artist).filter { it.isNotBlank() }.distinct().joinToString(", ")
+        } else candidate.artist
+        val got = parseTitle(candidate.title, candidateTitleArtist)
         if (wanted.core.isBlank() || got.core.isBlank()) return null
         // Same word, different script: katakana vs romaji is bridged by
         // Hepburn transliteration; kanji has no algorithmic reading and stays

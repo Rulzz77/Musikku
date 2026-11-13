@@ -276,6 +276,24 @@ class SpotifyImporterIdentityTest {
     }
 
     @Test
+    fun artistPageFallbackFindsTheMatchingSecondaryStructuredYoutubeCredit() {
+        val song = Song(
+            videoId = "secondary-artist-page-song",
+            title = "Budak Saha",
+            artist = "Primary Label, Friska",
+            thumbnailUrl = null,
+            artistId = "UCprimary",
+            artists = listOf(
+                ArtistRef(name = "Primary Label", browseId = "UCprimary"),
+                ArtistRef(name = "Friska", browseId = "UCfriska"),
+            ),
+        )
+
+        assertEquals("UCfriska", spotifyArtistBrowseId(song, "Friska"))
+        assertNull(spotifyArtistBrowseId(song, "Unrelated Singer"))
+    }
+
+    @Test
     fun spotifyImportPrefersAudioWhenAMatchingVideoIsAlsoPresent() {
         val target = TrackMatcher.Target(
             title = "Dumes",

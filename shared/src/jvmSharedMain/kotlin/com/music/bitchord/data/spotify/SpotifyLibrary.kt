@@ -250,6 +250,7 @@ internal fun nextSpotifyPageOffset(offset: Int, total: Int, raw: Int): Int? {
         return null
     }
     val next = offset + raw
+    if (next > total) error("Spotify returned $next entries for a playlist that reports $total")
     return next.takeIf { it < total }
 }
 

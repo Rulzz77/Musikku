@@ -3,7 +3,7 @@ import { useSyncExternalStore } from 'react';
 import type { SpotifyTrack } from '@bitchord/shared/bridge';
 import type { Track } from '@/data/music/types';
 import { useSpotifyAuth, useSpotifySignedIn } from '@/extension/useSpotifyAuth';
-import { fetchSpotifyPlaylistInfo, fetchSpotifyPlaylists, fetchSpotifyTracks, matchToYouTube, pendingTrack } from './api';
+import { clearCachedSpotifyMatch, fetchSpotifyPlaylistInfo, fetchSpotifyPlaylists, fetchSpotifyTracks, matchToYouTube, pendingTrack } from './api';
 
 export function useSpotifyPlaylists() {
   const signedIn = useSpotifySignedIn();
@@ -69,6 +69,21 @@ class PlaylistJob {
     this.listeners.forEach((l) => l());
   }
 
+  retryMissing() {
+    if (this.state.status !== 'ready') return;
+    const rows = [...this.state.rows];
+    let changed = false;
+    this.source.forEach((track, index) => {
+      if (rows[index]?.unavailable !== 'missing') return;
+      clearCachedSpotifyMatch(track.id);
+      rows[index] = pendingTrack(track);
+      changed = true;
+    });
+    if (!changed) return;
+    this.emit({ status: 'loading', error: null, rows });
+    this.pump();
+  }
+
   retry() {
     if (this.state.status !== 'error') return;
     // Ignore late callbacks from the failed attempt. A fetch failure restarts
@@ -119,7 +134,12 @@ class PlaylistJob {
     if (this.state.status === 'error') return;
     while (this.inFlight.size < MATCH_PARALLELISM && this.listeners.size > 0) {
       const index = this.state.rows.findIndex((r, i) => r.unavailable === 'matching' && !this.inFlight.has(i));
-      if (index < 0) return;
+      if (index < 0) {
+        if (!this.fetching && this.inFlight.size === 0 && this.state.status === 'loading') {
+          this.emit({ status: 'ready', error: null });
+        }
+        return;
+      }
       this.inFlight.add(index);
       const track = this.source[index]!;
       const generation = this.generation;
@@ -156,7 +176,11 @@ export function useSpotifyRows(playlistId: string): SpotifyRows & { retry: () =>
   }
   const current = job;
   const state = useSyncExternalStore(account ? current.subscribe : noSubscribe, () => current.state);
-  return { ...state, retry: () => current.retry() };
+  return {
+    ...state,
+    retry: () => current.retry(),
+    retryMissing: () => current.retryMissing(),
+  };
 }
 
 const noSubscribe = () => () => undefined;

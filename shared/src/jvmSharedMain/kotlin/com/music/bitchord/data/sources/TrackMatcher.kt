@@ -52,6 +52,8 @@ object TrackMatcher {
         val isExplicit: Boolean? = null,
         /** Music-video timing includes visual intros/outros that catalogue audio omits. */
         val isVideo: Boolean = false,
+        /** Imports with a known credited performer must not substitute another singer on runtime alone. */
+        val requireSharedArtist: Boolean = false,
     )
 
     fun targetOf(song: Song) = Target(
@@ -244,6 +246,15 @@ object TrackMatcher {
         if (wanted.versions != effectiveVersions) return null
 
         val creditedArtist = artistScore(target.artist, candidate.artist)
+        // Spotify supplies the requested performer explicitly. For this path,
+        // a matching runtime is not evidence that a different singer is the
+        // same recording: covers can have the same title and nearly identical
+        // length. Require a real artist-credit overlap before any other score.
+        if (target.requireSharedArtist &&
+            (artistNames(target.artist).isEmpty() ||
+                artistNames(candidate.artist).isEmpty() ||
+                creditedArtist == null)
+        ) return null
         val duration = durationScore(
             target.durationSec,
             secondsOf(candidate.durationText),

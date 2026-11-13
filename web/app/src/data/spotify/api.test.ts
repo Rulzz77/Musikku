@@ -82,7 +82,7 @@ describe('Spotify import safety', () => {
   });
 
   it('searches individual structured Spotify credits and accepts a strict composite artist alias', async () => {
-    const alias = youtubeTrack('friska-gasentra', 'Budak Saha', 'Friska Gasentra');
+    const alias = { ...youtubeTrack('friska-gasentra', 'Budak Saha', 'Friska Gasentra'), durationSec: 287 };
     mocks.searchSongs.mockImplementation(async (query: string) =>
       query === 'Budak Saha Friska' ? [alias] : [],
     );

@@ -91,7 +91,85 @@ describe('TrackMatcher', () => {
     expect(matches(song('Creep (Live)', 'Radiohead'), 'Creep [Live]', 'Radiohead')).toBe(true);
   });
 
+  it('keeps Indonesian DJ edits separate from the original and other DJ styles', () => {
+    expect(matches(song('Satu Rasa', 'Band Contoh', '3:30'), 'Satu Rasa (DJ Koplo)', 'Band Contoh', 210)).toBe(false);
+    expect(matches(song('Satu Rasa (DJ Breakbeat)', 'Band Contoh', '3:30'), 'Satu Rasa (DJ Koplo)', 'Band Contoh', 210)).toBe(false);
+    expect(matches(song('Satu Rasa (DJ Koplo)', 'Band Contoh', '3:30'), 'Satu Rasa (DJ Koplo)', 'Band Contoh', 210)).toBe(true);
+  });
+
+  it('recognizes unbracketed DJ suffixes without matching the studio original', () => {
+    expect(matches(song('Satu Rasa', 'Band Contoh', '3:30'), 'Satu Rasa DJ Koplo Remix', 'Band Contoh', 210)).toBe(false);
+    expect(matches(song('Satu Rasa DJ Koplo Remix', 'Band Contoh', '3:30'), 'Satu Rasa DJ Koplo Remix', 'Band Contoh', 210)).toBe(true);
+  });
+
+  it('keeps language-specific versions separate for non-Javanese tracks', () => {
+    expect(matches(song('Butter', 'BTS', '2:44'), 'Butter (Japanese Version)', 'BTS', 164)).toBe(false);
+    expect(matches(song('Butter (Korean Version)', 'BTS', '2:44'), 'Butter (Japanese Version)', 'BTS', 164)).toBe(false);
+    expect(matches(song('Butter (Japanese Version)', 'BTS', '2:44'), 'Butter (Japanese Version)', 'BTS', 164)).toBe(true);
+  });
+
+  it('does not collapse sped-up and slowed edits into one recording', () => {
+    expect(matches(song('Roses (Slowed + Reverb)', 'Saint Jhn', '2:30'), 'Roses (Sped Up)', 'Saint Jhn', 150)).toBe(false);
+  });
+
   it('treats an album or radio version as the plain track', () => {
+    expect(matches(song('Africa', 'Toto'), 'Africa (Album Version)', 'Toto')).toBe(true);
+    expect(matches(song('Clocks', 'Coldplay'), 'Clocks (Radio Edit)', 'Coldplay')).toBe(true);
+  });
+
+  it('refuses a candidate whose runtime is nowhere near', () => {
+    expect(matches(song('Levitating', 'Dua Lipa', '1:00:12'), 'Levitating', 'Dua Lipa', 203)).toBe(false);
+    expect(matches(song('Levitating', 'Dua Lipa', '3:25'), 'Levitating', 'Dua Lipa', 203)).toBe(true);
+  });
+
+  it('falls back to title alone when no artist is known', () => {
+    expect(matches(song('Clair de Lune', 'Debussy'), 'Clair de Lune', '')).toBe(true);
+    expect(matches(song('Reverie', 'Debussy'), 'Clair de Lune', '')).toBe(false);
+  });
+
+  it('picks the closest candidate rather than the first acceptable one', () => {
+    const wrongLength = song('Paniyon Sa', 'Atif Aslam', '4:32');
+    const right = song('Paniyon Sa', 'Atif Aslam, Tulsi Kumar', '4:06');
+    expect(best([wrongLength, right], { title: 'Paniyon Sa', artist: 'Atif Aslam', durationSec: 247 })).toBe(right);
+  });
+
+  it('uses the album to separate duplicate recordings', () => {
+    const wanted = song('Brown Rang', 'Yo Yo Honey Singh', '2:59', 'International Villager');
+    const closer = song('Brown Rang', 'Yo Yo Honey Singh', '2:54', 'Chaar Ikke');
+    expect(
+      best([closer, wanted], { title: 'Brown Rang', artist: 'Yo Yo Honey Singh', durationSec: 175, album: 'International Villager' }),
+    ).toBe(wanted);
+    expect(hasConflictingAlbums([closer, wanted], { title: 'Brown Rang', artist: 'Yo Yo Honey Singh', durationSec: 175 })).toBe(true);
+  });
+
+  it('resolves a collision only by a unique fullest credit', () => {
+    const target = { title: 'Ek Dil Ek Jaan', artist: 'Shivam Pathak', durationSec: 220 };
+    const full = song('Ek Dil Ek Jaan', 'Shivam Pathak, Shashwat Singh', '3:40', 'Padmaavat');
+    const short = song('Ek Dil Ek Jaan', 'Shivam Pathak', '3:41', 'Romance');
+    expect(uniquelyMostCreditedCloseMatch([short, full], target)).toBe(full);
+  });
+
+  it('transliterates kana and asks in the other script', () => {
+    expect(romajiOf('コイコガレ')).toBe('koikogare');
+    expect(romajiOf('しゃしん')).toBe('shashin');
+    expect(romajiOf('がっこう')).toBe('gakkou');
+    expect(queries({ title: 'コイコガレ', artist: 'milet' })).toEqual(['コイコガレ milet', 'コイコガレ', 'koikogare']);
+    expect(queries({ title: 'Paniyon Sa (From "Satyameva Jayate")', artist: 'Atif Aslam, Tulsi Kumar' })).toEqual([
+      'paniyon sa atif aslam',
+      'paniyon sa',
+    ]);
+  });
+
+  it('matches a bracketed CJK translation against its Latin filing', () => {
+    expect(matches(song('Love', 'Singer', '2:53'), '愛(Love)', 'Singer', 174)).toBe(true);
+    expect(matches(song('Love (愛)', 'Singer', '2:53'), '愛', 'Singer', 174)).toBe(true);
+    // Same-script packaging must not rescue a different title.
+    expect(matches(song('Film Name', 'Some Artist', '4:07'), 'Song Name (From "Film Name")', 'Singer', 247)).toBe(false);
+    // One word of a longer aside is not the whole title.
+    expect(matches(song('Night', 'Singer', '4:20'), '夜に駆ける (Racing Into The Night)', 'Singer', 260)).toBe(false);
+  });
+});
+
     expect(matches(song('Africa', 'Toto'), 'Africa (Album Version)', 'Toto')).toBe(true);
     expect(matches(song('Clocks', 'Coldplay'), 'Clocks (Radio Edit)', 'Coldplay')).toBe(true);
   });

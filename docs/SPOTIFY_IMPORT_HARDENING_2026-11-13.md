@@ -17,7 +17,7 @@ This note records the safety rules shared by the Android and Web Spotify import 
 - Keep temporary search failures retryable; only a completed search with no safe match is labelled missing.
 - Preserve structured artist names end-to-end across public playlist links, Spotify Library, Liked Songs, and the Web extension. Names containing commas (for example, “Earth, Wind & Fire”) remain one artist.
 - Search the raw title with the full credit and each individual credited artist (bounded to the first three query variants); use every credited performer and every matching structured YouTube artist browse id for artist-page fallback discovery on Android and Web.
-- Web import also opens up to three matching YouTube Music artist pages when global Search returns no safe match; these pages are selected only from exact artist cards matching Spotify's structured credits.
+- Web import also opens up to three YouTube Music artist pages when global Search returns no safe match; artist cards must identify a structured Spotify credit or a catalogue alias sharing that complete credit, and every returned song still passes the strict track matcher.
 - Recognize upload titles where the credited performers precede the song (for example, “Lead feat. Guest - Song”) without weakening the final artist check.
 - Treat `feat`, `ft`, `featuring`, or `with` as a credit suffix only when the following name matches a known artist credit. Words such as “With” inside real song titles must remain part of the title.
 

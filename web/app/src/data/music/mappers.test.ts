@@ -105,6 +105,8 @@ describe('search', () => {
     expect(results.top[0]!.title).not.toBe('');
     expect(results.songs.length).toBeGreaterThan(0);
     expect(results.albums.length + results.playlists.length).toBeGreaterThan(0);
+    const artistCardSong = results.songs.find((item) => item.title === 'You And Whose Army?');
+    expect(artistCardSong?.artists.map((artist) => artist.name)).toContain('Radiohead');
     const ids = [...results.songs, ...results.albums, ...results.artists, ...results.playlists, ...results.videos].map((i) => i.id);
     expect(new Set(ids).size).toBe(ids.length);
   });

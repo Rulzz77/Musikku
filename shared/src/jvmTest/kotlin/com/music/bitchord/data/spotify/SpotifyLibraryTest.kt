@@ -77,6 +77,30 @@ class SpotifyLibraryTest {
     }
 
     @Test
+    fun likedSongsPreserveStructuredArtistNamesAndPrimaryCredit() {
+        val root = json.parseToJsonElement(
+            """
+            {"data":{"me":{"library":{"tracks":{"totalCount":1,"items":[
+              {"track":{"_uri":"spotify:track:liked1","data":{
+                "name":"September",
+                "artists":{"items":[
+                  {"profile":{"name":"Earth, Wind & Fire"}},
+                  {"profile":{"name":"Guest Artist"}}
+                ]},
+                "albumOfTrack":{"name":"Greatest Hits"},
+                "trackDuration":{"totalMilliseconds":215000}
+              }}}
+            ]}}}}}
+            """.trimIndent(),
+        ).jsonObject
+
+        val track = parseLikedPage(root).first.single()
+        assertEquals("September", track.title)
+        assertEquals("Earth, Wind & Fire", track.leadArtist)
+        assertEquals(listOf("Earth, Wind & Fire", "Guest Artist"), track.artistCredits)
+    }
+
+    @Test
     fun spotifyPagingRejectsPrematureEmptyPages() {
         assertEquals(100, nextSpotifyPageOffset(0, 250, 100))
         assertEquals(200, nextSpotifyPageOffset(100, 250, 100))

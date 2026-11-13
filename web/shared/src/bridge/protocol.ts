@@ -108,6 +108,8 @@ export interface SpotifyTrack {
   artist: string;
   /** Exact first credited artist, kept intact when a name itself contains commas. */
   leadArtist?: string | null;
+  /** Original Spotify artist objects in order; preserves commas and ampersands inside artist names. */
+  artistCredits?: string[] | null;
   album: string | null;
   durationMs: number;
   imageUrl: string | null;

@@ -243,28 +243,35 @@ export function score(candidate: MatchCandidate, target: MatchTarget): number | 
   const spotifyCredits = target.artistCredits?.length
     ? target.artistCredits
     : artistNames(target.artist ?? '').map((words) => words.join(' '));
-  const compositeArtistAlias = !!requiredArtist && !requiredArtistMatched &&
+  const secondarySpotifyArtistMatched = !!requiredArtist && !requiredArtistMatched &&
+    (target.artistCredits ?? []).slice(1).some((credit) => {
+      const key = artistIdentityKey(credit);
+      return !!key && candidateNames.has(key);
+    });
+  const compositeArtistAlias = !!requiredArtist && !requiredArtistMatched && !secondarySpotifyArtistMatched &&
     sharesCompositeSpotifyCredit(
       spotifyCredits,
       [candidate.artist, ...(candidate.artistCredits ?? [])],
     );
-  if (requiredArtist && !requiredArtistMatched && !compositeArtistAlias) return null;
+  if (requiredArtist && !requiredArtistMatched && !secondarySpotifyArtistMatched && !compositeArtistAlias) return null;
   if (requiredArtist && !requiredArtistKey) return null;
   if (!requiredArtist && target.requireSharedArtist &&
     (!artistNames(target.artist ?? '').length || !artistNames(candidate.artist).length || creditedArtist === null)) return null;
   const duration = durationScore(
     target.durationSec ?? null,
     positive(candidate.durationSec),
-    creditedArtist !== null || requiredArtistMatched || compositeArtistAlias,
+    creditedArtist !== null || requiredArtistMatched || secondarySpotifyArtistMatched || compositeArtistAlias,
   );
   if (duration === null) return null;
-  // A flattened display alias may combine meaningful tokens from multiple
-  // Spotify credits, but only the full composite alias is trusted, and only
-  // when title identity is exact and runtime is within three seconds.
-  if (compositeArtistAlias && !withinSeconds(candidate, target, DURATION_TIGHT_SEC)) return null;
-  const artist = creditedArtist ?? (requiredArtistMatched || compositeArtistAlias
+  // A direct secondary credit or a flattened artist alias must still have
+  // near-identical runtime to protect against same-title covers and other takes.
+  if ((secondarySpotifyArtistMatched || compositeArtistAlias) &&
+    !withinSeconds(candidate, target, DURATION_TIGHT_SEC)) return null;
+  const artist = creditedArtist ?? (requiredArtistMatched
     ? ARTIST_EXACT
-    : !target.isVideo && withinSeconds(candidate, target, CREDIT_OVERRIDE_SEC) ? CREDITS_DISAGREE : null);
+    : secondarySpotifyArtistMatched || compositeArtistAlias
+      ? ARTIST_SHARED
+      : !target.isVideo && withinSeconds(candidate, target, CREDIT_OVERRIDE_SEC) ? CREDITS_DISAGREE : null);
   if (artist === null) return null;
   const explicit = explicitScore(target.isExplicit ?? null, candidate.explicit ?? null);
   if (explicit === null) return null;

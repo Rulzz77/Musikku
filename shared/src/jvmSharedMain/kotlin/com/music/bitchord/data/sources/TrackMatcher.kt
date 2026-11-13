@@ -268,6 +268,10 @@ object TrackMatcher {
             val candidateNames = buildSet {
                 add(artistIdentityKey(candidate.artist))
                 candidate.artists.forEach { add(artistIdentityKey(it.name)) }
+                // YouTube commonly serializes multiple billed artists with
+                // commas; split only those boundaries here so names containing
+                // "x", slash, or "and" remain intact.
+                candidate.artist.split(",").forEach { add(artistIdentityKey(it)) }
                 artistNames(candidate.artist).forEach { add(it.joinToString(" ")) }
             }
             expectedNames.any { it.isNotBlank() && it in candidateNames }

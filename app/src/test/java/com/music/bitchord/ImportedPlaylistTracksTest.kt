@@ -3,7 +3,10 @@ package com.music.bitchord
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.spotify.appendUniqueImportedTracks
 import com.music.bitchord.data.spotify.dedupeSongs
+import com.music.bitchord.data.spotify.isSamePlaylistTrack
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ImportedPlaylistTracksTest {
@@ -14,6 +17,28 @@ class ImportedPlaylistTracksTest {
         artist = "Artist",
         thumbnailUrl = null,
     )
+
+
+    @Test
+    fun `same title with a different video id is a different playlist entry`() {
+        assertFalse(isSamePlaylistTrack(song("upload-a", "Dumes"), song("upload-b", "Dumes")))
+    }
+
+    @Test
+    fun `same video id stays the same playlist entry if metadata changes`() {
+        assertTrue(isSamePlaylistTrack(song("same-id", "Old title"), song("same-id", "Updated title")))
+    }
+
+    @Test
+    fun `same title with different video ids can both be added`() {
+        val existing = listOf(song("upload-a", "Dumes"))
+        val incoming = listOf(song("upload-b", "Dumes"))
+
+        val (result, added) = appendUniqueImportedTracks(existing, incoming)
+
+        assertEquals(1, added)
+        assertEquals(listOf("upload-a", "upload-b"), result.map { it.videoId })
+    }
 
     @Test
     fun `new tracks append after existing tracks in selection order`() {

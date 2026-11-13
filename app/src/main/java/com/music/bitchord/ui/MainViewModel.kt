@@ -32,6 +32,7 @@ import com.music.bitchord.data.model.SPOTIFY_MISSING_PREFIX
 import com.music.bitchord.data.model.SPOTIFY_PENDING_PREFIX
 import com.music.bitchord.data.spotify.SPOTIFY_PAGE_PREFIX
 import com.music.bitchord.data.spotify.SpotifyImporter
+import com.music.bitchord.data.spotify.isSamePlaylistTrack
 import com.music.bitchord.data.spotify.SpotifyLibrary
 import com.music.bitchord.data.spotify.SpotifyTrack
 import com.music.bitchord.data.lyrics.EmbeddedLyrics
@@ -938,21 +939,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _songPlaylistMembership.value = emptySet()
         if (song == null || playlists.isEmpty() || !_signedIn.value || song.videoId.isBlank()) return
 
-        val target = TrackMatcher.targetOf(song)
-        val requestSongId = song.videoId
         songPlaylistMembershipJob = viewModelScope.launch {
             val found = linkedSetOf<String>()
             playlists.forEach { playlist ->
                 val cachedPage = _detailStack.value.firstOrNull { it.browseId == playlist.browseId }
                     ?.songs as? UiState.Success
                 val onOpenPage = cachedPage?.data?.any { existing ->
-                    existing.videoId == requestSongId || TrackMatcher.score(existing, target) != null
+                    isSamePlaylistTrack(existing, song)
                 } == true
 
                 val contains = if (onOpenPage) {
                     true
                 } else {
-                    playlistContainsSong(playlist.browseId, requestSongId, target)
+                    playlistContainsSong(playlist.browseId, song)
                 }
                 if (contains) {
                     found += playlist.browseId
@@ -964,16 +963,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private suspend fun playlistContainsSong(
         browseId: String,
-        videoId: String,
-        target: TrackMatcher.Target,
+        song: Song,
     ): Boolean {
         var page = YtMusicRepository.browseSongs(browseId).getOrNull() ?: return false
         var pageCount = 0
         while (true) {
-            if (page.songs.any { existing ->
-                    existing.videoId == videoId || TrackMatcher.score(existing, target) != null
-                }
-            ) return true
+            if (page.songs.any { existing -> isSamePlaylistTrack(existing, song) }) return true
             val token = page.continuation ?: return false
             if (++pageCount >= YtMusicRepository.MAX_PAGES) return false
             page = YtMusicRepository.moreSongs(token).getOrNull() ?: return false
@@ -1090,9 +1085,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             ?: YtMusicRepository.allSongs(playlist.browseId).getOrNull()
         val importedAlready = com.music.bitchord.data.spotify.LocalPlaylistStore
             .containsRemoteSpotifySong(playlist.browseId, song)
-        val target = TrackMatcher.targetOf(song)
         if (importedAlready || known?.any { existing ->
-                existing.videoId == song.videoId || TrackMatcher.score(existing, target) != null
+                isSamePlaylistTrack(existing, song)
             } == true) return AddOutcome.ALREADY_THERE
         return YtMusicRepository.addToPlaylist(playlist.playlistId, listOf(song.videoId)).fold(
             onSuccess = { added ->

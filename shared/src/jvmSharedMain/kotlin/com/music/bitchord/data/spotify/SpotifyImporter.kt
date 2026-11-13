@@ -30,6 +30,7 @@ data class SpotifyImportTrack(
     val artist: String,
     val durationMs: Long? = null,
     val album: String? = null,
+    val spotifyId: String? = null,
 )
 
 /** The result of fetching and resolving a Spotify playlist's tracks. */
@@ -126,17 +127,14 @@ object SpotifyImporter {
                 val title = obj["title"]?.jsonPrimitive?.content
                     ?: obj["name"]?.jsonPrimitive?.content
                     ?: continue
-                val subtitle = obj["subtitle"]?.jsonPrimitive?.content
-                    ?: obj["artists"]?.jsonArray?.joinToString(", ") {
-                        it.jsonObject["name"]?.jsonPrimitive?.content.orEmpty()
-                    }
-                    ?: ""
+                val artists = obj.spotifyArtistCredit()
                 if (title.isNotBlank()) {
                     tracks.add(SpotifyImportTrack(
                         title = title.trim(),
-                        artist = subtitle.trim(),
+                        artist = artists,
                         durationMs = obj.spotifyDurationMs(),
                         album = obj.spotifyAlbumName(),
+                        spotifyId = obj.spotifyTrackId(),
                     ))
                 }
             }
@@ -164,9 +162,8 @@ object SpotifyImporter {
         }
 
     /**
-     * The YouTube Music song that is [track], or null if there is none: the
-     * best candidate by title, artist, length and album, and failing that the
-     * search's first hit.
+     * The YouTube Music song that is [track], or null if no safe match is
+     * found after searching song and music-video results.
      */
     suspend fun matchTrack(track: SpotifyTrack): Song? {
         val target = TrackMatcher.Target(
@@ -185,17 +182,43 @@ object SpotifyImporter {
      * first row. This also lets bracketed film/version packaging be removed by
      * TrackMatcher before the request reaches YouTube Music.
      */
+    private const val MAX_CANDIDATE_SEARCH_PAGES = 3
+
+    /**
+     * Search the Songs catalogue first, then music-video uploads if no safe
+     * match exists. Each query can walk a few continuation pages, because
+     * regional tracks are often below the first popular results. Ranking is
+     * still strict: a broader search never means accepting an arbitrary row.
+     */
     private suspend fun searchCandidates(target: TrackMatcher.Target, suffix: String? = null): List<Song> {
         val found = LinkedHashMap<String, Song>()
-        for (baseQuery in TrackMatcher.queries(target)) {
-            val query = listOf(baseQuery, suffix?.takeIf { it.isNotBlank() }).filterNotNull().joinToString(" ")
-            val songs = YtMusicRepository.search(query, SearchFilter.SONGS).getOrNull()
-                ?.filterIsInstance<SearchResult.Track>()
-                ?.map { it.song }
-                .orEmpty()
-            songs.forEach { song ->
-                if (song.videoId.isNotBlank()) found.putIfAbsent(song.videoId, song)
+        val queries = TrackMatcher.queries(target)
+        for (filter in listOf(SearchFilter.SONGS, SearchFilter.VIDEOS)) {
+            for (baseQuery in queries) {
+                val query = listOf(baseQuery, suffix?.takeIf { it.isNotBlank() })
+                    .filterNotNull()
+                    .joinToString(" ")
+                var page = YtMusicRepository.searchPage(query, filter).getOrNull() ?: continue
+                var pagesRead = 0
+                while (pagesRead < MAX_CANDIDATE_SEARCH_PAGES) {
+                    page.rows.forEach { row ->
+                        val candidate = when (row) {
+                            is SearchResult.Track -> row.song
+                            is SearchResult.TopTrack -> row.song
+                            is SearchResult.Browse -> null
+                        }
+                        val id = candidate?.videoId?.trim().orEmpty()
+                        if (candidate != null && id.isNotEmpty()) found.putIfAbsent(id, candidate)
+                    }
+                    pagesRead++
+                    if (TrackMatcher.best(found.values.toList(), target) != null) break
+                    val continuation = page.continuation ?: break
+                    page = YtMusicRepository.searchContinuation(continuation, filter).getOrNull() ?: break
+                }
             }
+            // Don't spend extra requests on music-video results when the Songs
+            // catalogue has already yielded a verified same-track candidate.
+            if (TrackMatcher.best(found.values.toList(), target) != null) break
         }
         return found.values.toList()
     }
@@ -247,9 +270,10 @@ object SpotifyImporter {
                     .orEmpty()
                 out.add(SpotifyImportTrack(
                     title = title,
-                    artist = artist,
+                    artist = data.spotifyArtistCredit().ifBlank { artist },
                     durationMs = data.spotifyDurationMs(),
                     album = data.spotifyAlbumName(),
+                    spotifyId = data.spotifyTrackId(),
                 ))
             }
             val total = content["totalCount"]?.jsonPrimitive?.content?.toIntOrNull() ?: break
@@ -270,9 +294,7 @@ object SpotifyImporter {
         onProgress: (completed: Int, total: Int) -> Unit,
     ): Pair<List<Song>, List<SpotifyImportTrack>> = coroutineScope {
         // Spotify can repeat entries in its page payload; normalize before resolving.
-        val uniqueTracks = tracks.distinctBy { track ->
-            track.title.normalizedImportKey() + "|" + track.artist.normalizedImportKey()
-        }
+        val uniqueTracks = distinctSpotifyImportTracks(tracks)
         val total = uniqueTracks.size
         val completedCount = AtomicInteger(0)
         val semaphore = Semaphore(4) // Bounded concurrency for search queries
@@ -332,13 +354,48 @@ object SpotifyImporter {
         val seenVideoIds = HashSet<String>()
         val songs = results.mapNotNull { it.first }
             .filter { it.videoId.isNotBlank() && seenVideoIds.add(it.videoId) }
-        val unmatched = results.mapNotNull { it.second }
-            .distinctBy { it.title.normalizedImportKey() + "|" + it.artist.normalizedImportKey() }
+        val unmatched = distinctSpotifyImportTracks(results.mapNotNull { it.second })
 
         Pair(songs, unmatched)
     }
 }
 
+
+internal fun distinctSpotifyImportTracks(tracks: List<SpotifyImportTrack>): List<SpotifyImportTrack> =
+    tracks.distinctBy { track ->
+        track.spotifyId?.trim()?.takeIf { it.isNotEmpty() }?.let { "spotify:$it" }
+            ?: listOf(
+                track.title.normalizedImportKey(),
+                track.artist.normalizedImportKey(),
+                track.durationMs?.toString().orEmpty(),
+                track.album?.normalizedImportKey().orEmpty(),
+            ).joinToString("|")
+    }
+
+private fun JsonObject.spotifyTrackId(): String? {
+    val raw = sequenceOf("uri", "id").mapNotNull { key ->
+        this[key]?.let { runCatching { it.jsonPrimitive.content }.getOrNull() }
+    }.firstOrNull()?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    return raw.substringAfterLast(':').substringAfterLast('/').takeIf { it.isNotBlank() }
+}
+
+private fun JsonObject.spotifyArtistCredit(): String {
+    val subtitle = this["subtitle"]?.let {
+        runCatching { it.jsonPrimitive.content.trim() }.getOrNull()
+    }
+    if (!subtitle.isNullOrBlank()) return subtitle
+    val artists = this["artists"] ?: return ""
+    val items = runCatching { artists.jsonArray }.getOrNull()
+        ?: runCatching { artists.jsonObject["items"]?.jsonArray }.getOrNull()
+        ?: return ""
+    return items.mapNotNull { element ->
+        runCatching {
+            val artist = element.jsonObject
+            val profile = artist["profile"]?.jsonObject
+            (artist["name"] ?: profile?.get("name"))?.jsonPrimitive?.content?.trim()
+        }.getOrNull()?.takeIf { it.isNotBlank() }
+    }.distinct().joinToString(", ")
+}
 
 private fun JsonObject.spotifyDurationMs(): Long? {
     val value = this["durationMs"] ?: this["duration_ms"] ?: this["duration"] ?: return null
@@ -354,7 +411,7 @@ private fun JsonObject.spotifyDurationMs(): Long? {
 }
 
 private fun JsonObject.spotifyAlbumName(): String? {
-    val value = this["albumName"] ?: this["album"] ?: return null
+    val value = this["albumName"] ?: this["album"] ?: this["albumOfTrack"] ?: return null
     return runCatching { value.jsonPrimitive.content.trim().takeIf { it.isNotBlank() } }.getOrNull()
         ?: runCatching {
             value.jsonObject["name"]?.jsonPrimitive?.content?.trim()?.takeIf { it.isNotBlank() }

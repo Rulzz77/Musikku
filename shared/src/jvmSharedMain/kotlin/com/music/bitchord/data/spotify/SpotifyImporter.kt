@@ -19,6 +19,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
 import java.util.concurrent.atomic.AtomicInteger
@@ -27,6 +28,8 @@ import java.util.concurrent.atomic.AtomicInteger
 data class SpotifyImportTrack(
     val title: String,
     val artist: String,
+    val durationMs: Long? = null,
+    val album: String? = null,
 )
 
 /** The result of fetching and resolving a Spotify playlist's tracks. */
@@ -129,7 +132,12 @@ object SpotifyImporter {
                     }
                     ?: ""
                 if (title.isNotBlank()) {
-                    tracks.add(SpotifyImportTrack(title = title.trim(), artist = subtitle.trim()))
+                    tracks.add(SpotifyImportTrack(
+                        title = title.trim(),
+                        artist = subtitle.trim(),
+                        durationMs = obj.spotifyDurationMs(),
+                        album = obj.spotifyAlbumName(),
+                    ))
                 }
             }
 
@@ -237,7 +245,12 @@ object SpotifyImporter {
                     ?.mapNotNull { it.jsonObject["profile"]?.jsonObject?.get("name")?.jsonPrimitive?.content }
                     ?.joinToString(", ")
                     .orEmpty()
-                out.add(SpotifyImportTrack(title = title, artist = artist))
+                out.add(SpotifyImportTrack(
+                    title = title,
+                    artist = artist,
+                    durationMs = data.spotifyDurationMs(),
+                    album = data.spotifyAlbumName(),
+                ))
             }
             val total = content["totalCount"]?.jsonPrimitive?.content?.toIntOrNull() ?: break
             offset += items.size
@@ -281,6 +294,8 @@ object SpotifyImporter {
                     val target = TrackMatcher.Target(
                         title = track.title,
                         artist = track.artist,
+                        durationSec = track.durationMs?.takeIf { it > 0 }?.div(1000)?.toInt(),
+                        album = track.album,
                     )
                     val candidates = searchCandidates(target, cleanLang).let { found ->
                         if (cleanLang == null) found else {
@@ -324,6 +339,27 @@ object SpotifyImporter {
     }
 }
 
+
+private fun JsonObject.spotifyDurationMs(): Long? {
+    val value = this["durationMs"] ?: this["duration_ms"] ?: this["duration"] ?: return null
+    return runCatching { value.jsonPrimitive.longOrNull }.getOrNull()
+        ?: runCatching {
+            val duration = value.jsonObject
+            (duration["totalMilliseconds"] ?: duration["milliseconds"] ?: duration["ms"])
+                ?.jsonPrimitive?.longOrNull
+        }.getOrNull()
+        ?: runCatching {
+            value.jsonObject["total_seconds"]?.jsonPrimitive?.longOrNull?.times(1000)
+        }.getOrNull()
+}
+
+private fun JsonObject.spotifyAlbumName(): String? {
+    val value = this["albumName"] ?: this["album"] ?: return null
+    return runCatching { value.jsonPrimitive.content.trim().takeIf { it.isNotBlank() } }.getOrNull()
+        ?: runCatching {
+            value.jsonObject["name"]?.jsonPrimitive?.content?.trim()?.takeIf { it.isNotBlank() }
+        }.getOrNull()
+}
 
 private fun String.normalizedImportKey(): String =
     lowercase().replace(Regex("[ \\t\\n]+"), " ").trim()

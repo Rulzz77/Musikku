@@ -84,6 +84,18 @@ export async function fetchSearch(query: string): Promise<SearchResults> {
 }
 
 /**
+ * The mixed Search response was usable, but fetching the Songs continuation
+ * failed. Keep its candidates so the caller can still match a visible result;
+ * the error remains available so an unsuccessful match can be retried.
+ */
+export class SearchSongsIncompleteError extends Error {
+  constructor(readonly candidates: Track[], cause: unknown) {
+    super(`YouTube Music search was incomplete: ${String(cause)}`);
+    this.name = 'SearchSongsIncompleteError';
+  }
+}
+
+/**
  * All playable tracks Search shows for [query], not just the first Songs shelf.
  *
  * Spotify matching used to call the filtered Songs endpoint and read only its
@@ -123,12 +135,17 @@ export async function searchSongs(query: string): Promise<Track[]> {
 
   // Follow the Songs filter's own continuation; YouTube can put a regional
   // release below the first visible page. Keep this bounded per track.
-  const filtered = await search.applyFilter('Songs');
-  add(mapPlaylistTracks(filtered.songs?.contents ?? []));
-  let continuation = filtered.has_continuation ? await filtered.getContinuation() : null;
-  for (let page = 0; page < 2 && continuation; page++) {
-    add(mapPlaylistTracks(continuation.contents?.contents ?? []));
-    continuation = continuation.has_continuation ? await continuation.getContinuation() : null;
+  try {
+    const filtered = await search.applyFilter('Songs');
+    add(mapPlaylistTracks(filtered.songs?.contents ?? []));
+    let continuation = filtered.has_continuation ? await filtered.getContinuation() : null;
+    for (let page = 0; page < 2 && continuation; page++) {
+      add(mapPlaylistTracks(continuation.contents?.contents ?? []));
+      continuation = continuation.has_continuation ? await continuation.getContinuation() : null;
+    }
+  } catch (error) {
+    if (found.size > 0) throw new SearchSongsIncompleteError([...found.values()], error);
+    throw error;
   }
 
   return [...found.values()];

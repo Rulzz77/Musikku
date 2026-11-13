@@ -58,6 +58,8 @@ object TrackMatcher {
         val requiredArtistName: String? = null,
         /** Spotify imports must match the same title identity, not a longer title containing it. */
         val requireExactTitle: Boolean = false,
+        /** Original Spotify credits, kept as separate names (commas may belong inside a name). */
+        val artistCredits: List<String> = emptyList(),
     )
 
     fun targetOf(song: Song) = Target(
@@ -280,7 +282,7 @@ object TrackMatcher {
         }
         val compositeArtistAlias = requiredArtist != null && !requiredArtistMatched &&
             sharesCompositeSpotifyCredit(
-                target.artist,
+                target.artistCredits.ifEmpty { artistNames(target.artist).map { it.joinToString(" ") } },
                 listOf(candidate.artist) + candidate.artists.map { it.name },
             )
         if (requiredArtist != null && !requiredArtistMatched && !compositeArtistAlias) return null
@@ -794,17 +796,23 @@ object TrackMatcher {
      * candidate's one display name must combine meaningful tokens from at
      * least two distinct Spotify credits.
      */
-    private fun sharesCompositeSpotifyCredit(targetArtist: String, candidateCredits: List<String>): Boolean {
+    private fun sharesCompositeSpotifyCredit(targetCredits: List<String>, candidateCredits: List<String>): Boolean {
         val ignored = setOf("the", "and", "feat", "featuring", "ft", "with", "vs", "dj", "band", "music", "official")
-        val sourceGroups = artistNames(targetArtist)
-            .map { words -> words.filterNot { it in ignored }.toSet() }
-            .filter { it.isNotEmpty() }
+        fun tokens(name: String): Set<String> = normalize(name)
+            .split(WORD_SPLIT)
+            .map { it.replace(NON_ALNUM, "") }
+            .filter { it.length > 1 && it !in ignored }
+            .toSet()
+
+        // These are Spotify's original artist objects, not a comma-split
+        // reconstruction of the display line. "Earth, Wind & Fire" stays one
+        // credit even though its name contains the usual joiner characters.
+        val sourceGroups = targetCredits.map(::tokens).filter { it.isNotEmpty() }
         if (sourceGroups.size < 2) return false
         val sourceTokens = sourceGroups.flatten().toSet()
         return candidateCredits.asSequence()
-            .flatMap { artistNames(it).asSequence() }
-            .any { words ->
-                val meaningful = words.filterNot { it in ignored }.toSet()
+            .map(::tokens)
+            .any { meaningful ->
                 meaningful.size >= 2 &&
                     meaningful.all { it in sourceTokens } &&
                     sourceGroups.count { group -> meaningful.any { it in group } } >= 2

@@ -81,6 +81,23 @@ describe('Spotify import safety', () => {
     expect(mocks.searchSongs).toHaveBeenCalledWith('Tanpo Tresnamu (Official Audio) Denny Caknan');
   });
 
+  it('searches individual structured Spotify credits and accepts a strict composite artist alias', async () => {
+    const alias = youtubeTrack('friska-gasentra', 'Budak Saha', 'Friska Gasentra');
+    mocks.searchSongs.mockImplementation(async (query: string) =>
+      query === 'Budak Saha Friska' ? [alias] : [],
+    );
+
+    await expect(matchToYouTube(spotifyTrack({
+      id: 'spotify-budak-saha',
+      title: 'Budak Saha',
+      artist: 'Gasentra Pajampangan, Friska',
+      leadArtist: 'Gasentra Pajampangan',
+      artistCredits: ['Gasentra Pajampangan', 'Friska'],
+      durationMs: 287_000,
+    }))).resolves.toMatchObject({ videoId: 'friska-gasentra' });
+    expect(mocks.searchSongs).toHaveBeenCalledWith('Budak Saha Friska');
+  });
+
   it('accepts a verified title, primary artist and runtime match', async () => {
     const correct = youtubeTrack('correct-song', 'Dumes', 'Guyon Waton');
     mocks.searchSongs.mockResolvedValue([correct]);

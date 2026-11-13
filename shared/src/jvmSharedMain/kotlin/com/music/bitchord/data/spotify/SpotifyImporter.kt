@@ -196,7 +196,7 @@ object SpotifyImporter {
      * stays bounded so a long playlist cannot overwhelm the service.
      */
     private const val MAX_CANDIDATE_SEARCH_PAGES = 5
-    private const val MIN_PAGES_TO_COMPARE_AFTER_MATCH = 3
+    private const val MIN_PAGES_TO_COMPARE_AFTER_MATCH = 2
 
     private val artistPageLocks = ConcurrentHashMap<String, Mutex>()
     private val artistSongCache = object : LinkedHashMap<String, List<Song>>(16, 0.75f, true) {
@@ -594,11 +594,12 @@ internal fun spotifyImportSearchQueries(target: TrackMatcher.Target): List<Strin
     val album = target.album?.trim().orEmpty()
 
     return buildList {
-        normalized.firstOrNull()?.let(::add)
-        if (rawTitle.isNotBlank() && fullArtist.isNotBlank()) add("$rawTitle $fullArtist")
+        // Match the query a listener naturally enters in Search first:
+        // Spotify's untouched title plus its exact first credited performer.
         if (rawTitle.isNotBlank() && leadArtist.isNotBlank()) add("$rawTitle $leadArtist")
+        if (rawTitle.isNotBlank() && fullArtist.isNotBlank()) add("$rawTitle $fullArtist")
         if (rawTitle.isNotBlank()) add(rawTitle)
-        addAll(normalized.drop(1))
+        addAll(normalized)
         if (album.isNotBlank() && normalized.firstOrNull() != null) {
             add("${normalized.first()} $album")
         }

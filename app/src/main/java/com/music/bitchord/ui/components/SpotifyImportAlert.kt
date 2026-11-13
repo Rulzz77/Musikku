@@ -184,7 +184,7 @@ fun SpotifyImportAlert(
             val missed = unmatched
             if (missed != null) {
                 Text(
-                    text = if (working && status != null) status.orEmpty()
+                    text = if ((working || failed) && status != null) status.orEmpty()
                     else stringResource(R.string.spotify_import_unmatched, missed.size),
                     modifier = Modifier.padding(top = 4.dp, bottom = 10.dp),
                     style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp, lineHeight = 17.sp),

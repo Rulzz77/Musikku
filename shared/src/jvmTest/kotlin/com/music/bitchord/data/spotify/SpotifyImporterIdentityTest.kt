@@ -459,6 +459,8 @@ class SpotifyImporterIdentityTest {
         )
 
         assertNull(TrackMatcher.best(listOf(slowed), target))
+        val speedUpSpelling = slowed.copy(videoId = "speed-up", title = "Roses (Speed Up)")
+        assertNotNull(TrackMatcher.best(listOf(speedUpSpelling), target))
     }
 
     @Test

@@ -1051,14 +1051,14 @@ object TrackMatcher {
     )
 
     private val TRAILING_MIX_LABEL = Regex(
-        """\\s+(dj(?:\\s+[\\p{L}\\p{N}]+){0,3}\\s+(?:remix|mix|edit|version)|""" +
-            """dj\\s+(?:koplo|kentrung|funkot|breakbeat|dangdut|jedag(?:[\\s-]*jedug)?|bass|boosted|house|techno|trance|dubstep|reggae|disco|club|funky|tiktok|viral)(?:\\s+(?:remix|mix|edit|version))?|""" +
-            """(?:koplo|kentrung|funkot|breakbeat|dangdut|jedag[\\s-]*jedug|bass\\s+boosted|""" +
-            """(?:house|techno|trance|dubstep|reggae|disco|club|funky|tiktok|viral)\\s+(?:remix|mix|edit|version)|""" +
-            """sped\\s+up|speed\\s+up|slowed(?:\\s*\\+\\s*|\\s+)reverb|nightcore|""" +
+        """\s+(dj(?:\s+[\p{L}\p{N}]+){0,3}\s+(?:remix|mix|edit|version)|""" +
+            """dj\s+(?:koplo|kentrung|funkot|breakbeat|dangdut|jedag(?:[\s-]*jedug)?|bass|boosted|house|techno|trance|dubstep|reggae|disco|club|funky|tiktok|viral)(?:\s+(?:remix|mix|edit|version))?|""" +
+            """(?:koplo|kentrung|funkot|breakbeat|dangdut|jedag[\s-]*jedug|bass\s+boosted|""" +
+            """(?:house|techno|trance|dubstep|reggae|disco|club|funky|tiktok|viral)\s+(?:remix|mix|edit|version)|""" +
+            """sped\s+up|speed\s+up|slowed(?:\s*\+\s*|\s+)reverb|nightcore|""" +
             """english|hindi|bengali|punjabi|tamil|telugu|malayalam|kannada|marathi|japanese|korean|""" +
             """spanish|french|portuguese|italian|german|russian|turkish|thai)""" +
-            """(?:\\s+(?:remix|mix|edit|version))?)$""",
+            """(?:\s+(?:remix|mix|edit|version))?)$""",
         RegexOption.IGNORE_CASE,
     )
 

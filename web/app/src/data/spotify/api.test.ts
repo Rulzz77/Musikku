@@ -5,7 +5,7 @@ import type { Track } from '@/data/music/types';
 const mocks = vi.hoisted(() => ({ searchSongs: vi.fn() }));
 vi.mock('@/data/music/api', () => ({ searchSongs: mocks.searchSongs }));
 
-import { matchToYouTube, nextSpotifyPageOffset } from './api';
+import { clearCachedSpotifyMatch, matchToYouTube, nextSpotifyPageOffset } from './api';
 
 function spotifyTrack(overrides: Partial<SpotifyTrack> = {}): SpotifyTrack {
   return {
@@ -68,6 +68,19 @@ describe('Spotify import safety', () => {
     await expect(matchToYouTube(spotifyTrack({ id: 'spotify-retry' }))).rejects.toThrow(
       'temporary YouTube search failure',
     );
+  });
+
+  it('can retry a previous no-match after clearing the cached result', async () => {
+    const track = spotifyTrack({ id: 'spotify-no-match-retry' });
+    mocks.searchSongs.mockResolvedValue([]);
+    await expect(matchToYouTube(track)).resolves.toBeNull();
+
+    const correct = youtubeTrack('retry-correct-song', 'Dumes', 'Guyon Waton');
+    mocks.searchSongs.mockResolvedValue([correct]);
+    await expect(matchToYouTube(track)).resolves.toBeNull();
+
+    clearCachedSpotifyMatch(track.id);
+    await expect(matchToYouTube(track)).resolves.toMatchObject({ videoId: 'retry-correct-song' });
   });
 
   it('rejects a zero-sized page before Spotify reports the playlist complete', () => {

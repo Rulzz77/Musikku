@@ -64,6 +64,49 @@ class PaxSenixLyricsMatchTest {
     }
 
     @Test
+    fun anonymousLyricsAreRejectedEvenWhenRuntimeMatchesExactly() {
+        val response = """
+            {
+              "lyrics": [
+                "[00:01.00]A different song",
+                "[00:39.00]A different song ends"
+              ]
+            }
+        """.trimIndent()
+
+        assertNull(
+            PaxSenix.parseLrcGet(
+                raw = response,
+                title = "Tanpo Tresnamu",
+                artist = "Denny Caknan",
+                durationMs = 40_000L,
+            ),
+        )
+    }
+
+    @Test
+    fun directLyricsRequireMatchingTrackMetadata() {
+        val anonymous = """
+            {"lyrics":"[00:01.00]Wrong lyrics","durationMs":40000}
+        """.trimIndent()
+        val identified = """
+            {
+              "title":"Tanpo Tresnamu",
+              "artistName":"Denny Caknan",
+              "durationMs":40000,
+              "lyrics":"[00:01.00]Biyen seneng"
+            }
+        """.trimIndent()
+
+        assertNull(PaxSenix.parseLrcGet(anonymous, "Tanpo Tresnamu", "Denny Caknan", 40_000L))
+        assertEquals(
+            listOf("Biyen seneng"),
+            PaxSenix.parseLrcGet(identified, "Tanpo Tresnamu", "Denny Caknan", 40_000L)
+                ?.map { it.text },
+        )
+    }
+
+    @Test
     fun anonymousLyricsAreRejectedWhenTheirRuntimeDoesNotMatch() {
         val response = """
             {

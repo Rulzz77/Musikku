@@ -73,6 +73,43 @@ describe('TrackMatcher', () => {
     expect(best([song('Budak Saha', 'Friska Gasentra')], target)).toBeNull();
   });
 
+  it('preserves real song titles containing the word with', () => {
+    expect(best([song('With or Without You', 'U2', '3:30')], {
+      title: 'With or Without You',
+      artist: 'U2',
+      durationSec: 210,
+      requiredArtistName: 'U2',
+      requireSharedArtist: true,
+      requireExactTitle: true,
+    })).not.toBeNull();
+    expect(best([song('Dancing With Myself', 'Billy Idol', '3:30')], {
+      title: 'Dancing With Myself',
+      artist: 'Billy Idol',
+      durationSec: 210,
+      requiredArtistName: 'Billy Idol',
+      requireSharedArtist: true,
+      requireExactTitle: true,
+    })).not.toBeNull();
+  });
+
+  it('strips with only when the suffix is a credited artist', () => {
+    const target = {
+      title: 'Song',
+      artist: 'Lead, Guest Artist',
+      artistCredits: ['Lead', 'Guest Artist'],
+      durationSec: 200,
+      requiredArtistName: 'Lead',
+      requireSharedArtist: true,
+      requireExactTitle: true,
+    };
+    expect(best([song('Song with Guest Artist', 'Lead', '3:20')], target)).not.toBeNull();
+    expect(best([song('Song with Guest Artist', 'Lead', '3:20')], {
+      ...target,
+      artist: 'Lead',
+      artistCredits: ['Lead'],
+    })).toBeNull();
+  });
+
   it('keeps a song title after a featured-artist prefix in YouTube metadata', () => {
     const target = {
       title: 'Bubrah',

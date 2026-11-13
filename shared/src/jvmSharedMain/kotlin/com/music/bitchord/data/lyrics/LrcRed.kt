@@ -112,7 +112,8 @@ object LrcRed {
                 hit.isrc?.let(::documentUrl) != null &&
                     coreOf(name) == wantedTitle &&
                     versionOf(name) == wantedVersion &&
-                    (wantedArtists.isEmpty() || artistsOf(hit.artist.orEmpty()).any { it in wantedArtists }) &&
+                    wantedArtists.isNotEmpty() &&
+                    artistsOf(hit.artist.orEmpty()).any { it in wantedArtists } &&
                     distance(hit) <= DURATION_TOLERANCE_SECONDS
             }
             .minByOrNull(::distance)
@@ -127,11 +128,23 @@ object LrcRed {
     private fun versionOf(title: String): Set<String> {
         val extras = BRACKETED.findAll(title).joinToString(" ") { it.value } +
             " " + title.substringAfter(" - ", "")
-        return normalized(extras).split(' ').filter { it in VERSION_WORDS }.toSet()
+        return normalized(extras).split(' ').mapNotNull(::versionToken).toSet()
+    }
+
+    /** Canonicalise common spelling variants in release labels. */
+    private fun versionToken(word: String): String? = when (word) {
+        "remix", "remixed" -> "remix"
+        "remaster", "remastered", "remastering" -> "remaster"
+        "cappella", "acapella" -> "acapella"
+        else -> word.takeIf { it in VERSION_WORDS }
     }
 
     private fun artistsOf(artist: String): Set<String> =
-        artist.split(ARTIST_SEPARATORS).map(::normalized).filter { it.isNotEmpty() }.toSet()
+        artist.artistForLyricsSearch()
+            .split(ARTIST_SEPARATORS)
+            .map(::normalized)
+            .filter { it.isNotEmpty() }
+            .toSet()
 
     /** Lower case, accents off ("ROSÉ" is "rose"), and only letters and digits. */
     private fun normalized(value: String): String =
@@ -153,9 +166,17 @@ object LrcRed {
 
     /** Bracket words that make it a different recording, not a different label. */
     private val VERSION_WORDS = setOf(
-        "live", "remix", "remixed", "mix", "acoustic", "unplugged", "instrumental",
-        "karaoke", "cappella", "acapella", "demo", "edit", "version", "cover",
-        "sped", "slowed", "reverb", "nightcore", "lofi", "orchestral", "extended",
+        // Recording/performance variants.
+        "live", "remix", "mix", "acoustic", "unplugged", "instrumental",
+        "karaoke", "acapella", "demo", "edit", "version", "cover",
+        "sped", "slowed", "slow", "reverb", "nightcore", "lofi", "orchestral", "extended",
+        "remaster", "remastered", "remastering", "mono", "stereo",
+        // Alternate DJ and dance edits frequently used in Indonesian uploads.
+        "dj", "bootleg", "mashup", "medley", "rework", "flip", "vip",
+        "koplo", "kentrung", "funkot", "breakbeat", "dangdut", "jedag", "jedug",
+        "house", "techno", "trance", "dubstep", "reggae", "disco", "club",
+        "bass", "boosted", "full", "short", "radio", "tiktok", "viral",
+        "piano", "guitar", "orchestra", "symphonic", "remake", "clean", "explicit",
     )
 
     @Serializable

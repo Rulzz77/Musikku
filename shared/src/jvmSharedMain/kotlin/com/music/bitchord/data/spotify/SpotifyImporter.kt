@@ -176,7 +176,8 @@ object SpotifyImporter {
             durationSec = track.durationMs.takeIf { it > 0 }?.div(1000),
             album = track.album,
             requireSharedArtist = true,
-            requiredArtistName = track.artist.substringBefore(",").trim().takeIf { it.isNotBlank() },
+            requiredArtistName = track.leadArtist
+                ?: track.artist.substringBefore(",").trim().takeIf { it.isNotBlank() },
             requireExactTitle = true,
         )
         return TrackMatcher.best(searchCandidates(target), target)

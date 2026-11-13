@@ -2,6 +2,7 @@ import type { YTMusic, YTNodes } from 'youtubei.js/web';
 import type { Candidate } from '@/playback/queue/builder';
 import { getInnertube, getMusicClient, getSignedInnertube } from '@/playback/youtube/innertube';
 import { isExactArtistMatch, normalizedArtistName } from '@/lib/artistCredits';
+import { sharesArtist } from '@/data/match/trackMatcher';
 import { LIBRARY_SECTIONS, LIKED_MUSIC_PLAYLIST, type LibrarySection } from './library';
 import {
   mapAlbum,
@@ -140,7 +141,9 @@ async function searchSongsInternal(query: string, expectedArtists: string[] = []
   add(results.songs.map(asTrack).filter((track): track is Track => !!track));
   add(mapPlaylistTracks(search.songs?.contents ?? []));
   const artistIds = [...new Set(results.artists
-    .filter((artist) => expectedArtists.some((expected) => isExactArtistMatch(artist.title, expected)))
+    .filter((artist) => expectedArtists.some((expected) =>
+      isExactArtistMatch(artist.title, expected) || sharesArtist(expected, artist.title),
+    ))
     .map((artist) => artist.id)
     .filter(Boolean))];
 

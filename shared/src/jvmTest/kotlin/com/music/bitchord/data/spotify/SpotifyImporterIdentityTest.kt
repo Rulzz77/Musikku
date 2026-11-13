@@ -1,5 +1,6 @@
 package com.music.bitchord.data.spotify
 
+import com.music.bitchord.data.model.ArtistRef
 import com.music.bitchord.data.model.BrowseItem
 import com.music.bitchord.data.model.BrowseType
 import com.music.bitchord.data.model.SearchResult
@@ -244,6 +245,19 @@ class SpotifyImporterIdentityTest {
         )
         assertNull(spotifyArtistBrowseId(partialName, "Guyon Waton"))
         assertNull(spotifyArtistBrowseId(album, "Guyon Waton"))
+
+        val matchingTrack = Song(
+            videoId = "artist-track",
+            title = "Dumes",
+            artist = "GUYONWATON",
+            thumbnailUrl = null,
+            artistId = "artist-from-track-credit",
+            artists = listOf(ArtistRef(name = "GUYONWATON", browseId = "artist-from-track-credit")),
+        )
+        assertEquals(
+            "artist-from-track-credit",
+            spotifyArtistBrowseId(matchingTrack, "Guyon Waton"),
+        )
     }
 
     @Test

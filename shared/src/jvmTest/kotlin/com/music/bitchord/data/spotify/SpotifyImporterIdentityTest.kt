@@ -377,17 +377,18 @@ class SpotifyImporterIdentityTest {
         val prefixedUpload = Song(
             videoId = "northsle-agiff-bubrah",
             title = "Northsle feat. Agiff - Bubrah",
-            artist = "Northsle, Agiff",
+            // YouTube's structured byline sometimes carries only the lead.
+            artist = "Northsle",
             thumbnailUrl = null,
             durationText = "3:20",
         )
-        val incompleteCredit = prefixedUpload.copy(
-            videoId = "northsle-only",
-            artist = "Northsle",
+        val unrelatedSinger = prefixedUpload.copy(
+            videoId = "unrelated-singer",
+            artist = "Unrelated Singer",
         )
 
         assertNotNull(TrackMatcher.best(listOf(prefixedUpload), target))
-        assertNull(TrackMatcher.best(listOf(incompleteCredit), target))
+        assertNull(TrackMatcher.best(listOf(unrelatedSinger), target))
     }
 
     @Test

@@ -365,6 +365,65 @@ class SpotifyImporterIdentityTest {
     }
 
     @Test
+    fun spotifyImportPreservesRealTitlesContainingWith() {
+        val withOrWithout = TrackMatcher.Target(
+            title = "With or Without You",
+            artist = "U2",
+            durationSec = 210,
+            requiredArtistName = "U2",
+            requireSharedArtist = true,
+            requireExactTitle = true,
+        )
+        val u2 = Song(
+            videoId = "with-or-without-you",
+            title = "With or Without You",
+            artist = "U2",
+            thumbnailUrl = null,
+            durationText = "3:30",
+        )
+        val dancingWithMyself = u2.copy(
+            videoId = "dancing-with-myself",
+            title = "Dancing With Myself",
+            artist = "Billy Idol",
+        )
+        val dancingTarget = withOrWithout.copy(
+            title = "Dancing With Myself",
+            artist = "Billy Idol",
+            requiredArtistName = "Billy Idol",
+        )
+
+        assertNotNull(TrackMatcher.best(listOf(u2), withOrWithout))
+        assertNotNull(TrackMatcher.best(listOf(dancingWithMyself), dancingTarget))
+    }
+
+    @Test
+    fun spotifyImportStripsWithOnlyWhenTheSuffixIsACreditedArtist() {
+        val withGuest = TrackMatcher.Target(
+            title = "Song",
+            artist = "Lead, Guest Artist",
+            durationSec = 200,
+            requiredArtistName = "Lead",
+            requireSharedArtist = true,
+            requireExactTitle = true,
+            artistCredits = listOf("Lead", "Guest Artist"),
+        )
+        val candidate = Song(
+            videoId = "song-with-guest",
+            title = "Song with Guest Artist",
+            artist = "Lead",
+            thumbnailUrl = null,
+            durationText = "3:20",
+        )
+        assertNotNull(TrackMatcher.best(listOf(candidate), withGuest))
+
+        val noGuestCredit = withGuest.copy(
+            artist = "Lead",
+            artistCredits = listOf("Lead"),
+        )
+        assertNull(TrackMatcher.best(listOf(candidate), noGuestCredit))
+    }
+
+    @Test
     fun spotifyImportKeepsSongTitleAfterFeaturedArtistPrefix() {
         val target = TrackMatcher.Target(
             title = "Bubrah",

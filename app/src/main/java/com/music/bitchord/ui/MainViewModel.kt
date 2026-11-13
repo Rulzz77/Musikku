@@ -939,7 +939,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _songPlaylistMembership.value = emptySet()
         if (song == null || playlists.isEmpty() || !_signedIn.value || song.videoId.isBlank()) return
 
-        val requestSongId = song.videoId
         songPlaylistMembershipJob = viewModelScope.launch {
             val found = linkedSetOf<String>()
             playlists.forEach { playlist ->

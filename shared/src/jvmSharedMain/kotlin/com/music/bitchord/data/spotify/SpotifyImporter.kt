@@ -288,7 +288,7 @@ object SpotifyImporter {
 
                     // The normal Search screen shows the same authenticated
                     // ALL catalogue. Once a strict match appears, read up to
-                    // three pages of that query so a canonical album row can
+                    // two pages of that query so a canonical album row can
                     // outrank an earlier near-runtime upload, then stop before
                     // spending requests on every other spelling.
                     if (filter == SearchFilter.ALL && hasAudioMatch() &&

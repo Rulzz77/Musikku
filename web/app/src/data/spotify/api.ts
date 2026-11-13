@@ -96,6 +96,11 @@ export function candidateOf(track: Track): MatchCandidate {
 
 const matched = new Map<string, Track | null>();
 
+/** Clear a previous no-match so the user can explicitly retry that Spotify row. */
+export function clearCachedSpotifyMatch(trackId: string): void {
+  matched.delete(trackId);
+}
+
 /**
  * The YouTube Music counterpart of a Spotify row, or null when no result
  * passes the same title/version/lead-artist checks used by Android.

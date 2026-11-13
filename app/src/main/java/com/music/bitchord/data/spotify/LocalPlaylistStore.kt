@@ -3,7 +3,6 @@ package com.music.bitchord.data.spotify
 import android.content.Context
 import android.content.SharedPreferences
 import com.music.bitchord.data.model.Song
-import com.music.bitchord.data.sources.TrackMatcher
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONArray
@@ -186,14 +185,11 @@ object LocalPlaylistStore {
 
     fun removeSong(playlistId: String, song: Song) {
         val cleanId = playlistId.removePrefix(IMPORTED_PLAYLIST_PREFIX)
-        val target = TrackMatcher.targetOf(song)
         val updated = _playlists.value.map { playlist ->
             if (playlist.id == cleanId) {
-                playlist.copy(
-                    songs = playlist.songs.filterNot { existing ->
-                        existing.videoId == song.videoId || TrackMatcher.score(existing, target) != null
-                    },
-                )
+                playlist.copy(songs = playlist.songs.filterNot { existing ->
+                    isSamePlaylistTrack(existing, song)
+                })
             } else playlist
         }
         _playlists.value = updated
@@ -227,13 +223,14 @@ object LocalPlaylistStore {
         return _playlists.value.firstOrNull { it.id == cleanId || it.id == id || it.browseId == id }
     }
 
-    /** Match by video id first, then by the same recording metadata. */
+    /**
+     * Playlist membership is an entry identity, not a recording-similarity
+     * decision. Two uploads can share a title and artist while still being
+     * separate entries the listener explicitly chose.
+     */
     fun containsSong(playlistId: String, song: Song): Boolean {
         val playlist = getPlaylist(playlistId) ?: return false
-        val target = TrackMatcher.targetOf(song)
-        return playlist.songs.any { existing ->
-            existing.videoId == song.videoId || TrackMatcher.score(existing, target) != null
-        }
+        return playlist.songs.any { existing -> isSamePlaylistTrack(existing, song) }
     }
 
     private fun persist(list: List<LocalPlaylist>) {
@@ -290,4 +287,15 @@ internal fun dedupeSongs(songs: List<Song>): List<Song> {
         val key = song.videoId.trim()
         key.isNotEmpty() && seen.add(key)
     }
+}
+
+
+/**
+ * Exact playlist identity. Fuzzy title/artist matching belongs to catalogue
+ * resolution only; it must never block adding or removing a distinct upload.
+ */
+internal fun isSamePlaylistTrack(existing: Song, candidate: Song): Boolean {
+    val existingId = existing.videoId.trim()
+    val candidateId = candidate.videoId.trim()
+    return existingId.isNotEmpty() && existingId == candidateId
 }

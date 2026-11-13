@@ -417,9 +417,13 @@ export function isTranslationMatch(wanted: TitleParts, got: TitleParts): boolean
 
 function isArtistName(text: string, artist: string): boolean {
   if (!artist.trim()) return false;
-  const words = wordsOf(text);
+  // Regional uploads sometimes prefix the title with every performer:
+  // "Artist feat. Collaborator - Song". Ignore the feature joiner only
+  // while testing whether the dash prefix is a complete artist credit.
+  const creditJoiners = new Set(['feat', 'ft', 'featuring', 'with']);
+  const words = wordsOf(text).filter((word) => !creditJoiners.has(word));
   if (!words.length) return false;
-  const credited = new Set(wordsOf(normalize(artist)));
+  const credited = new Set(wordsOf(normalize(artist)).filter((word) => !creditJoiners.has(word)));
   return words.every((w) => credited.has(w));
 }
 

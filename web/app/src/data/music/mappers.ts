@@ -297,8 +297,8 @@ export function mapArtist(id: string, artist: Pick<YTMusic.Artist, 'header' | 's
  * are grouped here, in the order YouTube ranked them.
  */
 const SEARCH_TYPE_WORDS = new Set(['song', 'video', 'album', 'single', 'ep', 'playlist', 'artist']);
-const SEARCH_DURATION = /^\\d{1,2}:\\d{2}(?::\\d{2})?$/;
-const SEARCH_TALLY = /^\\d[\\d,.]*\\s*(?:plays|views|listeners|subscribers|monthly audience)$/i;
+const SEARCH_DURATION = /^\d{1,2}:\\d{2}(?::\\d{2})?$/;
+const SEARCH_TALLY = /^\d[\d,.]*\\s*(?:plays|views|listeners|subscribers|monthly audience)$/i;
 
 /** The artist segment of a promoted card subtitle such as "Song • Artist • 3:42". */
 function cardArtist(subtitle: string): string | null {

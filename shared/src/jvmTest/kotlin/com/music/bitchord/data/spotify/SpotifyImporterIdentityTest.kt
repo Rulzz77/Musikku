@@ -101,8 +101,17 @@ class SpotifyImporterIdentityTest {
             durationText = "3:15",
         )
 
+        val unrelatedBandWithSimilarName = Song(
+            videoId = "ambassadors-upload",
+            title = "Renegades",
+            artist = "Ambassadors",
+            thumbnailUrl = null,
+            durationText = "3:15",
+        )
+
         assertNotNull(TrackMatcher.best(listOf(acdc), acdcTarget))
         assertNotNull(TrackMatcher.best(listOf(xAmbassadors), xTarget))
+        assertNull(TrackMatcher.best(listOf(unrelatedBandWithSimilarName), xTarget))
     }
 
     @Test

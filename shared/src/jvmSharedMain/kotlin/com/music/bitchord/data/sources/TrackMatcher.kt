@@ -270,39 +270,33 @@ object TrackMatcher {
         // Match the complete first credited artist name against one complete
         // candidate credit instead of accepting a partial token overlap.
         val requiredArtist = target.requiredArtistName?.takeIf { it.isNotBlank() }
-        // Keep every candidate credit as a complete name. Splitting the
-        // required artist itself would turn names such as "X Ambassadors"
-        // into the unrelated artist "Ambassadors".
-        val candidateNames = buildSet {
-            add(artistIdentityKey(candidate.artist))
-            candidate.artists.forEach { add(artistIdentityKey(it.name)) }
-            // YouTube commonly serializes multiple billed artists with commas;
-            // split only those boundaries, never a name's internal punctuation.
-            candidate.artist.split(",").forEach { add(artistIdentityKey(it)) }
-            artistNames(candidate.artist).forEach { add(it.joinToString("")) }
+        val requiredArtistMatched = if (requiredArtist != null) {
+            // Keep this as one complete name. Splitting the required artist
+            // with collaboration separators would turn names such as
+            // "X Ambassadors" into the unrelated name "Ambassadors".
+            val expectedNames = setOf(artistIdentityKey(requiredArtist))
+            val candidateNames = buildSet {
+                add(artistIdentityKey(candidate.artist))
+                candidate.artists.forEach { add(artistIdentityKey(it.name)) }
+                // YouTube commonly serializes multiple billed artists with
+                // commas; split only those boundaries here so names containing
+                // "x", slash, or "and" remain intact.
+                candidate.artist.split(",").forEach { add(artistIdentityKey(it)) }
+                artistNames(candidate.artist).forEach { add(it.joinToString("")) }
+            }
+            expectedNames.any { it.isNotBlank() && it in candidateNames }
+        } else {
+            false
         }
-        val requiredArtistMatched = requiredArtist != null &&
-            artistIdentityKey(requiredArtist).isNotBlank() &&
-            artistIdentityKey(requiredArtist) in candidateNames
         val spotifyCredits = target.artistCredits.ifEmpty {
             artistNames(target.artist).map { it.joinToString(" ") }
         }
-        // A catalogue may file a track under Spotify's second credited singer
-        // alone. Accept that exact full credit only with an exact title and
-        // a runtime within three seconds; an unrelated cover artist is not in
-        // the original Spotify credit list and cannot qualify.
-        val secondaryArtistMatched = requiredArtist != null && !requiredArtistMatched &&
-            spotifyCredits.drop(1).any { credit ->
-                val key = artistIdentityKey(credit)
-                key.isNotBlank() && key in candidateNames
-            }
         val compositeArtistAlias = requiredArtist != null && !requiredArtistMatched &&
             sharesCompositeSpotifyCredit(
                 spotifyCredits,
                 listOf(candidate.artist) + candidate.artists.map { it.name },
             )
-        val alternateSpotifyArtist = secondaryArtistMatched || compositeArtistAlias
-        if (requiredArtist != null && !requiredArtistMatched && !alternateSpotifyArtist) return null
+        if (requiredArtist != null && !requiredArtistMatched && !compositeArtistAlias) return null
         if (requiredArtist != null && artistIdentityKey(requiredArtist).isBlank()) return null
         if (requiredArtist == null && target.requireSharedArtist &&
             (artistNames(target.artist).isEmpty() ||
@@ -320,7 +314,7 @@ object TrackMatcher {
             // the only way through the wider window. Exact title/version plus
             // a shared artist is strong enough; a different artist still gets
             // the ordinary 30-second ceiling below.
-            allowVideoDrift = creditedArtist != null || requiredArtistMatched || alternateSpotifyArtist,
+            allowVideoDrift = creditedArtist != null || requiredArtistMatched || compositeArtistAlias,
         ) ?: return null
         // Spotify may put a label/producer first and the actual singer second
         // (for example "Gasentra Pajampangan, Friska"), while YouTube Music
@@ -329,8 +323,8 @@ object TrackMatcher {
         // the candidate shares a credited Spotify artist, and runtimes agree
         // within three seconds. A loose runtime or an unrelated featured
         // artist can never bypass the explicit lead-artist requirement.
-        if (alternateSpotifyArtist && !withinSeconds(candidate, target, DURATION_TIGHT_SEC)) return null
-        val artist = creditedArtist ?: ARTIST_EXACT.takeIf { requiredArtistMatched || alternateSpotifyArtist }
+        if (compositeArtistAlias && !withinSeconds(candidate, target, DURATION_TIGHT_SEC)) return null
+        val artist = creditedArtist ?: ARTIST_EXACT.takeIf { requiredArtistMatched }
         // The credits don't merely differ in spelling, they name different
         // people — and sometimes that is because they are describing the
         // same recording from different ends of it. Film catalogues are

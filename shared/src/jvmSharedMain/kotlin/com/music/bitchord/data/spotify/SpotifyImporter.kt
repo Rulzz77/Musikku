@@ -341,6 +341,8 @@ object SpotifyImporter {
                         durationSec = track.durationMs?.takeIf { it > 0 }?.div(1000)?.toInt(),
                         album = track.album,
                         requireSharedArtist = true,
+                        requirePrimaryArtist = true,
+                        requireExactTitle = true,
                     )
                     val candidates = searchCandidates(target, cleanLang).let { found ->
                         if (cleanLang == null) found else {

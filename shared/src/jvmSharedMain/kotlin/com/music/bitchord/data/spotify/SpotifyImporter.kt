@@ -142,11 +142,11 @@ object SpotifyImporter {
                         durationMs = obj.spotifyDurationMs(),
                         album = obj.spotifyAlbumName(),
                         spotifyId = obj.spotifyTrackId(),
-                        // If Spotify omitted structured artist credits, keep the
-                        // whole subtitle rather than truncating a valid name at
-                        // its own comma (for example, "Earth, Wind & Fire").
+                        // Prefer Spotify's structured first credit. Only use the
+                        // first subtitle segment as a fallback when Spotify omitted
+                        // structured credits, matching the established import behavior.
                         leadArtist = artistNames.firstOrNull()
-                            ?: artists.trim().takeIf { it.isNotBlank() },
+                            ?: artists.substringBefore(",").trim().takeIf { it.isNotBlank() },
                     ))
                 }
             }

@@ -108,8 +108,31 @@ describe('TrackMatcher', () => {
     expect(matches(song('Butter (Japanese Version)', 'BTS', '2:44'), 'Butter (Japanese Version)', 'BTS', 164)).toBe(true);
   });
 
+  it('does not treat a DJ artist prefix as a recording version', () => {
+    const target = {
+      title: 'Taki Taki',
+      artist: 'DJ Snake',
+      requiredArtistName: 'DJ Snake',
+      requireSharedArtist: true,
+      requireExactTitle: true,
+      durationSec: 212,
+    };
+    expect(best([song('DJ Snake - Taki Taki (Official Audio)', 'DJ Snake', '3:32')], target)).not.toBeNull();
+
+    const remixTarget = { ...target, title: 'Taki Taki (DJ Snake Remix)' };
+    expect(best([song('Taki Taki', 'DJ Snake', '3:32')], remixTarget)).toBeNull();
+    expect(best([song('Taki Taki (DJ Snake Remix)', 'DJ Snake', '3:32')], remixTarget)).not.toBeNull();
+  });
+
+  it('does not treat language words in ordinary packaging as version markers', () => {
+    expect(matches(song('Song (Hindi Medium)', 'Band', '3:30'), 'Song', 'Band', 210)).toBe(true);
+    expect(matches(song('Song', 'Band', '3:30'), 'Song (Hindi Version)', 'Band', 210)).toBe(false);
+    expect(matches(song('Song (Hindi Version)', 'Band', '3:30'), 'Song (Hindi Version)', 'Band', 210)).toBe(true);
+  });
+
   it('does not collapse sped-up and slowed edits into one recording', () => {
     expect(matches(song('Roses (Slowed + Reverb)', 'Saint Jhn', '2:30'), 'Roses (Sped Up)', 'Saint Jhn', 150)).toBe(false);
+    expect(matches(song('Roses (Speed Up)', 'Saint Jhn', '2:30'), 'Roses (Sped Up)', 'Saint Jhn', 150)).toBe(true);
   });
 
   it('keeps generic genre packaging out of version identity unless it names an edit', () => {

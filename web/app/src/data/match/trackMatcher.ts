@@ -87,16 +87,10 @@ const VERSION_WORDS = new Set([
   'vocals', 'vocal', 'acapella', 'acappella', 'backing', 'stems', 'stem',
   'cover', 'demo', 'reprise', 'remake', 'rework', 'extended', 'edit',
   'version', 'mix', 'dub', 'vip', 'session', 'sessions',
-  'sped', 'speed', 'slowed', 'slow', 'reverb', 'nightcore', 'lofi', 'orchestral', 'symphonic',
-  // Indonesian DJ styles and common electronic/dance edits.
-  'dj', 'koplo', 'kentrung', 'funkot', 'breakbeat', 'dangdut',
+  'sped', 'slowed', 'reverb', 'nightcore', 'lofi', 'orchestral', 'symphonic',
+  // Indonesian DJ styles are only take markers when paired with an edit label.
+  'koplo', 'kentrung', 'funkot', 'breakbeat', 'dangdut',
   'jedag', 'jedug', 'jedagjedug', 'boosted',
-  // Language-tagged versions.
-  'english', 'hindi', 'bengali', 'punjabi', 'tamil', 'telugu', 'malayalam',
-  'kannada', 'marathi', 'gujarati', 'bhojpuri', 'urdu', 'arabic', 'japanese',
-  'korean', 'mandarin', 'cantonese', 'chinese', 'spanish', 'french',
-  'portuguese', 'italian', 'german', 'russian', 'turkish', 'thai',
-  'indonesian', 'javanese', 'sundanese', 'jawa', 'sunda',
   'part', 'pt', 'chapter',
   'カバー', 'カラオケ', 'リミックス', 'ライブ', 'アコースティック',
   'インスト', 'バージョン', '歌ってみた', '踊ってみた', '弾いてみた',
@@ -117,7 +111,7 @@ const VERSION_DESCRIPTORS = new Set([
   'indonesian', 'javanese', 'sundanese', 'jawa', 'sunda',
 ]);
 const TRAILING_MIX_LABEL =
-  /\s+(dj(?:\s+[\p{L}\p{N}]+){0,3}\s+(?:remix|mix|edit|version)|dj\s+(?:koplo|kentrung|funkot|breakbeat|dangdut|jedag(?:[\s-]*jedug)?|bass|boosted|house|techno|trance|dubstep|reggae|disco|club|funky|tiktok|viral)(?:\s+(?:remix|mix|edit|version))?|(?:koplo|kentrung|funkot|breakbeat|dangdut|jedag[\s-]*jedug|bass\s+boosted|(?:house|techno|trance|dubstep|reggae|disco|club|funky|tiktok|viral)\s+(?:remix|mix|edit|version)|sped\s+up|speed\s+up|slowed(?:\s*\+\s*|\s+)reverb|nightcore|english|hindi|bengali|punjabi|tamil|telugu|malayalam|kannada|marathi|japanese|korean|spanish|french|portuguese|italian|german|russian|turkish|thai)(?:\s+(?:remix|mix|edit|version))?)$/iu;
+  /\s+(dj(?:\s+[\p{L}\p{N}]+){0,3}\s+(?:remix|mix|edit|version)|dj\s+(?:koplo|kentrung|funkot|breakbeat|dangdut|jedag(?:[\s-]*jedug)?|bass|boosted|house|techno|trance|dubstep|reggae|disco|club|funky|tiktok|viral)(?:\s+(?:remix|mix|edit|version))?|(?:koplo|kentrung|funkot|breakbeat|dangdut|jedag[\s-]*jedug|bass\s+boosted|(?:house|techno|trance|dubstep|reggae|disco|club|funky|tiktok|viral)\s+(?:remix|mix|edit|version)|sped\s+up|speed\s+up|slowed(?:\s*\+\s*|\s+)reverb|nightcore|(?:english|hindi|bengali|punjabi|tamil|telugu|malayalam|kannada|marathi|gujarati|bhojpuri|urdu|arabic|japanese|korean|mandarin|cantonese|chinese|spanish|french|portuguese|italian|german|russian|turkish|thai|indonesian|javanese|sundanese|jawa|sunda)\s+(?:version|ver|dub|edition))(?:\s+(?:remix|mix|edit|version))?)$/iu;
 const TRAILING_TAKES = new Set([
   'instrumental', 'karaoke', 'acapella', 'acappella', 'remix', 'rmx', 'nightcore',
   'koplo', 'kentrung', 'funkot', 'breakbeat', 'dangdut', 'jedag', 'jedug',
@@ -365,11 +359,21 @@ function classify(segment: string, versions: Set<string>, context: Set<string>):
   const dj = words.indexOf('dj');
   const carriesDjStyle = words.some((w) => DJ_STYLE_WORDS.has(w)) &&
     (dj >= 0 || marks.some((w) => MIX_LABEL_MARKERS.has(w)));
-  if (marks.length || carriesDjStyle) {
+  // Language names occur in ordinary titles and packaging; only pair them
+  // with an explicit recording/version marker before treating them as identity.
+  const languageMarks = words.filter((w) => VERSION_DESCRIPTORS.has(w));
+  const hasLanguageVersion = languageMarks.length > 0 && marks.length > 0;
+  const speedUp = words.includes('speed') && words.includes('up');
+  if (marks.length || carriesDjStyle || hasLanguageVersion || speedUp) {
     marks.forEach((m) => versions.add(m));
-    if (dj >= 0) words.slice(dj).filter((w) => !NOISE_WORDS.has(w)).forEach((w) => versions.add(w));
-    else if (carriesDjStyle) words.filter((w) => DJ_STYLE_WORDS.has(w)).forEach((w) => versions.add(w));
-    words.filter((w) => VERSION_DESCRIPTORS.has(w)).forEach((w) => versions.add(w));
+    if (hasLanguageVersion) languageMarks.forEach((m) => versions.add(m));
+    if (speedUp) versions.add('sped');
+    // "DJ" is often the credited artist ("DJ Snake - Title"), not a remix.
+    if (dj >= 0 && (carriesDjStyle || marks.some((w) => MIX_LABEL_MARKERS.has(w)))) {
+      words.slice(dj).filter((w) => !NOISE_WORDS.has(w)).forEach((w) => versions.add(w));
+    } else if (carriesDjStyle) {
+      words.filter((w) => DJ_STYLE_WORDS.has(w)).forEach((w) => versions.add(w));
+    }
     return;
   }
   // A single CJK syllable is a whole title: the length gate exists

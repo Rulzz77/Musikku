@@ -550,13 +550,24 @@ object TrackMatcher {
         val dj = words.indexOf("dj")
         val carriesDjStyle = words.any { it in DJ_STYLE_WORDS } &&
             (dj >= 0 || marks.any { it in MIX_LABEL_MARKERS })
-        if (marks.isNotEmpty() || carriesDjStyle) {
+        // A language name is not a recording identity on its own: titles and
+        // packaging often contain words such as "Hindi" or "Japanese".
+        // Keep it only when Spotify/YouTube explicitly labels a version/take.
+        val languageMarks = words.filter { it in VERSION_DESCRIPTORS }
+        val hasLanguageVersion = languageMarks.isNotEmpty() && marks.isNotEmpty()
+        // "Speed Up" is a phrase, not the ordinary word "Speed".
+        val speedUp = "speed" in words && "up" in words
+        if (marks.isNotEmpty() || carriesDjStyle || hasLanguageVersion || speedUp) {
             versions += marks
-            // Preserve DJ/style identity only when the label describes a take.
-            // Generic "(House Music)" stays context; "(DJ House Remix)" does not.
-            if (dj >= 0) versions += words.drop(dj).filter { it !in NOISE_WORDS }
-            else if (carriesDjStyle) versions += words.filter { it in DJ_STYLE_WORDS }
-            versions += words.filter { it in VERSION_DESCRIPTORS }
+            if (hasLanguageVersion) versions += languageMarks
+            if (speedUp) versions += "sped"
+            // "DJ" is often the credited artist ("DJ Snake - Title"), not a
+            // remix. Keep the DJ name only when the segment also signals a take.
+            if (dj >= 0 && (carriesDjStyle || marks.any { it in MIX_LABEL_MARKERS })) {
+                versions += words.drop(dj).filter { it !in NOISE_WORDS }
+            } else if (carriesDjStyle) {
+                versions += words.filter { it in DJ_STYLE_WORDS }
+            }
             return
         }
         // A single CJK syllable is a whole title: the length gate exists
@@ -1017,16 +1028,10 @@ object TrackMatcher {
         "vocals", "vocal", "acapella", "acappella", "backing", "stems", "stem",
         "cover", "demo", "reprise", "remake", "rework", "extended", "edit",
         "version", "mix", "dub", "vip", "session", "sessions",
-        "sped", "speed", "slowed", "slow", "reverb", "nightcore", "lofi", "orchestral", "symphonic",
-        // Indonesian DJ styles and common electronic/dance edits.
-        "dj", "koplo", "kentrung", "funkot", "breakbeat", "dangdut",
+        "sped", "slowed", "reverb", "nightcore", "lofi", "orchestral", "symphonic",
+        // Indonesian DJ styles are only take markers when paired with an edit label.
+        "koplo", "kentrung", "funkot", "breakbeat", "dangdut",
         "jedag", "jedug", "jedagjedug", "boosted",
-        // Language-tagged versions.
-        "english", "hindi", "bengali", "punjabi", "tamil", "telugu", "malayalam",
-        "kannada", "marathi", "gujarati", "bhojpuri", "urdu", "arabic", "japanese",
-        "korean", "mandarin", "cantonese", "chinese", "spanish", "french",
-        "portuguese", "italian", "german", "russian", "turkish", "thai",
-        "indonesian", "javanese", "sundanese", "jawa", "sunda",
         "part", "pt", "chapter",
         "カバー", "カラオケ", "リミックス", "ライブ", "アコースティック",
         "インスト", "バージョン", "歌ってみた", "踊ってみた", "弾いてみた",
@@ -1056,8 +1061,9 @@ object TrackMatcher {
             """(?:koplo|kentrung|funkot|breakbeat|dangdut|jedag[\s-]*jedug|bass\s+boosted|""" +
             """(?:house|techno|trance|dubstep|reggae|disco|club|funky|tiktok|viral)\s+(?:remix|mix|edit|version)|""" +
             """sped\s+up|speed\s+up|slowed(?:\s*\+\s*|\s+)reverb|nightcore|""" +
-            """english|hindi|bengali|punjabi|tamil|telugu|malayalam|kannada|marathi|japanese|korean|""" +
-            """spanish|french|portuguese|italian|german|russian|turkish|thai)""" +
+            """(?:english|hindi|bengali|punjabi|tamil|telugu|malayalam|kannada|marathi|gujarati|bhojpuri|""" +
+            """urdu|arabic|japanese|korean|mandarin|cantonese|chinese|spanish|french|portuguese|italian|""" +
+            """german|russian|turkish|thai|indonesian|javanese|sundanese|jawa|sunda)\s+(?:version|ver|dub|edition))""" +
             """(?:\s+(?:remix|mix|edit|version))?)$""",
         RegexOption.IGNORE_CASE,
     )

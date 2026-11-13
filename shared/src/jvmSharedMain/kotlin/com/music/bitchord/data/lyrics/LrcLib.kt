@@ -32,8 +32,8 @@ object LrcLib {
     /** Synced lyrics for a track, or null when nothing usable is published. */
     suspend fun lyrics(title: String, artist: String, durationMs: Long): List<LyricLine>? =
         withContext(Dispatchers.IO) {
-            val cleanTitle = title.clean()
-            val cleanArtist = artist.clean()
+            val cleanTitle = title.forLyricsSearch()
+            val cleanArtist = artist.artistForLyricsSearch()
             val seconds = (durationMs / 1000).toInt()
 
             val exact = runCatching { exactMatch(cleanTitle, cleanArtist, seconds) }.getOrNull()
@@ -158,16 +158,6 @@ object LrcLib {
 
     private const val ALIGNMENT_MARKER = "<R>"
 
-    /**
-     * YouTube Music titles are noisy — "(From "Raees")", "| Official Video",
-     * "(Lyrical)" — and LRCLIB matches on the plain song name.
-     */
-    private fun String.clean(): String = this
-        .replace(NOISE, " ")
-        .substringBefore(" | ")
-        .replace(Regex("\\s+"), " ")
-        .trim()
-        .ifBlank { this }
 
     /**
      * The `<mm:ss.xx>` runs of an "enhanced" A2 line, as words.
@@ -212,9 +202,4 @@ object LrcLib {
 
     private val STAMP = Regex("""\[(\d{1,2}):(\d{2})[.:](\d{2,3})]""")
     private val WORD_STAMP = Regex("""<(\d{1,3}):(\d{2})[.:](\d{2,3})>""")
-    private val NOISE = Regex(
-        """\((?:from|feat\.?|official|lyrical|video|audio|remix)[^)]*\)|\[[^]]*]|""" +
-            """\b(?:official (?:video|audio|music video)|lyrical|full song|4k video)\b""",
-        RegexOption.IGNORE_CASE,
-    )
 }

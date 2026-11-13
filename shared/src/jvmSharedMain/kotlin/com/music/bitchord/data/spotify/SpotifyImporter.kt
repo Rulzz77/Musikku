@@ -215,7 +215,10 @@ object SpotifyImporter {
                     add((baseQueries.firstOrNull()?.let { 1 } ?: 0).coerceAtMost(size), albumQuery)
                 }
             }
-        for (filter in listOf(SearchFilter.SONGS, SearchFilter.VIDEOS)) {
+        // The normal Search screen's All tab can return a promoted TopTrack row.
+        // The Songs filter removes that row in YtMusicRepository before it reaches
+        // callers, so Spotify import must also inspect ALL to see those tracks.
+        for (filter in listOf(SearchFilter.ALL, SearchFilter.SONGS, SearchFilter.VIDEOS)) {
             for (baseQuery in queries) {
                 val query = listOf(baseQuery, suffix?.takeIf { it.isNotBlank() })
                     .filterNotNull()
@@ -224,11 +227,7 @@ object SpotifyImporter {
                 var pagesRead = 0
                 while (pagesRead < MAX_CANDIDATE_SEARCH_PAGES) {
                     page.rows.forEach { row ->
-                        val candidate = when (row) {
-                            is SearchResult.Track -> row.song
-                            is SearchResult.TopTrack -> row.song
-                            is SearchResult.Browse -> null
-                        }
+                        val candidate = spotifyImportCandidate(row)
                         val id = candidate?.videoId?.trim().orEmpty()
                         if (candidate != null && id.isNotEmpty()) found.putIfAbsent(id, candidate)
                     }
@@ -391,6 +390,13 @@ object SpotifyImporter {
     }
 }
 
+
+/** Converts playable rows from both mixed and filtered YouTube Music search pages. */
+internal fun spotifyImportCandidate(row: SearchResult): Song? = when (row) {
+    is SearchResult.Track -> row.song
+    is SearchResult.TopTrack -> row.song
+    is SearchResult.Browse -> null
+}
 
 internal fun distinctSpotifyImportTracks(tracks: List<SpotifyImportTrack>): List<SpotifyImportTrack> =
     tracks.distinctBy { track ->

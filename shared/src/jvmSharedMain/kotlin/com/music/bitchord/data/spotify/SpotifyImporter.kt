@@ -1,5 +1,6 @@
 package com.music.bitchord.data.spotify
 
+import com.music.bitchord.data.DebugLog
 import com.music.bitchord.data.Http
 import com.music.bitchord.data.YtMusicRepository
 import com.music.bitchord.data.model.BrowseType
@@ -236,18 +237,10 @@ object SpotifyImporter {
         val failures = mutableListOf<String>()
         var successfulRequests = 0
 
-        val baseQueries = TrackMatcher.queries(target)
-        val albumQuery = target.album?.trim()?.takeIf { it.isNotBlank() }
-            ?.let { album -> baseQueries.firstOrNull()?.let { "$it $album" } }
-        val queries = (baseQueries + listOfNotNull(albumQuery))
-            .distinct()
-            .let { all ->
-                if (albumQuery == null || all.size < 3) all
-                else all.toMutableList().apply {
-                    remove(albumQuery)
-                    add(1.coerceAtMost(size), albumQuery)
-                }
-            }
+        val queries = spotifyImportSearchQueries(target)
+
+        fun hasAudioMatch(): Boolean =
+            bestSpotifyImportMatch(found.values.filterNot { it.isVideo }, target) != null
 
         suspend fun searchFilter(filter: SearchFilter) {
             for (baseQuery in queries) {
@@ -291,6 +284,23 @@ object SpotifyImporter {
                         }
                     }
                     pagesRead++
+
+                    // The normal Search screen shows the same authenticated
+                    // ALL catalogue. Once that exact title/artist/version
+                    // candidate is verified, further pages and alternate
+                    // query spellings cannot improve identity; stop here to
+                    // avoid flooding Innertube during playlist imports.
+                    if (filter == SearchFilter.ALL && hasAudioMatch()) {
+                        DebugLog.d(
+                            "SpotifyImport",
+                            "Matched '${target.title}' by '${target.artist}' after ${successfulRequests} search requests",
+                        )
+                        break
+                    }
+                    if (filter == SearchFilter.VIDEOS &&
+                        bestSpotifyImportMatch(found.values.toList(), target) != null
+                    ) break
+
                     val continuation = page.continuation ?: break
                     page = YtMusicRepository.searchContinuation(continuation, filter).fold(
                         onSuccess = { successfulRequests++; it },
@@ -300,15 +310,16 @@ object SpotifyImporter {
                         },
                     ) ?: break
                 }
+                if (filter == SearchFilter.ALL && hasAudioMatch()) break
+                if (filter == SearchFilter.VIDEOS &&
+                    bestSpotifyImportMatch(found.values.toList(), target) != null
+                ) break
             }
         }
 
-        // ALL includes both Track and the promoted TopTrack that the ordinary
-        // Search screen displays. Keep artist cards for the targeted fallback.
+        // ALL is the same authenticated catalogue used by the normal Search
+        // screen. Its promoted TopTrack and regular Track rows are both kept.
         searchFilter(SearchFilter.ALL)
-
-        fun hasAudioMatch(): Boolean =
-            bestSpotifyImportMatch(found.values.filterNot { it.isVideo }, target) != null
 
         if (!hasAudioMatch()) {
             for (browseId in artistBrowseIds) {
@@ -335,6 +346,16 @@ object SpotifyImporter {
         }
 
         val match = bestSpotifyImportMatch(found.values.toList(), target)
+        if (match == null) {
+            DebugLog.w(
+                "SpotifyImport",
+                "No match for '${target.title}' by '${target.artist}' " +
+                    "(lead='${target.requiredArtistName}', duration=${target.durationSec}s, " +
+                    "queries=${queries.size}, requests=${successfulRequests}, " +
+                    "candidates=${found.size}, failures=${failures.size}). " +
+                    found.values.take(8).joinToString { "${it.title} — ${it.artist} [${it.durationText}]" },
+            )
+        }
         // A transport/API failure is not proof that a song is absent. Propagate
         // an incomplete lookup so the UI can leave the row retryable instead
         // of permanently labelling it as missing.
@@ -479,10 +500,14 @@ object SpotifyImporter {
                         }
                     } catch (cancelled: CancellationException) {
                         throw cancelled
-                    } catch (_: Exception) {
+                    } catch (failure: Exception) {
+                        DebugLog.w(
+                            "SpotifyImport",
+                            "Lookup failed for '${track.title}' by '${track.artist}': ${failure.message}",
+                            failure,
+                        )
                         // One unavailable search must not abort the entire
-                        // playlist import. This Spotify row stays in the
-                        // unmatched result set for a later retry/review.
+                        // playlist import. This Spotify row stays retryable.
                         emptyList()
                     }
                     // Never import the search engine's first row as a fallback:
@@ -542,6 +567,36 @@ internal fun bestSpotifyImportMatch(candidates: List<Song>, target: TrackMatcher
     val audio = candidates.filterNot { it.isVideo }
     return TrackMatcher.best(audio, target)
         ?: TrackMatcher.best(candidates.filter { it.isVideo }, target)
+}
+
+/**
+ * Query both Spotify's original spelling and TrackMatcher's normalized form.
+ *
+ * Manual Search receives the title/artist text the listener types. Import used
+ * to search only the stripped title generated by TrackMatcher; a packaging
+ * suffix, transliteration, or unusual DJ/language label could therefore change
+ * the query enough for YouTube Music to return a different result set.
+ */
+internal fun spotifyImportSearchQueries(target: TrackMatcher.Target): List<String> {
+    val normalized = TrackMatcher.queries(target)
+    val rawTitle = target.title.trim()
+    val fullArtist = target.artist.trim()
+    val leadArtist = target.requiredArtistName?.trim().orEmpty()
+    val album = target.album?.trim().orEmpty()
+
+    return buildList {
+        normalized.firstOrNull()?.let(::add)
+        if (rawTitle.isNotBlank() && fullArtist.isNotBlank()) add("$rawTitle $fullArtist")
+        if (rawTitle.isNotBlank() && leadArtist.isNotBlank()) add("$rawTitle $leadArtist")
+        if (rawTitle.isNotBlank()) add(rawTitle)
+        addAll(normalized.drop(1))
+        if (album.isNotBlank() && normalized.firstOrNull() != null) {
+            add("${normalized.first()} $album")
+        }
+    }
+        .map { it.replace(Regex("\\s+"), " ").trim() }
+        .filter { it.isNotBlank() }
+        .distinct()
 }
 
 internal fun distinctSpotifyImportTracks(tracks: List<SpotifyImportTrack>): List<SpotifyImportTrack> =

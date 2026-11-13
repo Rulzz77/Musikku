@@ -135,7 +135,7 @@ export async function matchToYouTube(track: SpotifyTrack): Promise<Track | null>
     rawTitle,
     ...baseQueries,
     ...(albumQuery ? [albumQuery] : []),
-  ].map((query) => query.replace(/\\s+/g, ' ').trim()).filter(Boolean))];
+  ].map((query) => query.replace(/\s+/g, ' ').trim()).filter(Boolean))];
   const candidates = new Map<string, Track>();
   let searchFailure: unknown = null;
 

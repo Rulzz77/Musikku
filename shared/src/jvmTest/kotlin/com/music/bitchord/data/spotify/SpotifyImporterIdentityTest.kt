@@ -207,6 +207,21 @@ class SpotifyImporterIdentityTest {
             durationText = "3:50",
         )
         assertNotNull(TrackMatcher.best(listOf(ndxSpelling), ndxTarget))
+
+        val accentTarget = TrackMatcher.Target(
+            title = "Halo",
+            artist = "Beyoncé",
+            durationSec = 260,
+            requiredArtistName = "Beyoncé",
+            requireExactTitle = true,
+        )
+        val unaccentedCredit = youtubeSpelling.copy(
+            videoId = "beyonce-upload",
+            title = "Halo",
+            artist = "Beyonce",
+            durationText = "4:20",
+        )
+        assertNotNull(TrackMatcher.best(listOf(unaccentedCredit), accentTarget))
     }
 
     @Test

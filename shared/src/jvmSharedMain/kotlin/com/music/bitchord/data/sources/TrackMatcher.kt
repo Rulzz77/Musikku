@@ -270,20 +270,20 @@ object TrackMatcher {
         // Match the complete first credited artist name against one complete
         // candidate credit instead of accepting a partial token overlap.
         val requiredArtist = target.requiredArtistName?.takeIf { it.isNotBlank() }
+        val candidateNames = buildSet {
+            add(artistIdentityKey(candidate.artist))
+            candidate.artists.forEach { add(artistIdentityKey(it.name)) }
+            // YouTube commonly serializes multiple billed artists with
+            // commas; split only those boundaries here so names containing
+            // "x", slash, or "and" remain intact.
+            candidate.artist.split(",").forEach { add(artistIdentityKey(it)) }
+            artistNames(candidate.artist).forEach { add(it.joinToString("")) }
+        }
         val requiredArtistMatched = if (requiredArtist != null) {
             // Keep this as one complete name. Splitting the required artist
             // with collaboration separators would turn names such as
             // "X Ambassadors" into the unrelated name "Ambassadors".
             val expectedNames = setOf(artistIdentityKey(requiredArtist))
-            val candidateNames = buildSet {
-                add(artistIdentityKey(candidate.artist))
-                candidate.artists.forEach { add(artistIdentityKey(it.name)) }
-                // YouTube commonly serializes multiple billed artists with
-                // commas; split only those boundaries here so names containing
-                // "x", slash, or "and" remain intact.
-                candidate.artist.split(",").forEach { add(artistIdentityKey(it)) }
-                artistNames(candidate.artist).forEach { add(it.joinToString("")) }
-            }
             expectedNames.any { it.isNotBlank() && it in candidateNames }
         } else {
             false

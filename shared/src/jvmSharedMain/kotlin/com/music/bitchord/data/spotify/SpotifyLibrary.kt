@@ -81,8 +81,7 @@ object SpotifyLibrary {
         while (true) {
             val (items, total, raw) = playlistPage(headers, offset)
             collected += items
-            offset += raw
-            if (raw == 0 || offset >= total) break
+            offset = nextSpotifyPageOffset(offset, total, raw) ?: break
         }
         // Liked Songs is not a playlist to Spotify's library query, so it is
         // always offered first rather than depending on it turning up there.
@@ -108,9 +107,8 @@ object SpotifyLibrary {
                 trackPage(headers, playlistId, offset)
             }
             collected += items
-            offset += raw
             onPage(collected.toList())
-            if (raw == 0 || offset >= total) break
+            offset = nextSpotifyPageOffset(offset, total, raw) ?: break
         }
         collected
     }
@@ -241,6 +239,18 @@ internal fun parsePlaylistPage(root: JsonObject): Triple<List<SpotifyPlaylist>, 
         )
     }
     return Triple(items, library.int("totalCount") ?: rawItems.size, rawItems.size)
+}
+
+/** Computes the next offset and refuses a page that silently stops before its advertised total. */
+internal fun nextSpotifyPageOffset(offset: Int, total: Int, raw: Int): Int? {
+    require(offset >= 0 && total >= 0) { "Spotify returned an invalid page offset or total" }
+    require(raw >= 0) { "Spotify returned a negative page size" }
+    if (raw == 0) {
+        if (offset < total) error("Spotify pagination stopped at $offset of $total entries")
+        return null
+    }
+    val next = offset + raw
+    return next.takeIf { it < total }
 }
 
 /** The tracks kept, the playlist's total, and how many entries the page held before filtering. */

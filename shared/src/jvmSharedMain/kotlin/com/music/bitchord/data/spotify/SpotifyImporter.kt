@@ -137,7 +137,8 @@ object SpotifyImporter {
                     ?: obj["name"]?.jsonPrimitive?.content
                     ?: continue
                 val artistNames = obj.spotifyArtistNames()
-                val artists = obj.spotifyArtistCredit().ifBlank { artistNames.joinToString(", ") }
+                val artists = artistNames.takeIf { it.isNotEmpty() }?.joinToString(", ")
+                    ?: obj.spotifyArtistCredit()
                 if (title.isNotBlank()) {
                     tracks.add(SpotifyImportTrack(
                         title = title.trim(),
@@ -436,7 +437,8 @@ object SpotifyImporter {
                 val title = data["name"]?.jsonPrimitive?.content?.trim().orEmpty()
                 if (title.isEmpty()) continue
                 val artistNames = data.spotifyArtistNames()
-                val artist = data.spotifyArtistCredit().ifBlank { artistNames.joinToString(", ") }
+                val artist = artistNames.takeIf { it.isNotEmpty() }?.joinToString(", ")
+                    ?: data.spotifyArtistCredit()
                 out.add(SpotifyImportTrack(
                     title = title,
                     artist = artist,
@@ -579,8 +581,12 @@ internal fun spotifyArtistBrowseId(row: SearchResult, expectedArtist: String?): 
 
 /** A matching song row can expose the artist page id even without an artist card. */
 internal fun spotifyArtistBrowseId(song: Song, expectedArtist: String?): String? {
-    val browseId = song.artistId?.takeIf { it.isNotBlank() } ?: return null
     val expected = expectedArtist?.takeIf { it.isNotBlank() } ?: return null
+    // Search rows may expose browse ids for more than the first credited singer.
+    song.artists.firstOrNull { artist ->
+        artist.browseId?.isNotBlank() == true && TrackMatcher.sharesArtist(expected, artist.name)
+    }?.browseId?.takeIf { it.isNotBlank() }?.let { return it }
+    val browseId = song.artistId?.takeIf { it.isNotBlank() } ?: return null
     val lead = song.artists.firstOrNull()?.name?.takeIf { it.isNotBlank() } ?: song.artist
     return browseId.takeIf { TrackMatcher.sharesArtist(expected, lead) }
 }

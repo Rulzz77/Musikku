@@ -11,12 +11,12 @@ This note records the safety rules shared by the Android and Web Spotify import 
 
 ## Matching Spotify rows to YouTube Music
 
-- Use the cleaned title, Spotify's structured artist credits, runtime, album, and recording/version markers. The primary artist remains mandatory by default. Only a catalogue alias combining meaningful tokens from at least two distinct Spotify credits can bypass the primary-name check, and only with an exact title/version match and runtime within three seconds. A secondary artist by itself is not enough; it may be a cover or a different performer on a same-title recording.
+- Use the cleaned title, Spotify's structured artist credits, runtime, album, and recording/version markers. The primary artist remains preferred. When it differs, an exact full-name match to another structured Spotify performer is accepted only with an exact title/version match and runtime within three seconds. A flattened alias combining meaningful tokens from at least two distinct Spotify credits uses the same guard. Do not split display strings to invent artist identities.
 - Keep DJ styles and language versions distinct, but do not interpret generic genre/packaging words such as “House Music” as an alternate recording unless the label identifies a DJ/edit take.
 - Prefer audio catalogue results. Never substitute the first search hit when no candidate passes identity checks.
 - Keep temporary search failures retryable; only a completed search with no safe match is labelled missing.
 - Preserve structured artist names end-to-end across public playlist links, Spotify Library, Liked Songs, and the Web extension. Names containing commas (for example, “Earth, Wind & Fire”) remain one artist.
-- Search the raw title with the full credit and each individual credited artist (bounded to the first three query variants); use every credited performer for artist-page fallback discovery.
+- Search the raw title with the full credit and each individual credited artist (bounded to the first three query variants); use every credited performer and every matching structured YouTube artist browse id for artist-page fallback discovery.
 - Recognize upload titles where the credited performers precede the song (for example, “Lead feat. Guest - Song”) without weakening the final artist check.
 - Treat `feat`, `ft`, `featuring`, or `with` as a credit suffix only when the following name matches a known artist credit. Words such as “With” inside real song titles must remain part of the title.
 

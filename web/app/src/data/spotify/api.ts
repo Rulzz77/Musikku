@@ -1,6 +1,6 @@
 import type { SpotifyPlaylist, SpotifyTrack } from '@bitchord/shared/bridge';
 import { best, primaryArtist, queries, type MatchCandidate, type MatchTarget } from '@/data/match/trackMatcher';
-import { searchSongs } from '@/data/music/api';
+import { searchSongs, SearchSongsIncompleteError } from '@/data/music/api';
 import type { Track } from '@/data/music/types';
 import { getBridge } from '@/extension/bridge';
 
@@ -150,6 +150,11 @@ export async function matchToYouTube(track: SpotifyTrack): Promise<Track | null>
       // spend more requests on normalized variants for this playlist row.
       if (best([...candidates.values()].map((candidate) => candidateOf(candidate)), target)) break;
     } catch (error) {
+      if (error instanceof SearchSongsIncompleteError) {
+        for (const candidate of error.candidates) {
+          if (candidate.videoId?.trim()) candidates.set(candidate.videoId, candidate);
+        }
+      }
       searchFailure ??= error;
     }
   }

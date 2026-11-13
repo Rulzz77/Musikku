@@ -258,10 +258,10 @@ object TrackMatcher {
         // candidate credit instead of accepting a partial token overlap.
         val requiredArtist = target.requiredArtistName?.takeIf { it.isNotBlank() }
         val requiredArtistMatched = if (requiredArtist != null) {
-            val expectedNames = buildSet {
-                add(artistIdentityKey(requiredArtist))
-                artistNames(requiredArtist).singleOrNull()?.let { add(it.joinToString(" ")) }
-            }
+            // Keep this as one complete name. Splitting the required artist
+            // with collaboration separators would turn names such as
+            // "X Ambassadors" into the unrelated name "Ambassadors".
+            val expectedNames = setOf(artistIdentityKey(requiredArtist))
             val candidateNames = buildSet {
                 add(artistIdentityKey(candidate.artist))
                 candidate.artists.forEach { add(artistIdentityKey(it.name)) }

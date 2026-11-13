@@ -2699,7 +2699,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         private const val ADDON_SEARCH_LIMIT = 20
 
         /** How many Spotify tracks are looked up on YouTube Music at once. */
-        private const val SPOTIFY_MATCH_PARALLELISM = 6
+        private const val SPOTIFY_MATCH_PARALLELISM = 3
 
         /**
          * How long a keystroke waits before the typeahead is asked about it.
@@ -3058,11 +3058,25 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     launch {
                         gate.withPermit {
                             if (!open()) return@withPermit
-                            val match = runCatching { SpotifyImporter.matchTrack(track) }.getOrNull()
-                            val found = match?.copy(thumbnailUrl = match.thumbnailUrl ?: track.imageUrl)
-                                ?: track.asPendingSong().let {
-                                    it.copy(videoId = SPOTIFY_MISSING_PREFIX + track.id)
-                                }
+                            val found = try {
+                                val match = SpotifyImporter.matchTrack(track)
+                                match?.copy(thumbnailUrl = match.thumbnailUrl ?: track.imageUrl)
+                                    ?: track.asPendingSong().let {
+                                        it.copy(videoId = SPOTIFY_MISSING_PREFIX + track.id)
+                                    }
+                            } catch (cancelled: CancellationException) {
+                                throw cancelled
+                            } catch (failure: Exception) {
+                                // A network/API failure is not proof that the track
+                                // is absent. Leave it retryable when this page is
+                                // reopened, and keep the failure visible in Logcat.
+                                Log.w(
+                                    "SpotifyImport",
+                                    "Temporary lookup failure for '${track.title}' by '${track.artist}'",
+                                    failure,
+                                )
+                                track.asPendingSong()
+                            }
                             _detailStack.value = _detailStack.value.map { page ->
                                 val list = (page.songs as? UiState.Success<List<Song>>)?.data
                                 if (page.browseId == browseId && list != null && index < list.size) {

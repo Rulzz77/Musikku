@@ -349,6 +349,7 @@ class SpotifyImporterIdentityTest {
             requiredArtistName = "Gasentra Pajampangan",
             requireSharedArtist = true,
             requireExactTitle = true,
+            artistCredits = listOf("Gasentra Pajampangan", "Friska"),
         )
         val singerFiledByYouTube = Song(
             videoId = "budak-saha-friska-gasentra",
@@ -361,6 +362,34 @@ class SpotifyImporterIdentityTest {
         assertNotNull(TrackMatcher.best(listOf(singerFiledByYouTube), target))
         assertNull(TrackMatcher.best(listOf(singerFiledByYouTube.copy(durationText = "4:35")), target))
         assertNull(TrackMatcher.best(listOf(singerFiledByYouTube.copy(durationText = null)), target))
+    }
+
+    @Test
+    fun spotifyImportDoesNotSplitCommasInsideStructuredArtistNames() {
+        val target = TrackMatcher.Target(
+            title = "September",
+            artist = "Earth, Wind & Fire, Guest Artist",
+            durationSec = 215,
+            requiredArtistName = "Earth, Wind & Fire",
+            requireSharedArtist = true,
+            requireExactTitle = true,
+            artistCredits = listOf("Earth, Wind & Fire", "Guest Artist"),
+        )
+        val canonical = Song(
+            videoId = "earth-wind-fire-september",
+            title = "September",
+            artist = "Earth, Wind & Fire",
+            thumbnailUrl = null,
+            durationText = "3:35",
+            artists = listOf(ArtistRef(name = "Earth, Wind & Fire", browseId = "earth-wind-fire")),
+        )
+        val reorderedButUnrelated = canonical.copy(
+            videoId = "misread-artist",
+            artist = "Wind Fire Earth",
+        )
+
+        assertNotNull(TrackMatcher.best(listOf(canonical), target))
+        assertNull(TrackMatcher.best(listOf(reorderedButUnrelated), target))
     }
 
     @Test

@@ -78,6 +78,19 @@ describe('Spotify import safety', () => {
     });
   });
 
+  it('uses visible first-page results when a later Songs page fails', async () => {
+    const { SearchSongsIncompleteError } = await import('@/data/music/api');
+    const correct = youtubeTrack('partial-visible-match', 'Dumes', 'Guyon Waton');
+    mocks.searchSongs.mockRejectedValue(new SearchSongsIncompleteError(
+      [correct],
+      new Error('continuation unavailable'),
+    ));
+
+    await expect(matchToYouTube(spotifyTrack({ id: 'spotify-partial-page' }))).resolves.toMatchObject({
+      videoId: 'partial-visible-match',
+    });
+  });
+
   it('does not turn a failed search request into an unmatched song', async () => {
     mocks.searchSongs.mockRejectedValue(new Error('temporary YouTube search failure'));
 

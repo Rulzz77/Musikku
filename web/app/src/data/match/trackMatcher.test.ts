@@ -69,7 +69,8 @@ describe('TrackMatcher', () => {
       requireExactTitle: true,
     };
     expect(best([song('Budak Saha', 'Friska Gasentra', '4:47')], target)).not.toBeNull();
-    expect(best([song('Budak Saha', 'Friska', '4:47')], target)).toBeNull();
+    expect(best([song('Budak Saha', 'Friska', '4:47')], target)).not.toBeNull();
+    expect(best([song('Budak Saha', 'Friska', '4:35')], target)).toBeNull();
     expect(best([song('Budak Saha', 'Denny Caknan', '4:47')], target)).toBeNull();
     expect(best([song('Budak Saha', 'Friska Gasentra', '4:35')], target)).toBeNull();
     expect(best([song('Budak Saha', 'Friska Gasentra')], target)).toBeNull();

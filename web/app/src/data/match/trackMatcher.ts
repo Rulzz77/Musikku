@@ -367,7 +367,7 @@ function classify(segment: string, versions: Set<string>, context: Set<string>):
   if (marks.length || carriesDjStyle || hasLanguageVersion || speedUp) {
     marks.forEach((m) => versions.add(m));
     if (hasLanguageVersion) languageMarks.forEach((m) => versions.add(m));
-    if (speedUp) versions.add('speedup');
+    if (speedUp) versions.add('sped');
     // "DJ" is often the credited artist ("DJ Snake - Title"), not a remix.
     if (dj >= 0 && (carriesDjStyle || marks.some((w) => MIX_LABEL_MARKERS.has(w)))) {
       words.slice(dj).filter((w) => !NOISE_WORDS.has(w)).forEach((w) => versions.add(w));

@@ -365,6 +365,32 @@ class SpotifyImporterIdentityTest {
     }
 
     @Test
+    fun spotifyImportKeepsSongTitleAfterFeaturedArtistPrefix() {
+        val target = TrackMatcher.Target(
+            title = "Bubrah",
+            artist = "Northsle, Agiff",
+            durationSec = 200,
+            requiredArtistName = "Northsle",
+            requireSharedArtist = true,
+            requireExactTitle = true,
+        )
+        val prefixedUpload = Song(
+            videoId = "northsle-agiff-bubrah",
+            title = "Northsle feat. Agiff - Bubrah",
+            artist = "Northsle, Agiff",
+            thumbnailUrl = null,
+            durationText = "3:20",
+        )
+        val incompleteCredit = prefixedUpload.copy(
+            videoId = "northsle-only",
+            artist = "Northsle",
+        )
+
+        assertNotNull(TrackMatcher.best(listOf(prefixedUpload), target))
+        assertNull(TrackMatcher.best(listOf(incompleteCredit), target))
+    }
+
+    @Test
     fun spotifyImportDoesNotSplitCommasInsideStructuredArtistNames() {
         val target = TrackMatcher.Target(
             title = "September",

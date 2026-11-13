@@ -82,8 +82,9 @@ describe('TrackMatcher', () => {
       requireSharedArtist: true,
       requireExactTitle: true,
     };
-    expect(best([song('Northsle feat. Agiff - Bubrah', 'Northsle, Agiff', '3:20')], target)).not.toBeNull();
-    expect(best([song('Northsle feat. Agiff - Bubrah', 'Northsle', '3:20')], target)).toBeNull();
+    // The byline may carry only the lead even when the title includes the guest.
+    expect(best([song('Northsle feat. Agiff - Bubrah', 'Northsle', '3:20')], target)).not.toBeNull();
+    expect(best([song('Northsle feat. Agiff - Bubrah', 'Unrelated Singer', '3:20')], target)).toBeNull();
   });
 
   it('keeps commas inside one structured Spotify artist name', () => {

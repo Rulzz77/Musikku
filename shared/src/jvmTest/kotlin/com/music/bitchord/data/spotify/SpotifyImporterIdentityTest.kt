@@ -360,10 +360,16 @@ class SpotifyImporterIdentityTest {
         )
 
         assertNotNull(TrackMatcher.best(listOf(singerFiledByYouTube), target))
-        // A secondary artist alone is not enough to identify the same recording.
-        assertNull(TrackMatcher.best(listOf(singerFiledByYouTube.copy(
+        // An exact full-name match to another structured Spotify performer is
+        // accepted only while title/version and runtime remain identical.
+        assertNotNull(TrackMatcher.best(listOf(singerFiledByYouTube.copy(
             videoId = "budak-saha-friska-only",
             artist = "Friska",
+        )), target))
+        assertNull(TrackMatcher.best(listOf(singerFiledByYouTube.copy(
+            videoId = "budak-saha-friska-only-too-long",
+            artist = "Friska",
+            durationText = "4:35",
         )), target))
         assertNull(TrackMatcher.best(listOf(singerFiledByYouTube.copy(
             videoId = "budak-saha-unrelated",

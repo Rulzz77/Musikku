@@ -83,12 +83,56 @@ export async function fetchSearch(query: string): Promise<SearchResults> {
   return mapSearch(await yt.music.search(query));
 }
 
-/** YouTube Music's Songs shelf for [query]: what an import or a match is chosen from. */
+/**
+ * All playable tracks Search shows for [query], not just the first Songs shelf.
+ *
+ * Spotify matching used to call the filtered Songs endpoint and read only its
+ * first page. That missed promoted track cards and any valid song below that
+ * first page, even though the normal Search screen had already surfaced it.
+ */
 export async function searchSongs(query: string): Promise<Track[]> {
   const yt = await getMusicClient();
-  const search = await yt.music.search(query, { type: 'song' });
-  const shelf = search.songs ?? search.contents?.find((c) => c.type === 'MusicShelf');
-  return mapPlaylistTracks((shelf as { contents?: readonly unknown[] } | undefined)?.contents ?? []);
+  const search = await yt.music.search(query);
+  const found = new Map<string, Track>();
+
+  const add = (tracks: Track[]) => {
+    for (const track of tracks) {
+      if (track.videoId?.trim()) found.set(track.videoId, track);
+    }
+  };
+  const asTrack = (item: MusicItem): Track | null => {
+    if (item.kind !== 'song' && item.kind !== 'video') return null;
+    return {
+      videoId: item.id,
+      title: item.title,
+      artists: item.artists,
+      album: item.album,
+      durationSec: item.durationSec,
+      explicit: item.explicit,
+      thumbnail: item.thumbnail,
+      index: null,
+      plays: null,
+    };
+  };
+
+  // Same mixed search response consumed by SearchPage, including promoted
+  // cards and tracks nested under an artist's card.
+  const results = mapSearch(search);
+  add([...results.songs, ...results.videos].map(asTrack).filter((track): track is Track => !!track));
+  add(mapPlaylistTracks(search.songs?.contents ?? []));
+  add(mapPlaylistTracks(search.videos?.contents ?? []));
+
+  // Follow the Songs filter's own continuation; YouTube can put a regional
+  // release below the first visible page. Keep this bounded per track.
+  const filtered = await search.applyFilter('Songs');
+  add(mapPlaylistTracks(filtered.songs?.contents ?? []));
+  let continuation = filtered.has_continuation ? await filtered.getContinuation() : null;
+  for (let page = 0; page < 2 && continuation; page++) {
+    add(mapPlaylistTracks(continuation.contents?.contents ?? []));
+    continuation = continuation.has_continuation ? await continuation.getContinuation() : null;
+  }
+
+  return [...found.values()];
 }
 
 export async function fetchSuggestions(input: string): Promise<Suggestions> {

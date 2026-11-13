@@ -215,10 +215,10 @@ object SpotifyImporter {
                     add((baseQueries.firstOrNull()?.let { 1 } ?: 0).coerceAtMost(size), albumQuery)
                 }
             }
-        // The normal Search screen's All tab can return a promoted TopTrack row.
-        // The Songs filter removes that row in YtMusicRepository before it reaches
-        // callers, so Spotify import must also inspect ALL to see those tracks.
-        for (filter in listOf(SearchFilter.ALL, SearchFilter.SONGS, SearchFilter.VIDEOS)) {
+        // ALL is the unfiltered music catalogue used by SONGS, but unlike the
+        // SONGS wrapper it preserves the promoted TopTrack row from Search.
+        // It is therefore a superset of SONGS; VIDEOS remains the fallback.
+        for (filter in listOf(SearchFilter.ALL, SearchFilter.VIDEOS)) {
             for (baseQuery in queries) {
                 val query = listOf(baseQuery, suffix?.takeIf { it.isNotBlank() })
                     .filterNotNull()
@@ -239,10 +239,9 @@ object SpotifyImporter {
                     page = YtMusicRepository.searchContinuation(continuation, filter).getOrNull() ?: break
                 }
             }
-            // Search all Songs queries before evaluating the best candidate.
-            // Only skip the Videos catalogue after the complete Songs pass
-            // has been collected and ranked.
-            if (filter == SearchFilter.SONGS &&
+            // ALL has returned every regular Track plus any promoted TopTrack.
+            // Only search Videos when no verified music-catalogue match exists.
+            if (filter == SearchFilter.ALL &&
                 TrackMatcher.best(found.values.toList(), target) != null
             ) break
         }

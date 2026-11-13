@@ -278,6 +278,12 @@ object TrackMatcher {
         } else {
             false
         }
+        val compositeArtistAlias = requiredArtist != null && !requiredArtistMatched &&
+            sharesCompositeSpotifyCredit(
+                target.artist,
+                listOf(candidate.artist) + candidate.artists.map { it.name },
+            )
+        if (requiredArtist != null && !requiredArtistMatched && !compositeArtistAlias) return null
         if (requiredArtist != null && artistIdentityKey(requiredArtist).isBlank()) return null
         if (requiredArtist == null && target.requireSharedArtist &&
             (artistNames(target.artist).isEmpty() ||
@@ -295,7 +301,7 @@ object TrackMatcher {
             // the only way through the wider window. Exact title/version plus
             // a shared artist is strong enough; a different artist still gets
             // the ordinary 30-second ceiling below.
-            allowVideoDrift = creditedArtist != null || requiredArtistMatched,
+            allowVideoDrift = creditedArtist != null || requiredArtistMatched || compositeArtistAlias,
         ) ?: return null
         // Spotify may put a label/producer first and the actual singer second
         // (for example "Gasentra Pajampangan, Friska"), while YouTube Music
@@ -304,9 +310,7 @@ object TrackMatcher {
         // the candidate shares a credited Spotify artist, and runtimes agree
         // within three seconds. A loose runtime or an unrelated featured
         // artist can never bypass the explicit lead-artist requirement.
-        if (requiredArtist != null && !requiredArtistMatched &&
-            !(creditedArtist != null && withinSeconds(candidate, target, DURATION_TIGHT_SEC))
-        ) return null
+        if (compositeArtistAlias && !withinSeconds(candidate, target, DURATION_TIGHT_SEC)) return null
         val artist = creditedArtist ?: ARTIST_EXACT.takeIf { requiredArtistMatched }
         // The credits don't merely differ in spelling, they name different
         // people — and sometimes that is because they are describing the
@@ -782,6 +786,30 @@ object TrackMatcher {
         }
         .filter { it.isNotEmpty() }
         .toSet()
+
+    /**
+     * A catalogue can flatten a performer alias across multiple Spotify
+     * credits, e.g. Spotify "Gasentra Pajampangan, Friska" vs YouTube
+     * "Friska Gasentra". A secondary artist alone is not enough: the
+     * candidate's one display name must combine meaningful tokens from at
+     * least two distinct Spotify credits.
+     */
+    private fun sharesCompositeSpotifyCredit(targetArtist: String, candidateCredits: List<String>): Boolean {
+        val ignored = setOf("the", "and", "feat", "featuring", "ft", "with", "vs", "dj", "band", "music", "official")
+        val sourceGroups = artistNames(targetArtist)
+            .map { words -> words.filterNot { it in ignored }.toSet() }
+            .filter { it.isNotEmpty() }
+        if (sourceGroups.size < 2) return false
+        val sourceTokens = sourceGroups.flatten().toSet()
+        return candidateCredits.asSequence()
+            .flatMap { artistNames(it).asSequence() }
+            .any { words ->
+                val meaningful = words.filterNot { it in ignored }.toSet()
+                meaningful.size >= 2 &&
+                    meaningful.all { it in sourceTokens } &&
+                    sourceGroups.count { group -> meaningful.any { it in group } } >= 2
+            }
+    }
 
     /**
      * Whether two catalogue credits are the same complete artist name.

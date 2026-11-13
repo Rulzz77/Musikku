@@ -280,7 +280,11 @@ object SpotifyImporter {
                             else -> {
                                 val candidate = spotifyImportCandidate(row)
                                 val id = candidate?.videoId?.trim().orEmpty()
-                                if (candidate != null && id.isNotEmpty()) found.putIfAbsent(id, candidate)
+                                if (candidate != null && id.isNotEmpty()) {
+                                    found.putIfAbsent(id, candidate)
+                                    spotifyArtistBrowseId(candidate, target.requiredArtistName)
+                                        ?.let(artistBrowseIds::add)
+                                }
                             }
                         }
                     }
@@ -499,6 +503,14 @@ internal fun spotifyArtistBrowseId(row: SearchResult, expectedArtist: String?): 
     if (item.type != BrowseType.ARTIST) return null
     val expected = expectedArtist?.takeIf { it.isNotBlank() } ?: return null
     return item.browseId.takeIf { TrackMatcher.sameArtistIdentity(expected, item.title) }
+}
+
+/** A matching song row can expose the artist page id even without an artist card. */
+internal fun spotifyArtistBrowseId(song: Song, expectedArtist: String?): String? {
+    val browseId = song.artistId?.takeIf { it.isNotBlank() } ?: return null
+    val expected = expectedArtist?.takeIf { it.isNotBlank() } ?: return null
+    val lead = song.artists.firstOrNull()?.name?.takeIf { it.isNotBlank() } ?: song.artist
+    return browseId.takeIf { TrackMatcher.sameArtistIdentity(expected, lead) }
 }
 
 /** Prefer an audio catalogue recording over an equally valid music-video upload. */

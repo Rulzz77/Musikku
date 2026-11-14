@@ -174,6 +174,11 @@ describe('TrackMatcher', () => {
     expect(matches(song('Creep (Live)', 'Radiohead'), 'Creep [Live]', 'Radiohead')).toBe(true);
   });
 
+  it('treats Official Live Music as upload packaging but keeps real live versions distinct', () => {
+    expect(matches(song('Keloas (Official Live Music)', 'Rena Movies', '3:30'), 'Keloas', 'Rena Movies', 210)).toBe(true);
+    expect(matches(song('Keloas (Live at Stage)', 'Rena Movies', '3:30'), 'Keloas', 'Rena Movies', 210)).toBe(false);
+  });
+
   it('keeps Indonesian DJ edits separate from the original and other DJ styles', () => {
     expect(matches(song('Satu Rasa', 'Band Contoh', '3:30'), 'Satu Rasa (DJ Koplo)', 'Band Contoh', 210)).toBe(false);
     expect(matches(song('Satu Rasa (DJ Breakbeat)', 'Band Contoh', '3:30'), 'Satu Rasa (DJ Koplo)', 'Band Contoh', 210)).toBe(false);

@@ -202,8 +202,11 @@ object SpotifyImporter {
      */
     private const val MAX_CANDIDATE_SEARCH_PAGES = 5
     private const val MIN_PAGES_TO_COMPARE_AFTER_MATCH = 2
+    private const val MAX_ARTIST_PAGE_FALLBACKS = 3
 
     private val artistPageLocks = ConcurrentHashMap<String, Mutex>()
+    // Cache exact artist lookups, including misses, across tracks in the playlist.
+    private val artistBrowseIdCache = ConcurrentHashMap<String, String>()
     private val artistSongCache = object : LinkedHashMap<String, List<Song>>(16, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<Song>>?): Boolean =
             size > 32
@@ -225,6 +228,18 @@ object SpotifyImporter {
                     synchronized(artistSongCache) { artistSongCache[browseId] = songs }
                 }
             }
+        }
+    }
+
+    /** Find a real artist page by exact displayed name, not a partial search hit. */
+    private suspend fun discoverArtistBrowseId(name: String): Result<String?> {
+        val key = name.trim().lowercase()
+        if (key.isBlank()) return Result.success(null)
+        artistBrowseIdCache[key]?.let { cached ->
+            return Result.success(cached.takeIf { it.isNotBlank() })
+        }
+        return YtMusicRepository.findArtistPageId(name).onSuccess { browseId ->
+            artistBrowseIdCache.putIfAbsent(key, browseId.orEmpty())
         }
     }
 
@@ -336,6 +351,20 @@ object SpotifyImporter {
         // ALL is the same authenticated catalogue used by the normal Search
         // screen. Its promoted TopTrack and regular Track rows are both kept.
         searchFilter(SearchFilter.ALL)
+
+        if (!hasAudioMatch()) {
+            // Global search does not always return an artist card or link every
+            // credited singer. Search up to three exact Spotify artist names,
+            // then validate every Top Song through the same strict matcher.
+            spotifyImportArtistCredits(target).take(MAX_ARTIST_PAGE_FALLBACKS).forEach { artistName ->
+                discoverArtistBrowseId(artistName).fold(
+                    onSuccess = { browseId -> browseId?.let(artistBrowseIds::add) },
+                    onFailure = { failure ->
+                        failures += "artist lookup '$artistName': \${failure.message}"
+                    },
+                )
+            }
+        }
 
         if (!hasAudioMatch()) {
             for (browseId in artistBrowseIds) {

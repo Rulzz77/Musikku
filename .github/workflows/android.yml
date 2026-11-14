@@ -116,7 +116,7 @@ jobs:
         run: ./gradlew --no-daemon --max-workers=2 :app:assembleProdRelease
 
       - name: Upload Phone APK Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: musikku-prod-release-signed
           path: app/build/outputs/apk/prod/release/*.apk
@@ -124,7 +124,7 @@ jobs:
           retention-days: 14
 
       - name: Upload Wear OS APK Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: musikku-wear-prod-release-signed
           path: wearos/build/outputs/apk/prod/release/*.apk

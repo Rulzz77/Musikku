@@ -11,6 +11,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -454,6 +455,39 @@ class SpotifyImporterIdentityTest {
             artistCredits = listOf("Lead"),
         )
         assertNull(TrackMatcher.best(listOf(candidate), noGuestCredit))
+    }
+
+    @Test
+    fun spotifyImportAcceptsSingleCharacterArtistSpellingVariantWithCloseRuntime() {
+        val target = TrackMatcher.Target(
+            title = "Terlalu Sayang",
+            artist = "Gasantra Pajampangan, Revina Alvira",
+            durationSec = 346,
+            requiredArtistName = "Gasantra Pajampangan",
+            requireSharedArtist = true,
+            requireExactTitle = true,
+            artistCredits = listOf("Gasantra Pajampangan", "Revina Alvira"),
+        )
+        val officialRecording = Song(
+            videoId = "terlalu-sayang-gasentra",
+            title = "Terlalu Sayang",
+            artist = "Gasentra Pajampangan",
+            thumbnailUrl = null,
+            durationText = "5:47",
+        )
+
+        assertTrue(TrackMatcher.nearArtistSpelling("Gasantra Pajampangan", "Gasentra Pajampangan"))
+        assertNotNull(TrackMatcher.best(listOf(officialRecording), target))
+        assertNull(TrackMatcher.best(listOf(officialRecording.copy(durationText = null)), target))
+        assertNull(TrackMatcher.best(listOf(officialRecording.copy(durationText = "4:50")), target))
+        assertNull(TrackMatcher.best(listOf(officialRecording.copy(title = "Terlalu Sayang (Live)")), target))
+    }
+
+    @Test
+    fun nearArtistSpellingRejectsShortNamesAndMultipleMisspelledWords() {
+        assertFalse(TrackMatcher.nearArtistSpelling("DJ", "DJS"))
+        assertFalse(TrackMatcher.nearArtistSpelling("Gasantra Pajampangan", "Gasentro Pajanpangan"))
+        assertFalse(TrackMatcher.nearArtistSpelling("Gasantra Pajampangan", "Gasentra"))
     }
 
     @Test

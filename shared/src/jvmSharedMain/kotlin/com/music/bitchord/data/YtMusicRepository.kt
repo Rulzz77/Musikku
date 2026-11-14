@@ -8,6 +8,7 @@ import com.music.bitchord.data.model.AccountChannel
 import com.music.bitchord.data.model.isExactArtistMatch
 import com.music.bitchord.data.model.normalizedArtistName
 import com.music.bitchord.data.model.ArtistPage
+import com.music.bitchord.data.model.BrowseItem
 import com.music.bitchord.data.model.BrowseType
 import com.music.bitchord.data.model.HomeFeed
 import com.music.bitchord.data.model.HomeShelf
@@ -700,11 +701,15 @@ object YtMusicRepository {
         val artists = InnertubeParser.parseSearchPage(Innertube.search(name, filter.params)).rows
             .filterIsInstance<SearchResult.Browse>()
             .map { it.item }
-            .filter { it.type == BrowseType.ARTIST }
-        // Exact display-name matches always win. A one-character typo in a
-        // long artist token may use a fallback only when the result is unique.
-        artists.firstOrNull { isExactArtistMatch(it.title, name) }?.browseId
-            ?: artists.filter { TrackMatcher.nearArtistSpelling(name, it.title) }
+        artistPageIdForName(name, artists)
+    }
+
+    /** Resolve exact artist pages first, otherwise only a unique one-character spelling alias. */
+    internal fun artistPageIdForName(name: String, artists: List<BrowseItem>): String? {
+        if (normalizedArtistName(name).isEmpty()) return null
+        val artistRows = artists.filter { it.type == BrowseType.ARTIST }
+        return artistRows.firstOrNull { isExactArtistMatch(it.title, name) }?.browseId
+            ?: artistRows.filter { TrackMatcher.nearArtistSpelling(name, it.title) }
                 .map { it.browseId }
                 .distinct()
                 .singleOrNull()

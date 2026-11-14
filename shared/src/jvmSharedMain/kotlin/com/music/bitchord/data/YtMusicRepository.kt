@@ -697,11 +697,17 @@ object YtMusicRepository {
     suspend fun findArtistPageId(name: String): Result<String?> = call("artistByName:$name") {
         if (normalizedArtistName(name).isEmpty()) return@call null
         val filter = SearchFilter.ARTISTS
-        InnertubeParser.parseSearchPage(Innertube.search(name, filter.params)).rows
+        val artists = InnertubeParser.parseSearchPage(Innertube.search(name, filter.params)).rows
             .filterIsInstance<SearchResult.Browse>()
             .map { it.item }
-            .firstOrNull { it.type == BrowseType.ARTIST && isExactArtistMatch(it.title, name) }
-            ?.browseId
+            .filter { it.type == BrowseType.ARTIST }
+        // Exact display-name matches always win. A one-character typo in a
+        // long artist token may use a fallback only when the result is unique.
+        artists.firstOrNull { isExactArtistMatch(it.title, name) }?.browseId
+            ?: artists.filter { TrackMatcher.nearArtistSpelling(name, it.title) }
+                .map { it.browseId }
+                .distinct()
+                .singleOrNull()
     }
 
     /**

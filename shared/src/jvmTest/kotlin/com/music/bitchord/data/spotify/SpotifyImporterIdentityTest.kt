@@ -485,6 +485,9 @@ class SpotifyImporterIdentityTest {
         val queries = spotifyImportSearchQueries(target)
 
         assertEquals("Tanpo Tresnamu (Official Audio) Denny Caknan", queries.first())
+        assertTrue("Tanpo Tresnamu (Official Audio) Denny Inka" !in queries)
+        assertTrue("Tanpo Tresnamu (Official Audio) Denny Caknan Album Contoh" in queries)
+        assertTrue("Tanpo Tresnamu (Official Audio) Album Contoh" in queries)
         assertTrue("Tanpo Tresnamu (Official Audio) Denny Caknan, Yeni Inka" in queries)
         assertTrue("Tanpo Tresnamu (Official Audio) Denny Caknan" in queries)
         assertTrue("Tanpo Tresnamu (Official Audio)" in queries)
@@ -666,7 +669,10 @@ class SpotifyImporterIdentityTest {
         assertNotNull(TrackMatcher.best(listOf(officialRecording), target))
         assertTrue(TrackMatcher.hasTrustedArtistCredit(officialRecording, target))
         assertNull(TrackMatcher.best(listOf(officialRecording.copy(durationText = null)), target))
-        assertNull(TrackMatcher.best(listOf(officialRecording.copy(durationText = "5:50")), target))
+        // Small uploader/runtime rounding differences are common; the alias
+        // remains guarded by a close (eight-second) runtime ceiling.
+        assertNotNull(TrackMatcher.best(listOf(officialRecording.copy(durationText = "5:54")), target))
+        assertNull(TrackMatcher.best(listOf(officialRecording.copy(durationText = "5:55")), target))
         assertNull(TrackMatcher.best(listOf(officialRecording.copy(durationText = "4:50")), target))
         assertNull(TrackMatcher.best(listOf(officialRecording.copy(title = "Terlalu Sayang (Live)")), target))
 
@@ -909,6 +915,53 @@ class SpotifyImporterIdentityTest {
         assertNull(TrackMatcher.best(listOf(slowed), target))
         val speedUpSpelling = slowed.copy(videoId = "speed-up", title = "Roses (Speed Up)")
         assertNotNull(TrackMatcher.best(listOf(speedUpSpelling), target))
+    }
+
+    @Test
+    fun spotifyImportHandlesSafeTitleSpellingAndAccentVariants() {
+        val titleTarget = TrackMatcher.Target(
+            title = "Tanpo Tresnamu",
+            artist = "Denny Caknan",
+            durationSec = 252,
+            requiredArtistName = "Denny Caknan",
+            requireSharedArtist = true,
+            requireExactTitle = true,
+        )
+        val oneLetterCatalogueVariant = Song(
+            videoId = "tanpa-tresnamu",
+            title = "Tanpa Tresnamu",
+            artist = "Denny Caknan",
+            thumbnailUrl = null,
+            durationText = "4:12",
+        )
+
+        assertNotNull(TrackMatcher.best(listOf(oneLetterCatalogueVariant), titleTarget))
+        assertNull(
+            TrackMatcher.best(
+                listOf(oneLetterCatalogueVariant.copy(artist = "Another Singer")),
+                titleTarget,
+            ),
+        )
+        assertNull(
+            TrackMatcher.best(
+                listOf(oneLetterCatalogueVariant.copy(durationText = "4:20")),
+                titleTarget,
+            ),
+        )
+
+        val accentTarget = titleTarget.copy(
+            title = "Canción",
+            artist = "Banda Ejemplo",
+            requiredArtistName = "Banda Ejemplo",
+            durationSec = 200,
+        )
+        val unaccentedCatalogue = oneLetterCatalogueVariant.copy(
+            videoId = "cancion-unaccented",
+            title = "Cancion",
+            artist = "Banda Ejemplo",
+            durationText = "3:20",
+        )
+        assertNotNull(TrackMatcher.best(listOf(unaccentedCatalogue), accentTarget))
     }
 
     @Test

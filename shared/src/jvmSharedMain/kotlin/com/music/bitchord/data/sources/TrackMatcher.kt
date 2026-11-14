@@ -1077,7 +1077,12 @@ object TrackMatcher {
      * A disagreement is not a veto: compilations and reissues can contain the
      * same master, and title/artist/runtime still have to do their usual work.
      */
-    /** True only when both catalogue rows identify the same normalized release. */
+    /**
+     * True only when both catalogue rows identify the same normalized release.
+     * This is a hard check only for the low-confidence Spotify composer/uploader
+     * fallback; trusted-artist matches can still be the same master on a
+     * compilation or reissue.
+     */
     fun hasExactAlbumMatch(wanted: String?, got: String?): Boolean {
         val want = albumKey(wanted) ?: return false
         return want == albumKey(got)

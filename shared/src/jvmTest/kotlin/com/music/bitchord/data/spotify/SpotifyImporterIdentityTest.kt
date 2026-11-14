@@ -912,6 +912,78 @@ class SpotifyImporterIdentityTest {
     }
 
     @Test
+    fun spotifyImportNormalizesRegionalLanguageVersionAliases() {
+        fun target(title: String) = TrackMatcher.Target(
+            title = title,
+            artist = "Dendi Nata",
+            durationSec = 200,
+            requiredArtistName = "Dendi Nata",
+            requireSharedArtist = true,
+            requireExactTitle = true,
+        )
+        fun candidate(title: String) = Song(
+            videoId = "abadi-language-version",
+            title = title,
+            artist = "Dendi Nata",
+            thumbnailUrl = null,
+            durationText = "3:20",
+        )
+
+        assertNotNull(
+            TrackMatcher.best(
+                listOf(candidate("Abadi (Indonesian Version)")),
+                target("Abadi - Indo Version"),
+            ),
+        )
+        assertNotNull(
+            TrackMatcher.best(
+                listOf(candidate("Abadi - Indo Version")),
+                target("Abadi (Indonesian Version)"),
+            ),
+        )
+        assertNull(
+            TrackMatcher.best(
+                listOf(candidate("Abadi")),
+                target("Abadi - Indo Version"),
+            ),
+        )
+
+        assertNotNull(
+            TrackMatcher.best(
+                listOf(candidate("Lagu (Javanese Version)")),
+                target("Lagu - Jawa Version").copy(title = "Lagu - Jawa Version"),
+            ),
+        )
+        assertNotNull(
+            TrackMatcher.best(
+                listOf(candidate("Lagu (Sundanese Version)")),
+                target("Lagu - Sunda Version").copy(title = "Lagu - Sunda Version"),
+            ),
+        )
+    }
+
+    @Test
+    fun spotifyImportAcceptsOfficialFeaturedDescriptionInIndonesianTitle() {
+        val target = TrackMatcher.Target(
+            title = "Sampai Jadi Debu (Menampilkan Gardika Gigih)",
+            artist = "Banda Neira",
+            durationSec = 240,
+            requiredArtistName = "Banda Neira",
+            requireSharedArtist = true,
+            requireExactTitle = true,
+        )
+        val catalogueTrack = Song(
+            videoId = "sampai-jadi-debu-catalogue",
+            title = "Sampai Jadi Debu",
+            artist = "Banda Neira",
+            thumbnailUrl = null,
+            durationText = "4:00",
+        )
+
+        assertNotNull(TrackMatcher.best(listOf(catalogueTrack), target))
+    }
+
+    @Test
     fun spotifyImportPreservesVersionAndReleaseLabelsFromPlaylistSamples() {
         fun target(
             title: String,

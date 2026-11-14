@@ -754,16 +754,37 @@ internal fun spotifyArtistBrowseId(song: Song, expectedArtist: String?): String?
     return browseId.takeIf { TrackMatcher.sharesArtist(expected, lead) }
 }
 
-/** Prefer an audio catalogue recording over an equally valid music-video upload. */
+/**
+ * The only permitted composer/uploader fallback: a non-video row whose runtime
+ * is within one second, and whose release does not contradict Spotify when
+ * both catalogues expose an album. It remains a last resort after credited
+ * audio and credited music-video rows have been considered.
+ */
+internal fun isSafeSpotifyDurationOnlyFallback(
+    candidate: Song,
+    target: TrackMatcher.Target,
+): Boolean {
+    if (candidate.isVideo || TrackMatcher.hasTrustedArtistCredit(candidate, target)) return false
+    if (!TrackMatcher.withinSeconds(candidate, target, 1)) return false
+    val targetAlbum = target.album?.takeIf { it.isNotBlank() }
+    val candidateAlbum = candidate.albumName?.takeIf { it.isNotBlank() }
+    if (targetAlbum != null && candidateAlbum != null &&
+        !TrackMatcher.hasExactAlbumMatch(targetAlbum, candidateAlbum)
+    ) return false
+    return TrackMatcher.score(candidate, target) != null
+}
+
+/** Prefer a credited audio catalogue recording over a weaker duration-only fallback. */
 internal fun bestSpotifyImportMatch(candidates: List<Song>, target: TrackMatcher.Target): Song? {
     val audio = candidates.filterNot { it.isVideo }
     val videos = candidates.filter { it.isVideo }
-    // A real performer-credit match must beat a duration-only composer/uploader
-    // override, even when that weak row has a more convenient album/runtime score.
-    return TrackMatcher.best(audio.filter { TrackMatcher.hasTrustedArtistCredit(it, target) }, target)
-        ?: TrackMatcher.best(videos.filter { TrackMatcher.hasTrustedArtistCredit(it, target) }, target)
-        ?: TrackMatcher.best(audio, target)
-        ?: TrackMatcher.best(videos, target)
+    val creditedAudio = audio.filter { TrackMatcher.hasTrustedArtistCredit(it, target) }
+    val creditedVideos = videos.filter { TrackMatcher.hasTrustedArtistCredit(it, target) }
+    val durationOnlyAudio = audio.filter { isSafeSpotifyDurationOnlyFallback(it, target) }
+
+    return TrackMatcher.best(creditedAudio, target)
+        ?: TrackMatcher.best(creditedVideos, target)
+        ?: TrackMatcher.best(durationOnlyAudio, target)
 }
 
 /**

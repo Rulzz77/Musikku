@@ -1196,6 +1196,49 @@ object YtMusicRepository {
     }
 
     /**
+     * The full Top Songs catalogue for Spotify-import fallback.
+     *
+     * Unlike the display-oriented [artistPage], this path must not silently
+     * turn a failed continuation into the landing page's first ~5 songs.
+     * An incomplete page chain is returned as a failure so Spotify import
+     * can leave the row retryable rather than marking it absent.
+     */
+    suspend fun artistSongsForSpotifyImport(browseId: String): Result<List<Song>> =
+        call("artistSongsForSpotifyImport:$browseId") {
+            val page = InnertubeParser.parseArtistPage(Innertube.browse(browseId))
+            val topSongsBrowseId = page.moreSongsBrowseId
+                ?: return@call page.songs
+            val fullSongs = songsPagedComplete(topSongsBrowseId)
+            fullSongs.ifEmpty { page.songs }
+        }
+
+    /** Page an artist's Top Songs list without accepting a truncated result. */
+    private suspend fun songsPagedComplete(browseId: String): List<Song> {
+        val out = LinkedHashMap<String, Song>()
+        var response = Innertube.browse(browseId)
+        if (browseId.startsWith("MPREb")) {
+            val albumRows = InnertubeParser.collectSongsDeep(response).size
+            albumPlaylistOf(response, albumRows)?.let { response = it }
+        }
+        var page = 1
+        val show = InnertubeParser.podcastShow(response)
+        while (true) {
+            val shelf = InnertubeParser.parsePlaylistShelf(response)
+            (shelf?.songs ?: InnertubeParser.collectSongsDeep(response, show))
+                .forEach { out.putIfAbsent(it.videoId, it) }
+            val token = shelf?.continuation ?: InnertubeParser.continuationToken(response)
+            if (token == null) return out.values.toList()
+            if (page >= MAX_PAGES) {
+                error("Artist Top Songs catalogue exceeded $MAX_PAGES pages; import lookup is incomplete")
+            }
+            // No runCatching here: a failed continuation must reach the
+            // caller instead of being mistaken for a complete short catalogue.
+            response = Innertube.browseContinuation(token)
+            page++
+        }
+    }
+
+    /**
      * The artist's landing page alone — one request. [artistPage] goes on to
      * page out every song and release, which a Top Picks card has no use for:
      * it needs the header (photo, Mix and Shuffle) and the first card of each

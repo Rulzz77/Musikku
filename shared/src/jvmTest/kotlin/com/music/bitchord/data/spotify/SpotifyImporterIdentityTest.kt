@@ -528,13 +528,16 @@ class SpotifyImporterIdentityTest {
 
         val queries = spotifyImportSearchQueries(target)
 
-        assertEquals("Tanpo Tresnamu (Official Audio) Denny Caknan", queries.first())
+        assertEquals("Tanpo Tresnamu (Official Audio)", queries.first())
+        assertEquals("Tanpo Tresnamu (Official Audio) Denny Caknan", queries[1])
         assertTrue("Tanpo Tresnamu (Official Audio) Denny Caknan Album Contoh" in queries)
         assertTrue("Tanpo Tresnamu (Official Audio) Album Contoh" in queries)
         assertTrue("Tanpo Tresnamu (Official Audio) Denny Caknan, Yeni Inka" in queries)
         assertTrue("Tanpo Tresnamu (Official Audio) Denny Caknan" in queries)
         assertTrue("Tanpo Tresnamu (Official Audio)" in queries)
         assertTrue(TrackMatcher.queries(target).all { it in queries })
+        // The import's first lookup must not add artist/album/language terms:
+        // it should return the same catalogue page as a title-only manual search.
         assertEquals(queries.size, queries.distinct().size)
     }
 

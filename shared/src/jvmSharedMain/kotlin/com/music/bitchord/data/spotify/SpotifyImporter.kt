@@ -319,9 +319,9 @@ object SpotifyImporter {
             }
 
             for ((queryIndex, baseQuery) in queries.take(MAX_SEARCH_QUERY_VARIANTS).withIndex()) {
-                // Once a strong result exists, sample the first page of each
-                // remaining spelling/album query instead of stopping entirely.
-                // Queries without a strong result still receive the full page budget.
+                // Once a strong result exists, sample just one additional
+                // spelling/album query. Queries without a strong result still
+                // receive the full page budget.
                 val pageLimitForQuery = if (
                     (filter == SearchFilter.ALL && hasHighConfidenceAudioMatch()) ||
                     (filter == SearchFilter.VIDEOS && hasHighConfidenceVideoMatch())
@@ -396,7 +396,7 @@ object SpotifyImporter {
                     ) {
                         DebugLog.d(
                             "SpotifyImport",
-                            "Matched '${target.title}' by '${target.artist}' after ${successfulRequests} search requests",
+                            "Matched '${target.title}' by '${target.artist}' after ${successfulRequests} search requests; checking one alternate query",
                         )
                         break
                     }

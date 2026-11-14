@@ -85,10 +85,16 @@ class SpotifyImporterIdentityTest {
             durationText = "5:46",
         )
 
-        // Existing exact-runtime override remains an allowed last resort.
+        // The Spotify importer supplies requiredArtistName, so this exact
+        // runtime exception must remain reachable even when the catalogue
+        // files the song under a composer/uploader instead of the singer.
         assertNotNull(TrackMatcher.best(listOf(composerOnly), target))
-        // But it must not stop the importer from checking artist pages.
         assertFalse(TrackMatcher.hasTrustedArtistCredit(composerOnly, target))
+
+        // The exception is deliberately narrow: a three-second mismatch or
+        // a music-video upload cannot use an unrelated byline as proof.
+        assertNull(TrackMatcher.best(listOf(composerOnly.copy(durationText = "5:49")), target))
+        assertNull(TrackMatcher.best(listOf(composerOnly.copy(isVideo = true)), target))
     }
 
     @Test

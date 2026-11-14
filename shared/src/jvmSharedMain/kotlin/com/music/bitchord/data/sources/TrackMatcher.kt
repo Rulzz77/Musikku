@@ -641,6 +641,7 @@ object TrackMatcher {
         val words = segment.split(WORD_SPLIT)
             .map { it.replace(NON_ALNUM, "") }
             .filter { it.isNotEmpty() }
+            .map { VERSION_LANGUAGE_ALIASES[it] ?: it }
         if (words.isEmpty()) return
         if (words.joinToString("") in NEUTRAL_SEGMENTS) return
         // Regional labels often append "Official Live Music" as an upload label,
@@ -1231,6 +1232,16 @@ object TrackMatcher {
     )
 
     private val MIX_LABEL_MARKERS = setOf("remix", "remixes", "rmx", "mix", "edit", "version")
+
+    // Common regional shorthand and native-language labels should describe
+    // the same explicit language edition (e.g. "Indo Version" vs
+    // "Indonesian Version"). Applied only while classifying a labelled
+    // version segment, never to ordinary title words.
+    private val VERSION_LANGUAGE_ALIASES = mapOf(
+        "indo" to "indonesian",
+        "jawa" to "javanese",
+        "sunda" to "sundanese",
+    )
 
     private val VERSION_DESCRIPTORS = setOf(
         "english", "hindi", "bengali", "punjabi", "tamil", "telugu", "malayalam",

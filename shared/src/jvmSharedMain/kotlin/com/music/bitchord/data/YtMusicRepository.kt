@@ -1203,13 +1203,40 @@ object YtMusicRepository {
      * An incomplete page chain is returned as a failure so Spotify import
      * can leave the row retryable rather than marking it absent.
      */
+    private const val MAX_SPOTIFY_ARTIST_ALBUM_FALLBACKS = 8
+
     suspend fun artistSongsForSpotifyImport(browseId: String): Result<List<Song>> =
         call("artistSongsForSpotifyImport:$browseId") {
             val page = InnertubeParser.parseArtistPage(Innertube.browse(browseId))
-            val topSongsBrowseId = page.moreSongsBrowseId
-                ?: return@call page.songs
-            val fullSongs = songsPagedComplete(topSongsBrowseId)
-            fullSongs.ifEmpty { page.songs }
+            val out = LinkedHashMap<String, Song>()
+            page.songs.forEach { out.putIfAbsent(it.videoId, it) }
+
+            // The artist landing shelf is often only five songs. Follow its
+            // complete Top Songs playlist when one exists.
+            page.moreSongsBrowseId?.let { topSongsBrowseId ->
+                songsPagedComplete(topSongsBrowseId).forEach { out.putIfAbsent(it.videoId, it) }
+            }
+
+            // Some artist pages do not expose a Top Songs "See all" link.
+            // Their Albums & Singles shelves still link to the actual releases.
+            // Read a bounded set of those catalogue pages so a less-popular
+            // Spotify track is not restricted to the first five top tracks.
+            val albumIds = page.sections.asSequence()
+                .flatMap { it.items.asSequence() }
+                .filterNot { it.isVideo }
+                .mapNotNull { it.browseId }
+                .filter { it.startsWith("MPREb") && it != page.moreSongsBrowseId }
+                .distinct()
+                .take(MAX_SPOTIFY_ARTIST_ALBUM_FALLBACKS)
+                .toList()
+            albumIds.forEach { albumId ->
+                songsPagedComplete(albumId).forEach { out.putIfAbsent(it.videoId, it) }
+            }
+
+            if (page.moreSongsBrowseId == null && albumIds.isEmpty() && page.songs.size >= 5) {
+                error("Artist page exposed only its first five songs and no complete catalogue link")
+            }
+            out.values.toList()
         }
 
     /** Read a browsable album/playlist completely for Spotify-import fallback. */

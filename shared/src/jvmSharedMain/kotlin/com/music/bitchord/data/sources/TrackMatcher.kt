@@ -1077,11 +1077,14 @@ object TrackMatcher {
      * A disagreement is not a veto: compilations and reissues can contain the
      * same master, and title/artist/runtime still have to do their usual work.
      */
-    private fun albumScore(wanted: String?, got: String?): Int {
-        val want = albumKey(wanted) ?: return 0
-        val have = albumKey(got) ?: return 0
-        return if (want == have) ALBUM_EXACT else 0
+    /** True only when both catalogue rows identify the same normalized release. */
+    fun hasExactAlbumMatch(wanted: String?, got: String?): Boolean {
+        val want = albumKey(wanted) ?: return false
+        return want == albumKey(got)
     }
+
+    private fun albumScore(wanted: String?, got: String?): Int =
+        if (hasExactAlbumMatch(wanted, got)) ALBUM_EXACT else 0
 
     /**
      * Clean and uncensored editions can be otherwise metadata-identical. When

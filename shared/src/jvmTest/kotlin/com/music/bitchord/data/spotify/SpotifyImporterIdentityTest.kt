@@ -93,10 +93,10 @@ class SpotifyImporterIdentityTest {
             durationText = "5:46",
         )
 
-        // The Spotify importer supplies requiredArtistName, so this exact
-        // runtime exception must remain reachable even when the catalogue
-        // files the song under a composer/uploader instead of the singer.
-        assertNotNull(TrackMatcher.best(listOf(composerOnly), target))
+        // The generic matcher must not treat an uncredited composer as the
+        // requested singer. The importer has a separate, last-resort fallback
+        // after every credited audio/video candidate has been considered.
+        assertNull(TrackMatcher.best(listOf(composerOnly), target))
         assertFalse(TrackMatcher.hasTrustedArtistCredit(composerOnly, target))
         assertEquals(composerOnly, bestSpotifyImportMatch(listOf(composerOnly), target))
 

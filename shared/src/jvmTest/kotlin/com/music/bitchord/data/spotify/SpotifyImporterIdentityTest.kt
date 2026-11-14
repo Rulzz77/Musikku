@@ -98,11 +98,27 @@ class SpotifyImporterIdentityTest {
         // files the song under a composer/uploader instead of the singer.
         assertNotNull(TrackMatcher.best(listOf(composerOnly), target))
         assertFalse(TrackMatcher.hasTrustedArtistCredit(composerOnly, target))
+        assertEquals(composerOnly, bestSpotifyImportMatch(listOf(composerOnly), target))
 
-        // The exception is deliberately narrow: a three-second mismatch or
-        // a music-video upload cannot use an unrelated byline as proof.
+        // Spotify import keeps the historical composer/uploader exception only
+        // when the runtime is within one second. A wider gap is not reliable
+        // enough to silently choose a different recording.
         assertNull(TrackMatcher.best(listOf(composerOnly.copy(durationText = "5:49")), target))
+        assertNull(bestSpotifyImportMatch(listOf(composerOnly.copy(durationText = "5:48")), target))
         assertNull(TrackMatcher.best(listOf(composerOnly.copy(isVideo = true)), target))
+        assertNull(bestSpotifyImportMatch(listOf(composerOnly.copy(isVideo = true)), target))
+
+        val albumTarget = target.copy(album = "Album Asli")
+        assertNull(
+            bestSpotifyImportMatch(
+                listOf(composerOnly.copy(albumName = "Album Kompilasi")),
+                albumTarget,
+            ),
+        )
+        assertEquals(
+            composerOnly.copy(albumName = "Album Asli"),
+            bestSpotifyImportMatch(listOf(composerOnly.copy(albumName = "Album Asli")), albumTarget),
+        ))
     }
 
     @Test

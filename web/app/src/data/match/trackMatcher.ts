@@ -391,7 +391,10 @@ function classify(segment: string, versions: Set<string>, context: Set<string>):
   const words = wordsOf(segment);
   if (!words.length) return;
   if (NEUTRAL_SEGMENTS.has(words.join(''))) return;
-  const marks = words.filter((w) => VERSION_WORDS.has(w));
+  // Regional labels often append "Official Live Music" as an upload label,
+  // not a different live-performance take. Keep actual "Live at ..." strict.
+  const officialLiveMusicLabel = words.includes('official') && words.includes('live') && words.includes('music');
+  const marks = words.filter((w) => VERSION_WORDS.has(w) && !(officialLiveMusicLabel && w === 'live'));
   const dj = words.indexOf('dj');
   const carriesDjStyle = words.some((w) => DJ_STYLE_WORDS.has(w)) &&
     (dj >= 0 || marks.some((w) => MIX_LABEL_MARKERS.has(w)));

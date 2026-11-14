@@ -593,7 +593,10 @@ object TrackMatcher {
             .filter { it.isNotEmpty() }
         if (words.isEmpty()) return
         if (words.joinToString("") in NEUTRAL_SEGMENTS) return
-        val marks = words.filter { it in VERSION_WORDS }
+        // Regional labels often append "Official Live Music" as an upload label,
+        // not a different live-performance take. Keep actual "(Live at ...)" strict.
+        val officialLiveMusicLabel = words.containsAll(listOf("official", "live", "music"))
+        val marks = words.filter { it in VERSION_WORDS && !(officialLiveMusicLabel && it == "live") }
         val dj = words.indexOf("dj")
         val carriesDjStyle = words.any { it in DJ_STYLE_WORDS } &&
             (dj >= 0 || marks.any { it in MIX_LABEL_MARKERS })

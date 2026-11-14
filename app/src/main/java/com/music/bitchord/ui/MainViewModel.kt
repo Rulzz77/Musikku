@@ -1176,8 +1176,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 ).fold(
                     onSuccess = { playlistId ->
                         if (videoIds.size > 50) {
-                            videoIds.drop(50).chunked(50).forEach { chunk ->
-                                YtMusicRepository.addToPlaylist(playlistId, chunk)
+                            for (chunk in videoIds.drop(50).chunked(50)) {
+                                if (YtMusicRepository.addToPlaylist(playlistId, chunk).isFailure) {
+                                    // A failed batch must not be reported as a complete
+                                    // YouTube playlist. Remove the partial remote copy
+                                    // when possible and preserve the full resolved list locally.
+                                    YtMusicRepository.deletePlaylist(playlistId)
+                                    val local = com.music.bitchord.data.spotify.LocalPlaylistStore.savePlaylist(name, songs)
+                                    onResult?.invoke(local.browseId, local.title, true)
+                                    return@fold
+                                }
                             }
                         }
                         setPlaylistOwned("VL$playlistId", true)

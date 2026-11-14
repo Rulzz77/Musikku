@@ -457,6 +457,32 @@ class SpotifyImporterIdentityTest {
     }
 
     @Test
+    fun spotifyImportTreatsOfficialLiveMusicAsUploadPackagingButKeepsRealLiveVersionsDistinct() {
+        val target = TrackMatcher.Target(
+            title = "Keloas",
+            artist = "Rena Movies",
+            durationSec = 210,
+            requiredArtistName = "Rena Movies",
+            requireSharedArtist = true,
+            requireExactTitle = true,
+        )
+        val officialLabelUpload = Song(
+            videoId = "keloas-official-live-music",
+            title = "Keloas (Official Live Music)",
+            artist = "Rena Movies",
+            thumbnailUrl = null,
+            durationText = "3:30",
+        )
+        val actualLivePerformance = officialLabelUpload.copy(
+            videoId = "keloas-live-at-stage",
+            title = "Keloas (Live at Stage)",
+        )
+
+        assertNotNull(TrackMatcher.best(listOf(officialLabelUpload), target))
+        assertNull(TrackMatcher.best(listOf(actualLivePerformance), target))
+    }
+
+    @Test
     fun spotifyImportKeepsSongTitleAfterFeaturedArtistPrefix() {
         val target = TrackMatcher.Target(
             title = "Bubrah",

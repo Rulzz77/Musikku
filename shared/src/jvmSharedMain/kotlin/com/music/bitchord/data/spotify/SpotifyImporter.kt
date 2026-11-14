@@ -800,7 +800,19 @@ internal fun bestSpotifyImportMatch(candidates: List<Song>, target: TrackMatcher
 
     return TrackMatcher.best(creditedAudio, target)
         ?: TrackMatcher.best(creditedVideos, target)
-        ?: TrackMatcher.best(durationOnlyAudio, target)
+        // The strict matcher intentionally rejects an uncredited composer.
+        // These rows have already passed the isolated title/version/runtime
+        // guard above, so rank them by closest runtime without sending them
+        // through the lead-artist matcher a second time.
+        ?: durationOnlyAudio.minByOrNull { candidate ->
+            val actual = TrackMatcher.secondsOf(candidate.durationText)
+            val expected = target.durationSec
+            if (actual != null && expected != null) {
+                kotlin.math.abs(actual - expected)
+            } else {
+                Int.MAX_VALUE
+            }
+        }
 }
 
 /**

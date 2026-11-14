@@ -321,6 +321,48 @@ class SpotifyImporterIdentityTest {
     }
 
     @Test
+    fun spotifyImportPrefersTrustedArtistOverDurationOnlyComposerFallback() {
+        val target = TrackMatcher.Target(
+            title = "Terlalu Sayang",
+            artist = "Gasentra Pajampangan, Revina Alvira",
+            durationSec = 346,
+            requiredArtistName = "Gasentra Pajampangan",
+            requireSharedArtist = true,
+            requireExactTitle = true,
+            artistCredits = listOf("Gasentra Pajampangan", "Revina Alvira"),
+        )
+        val composerOnly = Song(
+            videoId = "composer-only",
+            title = "Terlalu Sayang",
+            artist = "Unrelated Composer",
+            thumbnailUrl = null,
+            durationText = "5:46",
+        )
+        val officialSinger = Song(
+            videoId = "official-singer",
+            title = "Terlalu Sayang",
+            artist = "Gasentra Pajampangan",
+            thumbnailUrl = null,
+            durationText = "5:47",
+        )
+        val officialVideo = officialSinger.copy(
+            videoId = "official-video",
+            durationText = "6:20",
+            isVideo = true,
+        )
+
+        assertEquals(
+            officialSinger,
+            bestSpotifyImportMatch(listOf(composerOnly, officialSinger), target),
+        )
+        // A credited official video is still preferable to an uncredited audio fallback.
+        assertEquals(
+            officialVideo,
+            bestSpotifyImportMatch(listOf(composerOnly, officialVideo), target),
+        )
+    }
+
+    @Test
     fun spotifyImportPrefersAudioWhenAMatchingVideoIsAlsoPresent() {
         val target = TrackMatcher.Target(
             title = "Dumes",

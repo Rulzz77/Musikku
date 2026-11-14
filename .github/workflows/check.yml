@@ -43,7 +43,7 @@ jobs:
       - run: chmod +x gradlew
 
       - name: Tests
-        run: ./gradlew testDevDebugUnitTest
+        run: ./gradlew :shared:jvmTest testDevDebugUnitTest
 
       # APK splitting packages several ABI outputs in parallel. The default
       # worker count plus a 4 GiB heap can exhaust the runner while packaging;

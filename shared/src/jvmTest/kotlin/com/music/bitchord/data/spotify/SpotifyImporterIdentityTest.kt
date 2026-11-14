@@ -67,6 +67,14 @@ class SpotifyImporterIdentityTest {
     }
 
     @Test
+    fun spotifyImportStopsQueryExpansionAfterOneConfirmingVariant() {
+        assertFalse(shouldStopSpotifyQueryExpansion(null, 0, hasHighConfidenceMatch = true))
+        assertFalse(shouldStopSpotifyQueryExpansion(1, 1, hasHighConfidenceMatch = true))
+        assertTrue(shouldStopSpotifyQueryExpansion(1, 2, hasHighConfidenceMatch = true))
+        assertFalse(shouldStopSpotifyQueryExpansion(1, 2, hasHighConfidenceMatch = false))
+    }
+
+    @Test
     fun durationOnlyComposerOverrideDoesNotCountAsTrustedArtistCredit() {
         val target = TrackMatcher.Target(
             title = "Terlalu Sayang",
@@ -85,16 +93,32 @@ class SpotifyImporterIdentityTest {
             durationText = "5:46",
         )
 
-        // The Spotify importer supplies requiredArtistName, so this exact
-        // runtime exception must remain reachable even when the catalogue
-        // files the song under a composer/uploader instead of the singer.
-        assertNotNull(TrackMatcher.best(listOf(composerOnly), target))
+        // The generic matcher must not treat an uncredited composer as the
+        // requested singer. The importer has a separate, last-resort fallback
+        // after every credited audio/video candidate has been considered.
+        assertNull(TrackMatcher.best(listOf(composerOnly), target))
         assertFalse(TrackMatcher.hasTrustedArtistCredit(composerOnly, target))
+        assertEquals(composerOnly, bestSpotifyImportMatch(listOf(composerOnly), target))
 
-        // The exception is deliberately narrow: a three-second mismatch or
-        // a music-video upload cannot use an unrelated byline as proof.
+        // Spotify import keeps the historical composer/uploader exception only
+        // when the runtime is within one second. A wider gap is not reliable
+        // enough to silently choose a different recording.
         assertNull(TrackMatcher.best(listOf(composerOnly.copy(durationText = "5:49")), target))
+        assertNull(bestSpotifyImportMatch(listOf(composerOnly.copy(durationText = "5:48")), target))
         assertNull(TrackMatcher.best(listOf(composerOnly.copy(isVideo = true)), target))
+        assertNull(bestSpotifyImportMatch(listOf(composerOnly.copy(isVideo = true)), target))
+
+        val albumTarget = target.copy(album = "Album Asli")
+        assertNull(
+            bestSpotifyImportMatch(
+                listOf(composerOnly.copy(albumName = "Album Kompilasi")),
+                albumTarget,
+            ),
+        )
+        assertEquals(
+            composerOnly.copy(albumName = "Album Asli"),
+            bestSpotifyImportMatch(listOf(composerOnly.copy(albumName = "Album Asli")), albumTarget),
+        )
     }
 
     @Test

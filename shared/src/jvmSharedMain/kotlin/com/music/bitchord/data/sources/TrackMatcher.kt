@@ -323,7 +323,12 @@ object TrackMatcher {
             // exact-runtime override as a last resort. Spotify import always
             // supplies requiredArtistName, so returning here unconditionally
             // made that fallback unreachable for real imports.
-            if (target.isVideo || !withinSeconds(candidate, target, CREDIT_OVERRIDE_SEC)) {
+            // An explicit Spotify lead-artist requirement must never
+            // be bypassed here. Spotify's importer has its own isolated,
+            // one-second composer/uploader fallback after credited rows fail.
+            if (requiredArtist != null || target.isVideo ||
+                !withinSeconds(candidate, target, CREDIT_OVERRIDE_SEC)
+            ) {
                 return null
             }
         }
@@ -386,7 +391,14 @@ object TrackMatcher {
         // people. This exact exception is what admitted the 3:30 Lovely
         // track for Yo Yo Honey Singh's 3:31 "Brown Rang" video.
             ?: CREDITS_DISAGREE.takeIf {
-                !target.isVideo && withinSeconds(candidate, target, CREDIT_OVERRIDE_SEC)
+                // Spotify imports carry a structured lead performer. An
+                // uncredited row must not pass the generic matcher on runtime
+                // alone; the importer applies its narrower composer fallback
+                // only after credited candidates have been exhausted.
+                requiredArtist == null &&
+                    !target.isVideo &&
+                    !candidate.isVideo &&
+                    withinSeconds(candidate, target, CREDIT_OVERRIDE_SEC)
             }
             ?: return null
         val explicit = explicitScore(target.isExplicit, candidate.isExplicit) ?: return null
@@ -1077,11 +1089,19 @@ object TrackMatcher {
      * A disagreement is not a veto: compilations and reissues can contain the
      * same master, and title/artist/runtime still have to do their usual work.
      */
-    private fun albumScore(wanted: String?, got: String?): Int {
-        val want = albumKey(wanted) ?: return 0
-        val have = albumKey(got) ?: return 0
-        return if (want == have) ALBUM_EXACT else 0
+    /**
+     * True only when both catalogue rows identify the same normalized release.
+     * This is a hard check only for the low-confidence Spotify composer/uploader
+     * fallback; trusted-artist matches can still be the same master on a
+     * compilation or reissue.
+     */
+    fun hasExactAlbumMatch(wanted: String?, got: String?): Boolean {
+        val want = albumKey(wanted) ?: return false
+        return want == albumKey(got)
     }
+
+    private fun albumScore(wanted: String?, got: String?): Int =
+        if (hasExactAlbumMatch(wanted, got)) ALBUM_EXACT else 0
 
     /**
      * Clean and uncensored editions can be otherwise metadata-identical. When

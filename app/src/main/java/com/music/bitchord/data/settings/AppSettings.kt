@@ -446,8 +446,8 @@ object AppSettings {
     /** Preferred UI refresh rate while [highPerformanceMode] is enabled. */
     val performanceRefreshRate = MutableStateFlow(DEFAULT_PERFORMANCE_REFRESH_RATE)
 
-    /** Stop playback when the app is swiped away from the recent apps screen. */
-    val stopOnTaskRemoved = MutableStateFlow(false)
+    /** Stop playback when the app is swiped away from Recents; enabled by default. */
+    val stopOnTaskRemoved = MutableStateFlow(true)
 
     /** Hides the volume slider on the main player, leaving the rest of the layout to reflow. */
     val hideVolumeBar = MutableStateFlow(false)
@@ -1026,7 +1026,10 @@ object AppSettings {
         performanceRefreshRate.value = normalizePerformanceRefreshRate(
             prefs.getInt(KEY_PERFORMANCE_REFRESH_RATE, DEFAULT_PERFORMANCE_REFRESH_RATE),
         )
-        stopOnTaskRemoved.value = prefs.getBoolean(KEY_STOP_ON_TASK_REMOVED, false)
+        // A missing preference means the listener has never changed this option.
+        // Default to stopping on an explicit swipe-away, while Home/background
+        // playback remains unaffected because it does not remove the task.
+        stopOnTaskRemoved.value = prefs.getBoolean(KEY_STOP_ON_TASK_REMOVED, true)
         hideVolumeBar.value = prefs.getBoolean(KEY_HIDE_VOLUME_BAR, false)
         hideStatusBarInPlayer.value = prefs.getBoolean(KEY_HIDE_STATUS_BAR_IN_PLAYER, false)
         hideSongStatus.value = prefs.getBoolean(KEY_HIDE_SONG_STATUS, false)

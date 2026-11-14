@@ -198,6 +198,93 @@ class SpotifyImporterIdentityTest {
     }
 
     @Test
+    fun spotifyImportMatchesRepresentativePlaylistTitleAndCreditStyles() {
+        // Verified examples from the supplied Spotify track-ID list:
+        // punctuation in ".Feast"/"o,Tuan", commas in long titles, lower-case
+        // track names, and regional spelling/diacritic variation.
+        val feast = TrackMatcher.Target(
+            title = "o,Tuan",
+            artist = ".Feast",
+            durationSec = 305,
+            requiredArtistName = ".Feast",
+            requireExactTitle = true,
+        )
+        val feastCandidate = Song(
+            videoId = "playlist-fixture-o-tuan",
+            title = "o,Tuan",
+            artist = "Feast",
+            thumbnailUrl = null,
+            durationText = "5:05",
+        )
+
+        val hindiaLongTitle = TrackMatcher.Target(
+            title = "Berdansalah, Karir Ini Tak Ada Artinya",
+            artist = "Hindia",
+            durationSec = 224,
+            requiredArtistName = "Hindia",
+            requireExactTitle = true,
+        )
+        val hindiaCandidate = Song(
+            videoId = "playlist-fixture-berdansalah",
+            title = "Berdansalah, Karir Ini Tak Ada Artinya",
+            artist = "Hindia",
+            thumbnailUrl = null,
+            durationText = "3:44",
+        )
+
+        val hindiaLowerCase = TrackMatcher.Target(
+            title = "everything u are",
+            artist = "Hindia",
+            durationSec = 236,
+            requiredArtistName = "Hindia",
+            requireExactTitle = true,
+        )
+        val hindiaLowerCaseCandidate = Song(
+            videoId = "playlist-fixture-everything-u-are",
+            title = "Everything U Are",
+            artist = "Hindia",
+            thumbnailUrl = null,
+            durationText = "3:56",
+        )
+
+        val nucaCommaTitle = TrackMatcher.Target(
+            title = "Masa ini, Nanti, dan Masa Indah Lainnya",
+            artist = "Nuca",
+            durationSec = 275,
+            requiredArtistName = "Nuca",
+            requireExactTitle = true,
+        )
+        val nucaCandidate = Song(
+            videoId = "playlist-fixture-masa-ini",
+            title = "Masa Ini, Nanti, dan Masa Indah Lainnya",
+            artist = "Nuca",
+            thumbnailUrl = null,
+            durationText = "4:35",
+        )
+
+        val boaAccent = TrackMatcher.Target(
+            title = "Duvet",
+            artist = "bôa",
+            durationSec = 200,
+            requiredArtistName = "bôa",
+            requireExactTitle = true,
+        )
+        val boaCandidate = Song(
+            videoId = "playlist-fixture-duvet",
+            title = "Duvet",
+            artist = "boa",
+            thumbnailUrl = null,
+            durationText = "3:20",
+        )
+
+        assertNotNull(TrackMatcher.best(listOf(feastCandidate), feast))
+        assertNotNull(TrackMatcher.best(listOf(hindiaCandidate), hindiaLongTitle))
+        assertNotNull(TrackMatcher.best(listOf(hindiaLowerCaseCandidate), hindiaLowerCase))
+        assertNotNull(TrackMatcher.best(listOf(nucaCandidate), nucaCommaTitle))
+        assertNotNull(TrackMatcher.best(listOf(boaCandidate), boaAccent))
+    }
+
+    @Test
     fun spotifyImportMatchesLongArtistNamesWhenYouTubeDropsSpaces() {
         val target = TrackMatcher.Target(
             title = "Dumes",

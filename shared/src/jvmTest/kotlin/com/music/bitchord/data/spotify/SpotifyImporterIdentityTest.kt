@@ -67,6 +67,14 @@ class SpotifyImporterIdentityTest {
     }
 
     @Test
+    fun spotifyImportStopsQueryExpansionAfterOneConfirmingVariant() {
+        assertFalse(shouldStopSpotifyQueryExpansion(null, 0, hasHighConfidenceMatch = true))
+        assertFalse(shouldStopSpotifyQueryExpansion(1, 1, hasHighConfidenceMatch = true))
+        assertTrue(shouldStopSpotifyQueryExpansion(1, 2, hasHighConfidenceMatch = true))
+        assertFalse(shouldStopSpotifyQueryExpansion(1, 2, hasHighConfidenceMatch = false))
+    }
+
+    @Test
     fun durationOnlyComposerOverrideDoesNotCountAsTrustedArtistCredit() {
         val target = TrackMatcher.Target(
             title = "Terlalu Sayang",

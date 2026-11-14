@@ -307,7 +307,18 @@ object SpotifyImporter {
             filter: SearchFilter,
             includeLanguageSuffix: Boolean = false,
         ) {
-            for (baseQuery in queries.take(MAX_SEARCH_QUERY_VARIANTS)) {
+            // A strong match is still compared against one independent query,
+            // so a raw-title hit cannot hide a better artist-qualified release.
+            // Once that second query has been sampled, further variants add
+            // latency without meaningful identity evidence.
+            var firstStrongMatchQueryIndex: Int? = null
+            fun hasHighConfidenceMatch(): Boolean = when (filter) {
+                SearchFilter.ALL -> hasHighConfidenceAudioMatch()
+                SearchFilter.VIDEOS -> hasHighConfidenceVideoMatch()
+                else -> false
+            }
+
+            for ((queryIndex, baseQuery) in queries.take(MAX_SEARCH_QUERY_VARIANTS).withIndex()) {
                 // Once a strong result exists, sample the first page of each
                 // remaining spelling/album query instead of stopping entirely.
                 // Queries without a strong result still receive the full page budget.
@@ -339,7 +350,16 @@ object SpotifyImporter {
                         failures += "search '$query' (${filter.name}): ${failure.message}"
                         null
                     },
-                ) ?: continue
+                )
+                if (firstPage == null) {
+                    if (shouldStopSpotifyQueryExpansion(
+                            firstStrongMatchQueryIndex,
+                            queryIndex,
+                            hasHighConfidenceMatch(),
+                        )
+                    ) break
+                    continue
+                }
 
                 var page = firstPage
                 var pagesRead = 0
@@ -393,11 +413,21 @@ object SpotifyImporter {
                         },
                     ) ?: break
                 }
-                if (filter == SearchFilter.ALL && hasHighConfidenceAudioMatch()) {
+                val hasStrongMatch = hasHighConfidenceMatch()
+                if (hasStrongMatch && firstStrongMatchQueryIndex == null) {
+                    firstStrongMatchQueryIndex = queryIndex
+                } else if (shouldStopSpotifyQueryExpansion(
+                        firstStrongMatchQueryIndex,
+                        queryIndex,
+                        hasStrongMatch,
+                    )
+                ) {
                     DebugLog.d(
                         "SpotifyImport",
-                        "Strong match found for '${target.title}' by '${target.artist}'; checking remaining query variants",
+                        "Strong match for '${target.title}' by '${target.artist}' confirmed by " +
+                            "query ${queryIndex + 1}; stopping query expansion after ${successfulRequests} requests",
                     )
+                    break
                 }
             }
         }
@@ -671,6 +701,18 @@ object SpotifyImporter {
     }
 }
 
+
+/**
+ * Once one query produced a high-confidence match, allow one additional
+ * independent query to compare alternate catalogue releases, then stop.
+ */
+internal fun shouldStopSpotifyQueryExpansion(
+    firstStrongMatchQueryIndex: Int?,
+    currentQueryIndex: Int,
+    hasHighConfidenceMatch: Boolean,
+): Boolean = hasHighConfidenceMatch &&
+    firstStrongMatchQueryIndex != null &&
+    currentQueryIndex > firstStrongMatchQueryIndex
 
 /** Converts playable rows from both mixed and filtered YouTube Music search pages. */
 internal fun spotifyImportCandidate(row: SearchResult): Song? = when (row) {

@@ -237,13 +237,19 @@ object TrackMatcher {
         // Latin), so same-script packaging never rescues a different title.
         val isTitleMatch = when {
             wanted.core == got.core -> true
+            titleAccentKey(wanted.core) == titleAccentKey(got.core) -> true
             romajiOf(wanted.core) == romajiOf(got.core) -> true
             isTranslationMatch(wanted, got) -> true
             target.requireExactTitle -> false
             wanted.core.length <= 3 || got.core.length <= 3 -> false
             else -> wanted.core.contains(got.core) || got.core.contains(wanted.core)
         }
-        if (!isTitleMatch) return null
+        // A one-letter catalogue typo can still be the same track, but only
+        // when its primary artist is exact and the known runtime is within
+        // three seconds. Version identity is checked below as usual.
+        val nearTitleSpellingMatch = target.requireExactTitle &&
+            nearTitleSpelling(wanted.words, got.words)
+        if (!isTitleMatch && !nearTitleSpellingMatch) return null
         // Direction matters both ways round: asking for the album cut must not
         // land on the live take, and asking for the live take must not land on
         // the album cut. Markers living on the release rather than the row come
@@ -286,6 +292,9 @@ object TrackMatcher {
         } else {
             false
         }
+        if (nearTitleSpellingMatch && !isTitleMatch &&
+            (!requiredArtistMatched || !withinSeconds(candidate, target, DURATION_TIGHT_SEC))
+        ) return null
         val spotifyCredits = target.artistCredits.ifEmpty {
             artistNames(target.artist).map { it.joinToString(" ") }
         }
@@ -339,9 +348,9 @@ object TrackMatcher {
             ?: ARTIST_EXACT.takeIf { requiredArtistMatched }
             ?: ARTIST_SHARED.takeIf { secondarySpotifyArtistMatched || compositeArtistAlias }
             // A one-character spelling alias is lower confidence than an exact
-            // credit and needs a known runtime within three seconds.
+            // credit and needs a known runtime within eight seconds.
             ?: ARTIST_NEAR_SPELLING.takeIf {
-                nearLeadArtistMatched && withinSeconds(candidate, target, DURATION_TIGHT_SEC)
+                nearLeadArtistMatched && withinSeconds(candidate, target, ARTIST_SPELLING_RUNTIME_SEC)
             }
         // The credits don't merely differ in spelling, they name different
         // people — and sometimes that is because they are describing the
@@ -381,7 +390,7 @@ object TrackMatcher {
      * A duration-only composer/uploader override can still be a last-resort
      * match, but it must not stop Spotify import from checking remaining
      * queries and artist pages. Near-spelling aliases are trusted only with
-     * the same three-second runtime guard as secondary Spotify credits.
+     * an eight-second runtime guard.
      */
     fun hasTrustedArtistCredit(candidate: Song, target: Target): Boolean {
         if (score(candidate, target) == null) return false
@@ -411,7 +420,7 @@ object TrackMatcher {
         ) return true
 
         return candidateCredits.any { nearArtistSpelling(required, it) } &&
-            withinSeconds(candidate, target, DURATION_TIGHT_SEC)
+            withinSeconds(candidate, target, ARTIST_SPELLING_RUNTIME_SEC)
     }
 
     /** Candidate byline and linked credits, also split at known artist joiners. */
@@ -934,6 +943,26 @@ object TrackMatcher {
     }
 
     /**
+     * A conservative title alias for catalogue spelling mistakes.
+     * Only one word may differ by one character; every other word and its
+     * position must be identical. The caller additionally requires an exact
+     * primary-artist credit and a runtime within three seconds.
+     */
+    private fun nearTitleSpelling(first: List<String>, second: List<String>): Boolean {
+        if (first.isEmpty() || first.size != second.size) return false
+        var differingWords = 0
+        for ((left, right) in first.zip(second)) {
+            if (left == right) continue
+            if (minOf(left.length, right.length) < 4 || !differsByOneCharacter(left, right)) {
+                return false
+            }
+            differingWords++
+            if (differingWords > 1) return false
+        }
+        return differingWords == 1
+    }
+
+    /**
      * A conservative spelling alias for long, multi-word performer names.
      * Only one token may differ by one character; every other word and its
      * position must be identical. Callers must still require exact
@@ -979,6 +1008,10 @@ object TrackMatcher {
         if (left < first.length || right < second.length) edits++
         return edits == 1
     }
+
+    private fun titleAccentKey(value: String): String =
+        Normalizer.normalize(value, Normalizer.Form.NFKD)
+            .replace(Regex("\\p{M}+"), "")
 
     private fun artistSpacedKey(value: String): String =
         Normalizer.normalize(normalize(value), Normalizer.Form.NFKD)
@@ -1113,6 +1146,8 @@ object TrackMatcher {
 
     /** Within this many seconds is the same master, allowing for trimmed silence. */
     private const val DURATION_TIGHT_SEC = 3
+    /** A one-character artist spelling mismatch still needs a close runtime. */
+    private const val ARTIST_SPELLING_RUNTIME_SEC = 8
 
     /**
      * Past this, two tracks sharing a title are not sharing a recording.

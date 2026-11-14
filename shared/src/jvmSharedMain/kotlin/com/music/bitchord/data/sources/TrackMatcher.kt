@@ -339,7 +339,7 @@ object TrackMatcher {
             ?: ARTIST_EXACT.takeIf { requiredArtistMatched }
             ?: ARTIST_SHARED.takeIf { secondarySpotifyArtistMatched || compositeArtistAlias }
             // A one-character spelling alias is lower confidence than an exact
-            // credit and needs a known runtime within the normal song window.
+            // credit and needs a known runtime within three seconds.
             ?: ARTIST_NEAR_SPELLING.takeIf {
                 nearLeadArtistMatched && withinSeconds(candidate, target, DURATION_TIGHT_SEC)
             }
@@ -416,7 +416,7 @@ object TrackMatcher {
 
     /** Candidate byline and linked credits, also split at known artist joiners. */
     private fun candidateArtistCredits(candidate: Song): List<String> = buildList {
-        candidate.artist.takeIf { it.isNotBlank() }?.let(::add)
+        candidate.artist.takeIf { it.isNotBlank() }?.let { add(it) }
         addAll(candidate.artists.map { it.name })
         addAll(candidate.artist.split(","))
         addAll(artistNames(candidate.artist).map { it.joinToString(" ") })

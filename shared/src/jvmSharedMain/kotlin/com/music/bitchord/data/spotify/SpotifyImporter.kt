@@ -204,6 +204,7 @@ object SpotifyImporter {
     private const val MAX_SEARCH_QUERY_VARIANTS = 10
     private const val MIN_PAGES_TO_COMPARE_AFTER_MATCH = 2
     private const val MAX_ARTIST_PAGE_FALLBACKS = 5
+    private const val MAX_ALBUM_PAGE_FALLBACKS = 5
     private const val STRONG_MATCH_RUNTIME_SEC = 8
 
     private val artistPageLocks = ConcurrentHashMap<String, Mutex>()
@@ -257,6 +258,7 @@ object SpotifyImporter {
     private suspend fun searchCandidates(target: TrackMatcher.Target, suffix: String? = null): List<Song> {
         val found = LinkedHashMap<String, Song>()
         val artistBrowseIds = LinkedHashSet<String>()
+        val albumBrowseIds = LinkedHashSet<String>()
         val failures = mutableListOf<String>()
         var successfulRequests = 0
 
@@ -315,6 +317,7 @@ object SpotifyImporter {
                     page.rows.forEach { row ->
                         when (row) {
                             is SearchResult.Browse -> {
+                                spotifyImportAlbumBrowseId(row)?.let(albumBrowseIds::add)
                                 spotifyImportArtistCredits(target).forEach { expectedArtist ->
                                     spotifyArtistBrowseId(row, expectedArtist)?.let(artistBrowseIds::add)
                                 }
@@ -372,6 +375,27 @@ object SpotifyImporter {
         // ALL is the same authenticated catalogue used by the normal Search
         // screen. Its promoted TopTrack and regular Track rows are both kept.
         searchFilter(SearchFilter.ALL)
+
+        // Search may return an album card rather than an individual track.
+        // Open a small, bounded set of those albums before giving up; rows from
+        // them still pass the same strict title/artist/version/runtime matcher.
+        if (!hasHighConfidenceAudioMatch()) {
+            for (browseId in albumBrowseIds.take(MAX_ALBUM_PAGE_FALLBACKS)) {
+                YtMusicRepository.browseSongsForSpotifyImport(browseId).fold(
+                    onSuccess = { songs ->
+                        successfulRequests++
+                        songs.forEach { song ->
+                            val id = song.videoId.trim()
+                            if (id.isNotEmpty()) found.putIfAbsent(id, song)
+                        }
+                    },
+                    onFailure = { failure ->
+                        failures += "album page '$browseId': ${failure.message}"
+                    },
+                )
+                if (hasHighConfidenceAudioMatch()) break
+            }
+        }
 
         if (!hasHighConfidenceAudioMatch()) {
             // Global search may show a duration-only composer/uploader candidate
@@ -621,6 +645,13 @@ internal fun spotifyImportArtistCredits(target: TrackMatcher.Target): List<Strin
     target.artistCredits.ifEmpty {
         TrackMatcher.artistNames(target.artist).map { it.joinToString(" ") }
     }.map(String::trim).filter(String::isNotBlank).distinct()
+
+/** Album cards can provide a second path to a track hidden from global song results. */
+internal fun spotifyImportAlbumBrowseId(row: SearchResult): String? {
+    val item = (row as? SearchResult.Browse)?.item ?: return null
+    if (item.type != BrowseType.ALBUM) return null
+    return item.browseId.takeIf { it.isNotBlank() }
+}
 
 /** Artist cards are used only when the complete requested performer matches. */
 internal fun spotifyArtistBrowseId(row: SearchResult, expectedArtist: String?): String? {

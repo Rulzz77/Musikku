@@ -863,6 +863,12 @@ class PlaybackService : MediaLibraryService() {
         }
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
+            val active = this@PlaybackService.player
+            TrackLog.i(
+                "PLAYBACK_LIFECYCLE",
+                "onIsPlayingChanged isPlaying=$isPlaying playWhenReady=${active?.playWhenReady} playbackState=${active?.playbackState}",
+                about = active?.currentMediaItem?.mediaId,
+            )
             // The player this fired on, which is by definition the one the
             // session is currently pointed at.
             val exoPlayer = player ?: return
@@ -948,6 +954,12 @@ class PlaybackService : MediaLibraryService() {
          * on the audio, which is what the media notification shows too.
          */
         override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+            val active = this@PlaybackService.player
+            TrackLog.i(
+                "PLAYBACK_LIFECYCLE",
+                "onPlayWhenReadyChanged playWhenReady=$playWhenReady reason=$reason playbackState=${active?.playbackState} isPlaying=${active?.isPlaying}",
+                about = active?.currentMediaItem?.mediaId,
+            )
             // Something started the phone's own player while a receiver is the
             // speaker — an internal path, since the session player's door
             // already sends a listener's play to the receiver. The phone goes
@@ -1283,6 +1295,7 @@ class PlaybackService : MediaLibraryService() {
 
     override fun onCreate() {
         super.onCreate()
+        TrackLog.i("PLAYBACK_LIFECYCLE", "PlaybackService.onCreate pid=${android.os.Process.myPid()}")
 
         if (com.music.bitchord.data.innertube.Innertube.cookie == null) {
             com.music.bitchord.data.innertube.Innertube.cookie = com.music.bitchord.auth.AuthStore(this).cookie
@@ -7807,7 +7820,18 @@ class PlaybackService : MediaLibraryService() {
      * a foreground-service-backed media session.
      */
     override fun onTaskRemoved(rootIntent: Intent?) {
+        val active = player
+        TrackLog.i(
+            "PLAYBACK_LIFECYCLE",
+            "onTaskRemoved before super stopOnTaskRemoved=${AppSettings.stopOnTaskRemoved.value} playWhenReady=${active?.playWhenReady} playbackState=${active?.playbackState} isPlaying=${active?.isPlaying}",
+            about = active?.currentMediaItem?.mediaId,
+        )
         super.onTaskRemoved(rootIntent)
+        TrackLog.i(
+            "PLAYBACK_LIFECYCLE",
+            "onTaskRemoved after super playWhenReady=${player?.playWhenReady} playbackState=${player?.playbackState} isPlaying=${player?.isPlaying}",
+            about = player?.currentMediaItem?.mediaId,
+        )
         if (AppSettings.stopOnTaskRemoved.value) {
             // A receiver left playing with nothing on the phone to drive it
             // would run out its few queued tracks and stop on its own anyway;
@@ -7822,6 +7846,12 @@ class PlaybackService : MediaLibraryService() {
 
 
     override fun onDestroy() {
+        val active = player
+        TrackLog.w(
+            "PLAYBACK_LIFECYCLE",
+            "PlaybackService.onDestroy playWhenReady=${active?.playWhenReady} playbackState=${active?.playbackState} isPlaying=${active?.isPlaying} stopOnTaskRemoved=${AppSettings.stopOnTaskRemoved.value}",
+            about = active?.currentMediaItem?.mediaId,
+        )
         WearBridge.attachStreams(null)
         WearBridge.releaseSpeaker()
         // Let go of the receiver's player but leave its session alone: a

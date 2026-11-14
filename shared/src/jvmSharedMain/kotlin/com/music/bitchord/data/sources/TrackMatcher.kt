@@ -270,20 +270,11 @@ object TrackMatcher {
         // Match the complete first credited artist name against one complete
         // candidate credit instead of accepting a partial token overlap.
         val requiredArtist = target.requiredArtistName?.takeIf { it.isNotBlank() }
-        val candidateNames = buildSet {
-            add(artistIdentityKey(candidate.artist))
-            candidate.artists.forEach { add(artistIdentityKey(it.name)) }
-            // YouTube commonly serializes multiple billed artists with
-            // commas; split only those boundaries here so names containing
-            // "x", slash, or "and" remain intact.
-            candidate.artist.split(",").forEach { add(artistIdentityKey(it)) }
-            artistNames(candidate.artist).forEach { add(it.joinToString("")) }
-        }
-        val candidateCreditNames = buildList {
-            add(candidate.artist)
-            addAll(candidate.artists.map { it.name })
-            addAll(candidate.artist.split(","))
-        }.map(String::trim).filter(String::isNotBlank).distinct()
+        val candidateCreditNames = candidateArtistCredits(candidate)
+        val candidateNames = candidateCreditNames
+            .map(::artistIdentityKey)
+            .filter(String::isNotBlank)
+            .toSet()
         val nearLeadArtistMatched = requiredArtist != null &&
             candidateCreditNames.any { nearArtistSpelling(requiredArtist, it) }
         val requiredArtistMatched = if (requiredArtist != null) {
@@ -350,7 +341,7 @@ object TrackMatcher {
             // A one-character spelling alias is lower confidence than an exact
             // credit and needs a known runtime within the normal song window.
             ?: ARTIST_NEAR_SPELLING.takeIf {
-                nearLeadArtistMatched && withinSeconds(candidate, target, DURATION_LIMIT_SEC)
+                nearLeadArtistMatched && withinSeconds(candidate, target, DURATION_TIGHT_SEC)
             }
         // The credits don't merely differ in spelling, they name different
         // people — and sometimes that is because they are describing the
@@ -383,6 +374,53 @@ object TrackMatcher {
         return BASE + artist + duration + albumScore(target.album, candidate.albumName) + explicit +
                 contextScore(wanted, got)
     }
+
+    /**
+     * Whether [candidate] has a trustworthy artist-credit relationship to [target].
+     *
+     * A duration-only composer/uploader override can still be a last-resort
+     * match, but it must not stop Spotify import from checking remaining
+     * queries and artist pages. Near-spelling aliases are trusted only with
+     * the same three-second runtime guard as secondary Spotify credits.
+     */
+    fun hasTrustedArtistCredit(candidate: Song, target: Target): Boolean {
+        if (score(candidate, target) == null) return false
+        val required = target.requiredArtistName?.takeIf { it.isNotBlank() }
+            ?: return artistNames(target.artist).isNotEmpty() &&
+                artistNames(candidate.artist).isNotEmpty() &&
+                artistScore(target.artist, candidate.artist) != null
+
+        val candidateCredits = candidateArtistCredits(candidate)
+        val candidateKeys = candidateCredits.map(::artistIdentityKey).toSet()
+        val requiredKey = artistIdentityKey(required)
+        if (requiredKey.isNotBlank() && requiredKey in candidateKeys) return true
+
+        if (target.artistCredits.drop(1).any { credit ->
+                val key = artistIdentityKey(credit)
+                key.isNotBlank() && key in candidateKeys
+            }
+        ) return true
+
+        val spotifyCredits = target.artistCredits.ifEmpty {
+            artistNames(target.artist).map { it.joinToString(" ") }
+        }
+        if (sharesCompositeSpotifyCredit(
+                spotifyCredits,
+                listOf(candidate.artist) + candidate.artists.map { it.name },
+            )
+        ) return true
+
+        return candidateCredits.any { nearArtistSpelling(required, it) } &&
+            withinSeconds(candidate, target, DURATION_TIGHT_SEC)
+    }
+
+    /** Candidate byline and linked credits, also split at known artist joiners. */
+    private fun candidateArtistCredits(candidate: Song): List<String> = buildList {
+        candidate.artist.takeIf { it.isNotBlank() }?.let(::add)
+        addAll(candidate.artists.map { it.name })
+        addAll(candidate.artist.split(","))
+        addAll(artistNames(candidate.artist).map { it.joinToString(" ") })
+    }.map(String::trim).filter(String::isNotBlank).distinct()
 
     /**
      * Whether otherwise valid rows describe more than one release while the

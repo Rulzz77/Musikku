@@ -67,6 +67,31 @@ class SpotifyImporterIdentityTest {
     }
 
     @Test
+    fun durationOnlyComposerOverrideDoesNotCountAsTrustedArtistCredit() {
+        val target = TrackMatcher.Target(
+            title = "Terlalu Sayang",
+            artist = "Gasentra Pajampangan, Revina Alvira",
+            durationSec = 346,
+            requiredArtistName = "Gasentra Pajampangan",
+            requireSharedArtist = true,
+            requireExactTitle = true,
+            artistCredits = listOf("Gasentra Pajampangan", "Revina Alvira"),
+        )
+        val composerOnly = Song(
+            videoId = "duration-only-credit",
+            title = "Terlalu Sayang",
+            artist = "Unrelated Composer",
+            thumbnailUrl = null,
+            durationText = "5:46",
+        )
+
+        // Existing exact-runtime override remains an allowed last resort.
+        assertNotNull(TrackMatcher.best(listOf(composerOnly), target))
+        // But it must not stop the importer from checking artist pages.
+        assertFalse(TrackMatcher.hasTrustedArtistCredit(composerOnly, target))
+    }
+
+    @Test
     fun spotifyImportRejectsDifferentSingerEvenWhenTitleAndDurationMatch() {
         val target = TrackMatcher.Target(
             title = "Dumes",
@@ -505,14 +530,23 @@ class SpotifyImporterIdentityTest {
             title = "Terlalu Sayang",
             artist = "Gasentra Pajampangan",
             thumbnailUrl = null,
-            durationText = "5:50",
+            durationText = "5:47",
         )
 
         assertTrue(TrackMatcher.nearArtistSpelling("Gasantra Pajampangan", "Gasentra Pajampangan"))
         assertNotNull(TrackMatcher.best(listOf(officialRecording), target))
+        assertTrue(TrackMatcher.hasTrustedArtistCredit(officialRecording, target))
         assertNull(TrackMatcher.best(listOf(officialRecording.copy(durationText = null)), target))
+        assertNull(TrackMatcher.best(listOf(officialRecording.copy(durationText = "5:50")), target))
         assertNull(TrackMatcher.best(listOf(officialRecording.copy(durationText = "4:50")), target))
         assertNull(TrackMatcher.best(listOf(officialRecording.copy(title = "Terlalu Sayang (Live)")), target))
+
+        val joinedByline = officialRecording.copy(
+            videoId = "terlalu-sayang-gasentra-feat-revina",
+            artist = "Gasentra Pajampangan feat. Revina Alvira",
+        )
+        assertNotNull(TrackMatcher.best(listOf(joinedByline), target))
+        assertTrue(TrackMatcher.hasTrustedArtistCredit(joinedByline, target))
     }
 
     @Test

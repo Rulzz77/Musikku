@@ -1212,6 +1212,13 @@ object YtMusicRepository {
             fullSongs.ifEmpty { page.songs }
         }
 
+    /** Read a browsable album/playlist completely for Spotify-import fallback. */
+    suspend fun browseSongsForSpotifyImport(browseId: String): Result<List<Song>> =
+        call("browseSongsForSpotifyImport:$browseId") {
+            require(browseId.isNotBlank()) { "Missing catalogue browse id" }
+            songsPagedComplete(browseId)
+        }
+
     /** Page an artist's Top Songs list without accepting a truncated result. */
     private suspend fun songsPagedComplete(browseId: String): List<Song> {
         val out = LinkedHashMap<String, Song>()

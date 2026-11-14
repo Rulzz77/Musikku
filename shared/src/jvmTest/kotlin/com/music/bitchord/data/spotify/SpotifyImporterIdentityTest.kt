@@ -118,7 +118,7 @@ class SpotifyImporterIdentityTest {
         assertEquals(
             composerOnly.copy(albumName = "Album Asli"),
             bestSpotifyImportMatch(listOf(composerOnly.copy(albumName = "Album Asli")), albumTarget),
-        ))
+        )
     }
 
     @Test

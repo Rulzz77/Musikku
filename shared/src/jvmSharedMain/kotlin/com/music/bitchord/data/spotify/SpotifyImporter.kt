@@ -303,7 +303,10 @@ object SpotifyImporter {
                         TrackMatcher.withinSeconds(candidate, target, STRONG_MATCH_RUNTIME_SEC))
             }
 
-        suspend fun searchFilter(filter: SearchFilter) {
+        suspend fun searchFilter(
+            filter: SearchFilter,
+            includeLanguageSuffix: Boolean = false,
+        ) {
             for (baseQuery in queries.take(MAX_SEARCH_QUERY_VARIANTS)) {
                 // Once a strong result exists, sample the first page of each
                 // remaining spelling/album query instead of stopping entirely.
@@ -312,7 +315,14 @@ object SpotifyImporter {
                     (filter == SearchFilter.ALL && hasHighConfidenceAudioMatch()) ||
                     (filter == SearchFilter.VIDEOS && hasHighConfidenceVideoMatch())
                 ) 1 else MAX_CANDIDATE_SEARCH_PAGES
-                val query = listOf(baseQuery, suffix?.takeIf { it.isNotBlank() })
+                // Match the manual Search query first, without silently
+                // changing the words the listener would type. A preferred
+                // language is a fallback query, not part of the primary query:
+                // appending it up front can hide an otherwise visible result.
+                val query = listOf(
+                    baseQuery,
+                    suffix?.takeIf { includeLanguageSuffix && it.isNotBlank() },
+                )
                     .filterNotNull()
                     .joinToString(" ")
                 // Manual Search uses the authenticated endpoint. Starting the
@@ -394,7 +404,16 @@ object SpotifyImporter {
 
         // ALL is the same authenticated catalogue used by the normal Search
         // screen. Its promoted TopTrack and regular Track rows are both kept.
+        // First run the exact, unqualified queries. Only add the optional
+        // language term when those queries cannot produce any safe match.
         searchFilter(SearchFilter.ALL)
+        if (!suffix.isNullOrBlank() && bestSpotifyImportMatch(found.values.toList(), target) == null) {
+            DebugLog.d(
+                "SpotifyImport",
+                "No safe match for '${target.title}' without language suffix; retrying with '$suffix'",
+            )
+            searchFilter(SearchFilter.ALL, includeLanguageSuffix = true)
+        }
 
         // Search may return an album card rather than an individual track.
         // Open a small, bounded set of those albums before giving up; rows from
@@ -721,8 +740,11 @@ internal fun spotifyImportSearchQueries(target: TrackMatcher.Target): List<Strin
     val album = target.album?.trim().orEmpty()
 
     return buildList {
-        // Match the query a listener naturally enters in Search first:
-        // Spotify's untouched title plus its exact first credited performer.
+        // Match the simplest manual Search first. Adding an artist or album
+        // can change YouTube Music's ranking enough to bury a track that is
+        // plainly visible when the listener searches by title alone.
+        if (rawTitle.isNotBlank()) add(rawTitle)
+        // Then progressively add Spotify's structured performer/release data.
         if (rawTitle.isNotBlank() && leadArtist.isNotBlank()) add("$rawTitle $leadArtist")
         if (rawTitle.isNotBlank() && fullArtist.isNotBlank()) add("$rawTitle $fullArtist")
         // Album-qualified variants help when the global title query ranks an

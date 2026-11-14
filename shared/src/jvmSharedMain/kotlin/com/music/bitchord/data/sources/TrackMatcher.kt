@@ -316,7 +316,17 @@ object TrackMatcher {
             )
         if (requiredArtist != null && !requiredArtistMatched &&
             !secondarySpotifyArtistMatched && !compositeArtistAlias && !nearLeadArtistMatched
-        ) return null
+        ) {
+            // YouTube Music sometimes files a recording under its composer,
+            // label, or uploader rather than the credited singer. Keep the
+            // strict lead-artist rule by default, but allow the documented
+            // exact-runtime override as a last resort. Spotify import always
+            // supplies requiredArtistName, so returning here unconditionally
+            // made that fallback unreachable for real imports.
+            if (target.isVideo || !withinSeconds(candidate, target, CREDIT_OVERRIDE_SEC)) {
+                return null
+            }
+        }
         if (requiredArtist != null && artistIdentityKey(requiredArtist).isBlank()) return null
         if (requiredArtist == null && target.requireSharedArtist &&
             (artistNames(target.artist).isEmpty() ||

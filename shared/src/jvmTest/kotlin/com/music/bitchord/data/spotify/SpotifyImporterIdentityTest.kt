@@ -85,10 +85,16 @@ class SpotifyImporterIdentityTest {
             durationText = "5:46",
         )
 
-        // Existing exact-runtime override remains an allowed last resort.
+        // The Spotify importer supplies requiredArtistName, so this exact
+        // runtime exception must remain reachable even when the catalogue
+        // files the song under a composer/uploader instead of the singer.
         assertNotNull(TrackMatcher.best(listOf(composerOnly), target))
-        // But it must not stop the importer from checking artist pages.
         assertFalse(TrackMatcher.hasTrustedArtistCredit(composerOnly, target))
+
+        // The exception is deliberately narrow: a three-second mismatch or
+        // a music-video upload cannot use an unrelated byline as proof.
+        assertNull(TrackMatcher.best(listOf(composerOnly.copy(durationText = "5:49")), target))
+        assertNull(TrackMatcher.best(listOf(composerOnly.copy(isVideo = true)), target))
     }
 
     @Test
@@ -528,13 +534,16 @@ class SpotifyImporterIdentityTest {
 
         val queries = spotifyImportSearchQueries(target)
 
-        assertEquals("Tanpo Tresnamu (Official Audio) Denny Caknan", queries.first())
+        assertEquals("Tanpo Tresnamu (Official Audio)", queries.first())
+        assertEquals("Tanpo Tresnamu (Official Audio) Denny Caknan", queries[1])
         assertTrue("Tanpo Tresnamu (Official Audio) Denny Caknan Album Contoh" in queries)
         assertTrue("Tanpo Tresnamu (Official Audio) Album Contoh" in queries)
         assertTrue("Tanpo Tresnamu (Official Audio) Denny Caknan, Yeni Inka" in queries)
         assertTrue("Tanpo Tresnamu (Official Audio) Denny Caknan" in queries)
         assertTrue("Tanpo Tresnamu (Official Audio)" in queries)
         assertTrue(TrackMatcher.queries(target).all { it in queries })
+        // The import's first lookup must not add artist/album/language terms:
+        // it should return the same catalogue page as a title-only manual search.
         assertEquals(queries.size, queries.distinct().size)
     }
 

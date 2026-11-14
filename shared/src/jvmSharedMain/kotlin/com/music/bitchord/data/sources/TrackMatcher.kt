@@ -386,7 +386,14 @@ object TrackMatcher {
         // people. This exact exception is what admitted the 3:30 Lovely
         // track for Yo Yo Honey Singh's 3:31 "Brown Rang" video.
             ?: CREDITS_DISAGREE.takeIf {
-                !target.isVideo && withinSeconds(candidate, target, CREDIT_OVERRIDE_SEC)
+                // Spotify imports carry a structured lead performer. An
+                // uncredited row must not pass the generic matcher on runtime
+                // alone; the importer applies its narrower composer fallback
+                // only after credited candidates have been exhausted.
+                requiredArtist == null &&
+                    !target.isVideo &&
+                    !candidate.isVideo &&
+                    withinSeconds(candidate, target, CREDIT_OVERRIDE_SEC)
             }
             ?: return null
         val explicit = explicitScore(target.isExplicit, candidate.isExplicit) ?: return null

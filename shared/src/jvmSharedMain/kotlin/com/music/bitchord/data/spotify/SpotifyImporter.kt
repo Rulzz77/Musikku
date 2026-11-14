@@ -775,11 +775,19 @@ internal fun isSafeSpotifyDurationOnlyFallback(
     // isolated fallback check. Title/version, runtime, release and explicit
     // metadata still pass through the normal matcher; this helper is called
     // only after all credited audio and video rows have been checked.
+    val identityTarget = target.copy(
+        // The caller has already established that this row has no trusted
+        // artist credit. Disable the lead-credit requirement only for the
+        // isolated duration-only fallback; keep all title/version/release
+        // and runtime checks in TrackMatcher.
+        requiredArtistName = null,
+        requireSharedArtist = true,
+    )
     val identityCandidate = candidate.copy(
-        artist = target.requiredArtistName?.takeIf { it.isNotBlank() } ?: target.artist,
+        artist = target.artist,
         artists = emptyList(),
     )
-    return TrackMatcher.score(identityCandidate, target) != null
+    return TrackMatcher.score(identityCandidate, identityTarget) != null
 }
 
 /** Prefer a credited audio catalogue recording over a weaker duration-only fallback. */

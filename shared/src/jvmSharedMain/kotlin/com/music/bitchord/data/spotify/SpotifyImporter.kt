@@ -265,6 +265,11 @@ object SpotifyImporter {
                 !candidate.isVideo && TrackMatcher.hasTrustedArtistCredit(candidate, target)
             }
 
+        fun hasTrustedVideoMatch(): Boolean =
+            found.values.any { candidate ->
+                candidate.isVideo && TrackMatcher.hasTrustedArtistCredit(candidate, target)
+            }
+
         suspend fun searchFilter(filter: SearchFilter) {
             for (baseQuery in queries) {
                 val query = listOf(baseQuery, suffix?.takeIf { it.isNotBlank() })
@@ -324,9 +329,7 @@ object SpotifyImporter {
                         )
                         break
                     }
-                    if (filter == SearchFilter.VIDEOS &&
-                        bestSpotifyImportMatch(found.values.toList(), target) != null
-                    ) break
+                    if (filter == SearchFilter.VIDEOS && hasTrustedVideoMatch()) break
 
                     val continuation = page.continuation ?: break
                     page = YtMusicRepository.searchContinuation(continuation, filter).fold(
@@ -344,9 +347,7 @@ object SpotifyImporter {
                     )
                     break
                 }
-                if (filter == SearchFilter.VIDEOS &&
-                    bestSpotifyImportMatch(found.values.toList(), target) != null
-                ) break
+                if (filter == SearchFilter.VIDEOS && hasTrustedVideoMatch()) break
             }
         }
 
@@ -389,7 +390,7 @@ object SpotifyImporter {
 
         // Only fall back to the dedicated Videos search when neither the
         // general catalogue nor the artist's own catalogue found a recording.
-        if (bestSpotifyImportMatch(found.values.toList(), target) == null) {
+        if (!hasTrustedAudioMatch() && !hasTrustedVideoMatch()) {
             searchFilter(SearchFilter.VIDEOS)
         }
 
@@ -626,8 +627,13 @@ internal fun spotifyArtistBrowseId(song: Song, expectedArtist: String?): String?
 /** Prefer an audio catalogue recording over an equally valid music-video upload. */
 internal fun bestSpotifyImportMatch(candidates: List<Song>, target: TrackMatcher.Target): Song? {
     val audio = candidates.filterNot { it.isVideo }
-    return TrackMatcher.best(audio, target)
-        ?: TrackMatcher.best(candidates.filter { it.isVideo }, target)
+    val videos = candidates.filter { it.isVideo }
+    // A real performer-credit match must beat a duration-only composer/uploader
+    // override, even when that weak row has a more convenient album/runtime score.
+    return TrackMatcher.best(audio.filter { TrackMatcher.hasTrustedArtistCredit(it, target) }, target)
+        ?: TrackMatcher.best(videos.filter { TrackMatcher.hasTrustedArtistCredit(it, target) }, target)
+        ?: TrackMatcher.best(audio, target)
+        ?: TrackMatcher.best(videos, target)
 }
 
 /**

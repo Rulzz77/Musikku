@@ -739,7 +739,7 @@ internal fun spotifyArtistBrowseId(row: SearchResult, expectedArtist: String?): 
     val item = (row as? SearchResult.Browse)?.item ?: return null
     if (item.type != BrowseType.ARTIST) return null
     val expected = expectedArtist?.takeIf { it.isNotBlank() } ?: return null
-    return item.browseId.takeIf { TrackMatcher.sharesArtist(expected, item.title) }
+    return item.browseId.takeIf { TrackMatcher.sameArtistIdentity(expected, item.title) }
 }
 
 /** A matching song row can expose the artist page id even without an artist card. */
@@ -747,11 +747,11 @@ internal fun spotifyArtistBrowseId(song: Song, expectedArtist: String?): String?
     val expected = expectedArtist?.takeIf { it.isNotBlank() } ?: return null
     // Search rows may expose browse ids for more than the first credited singer.
     song.artists.firstOrNull { artist ->
-        artist.browseId?.isNotBlank() == true && TrackMatcher.sharesArtist(expected, artist.name)
+        artist.browseId?.isNotBlank() == true && TrackMatcher.sameArtistIdentity(expected, artist.name)
     }?.browseId?.takeIf { it.isNotBlank() }?.let { return it }
     val browseId = song.artistId?.takeIf { it.isNotBlank() } ?: return null
     val lead = song.artists.firstOrNull()?.name?.takeIf { it.isNotBlank() } ?: song.artist
-    return browseId.takeIf { TrackMatcher.sharesArtist(expected, lead) }
+    return browseId.takeIf { TrackMatcher.sameArtistIdentity(expected, lead) }
 }
 
 /**
@@ -771,7 +771,15 @@ internal fun isSafeSpotifyDurationOnlyFallback(
     if (targetAlbum != null && candidateAlbum != null &&
         !TrackMatcher.hasExactAlbumMatch(targetAlbum, candidateAlbum)
     ) return false
-    return TrackMatcher.score(candidate, target) != null
+    // Deliberately ignore the untrusted catalogue byline only for this
+    // isolated fallback check. Title/version, runtime, release and explicit
+    // metadata still pass through the normal matcher; this helper is called
+    // only after all credited audio and video rows have been checked.
+    val identityCandidate = candidate.copy(
+        artist = target.requiredArtistName?.takeIf { it.isNotBlank() } ?: target.artist,
+        artists = emptyList(),
+    )
+    return TrackMatcher.score(identityCandidate, target) != null
 }
 
 /** Prefer a credited audio catalogue recording over a weaker duration-only fallback. */

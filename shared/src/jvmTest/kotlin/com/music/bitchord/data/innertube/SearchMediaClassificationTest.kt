@@ -47,7 +47,7 @@ class SearchMediaClassificationTest {
                       "width": $width,
                       "height": $height
                     }] }
-                  }
+                  } }
                   $typeConfig
                 }
               }]

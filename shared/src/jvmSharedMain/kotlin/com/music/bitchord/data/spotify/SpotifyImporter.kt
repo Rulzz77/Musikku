@@ -357,7 +357,7 @@ object SpotifyImporter {
                             queryIndex,
                             hasHighConfidenceMatch(),
                         )
-                    ) break
+                    ) return
                     continue
                 }
 

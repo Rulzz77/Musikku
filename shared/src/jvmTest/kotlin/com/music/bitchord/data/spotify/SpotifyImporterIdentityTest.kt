@@ -1102,6 +1102,50 @@ class SpotifyImporterIdentityTest {
     }
 
     @Test
+    fun spotifyImportMatchesBrooklynSessionAndYearRemasterPlaylistTitles() {
+        val remasterTarget = TrackMatcher.Target(
+            title = "Voor Dilan #III: Dulu Kita Masih Remaja - 2018 Remaster",
+            artist = "The Panasdalam Bank",
+            durationSec = 240,
+            requiredArtistName = "The Panasdalam Bank",
+            requireSharedArtist = true,
+            requireExactTitle = true,
+        )
+        val remasterCatalogue = Song(
+            videoId = "voor-dilan-iii-catalogue",
+            title = "Voor Dilan #III: Dulu Kita Masih Remaja",
+            artist = "The Panasdalam Bank",
+            thumbnailUrl = null,
+            durationText = "4:00",
+        )
+
+        val sessionTarget = TrackMatcher.Target(
+            title = "Location Unknown ◐ (feat. BEKA) - Brooklyn Session",
+            artist = "HONNE, BEKA",
+            durationSec = 200,
+            requiredArtistName = "HONNE",
+            requireSharedArtist = true,
+            requireExactTitle = true,
+            artistCredits = listOf("HONNE", "BEKA"),
+        )
+        val sessionCatalogue = Song(
+            videoId = "location-unknown-brooklyn-session",
+            title = "Location Unknown (Brooklyn Session)",
+            artist = "HONNE, BEKA",
+            thumbnailUrl = null,
+            durationText = "3:20",
+        )
+        val ordinaryRecording = sessionCatalogue.copy(
+            videoId = "location-unknown-original",
+            title = "Location Unknown",
+        )
+
+        assertNotNull(TrackMatcher.best(listOf(remasterCatalogue), remasterTarget))
+        assertNotNull(TrackMatcher.best(listOf(sessionCatalogue), sessionTarget))
+        assertNull(TrackMatcher.best(listOf(ordinaryRecording), sessionTarget))
+    }
+
+    @Test
     fun sameTitleAndArtistWithDifferentSpotifyIdsAreKept() {
         val tracks = listOf(
             SpotifyImportTrack("Dumes", "Guyon Waton", spotifyId = "spotify-a"),

@@ -13,6 +13,8 @@ This note records the safety rules shared by the Android and Web Spotify import 
 
 - Use the cleaned title, Spotify's structured artist credits, runtime, album, and recording/version markers. The primary artist remains preferred. When it differs, an exact full-name match to another structured Spotify performer is accepted only with an exact title/version match and runtime within three seconds. A flattened alias combining meaningful tokens from at least two distinct Spotify credits uses the same guard. Do not split display strings to invent artist identities.
 - Keep DJ styles and language versions distinct, but do not interpret generic genre/packaging words such as “House Music” as an alternate recording unless the label identifies a DJ/edit take.
+- Treat the exact “Official Live Music” phrase as regional upload/channel packaging; actual “Live at …” or other explicit live-performance titles remain a separate take.
+- If global Search misses an audio match, search up to three exact Spotify artist names for their artist pages, then pass the artist Top Songs through the same strict matcher. Do not depend on a global result containing an artist card or linked browse id.
 - Prefer audio catalogue results. Never substitute the first search hit when no candidate passes identity checks.
 - Keep temporary search failures retryable; only a completed search with no safe match is labelled missing.
 - Preserve structured artist names end-to-end across public playlist links, Spotify Library, Liked Songs, and the Web extension. Names containing commas (for example, “Earth, Wind & Fire”) remain one artist.
@@ -30,4 +32,4 @@ This note records the safety rules shared by the Android and Web Spotify import 
 
 ## Regression coverage
 
-The Kotlin and TypeScript tests cover premature empty pages, inconsistent page totals, structured artist credits, comma-containing artist names, composite performer aliases with strict runtime checks, featured-artist title prefixes, real titles containing “with”, strict title/artist identity, DJ/genre separation, language versions, temporary search failures, and duplicate-safe import behaviour.
+The Kotlin and TypeScript tests cover premature empty pages, inconsistent page totals, structured artist credits, comma-containing artist names, composite performer aliases with strict runtime checks, featured-artist title prefixes, real titles containing “with”, strict title/artist identity, DJ/genre separation, language versions, “Official Live Music” packaging versus real live versions, temporary search failures, and duplicate-safe import behaviour.

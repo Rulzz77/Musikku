@@ -7814,10 +7814,10 @@ class PlaybackService : MediaLibraryService() {
      * Called by Android when the user swipes this app's task away from the
      * recent apps screen.
      *
-     * When [AppSettings.stopOnTaskRemoved] is on we stop the player and let the
-     * service die naturally; otherwise we leave it running in the background so
-     * music continues past the swipe, which is the default Android behaviour for
-     * a foreground-service-backed media session.
+     * By default [AppSettings.stopOnTaskRemoved] is on: an explicit swipe-away
+     * stops playback and lets the service die naturally. Turning it off keeps
+     * playback running past the swipe. Pressing Home does not remove the task,
+     * so ordinary background playback is unaffected.
      */
     override fun onTaskRemoved(rootIntent: Intent?) {
         val active = player

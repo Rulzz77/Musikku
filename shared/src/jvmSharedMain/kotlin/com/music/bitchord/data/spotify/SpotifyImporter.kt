@@ -214,6 +214,11 @@ object SpotifyImporter {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<Song>>?): Boolean =
             size > 32
     }
+    private val albumPageLocks = ConcurrentHashMap<String, Mutex>()
+    private val albumSongCache = object : LinkedHashMap<String, List<Song>>(32, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<Song>>?): Boolean =
+            size > 64
+    }
 
     /**
      * Reuse the artist catalogue between tracks in the same Spotify playlist.
@@ -229,6 +234,21 @@ object SpotifyImporter {
             YtMusicRepository.artistSongsForSpotifyImport(browseId).onSuccess { songs ->
                 if (songs.isNotEmpty()) {
                     synchronized(artistSongCache) { artistSongCache[browseId] = songs }
+                }
+            }
+        }
+    }
+
+    /** Reuse complete album pages across tracks from the same imported playlist. */
+    private suspend fun albumSongs(browseId: String): Result<List<Song>> {
+        val lock = albumPageLocks.computeIfAbsent(browseId) { Mutex() }
+        return lock.withLock {
+            synchronized(albumSongCache) {
+                albumSongCache[browseId]?.let { return@withLock Result.success(it) }
+            }
+            YtMusicRepository.browseSongsForSpotifyImport(browseId).onSuccess { songs ->
+                if (songs.isNotEmpty()) {
+                    synchronized(albumSongCache) { albumSongCache[browseId] = songs }
                 }
             }
         }
@@ -381,7 +401,7 @@ object SpotifyImporter {
         // them still pass the same strict title/artist/version/runtime matcher.
         if (!hasHighConfidenceAudioMatch()) {
             for (browseId in albumBrowseIds.take(MAX_ALBUM_PAGE_FALLBACKS)) {
-                YtMusicRepository.browseSongsForSpotifyImport(browseId).fold(
+                albumSongs(browseId).fold(
                     onSuccess = { songs ->
                         successfulRequests++
                         songs.forEach { song ->

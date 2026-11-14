@@ -360,7 +360,7 @@ object SpotifyImporter {
                 discoverArtistBrowseId(artistName).fold(
                     onSuccess = { browseId -> browseId?.let(artistBrowseIds::add) },
                     onFailure = { failure ->
-                        failures += "artist lookup '$artistName': \${failure.message}"
+                        failures += "artist lookup '$artistName': ${failure.message}"
                     },
                 )
             }

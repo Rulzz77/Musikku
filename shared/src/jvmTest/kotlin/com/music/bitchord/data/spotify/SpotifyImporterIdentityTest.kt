@@ -162,6 +162,116 @@ class SpotifyImporterIdentityTest {
     }
 
     @Test
+    fun spotifyImportAllowsSecondarySpotifySingersOnVideosWithVisualDurationDrift() {
+        val fixtures = listOf(
+            "Talaga Reumis" to "Nanih",
+            "Kamana Cintana" to "Nina",
+            "Bogon Kasaha" to "Friska",
+        )
+
+        fixtures.forEachIndexed { index, (title, singer) ->
+            val target = TrackMatcher.Target(
+                title = title,
+                artist = "Gasentra Pajampangan, $singer",
+                durationSec = 240,
+                requiredArtistName = "Gasentra Pajampangan",
+                requireSharedArtist = true,
+                requireExactTitle = true,
+                artistCredits = listOf("Gasentra Pajampangan", singer),
+            )
+            val officialVideo = Song(
+                videoId = "gasentra-video-$index",
+                title = title,
+                artist = singer,
+                thumbnailUrl = null,
+                durationText = "5:10",
+                isVideo = true,
+            )
+
+            // The YouTube byline may expose only Spotify's secondary vocalist.
+            // A video may also run longer because of its visual intro/outro.
+            assertNotNull(TrackMatcher.best(listOf(officialVideo), target), title)
+            assertEquals(officialVideo, bestSpotifyImportMatch(listOf(officialVideo), target), title)
+
+            // Do not extend this exception to audio-only catalogue tracks.
+            assertNull(
+                TrackMatcher.best(
+                    listOf(officialVideo.copy(videoId = "audio-$index", isVideo = false)),
+                    target,
+                ),
+                title,
+            )
+
+            // The video allowance is bounded at 90 seconds, not unlimited.
+            assertNotNull(
+                TrackMatcher.best(listOf(officialVideo.copy(durationText = "5:30")), target),
+                title,
+            )
+            assertNull(
+                TrackMatcher.best(listOf(officialVideo.copy(durationText = "5:31")), target),
+                title,
+            )
+
+            // A title match and runtime alone must not admit a different singer.
+            assertNull(
+                TrackMatcher.best(
+                    listOf(officialVideo.copy(artist = "Different Singer")),
+                    target,
+                ),
+                title,
+            )
+        }
+    }
+
+    @Test
+    fun spotifyImportAllowsFlattenedCollaborativeCreditOnMatchingMusicVideo() {
+        val target = TrackMatcher.Target(
+            title = "Bogon Kasaha",
+            artist = "Gasentra Pajampangan, Friska",
+            durationSec = 240,
+            requiredArtistName = "Gasentra Pajampangan",
+            requireSharedArtist = true,
+            requireExactTitle = true,
+            artistCredits = listOf("Gasentra Pajampangan", "Friska"),
+        )
+        // Some catalogue rows flatten both Spotify credits into one byline.
+        val flattenedCredit = Song(
+            videoId = "bogon-kasaha-flattened-credit",
+            title = "Bogon Kasaha",
+            artist = "Friska Gasentra",
+            thumbnailUrl = null,
+            durationText = "5:10",
+            isVideo = true,
+        )
+
+        assertNotNull(TrackMatcher.best(listOf(flattenedCredit), target))
+        assertEquals(flattenedCredit, bestSpotifyImportMatch(listOf(flattenedCredit), target))
+    }
+
+    @Test
+    fun spotifyImportRejectsWrongVersionEvenWhenVideoCreditAndRuntimeAreClose() {
+        val target = TrackMatcher.Target(
+            title = "Talaga Reumis",
+            artist = "Gasentra Pajampangan, Nanih",
+            durationSec = 240,
+            requiredArtistName = "Gasentra Pajampangan",
+            requireSharedArtist = true,
+            requireExactTitle = true,
+            artistCredits = listOf("Gasentra Pajampangan", "Nanih"),
+        )
+        val liveVersion = Song(
+            videoId = "talaga-reumis-live",
+            title = "Talaga Reumis (Live)",
+            artist = "Nanih",
+            thumbnailUrl = null,
+            durationText = "5:10",
+            isVideo = true,
+        )
+
+        assertNull(TrackMatcher.best(listOf(liveVersion), target))
+    }
+
+    @Test
     fun spotifyImportRejectsLongerTitleContainingRequestedTitle() {
         val target = TrackMatcher.Target(
             title = "Dumes",

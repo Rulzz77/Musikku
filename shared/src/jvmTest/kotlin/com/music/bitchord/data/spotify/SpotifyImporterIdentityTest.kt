@@ -339,6 +339,50 @@ class SpotifyImporterIdentityTest {
     }
 
     @Test
+    fun spotifyImportRetainsAlbumBrowseFallbackButNotOtherBrowseTypes() {
+        val album = SearchResult.Browse(
+            BrowseItem(
+                browseId = "MPREb-album-id",
+                title = "Album Lagu",
+                subtitle = "Album • Band Contoh",
+                thumbnailUrl = null,
+                type = BrowseType.ALBUM,
+            ),
+        )
+        val artist = SearchResult.Browse(
+            BrowseItem(
+                browseId = "UC-artist-id",
+                title = "Band Contoh",
+                subtitle = "Artist",
+                thumbnailUrl = null,
+                type = BrowseType.ARTIST,
+            ),
+        )
+        val playlist = SearchResult.Browse(
+            BrowseItem(
+                browseId = "VL-playlist-id",
+                title = "Playlist Lagu",
+                subtitle = "Playlist",
+                thumbnailUrl = null,
+                type = BrowseType.PLAYLIST,
+            ),
+        )
+        val track = SearchResult.Track(
+            Song(
+                videoId = "song-id",
+                title = "Lagu",
+                artist = "Band Contoh",
+                thumbnailUrl = null,
+            ),
+        )
+
+        assertEquals("MPREb-album-id", spotifyImportAlbumBrowseId(album))
+        assertNull(spotifyImportAlbumBrowseId(artist))
+        assertNull(spotifyImportAlbumBrowseId(playlist))
+        assertNull(spotifyImportAlbumBrowseId(track))
+    }
+
+    @Test
     fun artistPageFallbackOnlyUsesTheExactRequestedPerformer() {
         val correctArtist = SearchResult.Browse(
             BrowseItem(

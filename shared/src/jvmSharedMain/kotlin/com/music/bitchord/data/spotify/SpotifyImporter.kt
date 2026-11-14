@@ -388,8 +388,8 @@ object SpotifyImporter {
             }
         }
 
-        // Only fall back to the dedicated Videos search when neither the
-        // general catalogue nor the artist's own catalogue found a recording.
+        // Search the dedicated Videos tab too when no trusted audio/video
+        // recording has been established. A duration-only fallback is not proof.
         if (!hasTrustedAudioMatch() && !hasTrustedVideoMatch()) {
             searchFilter(SearchFilter.VIDEOS)
         }

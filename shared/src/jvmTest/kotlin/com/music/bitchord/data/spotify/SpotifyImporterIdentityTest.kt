@@ -912,6 +912,124 @@ class SpotifyImporterIdentityTest {
     }
 
     @Test
+    fun spotifyImportPreservesVersionAndReleaseLabelsFromPlaylistSamples() {
+        fun target(
+            title: String,
+            artist: String,
+            lead: String,
+            credits: List<String> = listOf(lead),
+        ) = TrackMatcher.Target(
+            title = title,
+            artist = artist,
+            durationSec = 210,
+            requiredArtistName = lead,
+            requireSharedArtist = true,
+            requireExactTitle = true,
+            artistCredits = credits,
+        )
+        fun candidate(
+            id: String,
+            title: String,
+            artist: String,
+        ) = Song(
+            videoId = id,
+            title = title,
+            artist = artist,
+            thumbnailUrl = null,
+            durationText = "3:30",
+        )
+
+        // Remaster and Radio Edit are release/catalogue labels in this matcher,
+        // while alternate edits such as Acoustic, Slowed and Extended remain distinct.
+        val remaster = target(
+            "Please, Please, Please, Let Me Get What I Want - 2011 Remaster",
+            "The Smiths",
+            "The Smiths",
+        )
+        assertNotNull(
+            TrackMatcher.best(
+                listOf(candidate("smiths-remaster-catalogue", "Please, Please, Please, Let Me Get What I Want", "The Smiths")),
+                remaster,
+            ),
+        )
+
+        val radioEdit = target("Dusk Till Dawn (feat. Sia) - Radio Edit", "ZAYN, Sia", "ZAYN", listOf("ZAYN", "Sia"))
+        assertNotNull(
+            TrackMatcher.best(
+                listOf(candidate("dusk-till-dawn-catalogue", "Dusk Till Dawn", "ZAYN, Sia")),
+                radioEdit,
+            ),
+        )
+
+        val extended = target("Somebody's Pleasure (Extended Version)", "Aziz Hedra", "Aziz Hedra")
+        val extendedSong = candidate("somebodys-pleasure-extended", "Somebody's Pleasure (Extended Version)", "Aziz Hedra")
+        val standardSong = candidate("somebodys-pleasure-standard", "Somebody's Pleasure", "Aziz Hedra")
+        assertNotNull(TrackMatcher.best(listOf(extendedSong), extended))
+        assertNull(TrackMatcher.best(listOf(standardSong), extended))
+
+        val acoustic = target(
+            "Take Me Home (feat. Bebe Rexha) - Acoustic",
+            "Cash Cash, Bebe Rexha",
+            "Cash Cash",
+            listOf("Cash Cash", "Bebe Rexha"),
+        )
+        val acousticSong = candidate("take-me-home-acoustic", "Take Me Home (Acoustic)", "Cash Cash, Bebe Rexha")
+        val originalSong = candidate("take-me-home-original", "Take Me Home", "Cash Cash, Bebe Rexha")
+        assertNotNull(TrackMatcher.best(listOf(acousticSong), acoustic))
+        assertNull(TrackMatcher.best(listOf(originalSong), acoustic))
+
+        val slowed = target("Heat Waves - Slowed", "Glass Animals", "Glass Animals")
+        assertNull(
+            TrackMatcher.best(
+                listOf(candidate("heat-waves-original", "Heat Waves", "Glass Animals")),
+                slowed,
+            ),
+        )
+
+        val dangdut = target("Nemen - Hiphop Dangdut Version", "NDX A.K.A.", "NDX A.K.A.")
+        assertNotNull(
+            TrackMatcher.best(
+                listOf(candidate("nemen-dangdut", "Nemen - Hiphop Dangdut Version", "NDX A.K.A.")),
+                dangdut,
+            ),
+        )
+        assertNull(
+            TrackMatcher.best(
+                listOf(candidate("nemen-original", "Nemen", "NDX A.K.A.")),
+                dangdut,
+            ),
+        )
+
+        val mashup = target(
+            "Die With A Smile x Glimpse Of Us (Mashup)",
+            "Luke Willies, OURGRND",
+            "Luke Willies",
+            listOf("Luke Willies", "OURGRND"),
+        )
+        assertNotNull(
+            TrackMatcher.best(
+                listOf(candidate("die-with-a-smile-glimpse-mashup", "Die With A Smile x Glimpse Of Us (Mashup)", "Luke Willies, OURGRND")),
+                mashup,
+            ),
+        )
+
+        val duet = target(
+            "Until I Found You (with Em Beihold) - Em Beihold Version",
+            "Stephen Sanchez, Em Beihold",
+            "Stephen Sanchez",
+            listOf("Stephen Sanchez", "Em Beihold"),
+        )
+        val duetSong = candidate(
+            "until-i-found-you-em-beihold",
+            "Until I Found You (with Em Beihold) - Em Beihold Version",
+            "Stephen Sanchez, Em Beihold",
+        )
+        val soloSong = candidate("until-i-found-you-solo", "Until I Found You", "Stephen Sanchez")
+        assertNotNull(TrackMatcher.best(listOf(duetSong), duet))
+        assertNull(TrackMatcher.best(listOf(soloSong), duet))
+    }
+
+    @Test
     fun sameTitleAndArtistWithDifferentSpotifyIdsAreKept() {
         val tracks = listOf(
             SpotifyImportTrack("Dumes", "Guyon Waton", spotifyId = "spotify-a"),

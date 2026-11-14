@@ -323,7 +323,12 @@ object TrackMatcher {
             // exact-runtime override as a last resort. Spotify import always
             // supplies requiredArtistName, so returning here unconditionally
             // made that fallback unreachable for real imports.
-            if (target.isVideo || !withinSeconds(candidate, target, CREDIT_OVERRIDE_SEC)) {
+            // An explicit Spotify lead-artist requirement must never
+            // be bypassed here. Spotify's importer has its own isolated,
+            // one-second composer/uploader fallback after credited rows fail.
+            if (requiredArtist != null || target.isVideo ||
+                !withinSeconds(candidate, target, CREDIT_OVERRIDE_SEC)
+            ) {
                 return null
             }
         }

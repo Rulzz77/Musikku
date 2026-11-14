@@ -237,13 +237,19 @@ object TrackMatcher {
         // Latin), so same-script packaging never rescues a different title.
         val isTitleMatch = when {
             wanted.core == got.core -> true
+            titleAccentKey(wanted.core) == titleAccentKey(got.core) -> true
             romajiOf(wanted.core) == romajiOf(got.core) -> true
             isTranslationMatch(wanted, got) -> true
             target.requireExactTitle -> false
             wanted.core.length <= 3 || got.core.length <= 3 -> false
             else -> wanted.core.contains(got.core) || got.core.contains(wanted.core)
         }
-        if (!isTitleMatch) return null
+        // A one-letter catalogue typo can still be the same track, but only
+        // when its primary artist is exact and the known runtime is within
+        // three seconds. Version identity is checked below as usual.
+        val nearTitleSpellingMatch = target.requireExactTitle &&
+            nearTitleSpelling(wanted.words, got.words)
+        if (!isTitleMatch && !nearTitleSpellingMatch) return null
         // Direction matters both ways round: asking for the album cut must not
         // land on the live take, and asking for the live take must not land on
         // the album cut. Markers living on the release rather than the row come
@@ -270,15 +276,13 @@ object TrackMatcher {
         // Match the complete first credited artist name against one complete
         // candidate credit instead of accepting a partial token overlap.
         val requiredArtist = target.requiredArtistName?.takeIf { it.isNotBlank() }
-        val candidateNames = buildSet {
-            add(artistIdentityKey(candidate.artist))
-            candidate.artists.forEach { add(artistIdentityKey(it.name)) }
-            // YouTube commonly serializes multiple billed artists with
-            // commas; split only those boundaries here so names containing
-            // "x", slash, or "and" remain intact.
-            candidate.artist.split(",").forEach { add(artistIdentityKey(it)) }
-            artistNames(candidate.artist).forEach { add(it.joinToString("")) }
-        }
+        val candidateCreditNames = candidateArtistCredits(candidate)
+        val candidateNames = candidateCreditNames
+            .map(::artistIdentityKey)
+            .filter(String::isNotBlank)
+            .toSet()
+        val nearLeadArtistMatched = requiredArtist != null &&
+            candidateCreditNames.any { nearArtistSpelling(requiredArtist, it) }
         val requiredArtistMatched = if (requiredArtist != null) {
             // Keep this as one complete name. Splitting the required artist
             // with collaboration separators would turn names such as
@@ -288,6 +292,9 @@ object TrackMatcher {
         } else {
             false
         }
+        if (nearTitleSpellingMatch && !isTitleMatch &&
+            (!requiredArtistMatched || !withinSeconds(candidate, target, DURATION_TIGHT_SEC))
+        ) return null
         val spotifyCredits = target.artistCredits.ifEmpty {
             artistNames(target.artist).map { it.joinToString(" ") }
         }
@@ -308,7 +315,7 @@ object TrackMatcher {
                 listOf(candidate.artist) + candidate.artists.map { it.name },
             )
         if (requiredArtist != null && !requiredArtistMatched &&
-            !secondarySpotifyArtistMatched && !compositeArtistAlias
+            !secondarySpotifyArtistMatched && !compositeArtistAlias && !nearLeadArtistMatched
         ) return null
         if (requiredArtist != null && artistIdentityKey(requiredArtist).isBlank()) return null
         if (requiredArtist == null && target.requireSharedArtist &&
@@ -340,6 +347,11 @@ object TrackMatcher {
         val artist = creditedArtist
             ?: ARTIST_EXACT.takeIf { requiredArtistMatched }
             ?: ARTIST_SHARED.takeIf { secondarySpotifyArtistMatched || compositeArtistAlias }
+            // A one-character spelling alias is lower confidence than an exact
+            // credit and needs a known runtime within eight seconds.
+            ?: ARTIST_NEAR_SPELLING.takeIf {
+                nearLeadArtistMatched && withinSeconds(candidate, target, ARTIST_SPELLING_RUNTIME_SEC)
+            }
         // The credits don't merely differ in spelling, they name different
         // people — and sometimes that is because they are describing the
         // same recording from different ends of it. Film catalogues are
@@ -371,6 +383,53 @@ object TrackMatcher {
         return BASE + artist + duration + albumScore(target.album, candidate.albumName) + explicit +
                 contextScore(wanted, got)
     }
+
+    /**
+     * Whether [candidate] has a trustworthy artist-credit relationship to [target].
+     *
+     * A duration-only composer/uploader override can still be a last-resort
+     * match, but it must not stop Spotify import from checking remaining
+     * queries and artist pages. Near-spelling aliases are trusted only with
+     * an eight-second runtime guard.
+     */
+    fun hasTrustedArtistCredit(candidate: Song, target: Target): Boolean {
+        if (score(candidate, target) == null) return false
+        val required = target.requiredArtistName?.takeIf { it.isNotBlank() }
+            ?: return artistNames(target.artist).isNotEmpty() &&
+                artistNames(candidate.artist).isNotEmpty() &&
+                artistScore(target.artist, candidate.artist) != null
+
+        val candidateCredits = candidateArtistCredits(candidate)
+        val candidateKeys = candidateCredits.map(::artistIdentityKey).toSet()
+        val requiredKey = artistIdentityKey(required)
+        if (requiredKey.isNotBlank() && requiredKey in candidateKeys) return true
+
+        if (target.artistCredits.drop(1).any { credit ->
+                val key = artistIdentityKey(credit)
+                key.isNotBlank() && key in candidateKeys
+            }
+        ) return true
+
+        val spotifyCredits = target.artistCredits.ifEmpty {
+            artistNames(target.artist).map { it.joinToString(" ") }
+        }
+        if (sharesCompositeSpotifyCredit(
+                spotifyCredits,
+                listOf(candidate.artist) + candidate.artists.map { it.name },
+            )
+        ) return true
+
+        return candidateCredits.any { nearArtistSpelling(required, it) } &&
+            withinSeconds(candidate, target, ARTIST_SPELLING_RUNTIME_SEC)
+    }
+
+    /** Candidate byline and linked credits, also split at known artist joiners. */
+    private fun candidateArtistCredits(candidate: Song): List<String> = buildList {
+        candidate.artist.takeIf { it.isNotBlank() }?.let { add(it) }
+        addAll(candidate.artists.map { it.name })
+        addAll(candidate.artist.split(","))
+        addAll(artistNames(candidate.artist).map { it.joinToString(" ") })
+    }.map(String::trim).filter(String::isNotBlank).distinct()
 
     /**
      * Whether otherwise valid rows describe more than one release while the
@@ -591,6 +650,7 @@ object TrackMatcher {
         val words = segment.split(WORD_SPLIT)
             .map { it.replace(NON_ALNUM, "") }
             .filter { it.isNotEmpty() }
+            .map { VERSION_LANGUAGE_ALIASES[it] ?: it }
         if (words.isEmpty()) return
         if (words.joinToString("") in NEUTRAL_SEGMENTS) return
         // Regional labels often append "Official Live Music" as an upload label,
@@ -882,6 +942,77 @@ object TrackMatcher {
             firstCompact == secondCompact
     }
 
+    /**
+     * A conservative title alias for catalogue spelling mistakes.
+     * Only one word may differ by one character; every other word and its
+     * position must be identical. The caller additionally requires an exact
+     * primary-artist credit and a runtime within three seconds.
+     */
+    private fun nearTitleSpelling(first: List<String>, second: List<String>): Boolean {
+        if (first.isEmpty() || first.size != second.size) return false
+        var differingWords = 0
+        for ((left, right) in first.zip(second)) {
+            if (left == right) continue
+            if (minOf(left.length, right.length) < 4 || !differsByOneCharacter(left, right)) {
+                return false
+            }
+            differingWords++
+            if (differingWords > 1) return false
+        }
+        return differingWords == 1
+    }
+
+    /**
+     * A conservative spelling alias for long, multi-word performer names.
+     * Only one token may differ by one character; every other word and its
+     * position must be identical. Callers must still require exact
+     * title/version identity and a known, close runtime before using it.
+     */
+    internal fun nearArtistSpelling(first: String, second: String): Boolean {
+        val a = artistSpacedKey(first).split(' ').filter { it.isNotBlank() }
+        val b = artistSpacedKey(second).split(' ').filter { it.isNotBlank() }
+        if (a.size < 2 || a.size != b.size) return false
+
+        var differingTokens = 0
+        for ((left, right) in a.zip(b)) {
+            if (left == right) continue
+            if (minOf(left.length, right.length) < 6 || !differsByOneCharacter(left, right)) {
+                return false
+            }
+            differingTokens++
+            if (differingTokens > 1) return false
+        }
+        return differingTokens == 1
+    }
+
+    /** True only when two strings differ by one insertion, deletion or substitution. */
+    private fun differsByOneCharacter(first: String, second: String): Boolean {
+        if (kotlin.math.abs(first.length - second.length) > 1) return false
+        var left = 0
+        var right = 0
+        var edits = 0
+        while (left < first.length && right < second.length) {
+            if (first[left] == second[right]) {
+                left++
+                right++
+                continue
+            }
+            edits++
+            if (edits > 1) return false
+            when {
+                first.length == second.length -> { left++; right++ }
+                first.length > second.length -> left++
+                else -> right++
+            }
+        }
+        if (left < first.length || right < second.length) edits++
+        return edits == 1
+    }
+
+    private fun titleAccentKey(value: String): String =
+        Normalizer.normalize(value, Normalizer.Form.NFKD)
+            .replace(Regex("\\p{M}+"), "")
+
     private fun artistSpacedKey(value: String): String =
         Normalizer.normalize(normalize(value), Normalizer.Form.NFKD)
             .replace(Regex("\\p{M}+"), "")
@@ -991,6 +1122,7 @@ object TrackMatcher {
     private const val BASE = 100
     private const val ARTIST_EXACT = 25
     private const val ARTIST_SHARED = 10
+    private const val ARTIST_NEAR_SPELLING = 5
 
     /**
      * Carried by a match the runtime vouched for rather than the credit. A
@@ -1014,6 +1146,8 @@ object TrackMatcher {
 
     /** Within this many seconds is the same master, allowing for trimmed silence. */
     private const val DURATION_TIGHT_SEC = 3
+    /** A one-character artist spelling mismatch still needs a close runtime. */
+    private const val ARTIST_SPELLING_RUNTIME_SEC = 8
 
     /**
      * Past this, two tracks sharing a title are not sharing a recording.
@@ -1133,6 +1267,16 @@ object TrackMatcher {
     )
 
     private val MIX_LABEL_MARKERS = setOf("remix", "remixes", "rmx", "mix", "edit", "version")
+
+    // Common regional shorthand and native-language labels should describe
+    // the same explicit language edition (e.g. "Indo Version" vs
+    // "Indonesian Version"). Applied only while classifying a labelled
+    // version segment, never to ordinary title words.
+    private val VERSION_LANGUAGE_ALIASES = mapOf(
+        "indo" to "indonesian",
+        "jawa" to "javanese",
+        "sunda" to "sundanese",
+    )
 
     private val VERSION_DESCRIPTORS = setOf(
         "english", "hindi", "bengali", "punjabi", "tamil", "telugu", "malayalam",

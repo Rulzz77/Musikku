@@ -1,6 +1,7 @@
 package com.music.bitchord.data.spotify
 
 import com.music.bitchord.data.model.ArtistRef
+import com.music.bitchord.data.YtMusicRepository
 import com.music.bitchord.data.model.BrowseItem
 import com.music.bitchord.data.model.BrowseType
 import com.music.bitchord.data.model.SearchResult
@@ -11,6 +12,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -62,6 +64,31 @@ class SpotifyImporterIdentityTest {
         )
 
         assertEquals(promoted, spotifyImportCandidate(SearchResult.TopTrack(promoted)))
+    }
+
+    @Test
+    fun durationOnlyComposerOverrideDoesNotCountAsTrustedArtistCredit() {
+        val target = TrackMatcher.Target(
+            title = "Terlalu Sayang",
+            artist = "Gasentra Pajampangan, Revina Alvira",
+            durationSec = 346,
+            requiredArtistName = "Gasentra Pajampangan",
+            requireSharedArtist = true,
+            requireExactTitle = true,
+            artistCredits = listOf("Gasentra Pajampangan", "Revina Alvira"),
+        )
+        val composerOnly = Song(
+            videoId = "duration-only-credit",
+            title = "Terlalu Sayang",
+            artist = "Unrelated Composer",
+            thumbnailUrl = null,
+            durationText = "5:46",
+        )
+
+        // Existing exact-runtime override remains an allowed last resort.
+        assertNotNull(TrackMatcher.best(listOf(composerOnly), target))
+        // But it must not stop the importer from checking artist pages.
+        assertFalse(TrackMatcher.hasTrustedArtistCredit(composerOnly, target))
     }
 
     @Test
@@ -171,6 +198,93 @@ class SpotifyImporterIdentityTest {
     }
 
     @Test
+    fun spotifyImportMatchesRepresentativePlaylistTitleAndCreditStyles() {
+        // Verified examples from the supplied Spotify track-ID list:
+        // punctuation in ".Feast"/"o,Tuan", commas in long titles, lower-case
+        // track names, and regional spelling/diacritic variation.
+        val feast = TrackMatcher.Target(
+            title = "o,Tuan",
+            artist = ".Feast",
+            durationSec = 305,
+            requiredArtistName = ".Feast",
+            requireExactTitle = true,
+        )
+        val feastCandidate = Song(
+            videoId = "playlist-fixture-o-tuan",
+            title = "o,Tuan",
+            artist = "Feast",
+            thumbnailUrl = null,
+            durationText = "5:05",
+        )
+
+        val hindiaLongTitle = TrackMatcher.Target(
+            title = "Berdansalah, Karir Ini Tak Ada Artinya",
+            artist = "Hindia",
+            durationSec = 224,
+            requiredArtistName = "Hindia",
+            requireExactTitle = true,
+        )
+        val hindiaCandidate = Song(
+            videoId = "playlist-fixture-berdansalah",
+            title = "Berdansalah, Karir Ini Tak Ada Artinya",
+            artist = "Hindia",
+            thumbnailUrl = null,
+            durationText = "3:44",
+        )
+
+        val hindiaLowerCase = TrackMatcher.Target(
+            title = "everything u are",
+            artist = "Hindia",
+            durationSec = 236,
+            requiredArtistName = "Hindia",
+            requireExactTitle = true,
+        )
+        val hindiaLowerCaseCandidate = Song(
+            videoId = "playlist-fixture-everything-u-are",
+            title = "Everything U Are",
+            artist = "Hindia",
+            thumbnailUrl = null,
+            durationText = "3:56",
+        )
+
+        val nucaCommaTitle = TrackMatcher.Target(
+            title = "Masa ini, Nanti, dan Masa Indah Lainnya",
+            artist = "Nuca",
+            durationSec = 275,
+            requiredArtistName = "Nuca",
+            requireExactTitle = true,
+        )
+        val nucaCandidate = Song(
+            videoId = "playlist-fixture-masa-ini",
+            title = "Masa Ini, Nanti, dan Masa Indah Lainnya",
+            artist = "Nuca",
+            thumbnailUrl = null,
+            durationText = "4:35",
+        )
+
+        val boaAccent = TrackMatcher.Target(
+            title = "Duvet",
+            artist = "bôa",
+            durationSec = 200,
+            requiredArtistName = "bôa",
+            requireExactTitle = true,
+        )
+        val boaCandidate = Song(
+            videoId = "playlist-fixture-duvet",
+            title = "Duvet",
+            artist = "boa",
+            thumbnailUrl = null,
+            durationText = "3:20",
+        )
+
+        assertNotNull(TrackMatcher.best(listOf(feastCandidate), feast))
+        assertNotNull(TrackMatcher.best(listOf(hindiaCandidate), hindiaLongTitle))
+        assertNotNull(TrackMatcher.best(listOf(hindiaLowerCaseCandidate), hindiaLowerCase))
+        assertNotNull(TrackMatcher.best(listOf(nucaCandidate), nucaCommaTitle))
+        assertNotNull(TrackMatcher.best(listOf(boaCandidate), boaAccent))
+    }
+
+    @Test
     fun spotifyImportMatchesLongArtistNamesWhenYouTubeDropsSpaces() {
         val target = TrackMatcher.Target(
             title = "Dumes",
@@ -222,6 +336,50 @@ class SpotifyImporterIdentityTest {
             durationText = "4:20",
         )
         assertNotNull(TrackMatcher.best(listOf(unaccentedCredit), accentTarget))
+    }
+
+    @Test
+    fun spotifyImportRetainsAlbumBrowseFallbackButNotOtherBrowseTypes() {
+        val album = SearchResult.Browse(
+            BrowseItem(
+                browseId = "MPREb-album-id",
+                title = "Album Lagu",
+                subtitle = "Album • Band Contoh",
+                thumbnailUrl = null,
+                type = BrowseType.ALBUM,
+            ),
+        )
+        val artist = SearchResult.Browse(
+            BrowseItem(
+                browseId = "UC-artist-id",
+                title = "Band Contoh",
+                subtitle = "Artist",
+                thumbnailUrl = null,
+                type = BrowseType.ARTIST,
+            ),
+        )
+        val playlist = SearchResult.Browse(
+            BrowseItem(
+                browseId = "VL-playlist-id",
+                title = "Playlist Lagu",
+                subtitle = "Playlist",
+                thumbnailUrl = null,
+                type = BrowseType.PLAYLIST,
+            ),
+        )
+        val track = SearchResult.Track(
+            Song(
+                videoId = "song-id",
+                title = "Lagu",
+                artist = "Band Contoh",
+                thumbnailUrl = null,
+            ),
+        )
+
+        assertEquals("MPREb-album-id", spotifyImportAlbumBrowseId(album))
+        assertNull(spotifyImportAlbumBrowseId(artist))
+        assertNull(spotifyImportAlbumBrowseId(playlist))
+        assertNull(spotifyImportAlbumBrowseId(track))
     }
 
     @Test
@@ -294,6 +452,48 @@ class SpotifyImporterIdentityTest {
     }
 
     @Test
+    fun spotifyImportPrefersTrustedArtistOverDurationOnlyComposerFallback() {
+        val target = TrackMatcher.Target(
+            title = "Terlalu Sayang",
+            artist = "Gasentra Pajampangan, Revina Alvira",
+            durationSec = 346,
+            requiredArtistName = "Gasentra Pajampangan",
+            requireSharedArtist = true,
+            requireExactTitle = true,
+            artistCredits = listOf("Gasentra Pajampangan", "Revina Alvira"),
+        )
+        val composerOnly = Song(
+            videoId = "composer-only",
+            title = "Terlalu Sayang",
+            artist = "Unrelated Composer",
+            thumbnailUrl = null,
+            durationText = "5:46",
+        )
+        val officialSinger = Song(
+            videoId = "official-singer",
+            title = "Terlalu Sayang",
+            artist = "Gasentra Pajampangan",
+            thumbnailUrl = null,
+            durationText = "5:47",
+        )
+        val officialVideo = officialSinger.copy(
+            videoId = "official-video",
+            durationText = "6:20",
+            isVideo = true,
+        )
+
+        assertEquals(
+            officialSinger,
+            bestSpotifyImportMatch(listOf(composerOnly, officialSinger), target),
+        )
+        // A credited official video is still preferable to an uncredited audio fallback.
+        assertEquals(
+            officialVideo,
+            bestSpotifyImportMatch(listOf(composerOnly, officialVideo), target),
+        )
+    }
+
+    @Test
     fun spotifyImportPrefersAudioWhenAMatchingVideoIsAlsoPresent() {
         val target = TrackMatcher.Target(
             title = "Dumes",
@@ -329,6 +529,8 @@ class SpotifyImporterIdentityTest {
         val queries = spotifyImportSearchQueries(target)
 
         assertEquals("Tanpo Tresnamu (Official Audio) Denny Caknan", queries.first())
+        assertTrue("Tanpo Tresnamu (Official Audio) Denny Caknan Album Contoh" in queries)
+        assertTrue("Tanpo Tresnamu (Official Audio) Album Contoh" in queries)
         assertTrue("Tanpo Tresnamu (Official Audio) Denny Caknan, Yeni Inka" in queries)
         assertTrue("Tanpo Tresnamu (Official Audio) Denny Caknan" in queries)
         assertTrue("Tanpo Tresnamu (Official Audio)" in queries)
@@ -454,6 +656,82 @@ class SpotifyImporterIdentityTest {
             artistCredits = listOf("Lead"),
         )
         assertNull(TrackMatcher.best(listOf(candidate), noGuestCredit))
+    }
+
+    @Test
+    fun artistPageLookupAcceptsOnlyAUniqueNearSpellingAndPrefersExactNames() {
+        val near = BrowseItem(
+            browseId = "UC-gasentra",
+            title = "Gasentra Pajampangan",
+            subtitle = "Artist",
+            thumbnailUrl = null,
+            type = BrowseType.ARTIST,
+        )
+        val secondNear = near.copy(
+            browseId = "UC-other",
+            title = "Gasantra Pajanpangan",
+        )
+        val exact = near.copy(
+            browseId = "UC-exact",
+            title = "Gasantra Pajampangan",
+        )
+
+        assertEquals(
+            "UC-gasentra",
+            YtMusicRepository.artistPageIdForName("Gasantra Pajampangan", listOf(near)),
+        )
+        assertNull(
+            YtMusicRepository.artistPageIdForName("Gasantra Pajampangan", listOf(near, secondNear)),
+        )
+        assertEquals(
+            "UC-exact",
+            YtMusicRepository.artistPageIdForName("Gasantra Pajampangan", listOf(near, exact)),
+        )
+    }
+
+    @Test
+    fun spotifyImportAcceptsSingleCharacterArtistSpellingVariantWithCloseRuntime() {
+        val target = TrackMatcher.Target(
+            title = "Terlalu Sayang",
+            artist = "Gasantra Pajampangan, Revina Alvira",
+            durationSec = 346,
+            requiredArtistName = "Gasantra Pajampangan",
+            requireSharedArtist = true,
+            requireExactTitle = true,
+            artistCredits = listOf("Gasantra Pajampangan", "Revina Alvira"),
+        )
+        val officialRecording = Song(
+            videoId = "terlalu-sayang-gasentra",
+            title = "Terlalu Sayang",
+            artist = "Gasentra Pajampangan",
+            thumbnailUrl = null,
+            durationText = "5:47",
+        )
+
+        assertTrue(TrackMatcher.nearArtistSpelling("Gasantra Pajampangan", "Gasentra Pajampangan"))
+        assertNotNull(TrackMatcher.best(listOf(officialRecording), target))
+        assertTrue(TrackMatcher.hasTrustedArtistCredit(officialRecording, target))
+        assertNull(TrackMatcher.best(listOf(officialRecording.copy(durationText = null)), target))
+        // Small uploader/runtime rounding differences are common; the alias
+        // remains guarded by a close (eight-second) runtime ceiling.
+        assertNotNull(TrackMatcher.best(listOf(officialRecording.copy(durationText = "5:54")), target))
+        assertNull(TrackMatcher.best(listOf(officialRecording.copy(durationText = "5:55")), target))
+        assertNull(TrackMatcher.best(listOf(officialRecording.copy(durationText = "4:50")), target))
+        assertNull(TrackMatcher.best(listOf(officialRecording.copy(title = "Terlalu Sayang (Live)")), target))
+
+        val joinedByline = officialRecording.copy(
+            videoId = "terlalu-sayang-gasentra-feat-revina",
+            artist = "Gasentra Pajampangan feat. Revina Alvira",
+        )
+        assertNotNull(TrackMatcher.best(listOf(joinedByline), target))
+        assertTrue(TrackMatcher.hasTrustedArtistCredit(joinedByline, target))
+    }
+
+    @Test
+    fun nearArtistSpellingRejectsShortNamesAndMultipleMisspelledWords() {
+        assertFalse(TrackMatcher.nearArtistSpelling("DJ", "DJS"))
+        assertFalse(TrackMatcher.nearArtistSpelling("Gasantra Pajampangan", "Gasentro Pajanpangan"))
+        assertFalse(TrackMatcher.nearArtistSpelling("Gasantra Pajampangan", "Gasentra"))
     }
 
     @Test
@@ -680,6 +958,287 @@ class SpotifyImporterIdentityTest {
         assertNull(TrackMatcher.best(listOf(slowed), target))
         val speedUpSpelling = slowed.copy(videoId = "speed-up", title = "Roses (Speed Up)")
         assertNotNull(TrackMatcher.best(listOf(speedUpSpelling), target))
+    }
+
+    @Test
+    fun spotifyImportHandlesSafeTitleSpellingAndAccentVariants() {
+        val titleTarget = TrackMatcher.Target(
+            title = "Tanpo Tresnamu",
+            artist = "Denny Caknan",
+            durationSec = 252,
+            requiredArtistName = "Denny Caknan",
+            requireSharedArtist = true,
+            requireExactTitle = true,
+        )
+        val oneLetterCatalogueVariant = Song(
+            videoId = "tanpa-tresnamu",
+            title = "Tanpa Tresnamu",
+            artist = "Denny Caknan",
+            thumbnailUrl = null,
+            durationText = "4:12",
+        )
+
+        assertNotNull(TrackMatcher.best(listOf(oneLetterCatalogueVariant), titleTarget))
+        assertNull(
+            TrackMatcher.best(
+                listOf(oneLetterCatalogueVariant.copy(artist = "Another Singer")),
+                titleTarget,
+            ),
+        )
+        assertNull(
+            TrackMatcher.best(
+                listOf(oneLetterCatalogueVariant.copy(durationText = "4:20")),
+                titleTarget,
+            ),
+        )
+
+        val accentTarget = titleTarget.copy(
+            title = "Canción",
+            artist = "Banda Ejemplo",
+            requiredArtistName = "Banda Ejemplo",
+            durationSec = 200,
+        )
+        val unaccentedCatalogue = oneLetterCatalogueVariant.copy(
+            videoId = "cancion-unaccented",
+            title = "Cancion",
+            artist = "Banda Ejemplo",
+            durationText = "3:20",
+        )
+        assertNotNull(TrackMatcher.best(listOf(unaccentedCatalogue), accentTarget))
+    }
+
+    @Test
+    fun spotifyImportNormalizesRegionalLanguageVersionAliases() {
+        fun target(title: String) = TrackMatcher.Target(
+            title = title,
+            artist = "Dendi Nata",
+            durationSec = 200,
+            requiredArtistName = "Dendi Nata",
+            requireSharedArtist = true,
+            requireExactTitle = true,
+        )
+        fun candidate(title: String) = Song(
+            videoId = "abadi-language-version",
+            title = title,
+            artist = "Dendi Nata",
+            thumbnailUrl = null,
+            durationText = "3:20",
+        )
+
+        assertNotNull(
+            TrackMatcher.best(
+                listOf(candidate("Abadi (Indonesian Version)")),
+                target("Abadi - Indo Version"),
+            ),
+        )
+        assertNotNull(
+            TrackMatcher.best(
+                listOf(candidate("Abadi - Indo Version")),
+                target("Abadi (Indonesian Version)"),
+            ),
+        )
+        assertNull(
+            TrackMatcher.best(
+                listOf(candidate("Abadi")),
+                target("Abadi - Indo Version"),
+            ),
+        )
+
+        assertNotNull(
+            TrackMatcher.best(
+                listOf(candidate("Lagu (Javanese Version)")),
+                target("Lagu - Jawa Version").copy(title = "Lagu - Jawa Version"),
+            ),
+        )
+        assertNotNull(
+            TrackMatcher.best(
+                listOf(candidate("Lagu (Sundanese Version)")),
+                target("Lagu - Sunda Version").copy(title = "Lagu - Sunda Version"),
+            ),
+        )
+    }
+
+    @Test
+    fun spotifyImportAcceptsOfficialFeaturedDescriptionInIndonesianTitle() {
+        val target = TrackMatcher.Target(
+            title = "Sampai Jadi Debu (Menampilkan Gardika Gigih)",
+            artist = "Banda Neira",
+            durationSec = 240,
+            requiredArtistName = "Banda Neira",
+            requireSharedArtist = true,
+            requireExactTitle = true,
+        )
+        val catalogueTrack = Song(
+            videoId = "sampai-jadi-debu-catalogue",
+            title = "Sampai Jadi Debu",
+            artist = "Banda Neira",
+            thumbnailUrl = null,
+            durationText = "4:00",
+        )
+
+        assertNotNull(TrackMatcher.best(listOf(catalogueTrack), target))
+    }
+
+    @Test
+    fun spotifyImportPreservesVersionAndReleaseLabelsFromPlaylistSamples() {
+        fun target(
+            title: String,
+            artist: String,
+            lead: String,
+            credits: List<String> = listOf(lead),
+        ) = TrackMatcher.Target(
+            title = title,
+            artist = artist,
+            durationSec = 210,
+            requiredArtistName = lead,
+            requireSharedArtist = true,
+            requireExactTitle = true,
+            artistCredits = credits,
+        )
+        fun candidate(
+            id: String,
+            title: String,
+            artist: String,
+        ) = Song(
+            videoId = id,
+            title = title,
+            artist = artist,
+            thumbnailUrl = null,
+            durationText = "3:30",
+        )
+
+        // Remaster and Radio Edit are release/catalogue labels in this matcher,
+        // while alternate edits such as Acoustic, Slowed and Extended remain distinct.
+        val remaster = target(
+            "Please, Please, Please, Let Me Get What I Want - 2011 Remaster",
+            "The Smiths",
+            "The Smiths",
+        )
+        assertNotNull(
+            TrackMatcher.best(
+                listOf(candidate("smiths-remaster-catalogue", "Please, Please, Please, Let Me Get What I Want", "The Smiths")),
+                remaster,
+            ),
+        )
+
+        val radioEdit = target("Dusk Till Dawn (feat. Sia) - Radio Edit", "ZAYN, Sia", "ZAYN", listOf("ZAYN", "Sia"))
+        assertNotNull(
+            TrackMatcher.best(
+                listOf(candidate("dusk-till-dawn-catalogue", "Dusk Till Dawn", "ZAYN, Sia")),
+                radioEdit,
+            ),
+        )
+
+        val extended = target("Somebody's Pleasure (Extended Version)", "Aziz Hedra", "Aziz Hedra")
+        val extendedSong = candidate("somebodys-pleasure-extended", "Somebody's Pleasure (Extended Version)", "Aziz Hedra")
+        val standardSong = candidate("somebodys-pleasure-standard", "Somebody's Pleasure", "Aziz Hedra")
+        assertNotNull(TrackMatcher.best(listOf(extendedSong), extended))
+        assertNull(TrackMatcher.best(listOf(standardSong), extended))
+
+        val acoustic = target(
+            "Take Me Home (feat. Bebe Rexha) - Acoustic",
+            "Cash Cash, Bebe Rexha",
+            "Cash Cash",
+            listOf("Cash Cash", "Bebe Rexha"),
+        )
+        val acousticSong = candidate("take-me-home-acoustic", "Take Me Home (Acoustic)", "Cash Cash, Bebe Rexha")
+        val originalSong = candidate("take-me-home-original", "Take Me Home", "Cash Cash, Bebe Rexha")
+        assertNotNull(TrackMatcher.best(listOf(acousticSong), acoustic))
+        assertNull(TrackMatcher.best(listOf(originalSong), acoustic))
+
+        val slowed = target("Heat Waves - Slowed", "Glass Animals", "Glass Animals")
+        assertNull(
+            TrackMatcher.best(
+                listOf(candidate("heat-waves-original", "Heat Waves", "Glass Animals")),
+                slowed,
+            ),
+        )
+
+        val dangdut = target("Nemen - Hiphop Dangdut Version", "NDX A.K.A.", "NDX A.K.A.")
+        assertNotNull(
+            TrackMatcher.best(
+                listOf(candidate("nemen-dangdut", "Nemen - Hiphop Dangdut Version", "NDX A.K.A.")),
+                dangdut,
+            ),
+        )
+        assertNull(
+            TrackMatcher.best(
+                listOf(candidate("nemen-original", "Nemen", "NDX A.K.A.")),
+                dangdut,
+            ),
+        )
+
+        val mashup = target(
+            "Die With A Smile x Glimpse Of Us (Mashup)",
+            "Luke Willies, OURGRND",
+            "Luke Willies",
+            listOf("Luke Willies", "OURGRND"),
+        )
+        assertNotNull(
+            TrackMatcher.best(
+                listOf(candidate("die-with-a-smile-glimpse-mashup", "Die With A Smile x Glimpse Of Us (Mashup)", "Luke Willies, OURGRND")),
+                mashup,
+            ),
+        )
+
+        val duet = target(
+            "Until I Found You (with Em Beihold) - Em Beihold Version",
+            "Stephen Sanchez, Em Beihold",
+            "Stephen Sanchez",
+            listOf("Stephen Sanchez", "Em Beihold"),
+        )
+        val duetSong = candidate(
+            "until-i-found-you-em-beihold",
+            "Until I Found You (with Em Beihold) - Em Beihold Version",
+            "Stephen Sanchez, Em Beihold",
+        )
+        val soloSong = candidate("until-i-found-you-solo", "Until I Found You", "Stephen Sanchez")
+        assertNotNull(TrackMatcher.best(listOf(duetSong), duet))
+        assertNull(TrackMatcher.best(listOf(soloSong), duet))
+    }
+
+    @Test
+    fun spotifyImportMatchesBrooklynSessionAndYearRemasterPlaylistTitles() {
+        val remasterTarget = TrackMatcher.Target(
+            title = "Voor Dilan #III: Dulu Kita Masih Remaja - 2018 Remaster",
+            artist = "The Panasdalam Bank",
+            durationSec = 240,
+            requiredArtistName = "The Panasdalam Bank",
+            requireSharedArtist = true,
+            requireExactTitle = true,
+        )
+        val remasterCatalogue = Song(
+            videoId = "voor-dilan-iii-catalogue",
+            title = "Voor Dilan #III: Dulu Kita Masih Remaja",
+            artist = "The Panasdalam Bank",
+            thumbnailUrl = null,
+            durationText = "4:00",
+        )
+
+        val sessionTarget = TrackMatcher.Target(
+            title = "Location Unknown ◐ (feat. BEKA) - Brooklyn Session",
+            artist = "HONNE, BEKA",
+            durationSec = 200,
+            requiredArtistName = "HONNE",
+            requireSharedArtist = true,
+            requireExactTitle = true,
+            artistCredits = listOf("HONNE", "BEKA"),
+        )
+        val sessionCatalogue = Song(
+            videoId = "location-unknown-brooklyn-session",
+            title = "Location Unknown (Brooklyn Session)",
+            artist = "HONNE, BEKA",
+            thumbnailUrl = null,
+            durationText = "3:20",
+        )
+        val ordinaryRecording = sessionCatalogue.copy(
+            videoId = "location-unknown-original",
+            title = "Location Unknown",
+        )
+
+        assertNotNull(TrackMatcher.best(listOf(remasterCatalogue), remasterTarget))
+        assertNotNull(TrackMatcher.best(listOf(sessionCatalogue), sessionTarget))
+        assertNull(TrackMatcher.best(listOf(ordinaryRecording), sessionTarget))
     }
 
     @Test

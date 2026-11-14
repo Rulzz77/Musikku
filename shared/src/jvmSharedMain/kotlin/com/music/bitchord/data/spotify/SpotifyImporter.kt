@@ -201,8 +201,11 @@ object SpotifyImporter {
      * stays bounded so a long playlist cannot overwhelm the service.
      */
     private const val MAX_CANDIDATE_SEARCH_PAGES = 5
+    private const val MAX_SEARCH_QUERY_VARIANTS = 10
     private const val MIN_PAGES_TO_COMPARE_AFTER_MATCH = 2
-    private const val MAX_ARTIST_PAGE_FALLBACKS = 3
+    private const val MAX_ARTIST_PAGE_FALLBACKS = 5
+    private const val MAX_ALBUM_PAGE_FALLBACKS = 5
+    private const val STRONG_MATCH_RUNTIME_SEC = 8
 
     private val artistPageLocks = ConcurrentHashMap<String, Mutex>()
     // Cache exact artist lookups, including misses, across tracks in the playlist.
@@ -210,6 +213,11 @@ object SpotifyImporter {
     private val artistSongCache = object : LinkedHashMap<String, List<Song>>(16, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<Song>>?): Boolean =
             size > 32
+    }
+    private val albumPageLocks = ConcurrentHashMap<String, Mutex>()
+    private val albumSongCache = object : LinkedHashMap<String, List<Song>>(32, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<Song>>?): Boolean =
+            size > 64
     }
 
     /**
@@ -223,9 +231,24 @@ object SpotifyImporter {
             synchronized(artistSongCache) {
                 artistSongCache[browseId]?.let { return@withLock Result.success(it) }
             }
-            YtMusicRepository.artistPage(browseId).map { it.songs }.onSuccess { songs ->
+            YtMusicRepository.artistSongsForSpotifyImport(browseId).onSuccess { songs ->
                 if (songs.isNotEmpty()) {
                     synchronized(artistSongCache) { artistSongCache[browseId] = songs }
+                }
+            }
+        }
+    }
+
+    /** Reuse complete album pages across tracks from the same imported playlist. */
+    private suspend fun albumSongs(browseId: String): Result<List<Song>> {
+        val lock = albumPageLocks.computeIfAbsent(browseId) { Mutex() }
+        return lock.withLock {
+            synchronized(albumSongCache) {
+                albumSongCache[browseId]?.let { return@withLock Result.success(it) }
+            }
+            YtMusicRepository.browseSongsForSpotifyImport(browseId).onSuccess { songs ->
+                if (songs.isNotEmpty()) {
+                    synchronized(albumSongCache) { albumSongCache[browseId] = songs }
                 }
             }
         }
@@ -255,16 +278,40 @@ object SpotifyImporter {
     private suspend fun searchCandidates(target: TrackMatcher.Target, suffix: String? = null): List<Song> {
         val found = LinkedHashMap<String, Song>()
         val artistBrowseIds = LinkedHashSet<String>()
+        val albumBrowseIds = LinkedHashSet<String>()
         val failures = mutableListOf<String>()
         var successfulRequests = 0
 
         val queries = spotifyImportSearchQueries(target)
 
-        fun hasAudioMatch(): Boolean =
-            bestSpotifyImportMatch(found.values.filterNot { it.isVideo }, target) != null
+        // A trusted credit alone is not enough to stop discovery: the first
+        // search row can be a shorter edit or a near-runtime regional upload.
+        // Keep looking until the title/credit match also has a close runtime.
+        fun hasHighConfidenceAudioMatch(): Boolean =
+            found.values.any { candidate ->
+                !candidate.isVideo &&
+                    TrackMatcher.hasTrustedArtistCredit(candidate, target) &&
+                    (target.durationSec == null ||
+                        TrackMatcher.withinSeconds(candidate, target, STRONG_MATCH_RUNTIME_SEC))
+            }
+
+        fun hasHighConfidenceVideoMatch(): Boolean =
+            found.values.any { candidate ->
+                candidate.isVideo &&
+                    TrackMatcher.hasTrustedArtistCredit(candidate, target) &&
+                    (target.durationSec == null ||
+                        TrackMatcher.withinSeconds(candidate, target, STRONG_MATCH_RUNTIME_SEC))
+            }
 
         suspend fun searchFilter(filter: SearchFilter) {
-            for (baseQuery in queries) {
+            for (baseQuery in queries.take(MAX_SEARCH_QUERY_VARIANTS)) {
+                // Once a strong result exists, sample the first page of each
+                // remaining spelling/album query instead of stopping entirely.
+                // Queries without a strong result still receive the full page budget.
+                val pageLimitForQuery = if (
+                    (filter == SearchFilter.ALL && hasHighConfidenceAudioMatch()) ||
+                    (filter == SearchFilter.VIDEOS && hasHighConfidenceVideoMatch())
+                ) 1 else MAX_CANDIDATE_SEARCH_PAGES
                 val query = listOf(baseQuery, suffix?.takeIf { it.isNotBlank() })
                     .filterNotNull()
                     .joinToString(" ")
@@ -286,10 +333,11 @@ object SpotifyImporter {
 
                 var page = firstPage
                 var pagesRead = 0
-                while (pagesRead < MAX_CANDIDATE_SEARCH_PAGES) {
+                while (pagesRead < pageLimitForQuery) {
                     page.rows.forEach { row ->
                         when (row) {
                             is SearchResult.Browse -> {
+                                spotifyImportAlbumBrowseId(row)?.let(albumBrowseIds::add)
                                 spotifyImportArtistCredits(target).forEach { expectedArtist ->
                                     spotifyArtistBrowseId(row, expectedArtist)?.let(artistBrowseIds::add)
                                 }
@@ -309,11 +357,11 @@ object SpotifyImporter {
                     pagesRead++
 
                     // The normal Search screen shows the same authenticated
-                    // ALL catalogue. Once a strict match appears, read up to
-                    // two pages of that query so a canonical album row can
-                    // outrank an earlier near-runtime upload, then stop before
-                    // spending requests on every other spelling.
-                    if (filter == SearchFilter.ALL && hasAudioMatch() &&
+                    // ALL catalogue. Once a candidate has a trusted artist
+                    // credit, read two pages so a canonical release can outrank
+                    // a near-runtime upload. A duration-only composer/uploader
+                    // fallback is not trusted enough to stop alternate queries.
+                    if (filter == SearchFilter.ALL && hasHighConfidenceAudioMatch() &&
                         pagesRead >= MIN_PAGES_TO_COMPARE_AFTER_MATCH
                     ) {
                         DebugLog.d(
@@ -322,8 +370,8 @@ object SpotifyImporter {
                         )
                         break
                     }
-                    if (filter == SearchFilter.VIDEOS &&
-                        bestSpotifyImportMatch(found.values.toList(), target) != null
+                    if (filter == SearchFilter.VIDEOS && hasHighConfidenceVideoMatch() &&
+                        pagesRead >= MIN_PAGES_TO_COMPARE_AFTER_MATCH
                     ) break
 
                     val continuation = page.continuation ?: break
@@ -335,16 +383,12 @@ object SpotifyImporter {
                         },
                     ) ?: break
                 }
-                if (filter == SearchFilter.ALL && hasAudioMatch()) {
+                if (filter == SearchFilter.ALL && hasHighConfidenceAudioMatch()) {
                     DebugLog.d(
                         "SpotifyImport",
-                        "Stopped after verified match for '${target.title}' by '${target.artist}'",
+                        "Strong match found for '${target.title}' by '${target.artist}'; checking remaining query variants",
                     )
-                    break
                 }
-                if (filter == SearchFilter.VIDEOS &&
-                    bestSpotifyImportMatch(found.values.toList(), target) != null
-                ) break
             }
         }
 
@@ -352,10 +396,32 @@ object SpotifyImporter {
         // screen. Its promoted TopTrack and regular Track rows are both kept.
         searchFilter(SearchFilter.ALL)
 
-        if (!hasAudioMatch()) {
-            // Global search does not always return an artist card or link every
-            // credited singer. Search up to three exact Spotify artist names,
-            // then validate every Top Song through the same strict matcher.
+        // Search may return an album card rather than an individual track.
+        // Open a small, bounded set of those albums before giving up; rows from
+        // them still pass the same strict title/artist/version/runtime matcher.
+        if (!hasHighConfidenceAudioMatch()) {
+            for (browseId in albumBrowseIds.take(MAX_ALBUM_PAGE_FALLBACKS)) {
+                albumSongs(browseId).fold(
+                    onSuccess = { songs ->
+                        successfulRequests++
+                        songs.forEach { song ->
+                            val id = song.videoId.trim()
+                            if (id.isNotEmpty()) found.putIfAbsent(id, song)
+                        }
+                    },
+                    onFailure = { failure ->
+                        failures += "album page '$browseId': ${failure.message}"
+                    },
+                )
+                if (hasHighConfidenceAudioMatch()) break
+            }
+        }
+
+        if (!hasHighConfidenceAudioMatch()) {
+            // Global search may show a duration-only composer/uploader candidate
+            // without exposing the requested singer. Keep searching artist
+            // pages until a candidate has a trusted credit; every Top Song still
+            // passes the strict title/version/runtime matcher.
             spotifyImportArtistCredits(target).take(MAX_ARTIST_PAGE_FALLBACKS).forEach { artistName ->
                 discoverArtistBrowseId(artistName).fold(
                     onSuccess = { browseId -> browseId?.let(artistBrowseIds::add) },
@@ -366,7 +432,7 @@ object SpotifyImporter {
             }
         }
 
-        if (!hasAudioMatch()) {
+        if (!hasHighConfidenceAudioMatch()) {
             for (browseId in artistBrowseIds) {
                 artistSongs(browseId).fold(
                     onSuccess = { songs ->
@@ -380,13 +446,13 @@ object SpotifyImporter {
                         failures += "artist page '$browseId': ${failure.message}"
                     },
                 )
-                if (hasAudioMatch()) break
+                if (hasHighConfidenceAudioMatch()) break
             }
         }
 
-        // Only fall back to the dedicated Videos search when neither the
-        // general catalogue nor the artist's own catalogue found a recording.
-        if (bestSpotifyImportMatch(found.values.toList(), target) == null) {
+        // Search the dedicated Videos tab too when no trusted audio/video
+        // recording has been established. A duration-only fallback is not proof.
+        if (!hasHighConfidenceAudioMatch() && !hasHighConfidenceVideoMatch()) {
             searchFilter(SearchFilter.VIDEOS)
         }
 
@@ -600,6 +666,13 @@ internal fun spotifyImportArtistCredits(target: TrackMatcher.Target): List<Strin
         TrackMatcher.artistNames(target.artist).map { it.joinToString(" ") }
     }.map(String::trim).filter(String::isNotBlank).distinct()
 
+/** Album cards can provide a second path to a track hidden from global song results. */
+internal fun spotifyImportAlbumBrowseId(row: SearchResult): String? {
+    val item = (row as? SearchResult.Browse)?.item ?: return null
+    if (item.type != BrowseType.ALBUM) return null
+    return item.browseId.takeIf { it.isNotBlank() }
+}
+
 /** Artist cards are used only when the complete requested performer matches. */
 internal fun spotifyArtistBrowseId(row: SearchResult, expectedArtist: String?): String? {
     val item = (row as? SearchResult.Browse)?.item ?: return null
@@ -623,8 +696,13 @@ internal fun spotifyArtistBrowseId(song: Song, expectedArtist: String?): String?
 /** Prefer an audio catalogue recording over an equally valid music-video upload. */
 internal fun bestSpotifyImportMatch(candidates: List<Song>, target: TrackMatcher.Target): Song? {
     val audio = candidates.filterNot { it.isVideo }
-    return TrackMatcher.best(audio, target)
-        ?: TrackMatcher.best(candidates.filter { it.isVideo }, target)
+    val videos = candidates.filter { it.isVideo }
+    // A real performer-credit match must beat a duration-only composer/uploader
+    // override, even when that weak row has a more convenient album/runtime score.
+    return TrackMatcher.best(audio.filter { TrackMatcher.hasTrustedArtistCredit(it, target) }, target)
+        ?: TrackMatcher.best(videos.filter { TrackMatcher.hasTrustedArtistCredit(it, target) }, target)
+        ?: TrackMatcher.best(audio, target)
+        ?: TrackMatcher.best(videos, target)
 }
 
 /**
@@ -647,6 +725,12 @@ internal fun spotifyImportSearchQueries(target: TrackMatcher.Target): List<Strin
         // Spotify's untouched title plus its exact first credited performer.
         if (rawTitle.isNotBlank() && leadArtist.isNotBlank()) add("$rawTitle $leadArtist")
         if (rawTitle.isNotBlank() && fullArtist.isNotBlank()) add("$rawTitle $fullArtist")
+        // Album-qualified variants help when the global title query ranks an
+        // unrelated cover above the exact regional/album catalogue entry.
+        if (rawTitle.isNotBlank() && leadArtist.isNotBlank() && album.isNotBlank()) {
+            add("$rawTitle $leadArtist $album")
+        }
+        if (rawTitle.isNotBlank() && album.isNotBlank()) add("$rawTitle $album")
         if (rawTitle.isNotBlank()) {
             target.artistCredits.take(3).forEach { credit ->
                 if (credit.isNotBlank()) add("$rawTitle $credit")

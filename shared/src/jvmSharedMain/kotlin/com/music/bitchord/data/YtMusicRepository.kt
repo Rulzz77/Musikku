@@ -8,6 +8,7 @@ import com.music.bitchord.data.model.AccountChannel
 import com.music.bitchord.data.model.isExactArtistMatch
 import com.music.bitchord.data.model.normalizedArtistName
 import com.music.bitchord.data.model.ArtistPage
+import com.music.bitchord.data.model.BrowseItem
 import com.music.bitchord.data.model.BrowseType
 import com.music.bitchord.data.model.HomeFeed
 import com.music.bitchord.data.model.HomeShelf
@@ -697,11 +698,21 @@ object YtMusicRepository {
     suspend fun findArtistPageId(name: String): Result<String?> = call("artistByName:$name") {
         if (normalizedArtistName(name).isEmpty()) return@call null
         val filter = SearchFilter.ARTISTS
-        InnertubeParser.parseSearchPage(Innertube.search(name, filter.params)).rows
+        val artists = InnertubeParser.parseSearchPage(Innertube.search(name, filter.params)).rows
             .filterIsInstance<SearchResult.Browse>()
             .map { it.item }
-            .firstOrNull { it.type == BrowseType.ARTIST && isExactArtistMatch(it.title, name) }
-            ?.browseId
+        artistPageIdForName(name, artists)
+    }
+
+    /** Resolve exact artist pages first, otherwise only a unique one-character spelling alias. */
+    internal fun artistPageIdForName(name: String, artists: List<BrowseItem>): String? {
+        if (normalizedArtistName(name).isEmpty()) return null
+        val artistRows = artists.filter { it.type == BrowseType.ARTIST }
+        return artistRows.firstOrNull { isExactArtistMatch(it.title, name) }?.browseId
+            ?: artistRows.filter { TrackMatcher.nearArtistSpelling(name, it.title) }
+                .map { it.browseId }
+                .distinct()
+                .singleOrNull()
     }
 
     /**
@@ -1181,6 +1192,83 @@ object YtMusicRepository {
             val fullShelves = shelvesDeferred.awaitAll()
             val resolvedSongs = if (!fullSongs.isNullOrEmpty()) fullSongs else page.songs
             page.copy(songs = resolvedSongs, sections = fullShelves)
+        }
+    }
+
+    /**
+     * The full Top Songs catalogue for Spotify-import fallback.
+     *
+     * Unlike the display-oriented [artistPage], this path must not silently
+     * turn a failed continuation into the landing page's first ~5 songs.
+     * An incomplete page chain is returned as a failure so Spotify import
+     * can leave the row retryable rather than marking it absent.
+     */
+    private const val MAX_SPOTIFY_ARTIST_ALBUM_FALLBACKS = 8
+
+    suspend fun artistSongsForSpotifyImport(browseId: String): Result<List<Song>> =
+        call("artistSongsForSpotifyImport:$browseId") {
+            val page = InnertubeParser.parseArtistPage(Innertube.browse(browseId))
+            val out = LinkedHashMap<String, Song>()
+            page.songs.forEach { out.putIfAbsent(it.videoId, it) }
+
+            // The artist landing shelf is often only five songs. Follow its
+            // complete Top Songs playlist when one exists.
+            page.moreSongsBrowseId?.let { topSongsBrowseId ->
+                songsPagedComplete(topSongsBrowseId).forEach { out.putIfAbsent(it.videoId, it) }
+            }
+
+            // Some artist pages do not expose a Top Songs "See all" link.
+            // Their Albums & Singles shelves still link to the actual releases.
+            // Read a bounded set of those catalogue pages so a less-popular
+            // Spotify track is not restricted to the first five top tracks.
+            val albumIds = page.sections.asSequence()
+                .flatMap { it.items.asSequence() }
+                .filterNot { it.isVideo }
+                .mapNotNull { it.browseId }
+                .filter { it.startsWith("MPREb") && it != page.moreSongsBrowseId }
+                .distinct()
+                .take(MAX_SPOTIFY_ARTIST_ALBUM_FALLBACKS)
+                .toList()
+            albumIds.forEach { albumId ->
+                songsPagedComplete(albumId).forEach { out.putIfAbsent(it.videoId, it) }
+            }
+
+            if (page.moreSongsBrowseId == null && albumIds.isEmpty() && page.songs.size >= 5) {
+                error("Artist page exposed only its first five songs and no complete catalogue link")
+            }
+            out.values.toList()
+        }
+
+    /** Read a browsable album/playlist completely for Spotify-import fallback. */
+    suspend fun browseSongsForSpotifyImport(browseId: String): Result<List<Song>> =
+        call("browseSongsForSpotifyImport:$browseId") {
+            require(browseId.isNotBlank()) { "Missing catalogue browse id" }
+            songsPagedComplete(browseId)
+        }
+
+    /** Page an artist's Top Songs list without accepting a truncated result. */
+    private suspend fun songsPagedComplete(browseId: String): List<Song> {
+        val out = LinkedHashMap<String, Song>()
+        var response = Innertube.browse(browseId)
+        if (browseId.startsWith("MPREb")) {
+            val albumRows = InnertubeParser.collectSongsDeep(response).size
+            albumPlaylistOf(response, albumRows)?.let { response = it }
+        }
+        var page = 1
+        val show = InnertubeParser.podcastShow(response)
+        while (true) {
+            val shelf = InnertubeParser.parsePlaylistShelf(response)
+            (shelf?.songs ?: InnertubeParser.collectSongsDeep(response, show))
+                .forEach { out.putIfAbsent(it.videoId, it) }
+            val token = shelf?.continuation ?: InnertubeParser.continuationToken(response)
+            if (token == null) return out.values.toList()
+            if (page >= MAX_PAGES) {
+                error("Artist Top Songs catalogue exceeded $MAX_PAGES pages; import lookup is incomplete")
+            }
+            // No runCatching here: a failed continuation must reach the
+            // caller instead of being mistaken for a complete short catalogue.
+            response = Innertube.browseContinuation(token)
+            page++
         }
     }
 

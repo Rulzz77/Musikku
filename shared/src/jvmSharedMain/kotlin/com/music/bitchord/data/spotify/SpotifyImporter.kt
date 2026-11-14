@@ -361,7 +361,7 @@ object SpotifyImporter {
                     continue
                 }
 
-                var page = firstPage ?: continue
+                var page: YtMusicRepository.SearchPage = firstPage ?: continue
                 var pagesRead = 0
                 while (pagesRead < pageLimitForQuery) {
                     page.rows.forEach { row ->

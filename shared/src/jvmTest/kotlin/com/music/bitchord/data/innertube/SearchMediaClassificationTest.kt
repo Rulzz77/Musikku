@@ -1,5 +1,6 @@
 package com.music.bitchord.data.innertube
 
+import com.music.bitchord.data.model.SearchResult
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlin.test.Test

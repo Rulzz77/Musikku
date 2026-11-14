@@ -1,6 +1,7 @@
 package com.music.bitchord.data.spotify
 
 import com.music.bitchord.data.model.ArtistRef
+import com.music.bitchord.data.YtMusicRepository
 import com.music.bitchord.data.model.BrowseItem
 import com.music.bitchord.data.model.BrowseType
 import com.music.bitchord.data.model.SearchResult
@@ -458,6 +459,37 @@ class SpotifyImporterIdentityTest {
     }
 
     @Test
+    fun artistPageLookupAcceptsOnlyAUniqueNearSpellingAndPrefersExactNames() {
+        val near = BrowseItem(
+            browseId = "UC-gasentra",
+            title = "Gasentra Pajampangan",
+            subtitle = "Artist",
+            thumbnailUrl = null,
+            type = BrowseType.ARTIST,
+        )
+        val secondNear = near.copy(
+            browseId = "UC-other",
+            title = "Gasantra Pajanpangan",
+        )
+        val exact = near.copy(
+            browseId = "UC-exact",
+            title = "Gasantra Pajampangan",
+        )
+
+        assertEquals(
+            "UC-gasentra",
+            YtMusicRepository.artistPageIdForName("Gasantra Pajampangan", listOf(near)),
+        )
+        assertNull(
+            YtMusicRepository.artistPageIdForName("Gasantra Pajampangan", listOf(near, secondNear)),
+        )
+        assertEquals(
+            "UC-exact",
+            YtMusicRepository.artistPageIdForName("Gasantra Pajampangan", listOf(near, exact)),
+        )
+    }
+
+    @Test
     fun spotifyImportAcceptsSingleCharacterArtistSpellingVariantWithCloseRuntime() {
         val target = TrackMatcher.Target(
             title = "Terlalu Sayang",
@@ -473,7 +505,7 @@ class SpotifyImporterIdentityTest {
             title = "Terlalu Sayang",
             artist = "Gasentra Pajampangan",
             thumbnailUrl = null,
-            durationText = "5:47",
+            durationText = "5:50",
         )
 
         assertTrue(TrackMatcher.nearArtistSpelling("Gasantra Pajampangan", "Gasentra Pajampangan"))

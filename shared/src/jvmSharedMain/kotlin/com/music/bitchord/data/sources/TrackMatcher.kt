@@ -279,6 +279,13 @@ object TrackMatcher {
             candidate.artist.split(",").forEach { add(artistIdentityKey(it)) }
             artistNames(candidate.artist).forEach { add(it.joinToString("")) }
         }
+        val candidateCreditNames = buildList {
+            add(candidate.artist)
+            addAll(candidate.artists.map { it.name })
+            addAll(candidate.artist.split(","))
+        }.map(String::trim).filter(String::isNotBlank).distinct()
+        val nearLeadArtistMatched = requiredArtist != null &&
+            candidateCreditNames.any { nearArtistSpelling(requiredArtist, it) }
         val requiredArtistMatched = if (requiredArtist != null) {
             // Keep this as one complete name. Splitting the required artist
             // with collaboration separators would turn names such as
@@ -308,7 +315,7 @@ object TrackMatcher {
                 listOf(candidate.artist) + candidate.artists.map { it.name },
             )
         if (requiredArtist != null && !requiredArtistMatched &&
-            !secondarySpotifyArtistMatched && !compositeArtistAlias
+            !secondarySpotifyArtistMatched && !compositeArtistAlias && !nearLeadArtistMatched
         ) return null
         if (requiredArtist != null && artistIdentityKey(requiredArtist).isBlank()) return null
         if (requiredArtist == null && target.requireSharedArtist &&
@@ -340,6 +347,11 @@ object TrackMatcher {
         val artist = creditedArtist
             ?: ARTIST_EXACT.takeIf { requiredArtistMatched }
             ?: ARTIST_SHARED.takeIf { secondarySpotifyArtistMatched || compositeArtistAlias }
+            // A one-character spelling alias is lower confidence than an exact
+            // credit and needs a known runtime within the normal song window.
+            ?: ARTIST_NEAR_SPELLING.takeIf {
+                nearLeadArtistMatched && withinSeconds(candidate, target, DURATION_LIMIT_SEC)
+            }
         // The credits don't merely differ in spelling, they name different
         // people — and sometimes that is because they are describing the
         // same recording from different ends of it. Film catalogues are
@@ -882,6 +894,53 @@ object TrackMatcher {
             firstCompact == secondCompact
     }
 
+    /**
+     * A conservative spelling alias for long, multi-word performer names.
+     * Only one token may differ by one character; every other word and its
+     * position must be identical. Callers must still require exact
+     * title/version identity and a known, close runtime before using it.
+     */
+    internal fun nearArtistSpelling(first: String, second: String): Boolean {
+        val a = artistSpacedKey(first).split(' ').filter { it.isNotBlank() }
+        val b = artistSpacedKey(second).split(' ').filter { it.isNotBlank() }
+        if (a.size < 2 || a.size != b.size) return false
+
+        var differingTokens = 0
+        for ((left, right) in a.zip(b)) {
+            if (left == right) continue
+            if (minOf(left.length, right.length) < 6 || !differsByOneCharacter(left, right)) {
+                return false
+            }
+            differingTokens++
+            if (differingTokens > 1) return false
+        }
+        return differingTokens == 1
+    }
+
+    /** True only when two strings differ by one insertion, deletion or substitution. */
+    private fun differsByOneCharacter(first: String, second: String): Boolean {
+        if (kotlin.math.abs(first.length - second.length) > 1) return false
+        var left = 0
+        var right = 0
+        var edits = 0
+        while (left < first.length && right < second.length) {
+            if (first[left] == second[right]) {
+                left++
+                right++
+                continue
+            }
+            edits++
+            if (edits > 1) return false
+            when {
+                first.length == second.length -> { left++; right++ }
+                first.length > second.length -> left++
+                else -> right++
+            }
+        }
+        if (left < first.length || right < second.length) edits++
+        return edits == 1
+    }
+
     private fun artistSpacedKey(value: String): String =
         Normalizer.normalize(normalize(value), Normalizer.Form.NFKD)
             .replace(Regex("\\p{M}+"), "")
@@ -991,6 +1050,7 @@ object TrackMatcher {
     private const val BASE = 100
     private const val ARTIST_EXACT = 25
     private const val ARTIST_SHARED = 10
+    private const val ARTIST_NEAR_SPELLING = 5
 
     /**
      * Carried by a match the runtime vouched for rather than the credit. A

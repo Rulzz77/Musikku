@@ -493,6 +493,34 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        TrackLog.i("PLAYBACK_LIFECYCLE", "MainActivity.onStart")
+    }
+
+    override fun onResume() {
+        super.onResume()
+        TrackLog.i("PLAYBACK_LIFECYCLE", "MainActivity.onResume")
+    }
+
+    override fun onPause() {
+        TrackLog.i("PLAYBACK_LIFECYCLE", "MainActivity.onPause")
+        super.onPause()
+    }
+
+    override fun onStop() {
+        TrackLog.i("PLAYBACK_LIFECYCLE", "MainActivity.onStop")
+        super.onStop()
+    }
+
+    override fun onDestroy() {
+        TrackLog.i(
+            "PLAYBACK_LIFECYCLE",
+            "MainActivity.onDestroy finishing=$isFinishing changingConfigurations=$isChangingConfigurations",
+        )
+        super.onDestroy()
+    }
+
     /**
      * The other half of the relay. This activity is `singleTask`, so once it is
      * running a second tap on the widget does not rebuild anything — it arrives

@@ -356,8 +356,18 @@ object TrackMatcher {
         // may differ from the primary credit, but must still have near-identical
         // runtime. This protects against covers and different takes with the
         // same title while handling catalogues that file the vocalist alone.
+        // A secondary Spotify singer or a flattened collaborative credit
+        // still needs close timing for an audio catalogue row. A music-video
+        // upload can include a visual intro/outro, so use the same bounded
+        // drift already allowed by durationScore for explicitly credited video
+        // candidates. Exact title and version checks above remain mandatory.
+        val collaborativeCreditRuntimeWindow = if (candidate.isVideo) {
+            VIDEO_DURATION_LIMIT_SEC
+        } else {
+            DURATION_TIGHT_SEC
+        }
         if ((secondarySpotifyArtistMatched || compositeArtistAlias) &&
-            !withinSeconds(candidate, target, DURATION_TIGHT_SEC)
+            !withinSeconds(candidate, target, collaborativeCreditRuntimeWindow)
         ) return null
         val artist = creditedArtist
             ?: ARTIST_EXACT.takeIf { requiredArtistMatched }

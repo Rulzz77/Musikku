@@ -223,7 +223,7 @@ object SpotifyImporter {
             synchronized(artistSongCache) {
                 artistSongCache[browseId]?.let { return@withLock Result.success(it) }
             }
-            YtMusicRepository.artistPage(browseId).map { it.songs }.onSuccess { songs ->
+            YtMusicRepository.artistSongsForSpotifyImport(browseId).onSuccess { songs ->
                 if (songs.isNotEmpty()) {
                     synchronized(artistSongCache) { artistSongCache[browseId] = songs }
                 }

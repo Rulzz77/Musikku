@@ -1054,6 +1054,13 @@ private fun BitChordApp(
     val playlists by viewModel.playlists.collectAsStateWithLifecycle()
     val playlistsLoading by viewModel.playlistsLoading.collectAsStateWithLifecycle()
     val songPlaylistMembership by viewModel.songPlaylistMembership.collectAsStateWithLifecycle()
+    val playlistOwned by viewModel.playlistOwned.collectAsStateWithLifecycle()
+    val currentPlaylistBrowseId = detail
+        ?.takeIf { it.type == BrowseType.PLAYLIST }
+        ?.browseId
+    LaunchedEffect(currentPlaylistBrowseId, playlists, signedIn) {
+        if (signedIn) viewModel.resolvePlaylistOwnership(currentPlaylistBrowseId)
+    }
 
     // Resolve the current track's membership against the actual YouTube Music
     // playlist contents; the import-mapping alone misses ordinary playlists.
@@ -3321,6 +3328,18 @@ private fun BitChordApp(
                             }
                             // This page's songs being rearranged, drawn in place of its list.
                             val reordering = reorderTarget?.takeIf { it.browseId == page.browseId }
+                            // A visible remove control is offered only for playlists the
+                            // listener owns or stores on this device. The backing stores
+                            // already have the correct per-entry removal paths.
+                            val pageLocalPlaylist =
+                                com.music.bitchord.data.spotify.LocalPlaylistStore.getPlaylist(page.browseId)
+                            val pageOfflinePlaylist = OfflinePlaylists.isOfflinePlaylist(page.browseId)
+                            val pageRemotePlaylistOwned = page.type == BrowseType.PLAYLIST &&
+                                signedIn &&
+                                playlistOwned[page.browseId] == true &&
+                                playlists.any { it.browseId == page.browseId }
+                            val canRemovePlaylistTracks = page.type == BrowseType.PLAYLIST &&
+                                (pageLocalPlaylist != null || pageOfflinePlaylist || pageRemotePlaylistOwned)
                             DetailScreen(
                                 page = page,
                                 currentSong = player.song,
@@ -3371,6 +3390,21 @@ private fun BitChordApp(
                                     viewModel.openDetail(id, name, "Artist", null, BrowseType.ARTIST)
                                 },
                                 onAddSuggested = { song -> viewModel.addSuggestedSong(page.browseId, song) },
+                                onRemoveSongFromPlaylist = if (canRemovePlaylistTracks) {
+                                    { song ->
+                                        when {
+                                            pageOfflinePlaylist -> OfflinePlaylists.remove(page.browseId, song)
+                                            pageLocalPlaylist != null -> {
+                                                com.music.bitchord.data.spotify.LocalPlaylistStore.removeSong(
+                                                    page.browseId,
+                                                    song,
+                                                )
+                                                viewModel.reloadLocalDetail(page.browseId)
+                                            }
+                                            else -> viewModel.removeFromPlaylist(page.browseId, song)
+                                        }
+                                    }
+                                } else null,
                                 // Saving is an account action, so it isn't offered to a
                                 // guest at all — same as the like and add-to-playlist rows
                                 // in the track menu.

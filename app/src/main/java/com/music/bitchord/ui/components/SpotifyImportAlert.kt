@@ -12,13 +12,18 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -28,14 +33,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil3.compose.AsyncImage
 import com.music.bitchord.R
 import com.music.bitchord.data.model.PlaylistPrivacy
 import com.music.bitchord.data.model.Song
@@ -89,6 +97,12 @@ fun SpotifyImportAlert(
     var importTitle by remember { mutableStateOf<String?>(null) }
     var resolvedSongs by remember { mutableStateOf<List<Song>>(emptyList()) }
     var submitted by remember { mutableStateOf(false) }
+    var editingMissing by remember { mutableStateOf<SpotifyImportTrack?>(null) }
+    var replacementQuery by remember { mutableStateOf("") }
+    var replacementCandidates by remember { mutableStateOf<List<Song>>(emptyList()) }
+    var replacementSearching by remember { mutableStateOf(false) }
+    var replacementSearched by remember { mutableStateOf(false) }
+    var replacementError by remember { mutableStateOf<String?>(null) }
 
     fun effectiveLanguage(): String? = if (selectedLanguage == "Manual / Other") {
         customLanguageInput.trim().ifBlank { null }
@@ -100,6 +114,64 @@ fun SpotifyImportAlert(
         submitted = true
         onImported(title, privacy, resolvedSongs)
         onDismiss()
+    }
+
+    fun closeReplacementEditor() {
+        editingMissing = null
+        replacementQuery = ""
+        replacementCandidates = emptyList()
+        replacementSearching = false
+        replacementSearched = false
+        replacementError = null
+    }
+
+    fun openReplacementEditor(track: SpotifyImportTrack) {
+        editingMissing = track
+        replacementQuery = SpotifyImporter.replacementSearchQuery(track)
+        replacementCandidates = emptyList()
+        replacementSearching = false
+        replacementSearched = false
+        replacementError = null
+    }
+
+    fun searchReplacement() {
+        val track = editingMissing ?: return
+        val query = replacementQuery.trim()
+        if (query.isEmpty() || replacementSearching || working) return
+        replacementSearching = true
+        replacementCandidates = emptyList()
+        replacementSearched = false
+        replacementError = null
+        scope.launch {
+            try {
+                val candidates = SpotifyImporter.searchReplacementCandidates(query)
+                if (editingMissing == track && replacementQuery.trim() == query) {
+                    replacementCandidates = candidates
+                    replacementSearched = true
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (editingMissing == track && replacementQuery.trim() == query) {
+                    replacementError = e.message ?: context.getString(R.string.spotify_import_failed, "")
+                    replacementSearched = true
+                }
+            } finally {
+                if (editingMissing == track) replacementSearching = false
+            }
+        }
+    }
+
+    fun selectReplacement(song: Song) {
+        val original = editingMissing ?: return
+        val videoId = song.videoId.trim()
+        if (videoId.isEmpty()) return
+        val knownIds = resolvedSongs.mapNotNullTo(HashSet()) { it.videoId.trim().takeIf(String::isNotEmpty) }
+        if (knownIds.add(videoId)) {
+            resolvedSongs = resolvedSongs + song
+        }
+        unmatched = unmatched.orEmpty().filterNot { it == original }
+        closeReplacementEditor()
     }
 
     fun retryMissing() {
@@ -163,7 +235,7 @@ fun SpotifyImportAlert(
     }
 
     AlertScaffold(hazeState = hazeState, onDismiss = {
-        if (!working) {
+        if (!working && !replacementSearching) {
             if (unmatched != null && resolvedSongs.isNotEmpty()) finishImport() else onDismiss()
         }
     }) {
@@ -202,11 +274,140 @@ fun SpotifyImportAlert(
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     missed.forEach { track ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    text = track.title,
+                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                if (track.artist.isNotBlank()) {
+                                    Text(
+                                        text = track.artist,
+                                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                            }
+                            TextButton(
+                                onClick = { openReplacementEditor(track) },
+                                enabled = !working && !replacementSearching,
+                            ) {
+                                Text(stringResource(R.string.search))
+                            }
+                        }
+                    }
+                }
+
+                editingMissing?.let { track ->
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
                         Text(
-                            text = if (track.artist.isBlank()) track.title else "${track.title} · ${track.artist}",
-                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            text = "${track.title} · ${track.artist}",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
                         )
+                        OutlinedTextField(
+                            value = replacementQuery,
+                            onValueChange = {
+                                replacementQuery = it
+                                replacementCandidates = emptyList()
+                                replacementSearched = false
+                                replacementError = null
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text(stringResource(R.string.search)) },
+                            singleLine = true,
+                            enabled = !replacementSearching && !working,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, imeAction = ImeAction.Search),
+                            keyboardActions = KeyboardActions(onSearch = { searchReplacement() }),
+                        )
+                        when {
+                            replacementSearching -> Box(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                            }
+                            replacementError != null -> Text(
+                                text = replacementError.orEmpty(),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                            replacementSearched && replacementCandidates.isEmpty() -> Text(
+                                text = stringResource(R.string.no_results),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 190.dp)
+                                .verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            replacementCandidates.forEach { candidate ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(9.dp))
+                                        .clickable(enabled = !replacementSearching) { selectReplacement(candidate) }
+                                        .padding(vertical = 6.dp, horizontal = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    AsyncImage(
+                                        model = candidate.thumbnailUrl,
+                                        contentDescription = null,
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier
+                                            .size(44.dp)
+                                            .clip(RoundedCornerShape(7.dp))
+                                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                                    )
+                                    Spacer(Modifier.width(10.dp))
+                                    Column(Modifier.weight(1f)) {
+                                        Text(
+                                            text = candidate.title,
+                                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                        Text(
+                                            text = listOf(candidate.artist, candidate.durationText.orEmpty())
+                                                .filter(String::isNotBlank)
+                                                .joinToString(" · "),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        TextButton(
+                            onClick = ::closeReplacementEditor,
+                            enabled = !replacementSearching,
+                            modifier = Modifier.align(Alignment.End),
+                        ) {
+                            Text(stringResource(R.string.cancel))
+                        }
                     }
                 }
             } else {
@@ -325,7 +526,21 @@ fun SpotifyImportAlert(
             }
         }
         AlertRule()
-        if (unmatched != null) {
+        if (unmatched != null && editingMissing != null) {
+            AlertAction(
+                label = stringResource(R.string.search),
+                emphasised = true,
+                onClick = ::searchReplacement,
+                enabled = !working && !replacementSearching && replacementQuery.isNotBlank(),
+            )
+            AlertRule()
+            AlertAction(
+                label = stringResource(R.string.cancel),
+                emphasised = false,
+                onClick = ::closeReplacementEditor,
+                enabled = !replacementSearching,
+            )
+        } else if (unmatched != null) {
             AlertAction(
                 label = "Retry missing tracks",
                 emphasised = false,

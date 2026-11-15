@@ -241,8 +241,8 @@ object SpotifyImporter {
         }
 
     /** Caches an explicit user-selected replacement for the same Spotify track in later imports. */
-    fun rememberManualMatch(track: SpotifyImportTrack, song: Song) {
-        if (song.videoId.isNotBlank()) matchCache.put(track.spotifyId, song)
+    fun rememberManualMatch(track: SpotifyImportTrack, song: Song, language: String? = null) {
+        if (song.videoId.isNotBlank()) matchCache.put(track.spotifyId, song, language)
     }
 
     /**
@@ -507,7 +507,7 @@ object SpotifyImporter {
         val deferredResults = uniqueTracks.map { track ->
             async(Dispatchers.IO) {
                 semaphore.withPermit {
-                    val matchedSong = matchCache.get(track.spotifyId) ?: run {
+                    val matchedSong = matchCache.get(track.spotifyId, cleanLang) ?: run {
                         val candidates = try {
                             searchCandidates(track, cleanLang)
                         } catch (cancelled: CancellationException) {
@@ -524,7 +524,7 @@ object SpotifyImporter {
                         }
                         // Liner's weighted evaluator rejects weak/ambiguous matches.
                         LinerSpotifyMatcher.evaluate(track, candidates).track?.also { matched ->
-                            matchCache.put(track.spotifyId, matched)
+                            matchCache.put(track.spotifyId, matched, cleanLang)
                         }
                     }
 

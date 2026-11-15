@@ -58,6 +58,7 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.RemoveCircleOutline
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.Folder
@@ -226,8 +227,8 @@ private val RELEASE_ACTION_GAP = 10.dp
 private val RELEASE_ACTIONS_MAX_WIDTH = 420.dp
 private val PILL_SHAPE = RoundedCornerShape(12.dp)
 
-/** Search is the first sticky row, above the release artwork rather than under it. */
-private const val SEARCH_ITEM_INDEX = 0
+/** The filter sits after the release header, at the head of its track list. */
+private const val SEARCH_ITEM_INDEX = 1
 
 /** The inset the header text and the action pills share. */
 private val HEADER_GUTTER = PAGE_GUTTER + 8.dp
@@ -307,6 +308,8 @@ fun DetailScreen(
     onSectionItemClick: (ShelfItem) -> Unit,
     onArtistClick: (String, String) -> Unit,
     onAddSuggested: (Song) -> Unit,
+    /** Removes one entry from a playlist this listener owns or keeps on this device. */
+    onRemoveSongFromPlaylist: ((Song) -> Unit)? = null,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
     listState: LazyListState = rememberLazyListState(),
@@ -581,23 +584,6 @@ fun DetailScreen(
                     // a release header clears the bar itself, see [ReleaseHeader].
                     contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
                 ) {
-            if (searching) {
-                // The search is the first row in the page, not tucked beneath
-                // the large sleeve/photo. It stays pinned under the app bar while
-                // the cover and track list scroll below it.
-                stickyHeader(key = "search") {
-                    DetailSearchField(
-                        query = query,
-                        onQueryChange = { query = it },
-                        onClose = closeSearch,
-                        autoFocus = focusSearch,
-                        onFocused = { focusSearch = false },
-                        palette = palette,
-                        type = page.type,
-                    )
-                }
-            }
-
             item(key = "header") {
                 if (isArtist) {
                     ArtistHeader(page = page, palette = palette, artHeight = artHeight, appleArt = appleArt, signature = signature)
@@ -615,6 +601,22 @@ fun DetailScreen(
                         onArtistClick = onArtistClick.takeIf { folder == null },
                         onToggleLibrary = onToggleLibrary,
                         onDownloadAll = folder?.onDownload?.let { download -> { download(songs) } },
+                    )
+                }
+            }
+
+            if (searching) {
+                // Keep the playlist filter with its tracks, below the cover and
+                // action area instead of taking space above the release artwork.
+                item(key = "search") {
+                    DetailSearchField(
+                        query = query,
+                        onQueryChange = { query = it },
+                        onClose = closeSearch,
+                        autoFocus = focusSearch,
+                        onFocused = { focusSearch = false },
+                        palette = palette,
+                        type = page.type,
                     )
                 }
             }
@@ -798,6 +800,23 @@ fun DetailScreen(
                             isPlaying = isCurrent && isPlaying,
                             activeTint = palette.accent,
                             searchPlayingStyle = true,
+                            trailing = if (
+                                onRemoveSongFromPlaylist != null &&
+                                (song.setVideoId != null || page.browseId.startsWith("local:"))
+                            ) {
+                                {
+                                    IconButton(
+                                        onClick = { onRemoveSongFromPlaylist(song) },
+                                        modifier = Modifier.size(40.dp),
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.RemoveCircleOutline,
+                                            contentDescription = stringResource(R.string.remove_from_playlist),
+                                            tint = palette.onBackgroundVariant,
+                                        )
+                                    }
+                                }
+                            } else null,
                         )
                         if (position < matches.lastIndex) {
                             HorizontalDivider(

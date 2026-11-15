@@ -197,9 +197,15 @@ object SpotifyImporter {
      * Each stage is one raw InnerTube request and candidates are re-scored as
      * a merged set, including Liner's ambiguity check.
      */
-    private suspend fun searchCandidates(
+    internal suspend fun searchCandidates(
         source: SpotifyImportTrack,
         suffix: String? = null,
+        searchRaw: suspend (
+            String,
+            YtMusicRepository.SpotifyImportSearchKind,
+        ) -> Result<List<Song>> = { searchQuery, kind ->
+            YtMusicRepository.searchSpotifyImportRaw(searchQuery, kind)
+        },
     ): List<Song> {
         val query = LinerSpotifyMatcher.searchQuery(source)
         val cleanTitle = LinerSpotifyMatcher.cleanedTitle(source)
@@ -213,7 +219,7 @@ object SpotifyImporter {
             kind: YtMusicRepository.SpotifyImportSearchKind,
         ): List<Song> {
             if (searchQuery.isBlank()) return emptyList()
-            return YtMusicRepository.searchSpotifyImportRaw(searchQuery, kind).fold(
+            return searchRaw(searchQuery, kind).fold(
                 onSuccess = {
                     searchDiagnostics += "${kind.name.lowercase()} '$searchQuery' -> ${it.size} candidates"
                     it
@@ -238,19 +244,22 @@ object SpotifyImporter {
                 val id = candidate.videoId.trim()
                 if (id.isNotEmpty()) combined.putIfAbsent(id, candidate)
             }
-            val nextCandidates = combined.values.toList()
+            val nextCandidates = filterCandidatesByLanguage(combined.values.toList(), suffix)
             val nextDecision = LinerSpotifyMatcher.evaluate(source, nextCandidates)
             searchDiagnostics += "${kind.name.lowercase()} '$searchQuery' -> ${nextDecision.reason ?: "matched"}" +
                 " (score=${nextDecision.score ?: 0}, candidates=${nextCandidates.size})" +
                 nextDecision.proposedTrack?.let { ", proposed='${it.title}' by '${it.artist}'" }.orEmpty()
-            // Keep every stage's candidates so later singer/title variants can
-            // be ranked together instead of silently discarding weak early rows.
+            // Filter language before evaluating so an unwanted version cannot
+            // stop the search sequence and then disappear only at the end.
             candidates = nextCandidates
             decision = nextDecision
         }
 
-        candidates = search(query, YtMusicRepository.SpotifyImportSearchKind.TRACK)
-            .distinctBy { it.videoId }
+        candidates = filterCandidatesByLanguage(
+            search(query, YtMusicRepository.SpotifyImportSearchKind.TRACK)
+                .distinctBy { it.videoId },
+            suffix,
+        )
         if (candidates.isNotEmpty()) {
             decision = LinerSpotifyMatcher.evaluate(source, candidates)
         }
@@ -267,15 +276,23 @@ object SpotifyImporter {
 
         // Spotify may credit a label/channel first (for example Gasentra
         // Pajampangan) while YouTube Music indexes the singer (Nina, Nanih,
-        // Friska, Revina). Search the remaining structured credits as a
-        // discovery fallback, but keep the exact same strict matcher.
-        if (decision?.matched != true) {
+        // Friska, Revina). Even if the label-only result passed, verify whether
+        // a secondary credited vocalist can be found before finalizing it.
+        if (decision?.matched != true ||
+            LinerSpotifyMatcher.needsSecondaryArtistSearch(source, decision?.track)
+        ) {
             for (alternateQuery in LinerSpotifyMatcher.alternateArtistSearchQueries(source)) {
+                if (decision?.matched == true &&
+                    !LinerSpotifyMatcher.needsSecondaryArtistSearch(source, decision?.track)
+                ) {
+                    break
+                }
                 attempt(alternateQuery, YtMusicRepository.SpotifyImportSearchKind.TRACK)
-                if (decision?.matched != true) {
+                if (decision?.matched != true ||
+                    LinerSpotifyMatcher.needsSecondaryArtistSearch(source, decision?.track)
+                ) {
                     attempt(alternateQuery, YtMusicRepository.SpotifyImportSearchKind.VIDEO)
                 }
-                if (decision?.matched == true) break
             }
         }
 
@@ -310,6 +327,32 @@ object SpotifyImporter {
             throw IllegalStateException("Spotify lookup returned no usable YouTube Music response")
         }
         return candidates
+    }
+
+    private val knownLanguages = listOf(
+        "Tamil", "Telugu", "Kannada", "Malayalam", "Hindi", "English",
+        "Punjabi", "Marathi", "Bengali", "Bhojpuri", "Gujarati", "Urdu",
+        "Arabic", "Japanese", "Korean", "Mandarin", "Cantonese", "Chinese",
+        "Spanish", "French", "Portuguese", "Italian", "German", "Russian",
+        "Turkish", "Thai", "Indonesian", "Javanese", "Sundanese",
+    )
+
+    private fun filterCandidatesByLanguage(
+        candidates: List<Song>,
+        language: String?,
+    ): List<Song> {
+        val selectedLanguage = language?.trim()?.takeIf(String::isNotBlank) ?: return candidates
+        val conflictingLanguages = knownLanguages.filterNot {
+            it.equals(selectedLanguage, ignoreCase = true)
+        }
+        return candidates.filter { candidate ->
+            val metadata = "${candidate.title} ${candidate.artist} ${candidate.albumName.orEmpty()}".lowercase()
+            !conflictingLanguages.any { other ->
+                metadata.contains("(${other.lowercase()})") ||
+                    metadata.contains("${other.lowercase()} version") ||
+                    metadata.contains("${other.lowercase()} song")
+            }
+        }
     }
 
     /** Tracks the embed page lists before it cuts off. */
@@ -406,31 +449,11 @@ object SpotifyImporter {
             it.isNotBlank()
         }
 
-        val knownLanguages = listOf(
-            "Tamil", "Telugu", "Kannada", "Malayalam", "Hindi", "English",
-            "Punjabi", "Marathi", "Bengali", "Bhojpuri", "Gujarati", "Urdu",
-            "Arabic", "Japanese", "Korean", "Mandarin", "Cantonese", "Chinese",
-            "Spanish", "French", "Portuguese", "Italian", "German", "Russian",
-            "Turkish", "Thai", "Indonesian", "Javanese", "Sundanese",
-        )
-
         val deferredResults = uniqueTracks.map { track ->
             async(Dispatchers.IO) {
                 semaphore.withPermit {
                     val candidates = try {
-                        searchCandidates(track, cleanLang).let { found ->
-                            if (cleanLang == null) found else {
-                                val conflictingLangs = knownLanguages.filter { !it.equals(cleanLang, ignoreCase = true) }
-                                found.filter { candidate ->
-                                    val meta = "${candidate.title} ${candidate.artist} ${candidate.albumName.orEmpty()}".lowercase()
-                                    !conflictingLangs.any {
-                                        meta.contains("(${it.lowercase()})") ||
-                                            meta.contains("${it.lowercase()} version") ||
-                                            meta.contains("${it.lowercase()} song")
-                                    }
-                                }
-                            }
-                        }
+                        searchCandidates(track, cleanLang)
                     } catch (cancelled: CancellationException) {
                         throw cancelled
                     } catch (failure: Exception) {

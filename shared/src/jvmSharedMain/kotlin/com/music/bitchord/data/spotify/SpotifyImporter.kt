@@ -203,7 +203,6 @@ object SpotifyImporter {
     // Mirror Liner Desktop's bounded search path: first result page, then at
     // most one high-value alternate query before the deeper recovery paths.
     private const val MAX_CANDIDATE_SEARCH_PAGES = 1
-    private const val MAX_SEARCH_QUERY_VARIANTS = 2
     private const val MAX_ARTIST_PAGE_FALLBACKS = 3
     private const val MAX_ALBUM_PAGE_FALLBACKS = 3
     private const val STRONG_MATCH_RUNTIME_SEC = 8
@@ -310,6 +309,12 @@ object SpotifyImporter {
             filter: SearchFilter,
             includeLanguageSuffix: Boolean = false,
         ) {
+            fun hasHighConfidenceMatch(): Boolean = when (filter) {
+                SearchFilter.SONGS, SearchFilter.ALL -> hasHighConfidenceAudioMatch()
+                SearchFilter.VIDEOS -> hasHighConfidenceVideoMatch()
+                else -> false
+            }
+
             for ((queryIndex, baseQuery) in queries.withIndex()) {
                 val query = listOf(
                     baseQuery,
@@ -660,8 +665,8 @@ object SpotifyImporter {
 
 
 /**
- * Once one query produced a high-confidence match, allow one additional
- * independent query to compare alternate catalogue releases, then stop.
+ * Stop expanding the catalogue search as soon as the current query yields a
+ * candidate that passes the full track identity matcher.
  */
 internal fun shouldStopSpotifyQueryExpansion(hasHighConfidenceMatch: Boolean): Boolean =
     hasHighConfidenceMatch
@@ -768,6 +773,14 @@ internal fun bestSpotifyImportMatch(candidates: List<Song>, target: TrackMatcher
 }
 
 /**
+ * The two highest-value queries mirror Liner Desktop's fast path: the title
+ * as typed, then the same title qualified by Spotify's lead artist. Broader
+ * spelling and album variants remain available to recovery paths.
+ */
+internal fun spotifyImportFastPathQueries(target: TrackMatcher.Target): List<String> =
+    spotifyImportSearchQueries(target).take(2)
+
+/**
  * Query both Spotify's original spelling and TrackMatcher's normalized form.
  *
  * Manual Search receives the title/artist text the listener types. Import used
@@ -775,14 +788,6 @@ internal fun bestSpotifyImportMatch(candidates: List<Song>, target: TrackMatcher
  * suffix, transliteration, or unusual DJ/language label could therefore change
  * the query enough for YouTube Music to return a different result set.
  */
-/**
- * The two highest-value queries mirror Liner Desktop's fast path: the title
- * as typed, then the same title qualified by Spotify's lead artist. Broader
- * spellings and album variants remain available to other recovery paths.
- */
-internal fun spotifyImportFastPathQueries(target: TrackMatcher.Target): List<String> =
-    spotifyImportSearchQueries(target).take(MAX_SEARCH_QUERY_VARIANTS)
-
 internal fun spotifyImportSearchQueries(target: TrackMatcher.Target): List<String> {
     val normalized = TrackMatcher.queries(target)
     val rawTitle = target.title.trim()

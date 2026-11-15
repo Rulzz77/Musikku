@@ -2005,17 +2005,19 @@ class SpotifyImporterIdentityTest {
         )
         val hindi = Song(
             videoId = "song-hindi",
-            title = "Song (Hindi Version)",
+            title = "Song",
             artist = "Singer",
             thumbnailUrl = null,
             durationText = "3:00",
+            albumName = "Hindi Version",
         )
         val tamil = Song(
             videoId = "song-tamil",
-            title = "Song (Tamil Version)",
+            title = "Song",
             artist = "Singer",
             thumbnailUrl = null,
             durationText = "3:00",
+            albumName = "Tamil Version",
         )
         val searchedQueries = mutableListOf<String>()
 

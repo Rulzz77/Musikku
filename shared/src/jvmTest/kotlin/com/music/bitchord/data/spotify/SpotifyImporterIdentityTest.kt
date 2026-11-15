@@ -21,6 +21,18 @@ import kotlin.test.assertTrue
 class SpotifyImporterIdentityTest {
 
     @Test
+    fun manualReplacementQueryPrefersSecondaryCreditedSingerWhenAvailable() {
+        val track = SpotifyImportTrack(
+            title = "Talaga Reumis",
+            artist = "Gasentra Pajampangan, Nanih",
+            leadArtist = "Gasentra Pajampangan",
+            artistCredits = listOf("Gasentra Pajampangan", "Nanih"),
+        )
+
+        assertEquals("Nanih Talaga Reumis", SpotifyImporter.replacementSearchQuery(track))
+    }
+
+    @Test
     fun manualReplacementSearchWidensFiltersAndDeduplicatesCandidates() = runBlocking {
         val trackCandidate = Song(
             videoId = "manual-track",

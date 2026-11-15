@@ -105,6 +105,18 @@ fun SpotifyImportAlert(
     var manualSearching by remember { mutableStateOf(false) }
     var manualError by remember { mutableStateOf<String?>(null) }
 
+    fun effectiveLanguage(): String? = if (selectedLanguage == "Manual / Other") {
+        customLanguageInput.trim().ifBlank { null }
+    } else selectedLanguage
+
+    fun finishImport() {
+        val title = importTitle ?: return
+        if (submitted || resolvedSongs.isEmpty()) return
+        submitted = true
+        onImported(title, privacy, resolvedSongs)
+        onDismiss()
+    }
+
     fun closeManualSearch() {
         editingTrack = null
         manualCandidates = emptyList()
@@ -161,18 +173,6 @@ fun SpotifyImportAlert(
         SpotifyImporter.rememberManualMatch(track, candidate, effectiveLanguage())
         closeManualSearch()
         if (remaining.isEmpty()) finishImport()
-    }
-
-    fun effectiveLanguage(): String? = if (selectedLanguage == "Manual / Other") {
-        customLanguageInput.trim().ifBlank { null }
-    } else selectedLanguage
-
-    fun finishImport() {
-        val title = importTitle ?: return
-        if (submitted || resolvedSongs.isEmpty()) return
-        submitted = true
-        onImported(title, privacy, resolvedSongs)
-        onDismiss()
     }
 
     fun retryMissing() {

@@ -24,21 +24,6 @@ internal object LinerSpotifyMatcher {
         val matched: Boolean get() = track != null
     }
 
-    private data class SourceProfile(
-        val rawTitle: String,
-        val searchTitle: String,
-        val searchQuery: String,
-        val baseTitle: String,
-        val fullClean: String,
-        val versionTags: Set<String>,
-        val artists: List<String>,
-        val primaryArtist: String,
-        val hasTwoParts: Boolean,
-        val part0Clean: String,
-        val part1Clean: String,
-        val durationMs: Long?,
-    )
-
     private data class VersionComparison(
         val matches: Boolean,
         val penalty: Int,
@@ -287,7 +272,7 @@ internal object LinerSpotifyMatcher {
     }
 
     private fun stripJunk(value: String): String =
-        junkPatterns.fold(value) { current, pattern -> current.replace(current.let { pattern }, "") }
+        junkPatterns.fold(value) { current, pattern -> current.replace(pattern, "") }
             .trim()
             .replace(Regex("""\s+"""), " ")
 
@@ -450,12 +435,12 @@ internal object LinerSpotifyMatcher {
 
     private fun isAmbiguous(best: RankedCandidate, second: RankedCandidate?): Boolean {
         if (second == null || second.disqualified || best.score - second.score >= 10) return false
+        val bestDuration = durationMs(best.track.durationText)
+        val secondDuration = durationMs(second.track.durationText)
         val duplicate = best.titleClean == second.titleClean &&
             artistsMatch(best.primaryArtist, second.primaryArtist) &&
-            ((best.deltaMs ?: Long.MAX_VALUE).let { first ->
-                val secondDelta = second.deltaMs ?: Long.MAX_VALUE
-                kotlin.math.abs(first - secondDelta)
-            } <= 3_000)
+            bestDuration != null && secondDuration != null &&
+            kotlin.math.abs(bestDuration - secondDuration) <= 3_000
         val clearWinner = best.score >= 75 && best.versionMatches && best.artistExact &&
             best.deltaMs != null && best.deltaMs <= 4_000
         return !duplicate && !clearWinner && (!best.titleExact || !best.versionMatches)
@@ -571,7 +556,7 @@ internal object LinerSpotifyMatcher {
         value.lowercase()
             .replace("ё", "е")
             .replace("!", "i")
-            .replace("$", "s")
+            .replace("\\$", "s")
             .replace(Regex("""[()\[\]\-–—_"'!?.,:;/\\|#]"""), " ")
             .replace(Regex("""\s+"""), " ")
             .trim()

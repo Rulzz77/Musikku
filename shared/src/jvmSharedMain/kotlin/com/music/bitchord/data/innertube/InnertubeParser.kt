@@ -695,19 +695,29 @@ object InnertubeParser {
         excludePodcastEpisodes: Boolean = false,
     ): Song? {
         if (renderer == null) return null
+        val columns = renderer.a("flexColumns").orEmpty()
+        val titleColumn = columns.getOrNull(0)
+            .o("musicResponsiveListItemFlexColumnRenderer").o("text")
+        val titleRuns = titleColumn.a("runs").orEmpty()
+        val title = titleColumn.runs().ifBlank { renderer.o("title").runs() }
+        if (title.isBlank()) return null
+
+        // Liner's mapper accepts every watch endpoint shape used by search.
+        // YouTube can attach the id to the title run, onTap, or the row's
+        // navigationEndpoint instead of playlistItemData / the overlay.
+        // Dropping those rows here means the matcher never gets a chance to
+        // see an otherwise valid catalogue result.
         val videoId = renderer.o("playlistItemData").s("videoId")
+            ?: titleRuns.firstOrNull()?.o("navigationEndpoint")?.o("watchEndpoint")?.s("videoId")
             ?: renderer.o("overlay")
                 .o("musicItemThumbnailOverlayRenderer").o("content")
                 .o("musicPlayButtonRenderer").o("playNavigationEndpoint")
                 .o("watchEndpoint").s("videoId")
+            ?: renderer.o("onTap").o("watchEndpoint").s("videoId")
+            ?: renderer.o("navigationEndpoint").o("watchEndpoint").s("videoId")
             ?: return null
 
         if (renderer.isPrivateUpload()) UploadedTracks.mark(videoId)
-
-        val columns = renderer.a("flexColumns").orEmpty()
-        val title = columns.getOrNull(0)
-            .o("musicResponsiveListItemFlexColumnRenderer").o("text").runs()
-        if (title.isBlank()) return null
 
         val subtitleRuns = columns.getOrNull(1)
             .o("musicResponsiveListItemFlexColumnRenderer").o("text").a("runs").orEmpty()

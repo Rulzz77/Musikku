@@ -313,8 +313,9 @@ object SpotifyImporter {
             // latency without meaningful identity evidence.
             var firstStrongMatchQueryIndex: Int? = null
             fun hasHighConfidenceMatch(): Boolean = when (filter) {
-                SearchFilter.TRACK, SearchFilter.ALL -> hasHighConfidenceAudioMatch()
+                SearchFilter.SONGS, SearchFilter.ALL -> hasHighConfidenceAudioMatch()
                 SearchFilter.VIDEOS -> hasHighConfidenceVideoMatch()
+                else -> false
             }
 
             for ((queryIndex, baseQuery) in queries.take(MAX_SEARCH_QUERY_VARIANTS).withIndex()) {
@@ -322,7 +323,7 @@ object SpotifyImporter {
                 // spelling/album query. Queries without a strong result still
                 // receive the full page budget.
                 val pageLimitForQuery = if (
-                    ((filter == SearchFilter.TRACK || filter == SearchFilter.ALL) &&
+                    ((filter == SearchFilter.SONGS || filter == SearchFilter.ALL) &&
                         hasHighConfidenceAudioMatch()) ||
                     (filter == SearchFilter.VIDEOS && hasHighConfidenceVideoMatch())
                 ) 1 else MAX_CANDIDATE_SEARCH_PAGES
@@ -435,7 +436,7 @@ object SpotifyImporter {
         // Follow Liner Desktop's catalogue-search sequence: try the dedicated
         // Songs shelf first, then broaden to ALL (promoted TopTrack plus artist
         // and album cards) only when no trusted audio match was found.
-        searchFilter(SearchFilter.TRACK)
+        searchFilter(SearchFilter.SONGS)
         if (!hasHighConfidenceAudioMatch()) {
             searchFilter(SearchFilter.ALL)
         }
@@ -445,7 +446,7 @@ object SpotifyImporter {
                 "SpotifyImport",
                 "No safe match for '${target.title}' without language suffix; retrying with '$suffix'",
             )
-            searchFilter(SearchFilter.TRACK, includeLanguageSuffix = true)
+            searchFilter(SearchFilter.SONGS, includeLanguageSuffix = true)
             if (!hasHighConfidenceAudioMatch()) {
                 searchFilter(SearchFilter.ALL, includeLanguageSuffix = true)
             }

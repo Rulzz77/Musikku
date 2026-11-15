@@ -243,10 +243,10 @@ object SpotifyImporter {
             searchDiagnostics += "${kind.name.lowercase()} '$searchQuery' -> ${nextDecision.reason ?: "matched"}" +
                 " (score=${nextDecision.score ?: 0}, candidates=${nextCandidates.size})" +
                 nextDecision.proposedTrack?.let { ", proposed='${it.title}' by '${it.artist}'" }.orEmpty()
-            if (nextDecision.matched || decision == null) {
-                candidates = nextCandidates
-                decision = nextDecision
-            }
+            // Keep every stage's candidates so later singer/title variants can
+            // be ranked together instead of silently discarding weak early rows.
+            candidates = nextCandidates
+            decision = nextDecision
         }
 
         candidates = search(query, YtMusicRepository.SpotifyImportSearchKind.TRACK)

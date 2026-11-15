@@ -528,7 +528,11 @@ internal object LinerSpotifyMatcher {
         // or label matching only the lead credit is useful discovery evidence,
         // but does not prove which singer performed the recording.
         if (secondaryMatch) return true to 100
-        if (primaryMatch) return if (hasSecondaryCredits) false to 55 else true to 100
+        // A primary label/artist byline is still valid evidence when the
+        // catalogue omits a secondary vocalist. Keep it eligible as a fallback;
+        // labelOnlyPenalty in rank() makes an explicitly credited vocalist win
+        // when both candidates are available.
+        if (primaryMatch) return true to 100
 
         val inTitle = candidateArtists.any { artist ->
             val normalized = normalizeTrackString(artist)

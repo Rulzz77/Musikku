@@ -51,6 +51,8 @@ data class SpotifyImportResult(
 
 object SpotifyImporter {
 
+    private val matchCache = SpotifyImportMatchCache(maxEntries = 512)
+
     private const val USER_AGENT =
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
@@ -187,7 +189,60 @@ object SpotifyImporter {
             leadArtist = track.leadArtist,
             artistCredits = track.artistCredits,
         )
-        return LinerSpotifyMatcher.evaluate(source, searchCandidates(source)).track
+        matchCache.get(source.spotifyId)?.let { return it }
+        val matched = LinerSpotifyMatcher.evaluate(source, searchCandidates(source)).track
+        if (matched != null) matchCache.put(source.spotifyId, matched)
+        return matched
+    }
+
+    /** The initial query shown by the manual replacement picker for an unresolved Spotify row. */
+    fun replacementSearchQuery(track: SpotifyImportTrack): String = LinerSpotifyMatcher.searchQuery(track)
+
+    /**
+     * Returns raw YouTube Music candidates for a user-selected replacement.
+     * Unlike automatic import matching, this deliberately does not discard
+     * candidates using the automatic confidence threshold: the user confirms
+     * the exact row to use.
+     */
+    suspend fun searchReplacementCandidates(query: String, limit: Int = 18): List<Song> =
+        withContext(Dispatchers.IO) {
+            val cleanQuery = query.trim()
+            require(cleanQuery.isNotEmpty()) { "Search query cannot be blank" }
+            require(limit > 0) { "Result limit must be greater than zero" }
+
+            val candidates = LinkedHashMap<String, Song>()
+            val failures = mutableListOf<String>()
+            val kinds = listOf(
+                YtMusicRepository.SpotifyImportSearchKind.TRACK,
+                YtMusicRepository.SpotifyImportSearchKind.ALL,
+                YtMusicRepository.SpotifyImportSearchKind.VIDEO,
+            )
+            for (kind in kinds) {
+                val result = YtMusicRepository.searchSpotifyImportRaw(cleanQuery, kind)
+                result.fold(
+                    onSuccess = { songs ->
+                        songs.forEach { song ->
+                            val id = song.videoId.trim()
+                            if (id.isNotEmpty()) candidates.putIfAbsent(id, song)
+                        }
+                    },
+                    onFailure = { failure ->
+                        if (failure is CancellationException) throw failure
+                        failures += "${kind.name.lowercase()}: ${failure.message.orEmpty()}"
+                    },
+                )
+                if (candidates.size >= limit) break
+            }
+
+            if (candidates.isEmpty() && failures.isNotEmpty()) {
+                throw IllegalStateException(failures.joinToString("; "))
+            }
+            candidates.values.take(limit)
+        }
+
+    /** Caches an explicit user-selected replacement for the same Spotify track in later imports. */
+    fun rememberManualMatch(track: SpotifyImportTrack, song: Song) {
+        if (song.videoId.isNotBlank()) matchCache.put(track.spotifyId, song)
     }
 
     /**
@@ -452,22 +507,26 @@ object SpotifyImporter {
         val deferredResults = uniqueTracks.map { track ->
             async(Dispatchers.IO) {
                 semaphore.withPermit {
-                    val candidates = try {
-                        searchCandidates(track, cleanLang)
-                    } catch (cancelled: CancellationException) {
-                        throw cancelled
-                    } catch (failure: Exception) {
-                        DebugLog.w(
-                            "SpotifyImport",
-                            "Lookup failed for '${track.title}' by '${track.artist}': ${failure.message}",
-                            failure,
-                        )
-                        // One unavailable search must not abort the entire
-                        // playlist import. This Spotify row stays retryable.
-                        emptyList()
+                    val matchedSong = matchCache.get(track.spotifyId) ?: run {
+                        val candidates = try {
+                            searchCandidates(track, cleanLang)
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (failure: Exception) {
+                            DebugLog.w(
+                                "SpotifyImport",
+                                "Lookup failed for '${track.title}' by '${track.artist}': ${failure.message}",
+                                failure,
+                            )
+                            // One unavailable search must not abort the entire
+                            // playlist import. This Spotify row stays retryable.
+                            emptyList()
+                        }
+                        // Liner's weighted evaluator rejects weak/ambiguous matches.
+                        LinerSpotifyMatcher.evaluate(track, candidates).track?.also { matched ->
+                            matchCache.put(track.spotifyId, matched)
+                        }
                     }
-                    // Liner's weighted evaluator rejects weak/ambiguous matches.
-                    val matchedSong = LinerSpotifyMatcher.evaluate(track, candidates).track
 
                     val done = completedCount.incrementAndGet()
                     onProgress(done, total)

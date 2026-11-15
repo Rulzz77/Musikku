@@ -67,6 +67,112 @@ class SpotifyImporterIdentityTest {
     }
 
     @Test
+    fun searchParserReadsTrackIdsFromEveryLinerSupportedEndpoint() {
+        val cases = listOf(
+            "title-run" to "title",
+            "row-on-tap" to "onTap",
+            "row-navigation-endpoint" to "navigationEndpoint",
+        )
+
+        for ((id, location) in cases) {
+            val titleRunEndpoint = if (location == "title") {
+                """, "navigationEndpoint": {"watchEndpoint": {"videoId": "$id"}}"""
+            } else {
+                ""
+            }
+            val rowEndpoint = when (location) {
+                "onTap" -> """"onTap": {"watchEndpoint": {"videoId": "$id"}},"""
+                "navigationEndpoint" -> """"navigationEndpoint": {"watchEndpoint": {"videoId": "$id"}},"""
+                else -> ""
+            }
+            val response = Json.parseToJsonElement(
+                """
+                {
+                  "contents": [{
+                    "musicResponsiveListItemRenderer": {
+                      $rowEndpoint
+                      "flexColumns": [
+                        {"musicResponsiveListItemFlexColumnRenderer": {"text": {"runs": [
+                          {"text": "Talaga Reumis"$titleRunEndpoint}
+                        ]}}},
+                        {"musicResponsiveListItemFlexColumnRenderer": {"text": {"runs": [
+                          {"text": "Song"}, {"text": " • "},
+                          {"text": "Gasentra Pajampangan"}, {"text": " • "},
+                          {"text": "4:03"}
+                        ]}}}
+                      ],
+                      "thumbnail": {"musicThumbnailRenderer": {"thumbnail": {"thumbnails": [
+                        {"url": "https://example.invalid/cover.jpg", "width": 544, "height": 544}
+                      ]}}}
+                    }
+                  }]
+                }
+                """.trimIndent(),
+            ).jsonObject
+
+            val result = InnertubeParser.parseSearchPage(
+                response,
+                includeAllTrackTypes = true,
+                musicOnly = true,
+            ).rows.single()
+
+            assertEquals(id, spotifyImportCandidate(result)?.videoId, "id location: $location")
+        }
+    }
+
+    @Test
+    fun spotifyTrackFilterKeepsWidescreenCandidatesInsteadOfDroppingThem() {
+        val response = Json.parseToJsonElement(
+            """
+            {
+              "contents": [{
+                "musicResponsiveListItemRenderer": {
+                  "flexColumns": [
+                    {"musicResponsiveListItemFlexColumnRenderer": {"text": {"runs": [
+                      {"text": "Talaga Reumis", "navigationEndpoint": {
+                        "watchEndpoint": {"videoId": "talaga-reumis-widescreen"}
+                      }}
+                    ]}}},
+                    {"musicResponsiveListItemFlexColumnRenderer": {"text": {"runs": [
+                      {"text": "Song"}, {"text": " • "},
+                      {"text": "Gasentra Pajampangan"}, {"text": " • "},
+                      {"text": "4:03"}
+                    ]}}}
+                  ],
+                  "thumbnail": {"musicThumbnailRenderer": {"thumbnail": {"thumbnails": [
+                    {"url": "https://example.invalid/widescreen.jpg", "width": 544, "height": 306}
+                  ]}}}
+                }
+              }]
+            }
+            """.trimIndent(),
+        ).jsonObject
+
+        // The ordinary screen parser uses a widescreen-art heuristic and
+        // drops this row from Songs. Liner's import keeps the result because
+        // it came from the server's dedicated TRACK filter.
+        assertTrue(
+            InnertubeParser.parseSearchPage(response, musicOnly = true).rows.isEmpty(),
+        )
+
+        val importedRow = InnertubeParser.parseSearchPage(
+            response,
+            includeAllTrackTypes = true,
+            musicOnly = true,
+        ).rows.single()
+        val parsedSong = assertNotNull(spotifyImportCandidate(importedRow))
+        assertTrue(parsedSong.isVideo)
+
+        val normalized = YtMusicRepository.normalizeSpotifyImportCandidate(
+            parsedSong,
+            YtMusicRepository.SpotifyImportSearchKind.TRACK,
+        )
+        assertEquals("talaga-reumis-widescreen", normalized.videoId)
+        assertFalse(normalized.isVideo)
+        assertFalse(normalized.isVideoOrigin)
+    }
+
+    @Test
     fun linerSpotifyMatcherUsesWeightedFuzzyTitleAndArtistScoring() {
         val source = SpotifyImportTrack(
             title = "Talaga Reumis",

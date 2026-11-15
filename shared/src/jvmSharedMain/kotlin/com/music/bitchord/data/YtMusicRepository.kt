@@ -363,6 +363,22 @@ object YtMusicRepository {
      */
     enum class SpotifyImportSearchKind { TRACK, ALL, VIDEO }
 
+    /**
+     * The server-side filter is authoritative for an import stage. In
+     * particular, a TRACK-filter result must not be dropped just because its
+     * artwork is widescreen: the general search parser uses that as a UI
+     * heuristic, while Liner treats every playable row returned by the
+     * filtered request as a candidate.
+     */
+    internal fun normalizeSpotifyImportCandidate(
+        song: Song,
+        kind: SpotifyImportSearchKind,
+    ): Song = when (kind) {
+        SpotifyImportSearchKind.TRACK -> song.copy(isVideo = false, isVideoOrigin = false)
+        SpotifyImportSearchKind.ALL -> song
+        SpotifyImportSearchKind.VIDEO -> song.copy(isVideo = true, isVideoOrigin = true)
+    }
+
     suspend fun searchSpotifyImportRaw(
         query: String,
         kind: SpotifyImportSearchKind,
@@ -376,15 +392,19 @@ object YtMusicRepository {
         val page = InnertubeParser.parseSearchPage(
             response,
             includeVideos = kind == SpotifyImportSearchKind.VIDEO,
-            includeAllTrackTypes = kind == SpotifyImportSearchKind.ALL,
+            // Do not second-guess the server's TRACK filter using the
+            // thumbnail-aspect-ratio heuristic. Liner also keeps all
+            // playable rows returned by this exact search stage.
+            includeAllTrackTypes = kind != SpotifyImportSearchKind.VIDEO,
             musicOnly = true,
         )
         page.rows.mapNotNull { row ->
-            when (row) {
+            val song = when (row) {
                 is SearchResult.Track -> row.song
                 is SearchResult.TopTrack -> row.song
                 is SearchResult.Browse -> null
             }
+            song?.let { normalizeSpotifyImportCandidate(it, kind) }
         }
     }
 

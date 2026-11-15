@@ -164,7 +164,7 @@ internal object LinerSpotifyMatcher {
 
         val credits = source.artistCredits.ifEmpty {
             source.artist.split(
-                Regex("""\s*(?:,|&| feat\\.? | ft\\.? | featuring | with )\s*""", RegexOption.IGNORE_CASE),
+                Regex("""\s*(?:,|&| feat\.? | ft\.? | featuring | with )\s*""", RegexOption.IGNORE_CASE),
             )
         }
         val primaryArtist = sourceMetadata(source).artist

@@ -377,7 +377,11 @@ internal object LinerSpotifyMatcher {
             .filter(String::isNotBlank)
         val versions = compareVersions(profile.versionTags, versionTags(candidate.title))
         val candidateArtists = candidate.artists.map { it.name }.filter(String::isNotBlank).toMutableList()
-        if (candidateArtists.isEmpty() && candidate.artist.isNotBlank()) candidateArtists += candidate.artist
+        if (candidate.artist.isNotBlank() &&
+            candidateArtists.none { it.equals(candidate.artist, ignoreCase = true) }
+        ) {
+            candidateArtists += candidate.artist
+        }
 
         // YouTube catalogue titles use both "Artist - Title" and
         // "Title - Artist". Only treat a segment as an artist when it matches

@@ -122,6 +122,89 @@ class SpotifyImporterIdentityTest {
     }
 
     @Test
+    fun spotifyImportUsesLinerStyleFuzzyTitleAndArtistScoringForRegionalCredits() {
+        val target = TrackMatcher.Target(
+            title = "Talaga Reumis",
+            artist = "Gasantra Pajampangan, Nanih",
+            durationSec = 243,
+            requiredArtistName = "Gasantra Pajampangan",
+            requireSharedArtist = true,
+            requireExactTitle = true,
+            artistCredits = listOf("Gasantra Pajampangan", "Nanih"),
+        )
+        val catalogueSpelling = Song(
+            videoId = "liner-fuzzy-regional-spelling",
+            title = "Telaga Reumis",
+            artist = "Gasentra Pajampangan",
+            thumbnailUrl = null,
+            durationText = "4:03",
+        )
+
+        // Liner Desktop scores title + full artist tokens instead of demanding
+        // exact strings. This covers a regional title spelling and a transposed
+        // letter in a long performer name.
+        assertNotNull(TrackMatcher.best(listOf(catalogueSpelling), target))
+        assertEquals(
+            catalogueSpelling,
+            bestSpotifyImportMatch(listOf(catalogueSpelling), target),
+        )
+
+        // Fuzzy identity must not become a duration-only shortcut.
+        assertNull(
+            TrackMatcher.best(
+                listOf(catalogueSpelling.copy(durationText = "4:20")),
+                target,
+            ),
+        )
+        assertNull(
+            TrackMatcher.best(
+                listOf(catalogueSpelling.copy(artist = "Unrelated Singer")),
+                target,
+            ),
+        )
+
+        // Keep complete artist-name boundaries: "X Ambassadors" is not
+        // the unrelated artist "Ambassadors".
+        val xTarget = target.copy(
+            title = "Renegades",
+            artist = "X Ambassadors",
+            requiredArtistName = "X Ambassadors",
+            artistCredits = listOf("X Ambassadors"),
+        )
+        assertNull(
+            TrackMatcher.best(
+                listOf(catalogueSpelling.copy(
+                    title = "Renegades",
+                    artist = "Ambassadors",
+                    durationText = "4:03",
+                )),
+                xTarget,
+            ),
+        )
+    }
+
+    @Test
+    fun spotifyImportLinerFuzzyMatchingStillRejectsWrongVersion() {
+        val target = TrackMatcher.Target(
+            title = "Talaga Reumis",
+            artist = "Gasantra Pajampangan, Nanih",
+            durationSec = 243,
+            requiredArtistName = "Gasantra Pajampangan",
+            requireSharedArtist = true,
+            requireExactTitle = true,
+            artistCredits = listOf("Gasantra Pajampangan", "Nanih"),
+        )
+        val live = Song(
+            videoId = "liner-fuzzy-live",
+            title = "Telaga Reumis (Live)",
+            artist = "Gasentra Pajampangan",
+            thumbnailUrl = null,
+            durationText = "4:03",
+        )
+        assertNull(TrackMatcher.best(listOf(live), target))
+    }
+
+    @Test
     fun spotifyImportRejectsDifferentSingerEvenWhenTitleAndDurationMatch() {
         val target = TrackMatcher.Target(
             title = "Dumes",

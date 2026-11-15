@@ -9,6 +9,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -17,8 +20,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -28,9 +35,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -41,6 +50,7 @@ import com.music.bitchord.data.model.PlaylistPrivacy
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.spotify.SpotifyImportTrack
 import com.music.bitchord.data.spotify.SpotifyImporter
+import coil3.compose.AsyncImage
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
 import kotlinx.coroutines.CancellationException
@@ -89,6 +99,69 @@ fun SpotifyImportAlert(
     var importTitle by remember { mutableStateOf<String?>(null) }
     var resolvedSongs by remember { mutableStateOf<List<Song>>(emptyList()) }
     var submitted by remember { mutableStateOf(false) }
+    var editingTrack by remember { mutableStateOf<SpotifyImportTrack?>(null) }
+    var manualQuery by remember { mutableStateOf("") }
+    var manualCandidates by remember { mutableStateOf<List<Song>>(emptyList()) }
+    var manualSearching by remember { mutableStateOf(false) }
+    var manualError by remember { mutableStateOf<String?>(null) }
+
+    fun closeManualSearch() {
+        editingTrack = null
+        manualCandidates = emptyList()
+        manualError = null
+        manualQuery = ""
+        manualSearching = false
+    }
+
+    fun openManualSearch(track: SpotifyImportTrack) {
+        editingTrack = track
+        manualQuery = SpotifyImporter.replacementSearchQuery(track)
+        manualCandidates = emptyList()
+        manualError = null
+    }
+
+    fun searchManualCandidates() {
+        val requestedTrack = editingTrack ?: return
+        val requestedQuery = manualQuery.trim()
+        if (requestedQuery.isBlank() || manualSearching) return
+        manualSearching = true
+        manualError = null
+        manualCandidates = emptyList()
+        scope.launch {
+            try {
+                val results = SpotifyImporter.searchReplacementCandidates(requestedQuery)
+                if (editingTrack == requestedTrack && manualQuery.trim() == requestedQuery) {
+                    manualCandidates = results
+                    if (results.isEmpty()) manualError = "Tidak ada kandidat. Coba ubah kata kunci."
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                if (editingTrack == requestedTrack) {
+                    manualError = failure.message ?: "Pencarian gagal. Coba lagi."
+                }
+            } finally {
+                if (editingTrack == requestedTrack) manualSearching = false
+            }
+        }
+    }
+
+    fun chooseManualCandidate(track: SpotifyImportTrack, candidate: Song) {
+        val remaining = unmatched.orEmpty().toMutableList()
+        val sourceIndex = remaining.indexOf(track)
+        if (sourceIndex >= 0) remaining.removeAt(sourceIndex)
+        unmatched = remaining
+
+        val alreadyAdded = resolvedSongs.any { it.videoId == candidate.videoId }
+        if (!alreadyAdded && candidate.videoId.isNotBlank()) {
+            resolvedSongs = resolvedSongs + candidate
+        }
+        // A deliberate user selection is a trusted positive mapping for
+        // subsequent playlists containing this same Spotify track ID.
+        SpotifyImporter.rememberManualMatch(track, candidate)
+        closeManualSearch()
+        if (remaining.isEmpty()) finishImport()
+    }
 
     fun effectiveLanguage(): String? = if (selectedLanguage == "Manual / Other") {
         customLanguageInput.trim().ifBlank { null }
@@ -202,11 +275,36 @@ fun SpotifyImportAlert(
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     missed.forEach { track ->
-                        Text(
-                            text = if (track.artist.isBlank()) track.title else "${track.title} · ${track.artist}",
-                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    text = track.title,
+                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                if (track.artist.isNotBlank()) {
+                                    Text(
+                                        text = track.artist,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                            }
+                            TextButton(
+                                onClick = { openManualSearch(track) },
+                                enabled = !working,
+                            ) {
+                                Text("Cari")
+                            }
+                        }
                     }
                 }
             } else {
@@ -356,3 +454,123 @@ fun SpotifyImportAlert(
         }
     }
 }
+
+
+    editingTrack?.let { track ->
+        AlertDialog(
+            onDismissRequest = { if (!manualSearching) closeManualSearch() },
+            title = { Text("Cari pengganti lagu") },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text(
+                        text = listOf(track.title, track.artist).filter(String::isNotBlank).joinToString(" · "),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    OutlinedTextField(
+                        value = manualQuery,
+                        onValueChange = {
+                            manualQuery = it
+                            manualError = null
+                            manualCandidates = emptyList()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        label = { Text("Judul atau artis") },
+                        enabled = !manualSearching,
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Text,
+                            imeAction = ImeAction.Search,
+                        ),
+                        keyboardActions = KeyboardActions(onSearch = { searchManualCandidates() }),
+                    )
+                    if (manualSearching) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                            Text("Mencari kandidat YouTube Music…", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                    manualError?.let { message ->
+                        Text(
+                            text = message,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    LazyColumn(
+                        modifier = Modifier.heightIn(max = 300.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        items(manualCandidates, key = { it.videoId }) { candidate ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .clickable(enabled = !manualSearching) {
+                                        chooseManualCandidate(track, candidate)
+                                    }
+                                    .padding(8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                AsyncImage(
+                                    model = candidate.thumbnailUrl,
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier
+                                        .size(48.dp)
+                                        .clip(RoundedCornerShape(7.dp)),
+                                )
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        text = candidate.title,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    Text(
+                                        text = candidate.artist,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    candidate.durationText?.let { duration ->
+                                        Text(
+                                            text = duration,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = ::searchManualCandidates,
+                    enabled = manualQuery.isNotBlank() && !manualSearching,
+                ) {
+                    Text("Cari")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = ::closeManualSearch,
+                    enabled = !manualSearching,
+                ) {
+                    Text("Tutup")
+                }
+            },
+        )
+    }

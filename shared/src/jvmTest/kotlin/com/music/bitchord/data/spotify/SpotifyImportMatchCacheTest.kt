@@ -32,6 +32,20 @@ class SpotifyImportMatchCacheTest {
     }
 
     @Test
+    fun keepsDifferentLanguageMatchesSeparateAndNormalizesNoPreference() {
+        val cache = SpotifyImportMatchCache()
+        val defaultSong = song("yt-default")
+        val englishSong = song("yt-english")
+
+        cache.put("spotify-one", defaultSong, "No Preference")
+        cache.put("spotify-one", englishSong, "English")
+
+        assertEquals(defaultSong, cache.get("spotify-one"))
+        assertEquals(defaultSong, cache.get("spotify-one", "Multilingual"))
+        assertEquals(englishSong, cache.get("spotify-one", "english"))
+    }
+
+    @Test
     fun evictsLeastRecentlyUsedEntryWhenCapacityIsExceeded() {
         val cache = SpotifyImportMatchCache(maxEntries = 2)
         val first = song("yt-one")

@@ -283,7 +283,7 @@ class SpotifyImporterIdentityTest {
                 listOf("Nina Kamana Cintana"),
                 listOf("Friska Bogoh Kasaha"),
             ),
-            tracks.map(LinerSpotifyMatcher::alternateArtistSearchQueries),
+            tracks.map { LinerSpotifyMatcher.alternateArtistSearchQueries(it) },
         )
     }
 

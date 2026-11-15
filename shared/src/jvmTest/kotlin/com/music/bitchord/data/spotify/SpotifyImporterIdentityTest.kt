@@ -186,17 +186,17 @@ class SpotifyImporterIdentityTest {
         )
         val first = Song(
             videoId = "liner-pulang-one",
-            title = "Pulanglah",
+            title = "Pulangx",
             artist = "Insomniacks",
             thumbnailUrl = null,
-            durationText = "3:50",
+            durationText = "3:56",
         )
         val second = Song(
             videoId = "liner-pulang-two",
-            title = "Pulang Lagi",
+            title = "Pulangy",
             artist = "Insomniacks",
             thumbnailUrl = null,
-            durationText = "3:51",
+            durationText = "3:57",
         )
 
         val decision = LinerSpotifyMatcher.evaluate(source, listOf(first, second))

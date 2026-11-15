@@ -57,7 +57,9 @@ internal object LinerSpotifyMatcher {
         val searchQuery: String,
     )
 
-    // Colon is common inside real song titles (for example "Voor Dilan #III: ...").\n    // Only split candidate titles on separators commonly used for artist/title layouts.\n    private val titleDelimiter = Regex("""\s*[-–—|~]\s*""")
+    // Colon is common inside real song titles (for example "Voor Dilan #III: ...").
+    // Only split candidate titles on separators commonly used for artist/title layouts.
+    private val titleDelimiter = Regex("""\s*[-–—|~]\s*""")
     private val versionPatterns = listOf(
         "remix" to Regex("""\b(remix(?:ed)?|ремикс|rmx)\b""", RegexOption.IGNORE_CASE),
         "vip" to Regex("""\b(vip|v\.i\.p\.?)\b""", RegexOption.IGNORE_CASE),

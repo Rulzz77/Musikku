@@ -21,6 +21,67 @@ import kotlin.test.assertTrue
 class SpotifyImporterIdentityTest {
 
     @Test
+    fun manualReplacementSearchWidensFiltersAndDeduplicatesCandidates() = runBlocking {
+        val trackCandidate = Song(
+            videoId = "manual-track",
+            title = "Talaga Reumis",
+            artist = "Gasentra Pajampangan",
+            thumbnailUrl = null,
+            durationText = "4:03",
+        )
+        val mixedCandidate = Song(
+            videoId = "manual-mixed",
+            title = "Talaga Reumis - Nanih",
+            artist = "Gasentra Pajampangan",
+            thumbnailUrl = null,
+            durationText = "4:05",
+        )
+        val videoCandidate = Song(
+            videoId = "manual-video",
+            title = "Nanih - Talaga Reumis",
+            artist = "Gasentra Pajampangan",
+            thumbnailUrl = null,
+            durationText = "6:43",
+            isVideo = true,
+        )
+        val calls = mutableListOf<YtMusicRepository.SpotifyImportSearchKind>()
+
+        val results = SpotifyImporter.searchReplacementCandidates("  Nanih Talaga Reumis  ") { query, kind ->
+            assertEquals("Nanih Talaga Reumis", query)
+            calls += kind
+            Result.success(
+                when (kind) {
+                    YtMusicRepository.SpotifyImportSearchKind.TRACK -> listOf(trackCandidate)
+                    YtMusicRepository.SpotifyImportSearchKind.ALL -> listOf(trackCandidate, mixedCandidate)
+                    YtMusicRepository.SpotifyImportSearchKind.VIDEO -> listOf(videoCandidate)
+                },
+            )
+        }
+
+        assertEquals(
+            listOf(
+                YtMusicRepository.SpotifyImportSearchKind.TRACK,
+                YtMusicRepository.SpotifyImportSearchKind.ALL,
+                YtMusicRepository.SpotifyImportSearchKind.VIDEO,
+            ),
+            calls,
+        )
+        assertEquals(listOf(trackCandidate, mixedCandidate, videoCandidate), results)
+    }
+
+    @Test
+    fun manualReplacementSearchSkipsBlankQueryWithoutNetworkCalls() = runBlocking {
+        var calls = 0
+        val results = SpotifyImporter.searchReplacementCandidates("   ") { _, _ ->
+            calls++
+            Result.success(emptyList())
+        }
+
+        assertTrue(results.isEmpty())
+        assertEquals(0, calls)
+    }
+
+    @Test
     fun allSearchParserPreservesPromotedTrackForSpotifyImport() {
         val response = Json.parseToJsonElement(
             """

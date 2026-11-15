@@ -2055,4 +2055,38 @@ class SpotifyImporterIdentityTest {
         assertEquals(tamil, LinerSpotifyMatcher.evaluate(source, candidates).track)
     }
 
+
+
+    @Test
+    fun linerSpotifyMatcherKeepsPrimaryLabelFallbackWhenCatalogueOmitsSinger() {
+        val source = SpotifyImportTrack(
+            title = "Talaga Reumis",
+            artist = "Gasentra Pajampangan, Nanih",
+            leadArtist = "Gasentra Pajampangan",
+            artistCredits = listOf("Gasentra Pajampangan", "Nanih"),
+        )
+        val labelOnlyCatalogueResult = Song(
+            videoId = "talaga-reumis-label-only",
+            title = "Talaga Reumis",
+            artist = "Gasentra Pajampangan",
+            thumbnailUrl = null,
+            durationText = null,
+        )
+
+        // A label-only catalogue byline must remain a fallback when the
+        // secondary singer is not exposed by YouTube Music's metadata.
+        assertEquals(
+            labelOnlyCatalogueResult,
+            LinerSpotifyMatcher.evaluate(source, listOf(labelOnlyCatalogueResult)).track,
+        )
+
+        val explicitlyWrongSinger = labelOnlyCatalogueResult.copy(
+            videoId = "talaga-reumis-wrong-singer",
+            title = "Talaga Reumis - Nina",
+        )
+        assertNull(
+            LinerSpotifyMatcher.evaluate(source, listOf(explicitlyWrongSinger)).track,
+        )
+    }
+
 }

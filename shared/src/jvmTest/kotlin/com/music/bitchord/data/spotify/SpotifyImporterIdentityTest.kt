@@ -94,6 +94,34 @@ class SpotifyImporterIdentityTest {
     }
 
     @Test
+    fun spotifyImportKeepsBroaderQueriesForRecoveryWhenFastPathMisses() {
+        val target = TrackMatcher.Target(
+            title = "Talaga Reumis",
+            artist = "Gasantra Pajampangan, Nanih",
+            durationSec = 243,
+            album = "Album Sunda",
+            requiredArtistName = "Gasantra Pajampangan",
+            requireSharedArtist = true,
+            requireExactTitle = true,
+            artistCredits = listOf("Gasantra Pajampangan", "Nanih"),
+        )
+
+        val fast = spotifyImportFastPathQueries(target)
+        val recovery = spotifyImportRecoveryQueries(target)
+
+        assertEquals(
+            listOf(
+                "Talaga Reumis",
+                "Talaga Reumis Gasantra Pajampangan",
+            ),
+            fast,
+        )
+        assertTrue(recovery.isNotEmpty())
+        assertFalse(recovery.any(fast::contains))
+        assertTrue(recovery.any { it.contains("Album Sunda") })
+    }
+
+    @Test
     fun durationOnlyComposerOverrideDoesNotCountAsTrustedArtistCredit() {
         val target = TrackMatcher.Target(
             title = "Terlalu Sayang",

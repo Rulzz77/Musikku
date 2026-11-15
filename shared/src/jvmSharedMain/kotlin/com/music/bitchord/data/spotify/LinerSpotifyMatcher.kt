@@ -72,7 +72,6 @@ internal object LinerSpotifyMatcher {
         "instrumental" to Regex("""\b(instrumental|инструментал|inst\b\.?)\b""", RegexOption.IGNORE_CASE),
         "acoustic" to Regex("""\b(acoustic|акустика)\b""", RegexOption.IGNORE_CASE),
         "live" to Regex("""\b(live(?:\s+at[^)]+)?|лайв|концерт)\b""", RegexOption.IGNORE_CASE),
-        "cover" to Regex("""\b(cover|кавер)\b""", RegexOption.IGNORE_CASE),
         "bass_boosted" to Regex("""\b(bass\s*boost(?:ed)?|басс\s*буст)\b""", RegexOption.IGNORE_CASE),
     )
 
@@ -152,6 +151,33 @@ internal object LinerSpotifyMatcher {
     fun searchQuery(source: SpotifyImportTrack): String = sourceMetadata(source).searchQuery
 
     fun cleanedTitle(source: SpotifyImportTrack): String = sourceMetadata(source).title
+
+    /**
+     * Alternate lookup queries for tracks whose Spotify primary credit is a
+     * label/channel while YouTube Music indexes the actual vocalist. The
+     * matcher still evaluates every result against all structured credits;
+     * these queries only widen discovery, never acceptance.
+     */
+    fun alternateArtistSearchQueries(source: SpotifyImportTrack): List<String> {
+        val title = cleanedTitle(source)
+        if (title.isBlank()) return emptyList()
+
+        val credits = source.artistCredits.ifEmpty {
+            source.artist.split(
+                Regex("""\s*(?:,|&| feat\.? | ft\.? | featuring | with )\s*""", RegexOption.IGNORE_CASE),
+            )
+        }
+        val primaryArtist = sourceMetadata(source).artist
+        return credits.asSequence()
+            .map(String::trim)
+            .filter(String::isNotBlank)
+            .filterNot { artistsMatch(it, primaryArtist) }
+            .distinct()
+            .take(3)
+            .map { artist -> "$artist $title".replace(Regex("""\s+"""), " ").trim() }
+            .distinct()
+            .toList()
+    }
 
     fun evaluate(source: SpotifyImportTrack, candidates: List<Song>): Decision {
         val profile = buildProfile(source)
@@ -312,17 +338,47 @@ internal object LinerSpotifyMatcher {
 
     private fun rank(profile: SourceProfile, candidate: Song): RankedCandidate {
         val parsed = parseArtistAndTitle(candidate.title)
-        val candidateBase = cleanBaseTitle(parsed.title)
-        val candidateFull = cleanBaseTitle(candidate.title)
+        val rawParts = stripJunk(candidate.title)
+            .split(titleDelimiter)
+            .map(String::trim)
+            .filter(String::isNotBlank)
         val versions = compareVersions(profile.versionTags, versionTags(candidate.title))
         val candidateArtists = candidate.artists.map { it.name }.filter(String::isNotBlank).toMutableList()
         if (candidateArtists.isEmpty() && candidate.artist.isNotBlank()) candidateArtists += candidate.artist
+
+        // YouTube catalogue titles use both "Artist - Title" and
+        // "Title - Artist". A singer segment is only treated as an embedded
+        // credit when it does not itself look like the requested song title.
+        val embeddedArtistParts = rawParts.filter { part ->
+            val partBase = cleanBaseTitle(part)
+            computeTitleRatio(profile, partBase, partBase) < 80 &&
+                profile.artists.any { artistsMatch(it, part) }
+        }
+        candidateArtists += embeddedArtistParts
         parsed.artist?.let { parsedArtist ->
             if (candidateArtists.none { artistsMatch(it, parsedArtist) }) candidateArtists += parsedArtist
         }
-        val primaryCandidate = candidateArtists.firstOrNull().orEmpty()
 
-        var titleRatio = computeTitleRatio(profile, candidateBase, candidateFull)
+        val titleOptions = linkedSetOf<String>().apply {
+            add(parsed.title)
+            add(candidate.title)
+            addAll(rawParts)
+            val withoutEmbeddedCredits = rawParts.filterNot { it in embeddedArtistParts }
+            if (withoutEmbeddedCredits.isNotEmpty() && withoutEmbeddedCredits.size < rawParts.size) {
+                add(withoutEmbeddedCredits.joinToString(" "))
+            }
+        }
+        val bestTitle = titleOptions
+            .map { option ->
+                val base = cleanBaseTitle(option)
+                base to computeTitleRatio(profile, base, base)
+            }
+            .maxByOrNull { it.second }
+        val candidateBase = bestTitle?.first.orEmpty()
+        var titleRatio = bestTitle?.second ?: 0
+
+        val primaryCandidate = candidateArtists.firstOrNull { artistsMatch(profile.primaryArtist, it) }
+            ?: candidateArtists.firstOrNull().orEmpty()
         val artist = computeArtistScore(profile, candidateArtists, primaryCandidate)
         val inverted = computeInvertedMatch(profile, candidateBase, candidateArtists)
         var artistRatio = artist.second

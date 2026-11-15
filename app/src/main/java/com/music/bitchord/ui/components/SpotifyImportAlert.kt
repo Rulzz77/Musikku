@@ -453,8 +453,6 @@ fun SpotifyImportAlert(
             )
         }
     }
-}
-
 
     editingTrack?.let { track ->
         AlertDialog(
@@ -574,3 +572,4 @@ fun SpotifyImportAlert(
             },
         )
     }
+}

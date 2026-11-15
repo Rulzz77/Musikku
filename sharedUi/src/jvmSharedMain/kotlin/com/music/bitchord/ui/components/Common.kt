@@ -334,6 +334,8 @@ fun SongRow(
      * songs folder's per-track download button. Null on every other list.
      */
     trailing: (@Composable () -> Unit)? = null,
+    /** Keep destructive playlist controls available even for unresolved imported rows. */
+    showTrailingWhenUnavailable: Boolean = false,
 ) {
     SwipeToQueueBox(
         onSwipeToQueue = onSwipeToQueue,
@@ -355,6 +357,7 @@ fun SongRow(
             selected = selected,
             showSourceQuality = showSourceQuality,
             trailing = trailing,
+            showTrailingWhenUnavailable = showTrailingWhenUnavailable,
         )
     }
 }
@@ -496,6 +499,8 @@ private fun SongRowContent(
     selected: Boolean = false,
     showSourceQuality: Boolean = false,
     trailing: (@Composable () -> Unit)? = null,
+    /** Keep destructive playlist controls available even for unresolved imported rows. */
+    showTrailingWhenUnavailable: Boolean = false,
 ) {
     val titleColor by animateColorAsState(
         targetValue = if (isCurrent && !searchPlayingStyle) activeTint else MaterialTheme.colorScheme.onBackground,
@@ -637,7 +642,7 @@ private fun SongRowContent(
                 )
             }
         }
-        if (trailing != null && !matching && !unavailable) {
+        if (trailing != null && (showTrailingWhenUnavailable || (!matching && !unavailable))) {
             Spacer(Modifier.width(4.dp))
             trailing()
         }

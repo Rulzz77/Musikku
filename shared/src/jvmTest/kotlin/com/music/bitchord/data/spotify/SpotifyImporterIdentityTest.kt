@@ -173,6 +173,48 @@ class SpotifyImporterIdentityTest {
     }
 
     @Test
+    fun videoSearchParserPreservesPromotedVideoCardWithSquareArtwork() {
+        val response = Json.parseToJsonElement(
+            """
+            {
+              "contents": [{
+                "musicCardShelfRenderer": {
+                  "onTap": { "watchEndpoint": { "videoId": "promoted-sundanese-video" } },
+                  "title": { "runs": [{ "text": "TALAGA REUMIS (Nining Meida) - Nanih (Pop Sunda Cover)" }] },
+                  "subtitle": { "runs": [
+                    { "text": "Gasentra Pajampangan" },
+                    { "text": " • " },
+                    { "text": "6:43" }
+                  ] },
+                  "thumbnail": { "musicThumbnailRenderer": {
+                    "thumbnail": { "thumbnails": [{
+                      "url": "https://example.invalid/square-cover.jpg",
+                      "width": 544,
+                      "height": 544
+                    }] }
+                  } }
+                }
+              }]
+            }
+            """.trimIndent(),
+        ).jsonObject
+
+        val rows = InnertubeParser.parseSearchPage(
+            response,
+            includeVideos = true,
+            musicOnly = true,
+        ).rows
+
+        val promoted = rows.single()
+        assertTrue(promoted is SearchResult.TopTrack)
+        val song = assertNotNull(spotifyImportCandidate(promoted))
+        assertEquals("promoted-sundanese-video", song.videoId)
+        // The server returned this from the dedicated Videos filter, so its
+        // square thumbnail must not make the importer classify it as audio.
+        assertTrue(song.isVideo)
+    }
+
+    @Test
     fun linerSpotifyMatcherUsesWeightedFuzzyTitleAndArtistScoring() {
         val source = SpotifyImportTrack(
             title = "Talaga Reumis",

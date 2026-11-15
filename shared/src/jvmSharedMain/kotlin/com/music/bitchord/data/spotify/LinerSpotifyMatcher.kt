@@ -57,7 +57,9 @@ internal object LinerSpotifyMatcher {
         val searchQuery: String,
     )
 
-    private val titleDelimiter = Regex("""\s*[-–—:|~]\s*""")
+    // Colon is common inside real song titles (for example "Voor Dilan #III: ...").
+    // Only split candidate titles on separators commonly used for artist/title layouts.
+    private val titleDelimiter = Regex("""\s*[-–—|~]\s*""")
     private val versionPatterns = listOf(
         "remix" to Regex("""\b(remix(?:ed)?|ремикс|rmx)\b""", RegexOption.IGNORE_CASE),
         "vip" to Regex("""\b(vip|v\.i\.p\.?)\b""", RegexOption.IGNORE_CASE),
@@ -179,21 +181,49 @@ internal object LinerSpotifyMatcher {
             .toList()
     }
 
+    /**
+     * True when a candidate is accepted only from the primary label/channel
+     * credit while Spotify also identifies a secondary vocalist. In that case
+     * search the secondary credit before finalizing the import.
+     */
+    fun needsSecondaryArtistSearch(source: SpotifyImportTrack, candidate: Song?): Boolean {
+        val profile = buildProfile(source)
+        val secondaryArtists = profile.artists.filterNot { artistsMatch(it, profile.primaryArtist) }
+        if (secondaryArtists.isEmpty()) return false
+        if (candidate == null) return true
+
+        val candidateArtists = candidate.artists.map { it.name }.filter(String::isNotBlank).toMutableList()
+        if (candidate.artist.isNotBlank()) candidateArtists += candidate.artist
+        val titleCredits = stripJunk(candidate.title)
+            .split(titleDelimiter)
+            .filter(String::isNotBlank)
+            .filter { part ->
+                computeTitleRatio(profile, cleanBaseTitle(part), cleanBaseTitle(part)) < 80 &&
+                    secondaryArtists.any { artistsMatch(it, part) }
+            }
+        candidateArtists += titleCredits
+        return candidateArtists.none { name -> secondaryArtists.any { artistsMatch(it, name) } }
+    }
+
     fun evaluate(source: SpotifyImportTrack, candidates: List<Song>): Decision {
         val profile = buildProfile(source)
         val ranked = candidates.map { rank(profile, it) }.sortedByDescending { it.score }
-        val best = ranked.firstOrNull() ?: return Decision(reason = "low_confidence_match")
-        if (best.disqualified) {
-            return Decision(score = best.score, reason = "duration_mismatch", proposedTrack = best.track)
-        }
-        // Liner's exact-title + duration acceptance can otherwise approve a
-        // same-title cover with a clearly unrelated credited singer. Spotify
-        // provides structured credits, so retain a hard performer-conflict
-        // veto when both catalogues actually name different people.
-        if (best.artistConflict) {
-            return Decision(score = best.score, reason = "artist_mismatch", proposedTrack = best.track)
-        }
-        val second = ranked.getOrNull(1)
+        val topRanked = ranked.firstOrNull() ?: return Decision(reason = "low_confidence_match")
+
+        // A high-scoring bad result must not block a valid second result. Remove
+        // candidates with impossible duration or explicit performer conflicts
+        // before applying the normal confidence and ambiguity rules.
+        val eligible = ranked.filterNot { it.disqualified || it.artistConflict }
+        val best = eligible.firstOrNull() ?: return Decision(
+            score = topRanked.score,
+            reason = when {
+                topRanked.disqualified -> "duration_mismatch"
+                topRanked.artistConflict -> "artist_mismatch"
+                else -> "low_confidence_match"
+            },
+            proposedTrack = topRanked.track,
+        )
+        val second = eligible.getOrNull(1)
         if (isAmbiguous(best, second)) {
             return Decision(score = best.score, reason = "ambiguous_match", proposedTrack = best.track)
         }
@@ -226,32 +256,33 @@ internal object LinerSpotifyMatcher {
 
     private fun buildProfile(source: SpotifyImportTrack): SourceProfile {
         val metadata = sourceMetadata(source)
-        val parsed = parseArtistAndTitle(source.title)
+        val leadArtist = source.leadArtist?.trim()?.takeIf(String::isNotBlank)
         val artists = source.artistCredits.filter(String::isNotBlank).toMutableList()
         if (artists.isEmpty()) {
-            (source.leadArtist?.takeIf(String::isNotBlank) ?: source.artist)
+            (leadArtist ?: source.artist)
                 .split(Regex("""\s*(?:,|&| feat\.? | ft\.? | featuring | with )\s*""", RegexOption.IGNORE_CASE))
                 .map(String::trim)
                 .filter(String::isNotBlank)
                 .forEach(artists::add)
         }
-        if (metadata.artist.isNotBlank() && artists.none { artistsMatch(it, metadata.artist) }) {
-            artists += metadata.artist
+        // Spotify's structured lead artist and artist objects are authoritative.
+        // Never reinterpret punctuation inside the Spotify title as an artist/title pair.
+        if (leadArtist != null && artists.none { artistsMatch(it, leadArtist) }) {
+            artists.add(0, leadArtist)
         }
-        val parts = stripJunk(source.title).split(titleDelimiter)
-        val hasTwoParts = parts.size == 2 && parts[0].trim().length >= 2 && parts[1].trim().isNotEmpty()
+        val primaryArtist = leadArtist ?: artists.firstOrNull() ?: source.artist
         return SourceProfile(
             rawTitle = source.title,
             searchTitle = metadata.title,
             searchQuery = metadata.searchQuery,
-            baseTitle = cleanBaseTitle(parsed.title),
+            baseTitle = cleanBaseTitle(source.title),
             fullClean = cleanBaseTitle(source.title),
             versionTags = metadata.versionTags,
             artists = artists,
-            primaryArtist = artists.firstOrNull().orEmpty(),
-            hasTwoParts = hasTwoParts,
-            part0Clean = if (hasTwoParts) cleanBaseTitle(parts[0]) else "",
-            part1Clean = if (hasTwoParts) cleanBaseTitle(parts[1]) else "",
+            primaryArtist = primaryArtist,
+            hasTwoParts = false,
+            part0Clean = "",
+            part1Clean = "",
             durationMs = source.durationMs?.takeIf { it > 0 },
         )
     }
@@ -272,12 +303,14 @@ internal object LinerSpotifyMatcher {
     )
 
     private fun sourceMetadata(source: SpotifyImportTrack): SourceMetadata {
-        val parsed = parseArtistAndTitle(source.title)
-        val artist = (parsed.artist
-            ?: source.leadArtist
-            ?: source.artistCredits.firstOrNull()
-            ?: source.artist).trim()
-        val title = stripJunk(parsed.title)
+        val artist = (
+            source.leadArtist?.takeIf(String::isNotBlank)
+                ?: source.artistCredits.firstOrNull(String::isNotBlank)
+                ?: source.artist
+            ).trim()
+        // Spotify's track title is a title, not an "Artist - Title" upload string.
+        // Preserve hyphens/colons so version suffixes and colon subtitles remain searchable.
+        val title = stripJunk(source.title)
         val query = if (artist.isNotBlank() && !title.startsWith(artist, ignoreCase = true)) {
             "$artist $title".trim()
         } else {
@@ -344,11 +377,15 @@ internal object LinerSpotifyMatcher {
             .filter(String::isNotBlank)
         val versions = compareVersions(profile.versionTags, versionTags(candidate.title))
         val candidateArtists = candidate.artists.map { it.name }.filter(String::isNotBlank).toMutableList()
-        if (candidateArtists.isEmpty() && candidate.artist.isNotBlank()) candidateArtists += candidate.artist
+        if (candidate.artist.isNotBlank() &&
+            candidateArtists.none { it.equals(candidate.artist, ignoreCase = true) }
+        ) {
+            candidateArtists += candidate.artist
+        }
 
         // YouTube catalogue titles use both "Artist - Title" and
-        // "Title - Artist". A singer segment is only treated as an embedded
-        // credit when it does not itself look like the requested song title.
+        // "Title - Artist". Only treat a segment as an artist when it matches
+        // a structured Spotify credit; arbitrary title segments are not artists.
         val embeddedArtistParts = rawParts.filter { part ->
             val partBase = cleanBaseTitle(part)
             computeTitleRatio(profile, partBase, partBase) < 80 &&
@@ -356,7 +393,11 @@ internal object LinerSpotifyMatcher {
         }
         candidateArtists += embeddedArtistParts
         parsed.artist?.let { parsedArtist ->
-            if (candidateArtists.none { artistsMatch(it, parsedArtist) }) candidateArtists += parsedArtist
+            if (profile.artists.any { artistsMatch(it, parsedArtist) } &&
+                candidateArtists.none { artistsMatch(it, parsedArtist) }
+            ) {
+                candidateArtists += parsedArtist
+            }
         }
 
         val titleOptions = linkedSetOf<String>().apply {
@@ -389,20 +430,54 @@ internal object LinerSpotifyMatcher {
             artistExact = true
         }
 
+        val hasSecondaryCredits = profile.artists.any { !artistsMatch(it, profile.primaryArtist) }
+        val secondaryCreditIdentified = candidateArtists.any { candidateArtist ->
+            profile.artists.any { sourceArtist ->
+                !artistsMatch(sourceArtist, profile.primaryArtist) &&
+                    artistsMatch(sourceArtist, candidateArtist)
+            }
+        }
+        val primaryCreditIdentified = candidateArtists.any {
+            artistsMatch(profile.primaryArtist, it)
+        }
+        val uncreditedBylineArtist = candidateArtists.any { candidateArtist ->
+            containsUncreditedArtistName(candidateArtist, profile.artists)
+        }
+        val uncreditedTitleArtist = rawParts.any { possibleArtist ->
+            val titlePartIsExact = rawParts.any { possibleTitle ->
+                possibleTitle != possibleArtist &&
+                    computeTitleRatio(
+                        profile,
+                        cleanBaseTitle(possibleTitle),
+                        cleanBaseTitle(possibleTitle),
+                    ) >= 85
+            }
+            titlePartIsExact &&
+                looksLikePerformerSegment(possibleArtist) &&
+                profile.artists.none { artistsMatch(it, possibleArtist) }
+        }
+
         val candidateDuration = durationMs(candidate.durationText)
         val delta = if (profile.durationMs != null && candidateDuration != null) {
             kotlin.math.abs(profile.durationMs - candidateDuration)
         } else null
+        // A label/channel-only byline is weaker evidence than a named credited
+        // vocalist. Keep it eligible when no better result exists, but rank it
+        // below a result that actually identifies a secondary Spotify credit.
+        val labelOnlyPenalty = if (hasSecondaryCredits && !secondaryCreditIdentified) 12 else 0
         val score = (45.0 * titleRatio / 100.0).roundToInt() +
             (30.0 * artistRatio / 100.0).roundToInt() +
-            durationScore(delta) + versions.bonus - versions.penalty
+            durationScore(delta) + versions.bonus - versions.penalty - labelOnlyPenalty
+        val unrelatedArtistConflict = profile.artists.isNotEmpty() &&
+            candidateArtists.any { it.isNotBlank() && !isGenericArtistLabel(it) } &&
+            !artistExact && artistRatio < 70 && !primaryCreditIdentified
+        val conflictingVocalist = hasSecondaryCredits && !secondaryCreditIdentified &&
+            (uncreditedBylineArtist || uncreditedTitleArtist)
         return RankedCandidate(
             track = candidate,
             score = score.coerceIn(0, 100),
             deltaMs = delta,
             disqualified = delta != null && delta > DISQUALIFY_DELTA_MS,
-            // Exact means identical after cleanup; a high fuzzy/substring score
-            // must not hide two competing near-title candidates.
             titleExact = candidateBase == profile.baseTitle,
             titleRatio = titleRatio,
             artistExact = artistExact,
@@ -410,9 +485,7 @@ internal object LinerSpotifyMatcher {
             titleClean = candidateBase,
             primaryArtist = primaryCandidate,
             versionMatches = versions.matches,
-            artistConflict = profile.artists.isNotEmpty() &&
-                candidateArtists.any { it.isNotBlank() && !isGenericArtistLabel(it) } &&
-                !artistExact && artistRatio < 70,
+            artistConflict = unrelatedArtistConflict || conflictingVocalist,
         )
     }
 
@@ -441,17 +514,29 @@ internal object LinerSpotifyMatcher {
         candidateArtists: List<String>,
         primaryCandidate: String,
     ): Pair<Boolean, Int> {
-        val direct = artistsMatch(profile.primaryArtist, primaryCandidate) ||
-            (profile.artists.isNotEmpty() && candidateArtists.any { candidate ->
-                profile.artists.any { artistsMatch(it, candidate) }
-            })
+        val secondaryMatch = candidateArtists.any { candidate ->
+            profile.artists.any { sourceArtist ->
+                !artistsMatch(sourceArtist, profile.primaryArtist) &&
+                    artistsMatch(sourceArtist, candidate)
+            }
+        }
+        val primaryMatch = artistsMatch(profile.primaryArtist, primaryCandidate) ||
+            candidateArtists.any { artistsMatch(profile.primaryArtist, it) }
+        val hasSecondaryCredits = profile.artists.any { !artistsMatch(it, profile.primaryArtist) }
+
+        // A credited vocalist is the strongest performer evidence. A channel
+        // or label matching only the lead credit is useful discovery evidence,
+        // but does not prove which singer performed the recording.
+        if (secondaryMatch) return true to 100
+        if (primaryMatch) return if (hasSecondaryCredits) false to 55 else true to 100
+
         val inTitle = candidateArtists.any { artist ->
             val normalized = normalizeTrackString(artist)
             normalized.length >= 3 &&
                 (profile.fullClean.contains(normalized) ||
                     toPhoneticLatin(profile.rawTitle).contains(toPhoneticLatin(artist)))
         }
-        if (direct || inTitle) return true to 100
+        if (inTitle) return true to 100
 
         var best = 0
         for (sourceArtist in profile.artists) {
@@ -599,6 +684,39 @@ internal object LinerSpotifyMatcher {
         normalizeTrackString(value) in setOf(
             "unknown artist", "various artists", "various", "soundtrack",
         )
+
+    private fun looksLikePerformerSegment(value: String): Boolean {
+        val tokens = normalizeTrackString(value).split(' ').filter(String::isNotBlank)
+        if (tokens.isEmpty() || isGenericArtistLabel(value)) return false
+        val packagingWords = setOf(
+            "official", "audio", "video", "music", "lyrics", "lyric", "visualizer",
+            "cover", "karaoke", "remix", "live", "edit", "version", "slowed",
+            "reverb", "sped", "speed", "up", "instrumental", "acoustic", "pop",
+            "sunda", "jawa", "full", "hd", "4k", "mv", "radio", "feat", "ft",
+            "featuring", "with", "and",
+        )
+        val nameTokens = tokens.filterNot { it in packagingWords }
+        return nameTokens.isNotEmpty() && nameTokens.size <= 4 &&
+            nameTokens.any { token -> token.any(Char::isLetter) }
+    }
+
+    private fun containsUncreditedArtistName(candidateArtist: String, sourceArtists: List<String>): Boolean {
+        val candidateTokens = normalizeTrackString(candidateArtist)
+            .split(' ')
+            .filter(String::isNotBlank)
+        val creditedTokens = sourceArtists
+            .flatMap { normalizeTrackString(it).split(' ') }
+            .filter(String::isNotBlank)
+            .distinct()
+        // Remove token-level spelling variants too (for example Gasantra /
+        // Gasentra), but do not let a similar label hide an extra singer name.
+        val remaining = candidateTokens.filter { candidateToken ->
+            creditedTokens.none { creditedToken ->
+                tokenSortRatio(candidateToken, creditedToken) >= 85
+            }
+        }.joinToString(" ")
+        return looksLikePerformerSegment(remaining)
+    }
 
     private fun artistsMatch(source: String, candidate: String): Boolean {
         if (source.isBlank() || candidate.isBlank()) return false

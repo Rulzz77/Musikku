@@ -305,7 +305,8 @@ object TrackMatcher {
             false
         }
         if (nearTitleSpellingMatch && !isTitleMatch &&
-            (!requiredArtistMatched || !withinSeconds(candidate, target, DURATION_TIGHT_SEC))
+            (!(requiredArtistMatched || linerFuzzyLeadArtistMatched) ||
+                !withinSeconds(candidate, target, LINER_FUZZY_RUNTIME_SEC))
         ) return null
         if (linerFuzzyTitleMatch &&
             !requiredArtistMatched && !linerFuzzyLeadArtistMatched

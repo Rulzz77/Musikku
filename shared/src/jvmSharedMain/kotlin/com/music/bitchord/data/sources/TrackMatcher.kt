@@ -293,8 +293,6 @@ object TrackMatcher {
         // Port Liner's weighted artist similarity for regional spellings and
         // transpositions. Whole-name token boundaries prevent "X Ambassadors"
         // from collapsing into the unrelated artist "Ambassadors".
-        val linerFuzzyLeadArtistMatched = requiredArtist != null &&
-            candidateCreditNames.any { linerArtistSimilarity(requiredArtist, it) }
         val requiredArtistMatched = if (requiredArtist != null) {
             // Keep this as one complete name. Splitting the required artist
             // with collaboration separators would turn names such as
@@ -304,12 +302,19 @@ object TrackMatcher {
         } else {
             false
         }
+        // Only use Liner's broader ratio when the credit is neither exact nor
+        // already covered by the legacy one-character spelling exception.
+        // This keeps existing 3s/8s tolerances intact for those old paths.
+        val linerFuzzyLeadArtistMatched = requiredArtist != null &&
+            !requiredArtistMatched && !nearLeadArtistMatched &&
+            candidateCreditNames.any { linerArtistSimilarity(requiredArtist, it) }
         if (nearTitleSpellingMatch && !isTitleMatch &&
-            (!(requiredArtistMatched || linerFuzzyLeadArtistMatched) ||
-                !withinSeconds(candidate, target, LINER_FUZZY_RUNTIME_SEC))
+            (!(requiredArtistMatched || nearLeadArtistMatched) ||
+                !withinSeconds(candidate, target, DURATION_TIGHT_SEC))
         ) return null
         if (linerFuzzyTitleMatch &&
-            !requiredArtistMatched && !linerFuzzyLeadArtistMatched
+            !requiredArtistMatched && !nearLeadArtistMatched &&
+            !linerFuzzyLeadArtistMatched
         ) return null
         val spotifyCredits = target.artistCredits.ifEmpty {
             artistNames(target.artist).map { it.joinToString(" ") }
@@ -397,7 +402,10 @@ object TrackMatcher {
             // A one-character spelling alias is lower confidence than an exact
             // credit and needs a known runtime within eight seconds.
             ?: ARTIST_NEAR_SPELLING.takeIf {
-                (nearLeadArtistMatched || linerFuzzyLeadArtistMatched) &&
+                nearLeadArtistMatched && withinSeconds(candidate, target, ARTIST_SPELLING_RUNTIME_SEC)
+            }
+            ?: ARTIST_NEAR_SPELLING.takeIf {
+                linerFuzzyLeadArtistMatched &&
                     withinSeconds(candidate, target, LINER_FUZZY_RUNTIME_SEC)
             }
         // The credits don't merely differ in spelling, they name different
@@ -474,9 +482,11 @@ object TrackMatcher {
             )
         ) return true
 
-        return candidateCredits.any {
-            nearArtistSpelling(required, it) || linerArtistSimilarity(required, it)
-        } && withinSeconds(candidate, target, LINER_FUZZY_RUNTIME_SEC)
+        if (candidateCredits.any { nearArtistSpelling(required, it) }) {
+            return withinSeconds(candidate, target, ARTIST_SPELLING_RUNTIME_SEC)
+        }
+        return candidateCredits.any { linerArtistSimilarity(required, it) } &&
+            withinSeconds(candidate, target, LINER_FUZZY_RUNTIME_SEC)
     }
 
     /** Candidate byline and linked credits, also split at known artist joiners. */

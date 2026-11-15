@@ -345,7 +345,9 @@ internal object LinerSpotifyMatcher {
             score = score.coerceIn(0, 100),
             deltaMs = delta,
             disqualified = delta != null && delta > DISQUALIFY_DELTA_MS,
-            titleExact = titleRatio >= 90,
+            // Exact means identical after cleanup; a high fuzzy/substring score
+            // must not hide two competing near-title candidates.
+            titleExact = candidateBase == profile.baseTitle,
             titleRatio = titleRatio,
             artistExact = artistExact,
             artistRatio = artistRatio,

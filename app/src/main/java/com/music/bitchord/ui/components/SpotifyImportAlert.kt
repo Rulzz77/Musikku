@@ -235,7 +235,7 @@ fun SpotifyImportAlert(
     }
 
     AlertScaffold(hazeState = hazeState, onDismiss = {
-        if (!working) {
+        if (!working && !replacementSearching) {
             if (unmatched != null && resolvedSongs.isNotEmpty()) finishImport() else onDismiss()
         }
     }) {

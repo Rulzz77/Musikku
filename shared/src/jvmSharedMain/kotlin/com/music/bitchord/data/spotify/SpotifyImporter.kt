@@ -181,18 +181,16 @@ object SpotifyImporter {
      * found after searching song and music-video results.
      */
     suspend fun matchTrack(track: SpotifyTrack): Song? {
-        val target = TrackMatcher.Target(
+        val source = SpotifyImportTrack(
             title = track.title,
             artist = track.artist,
-            durationSec = track.durationMs.takeIf { it > 0 }?.div(1000),
+            durationMs = track.durationMs.takeIf { it > 0 }?.toLong(),
             album = track.album,
-            requireSharedArtist = true,
-            requiredArtistName = track.leadArtist
-                ?: track.artist.substringBefore(",").trim().takeIf { it.isNotBlank() },
-            requireExactTitle = true,
+            spotifyId = track.id,
+            leadArtist = track.leadArtist,
             artistCredits = track.artistCredits,
         )
-        return bestSpotifyImportMatch(searchCandidates(target), target)
+        return LinerSpotifyMatcher.evaluate(source, searchCandidates(source)).track
     }
 
     /**
@@ -275,240 +273,107 @@ object SpotifyImporter {
      * Audio matches are always preferred. A music video is a fallback only
      * after the audio catalogue and the matching artist page have been tried.
      */
-    private suspend fun searchCandidates(target: TrackMatcher.Target, suffix: String? = null): List<Song> {
-        val found = LinkedHashMap<String, Song>()
-        val artistBrowseIds = LinkedHashSet<String>()
-        val albumBrowseIds = LinkedHashSet<String>()
+    /**
+     * Liner Desktop's actual import order, not its interactive search UI:
+     * track(query) -> all(query) when confidence is insufficient ->
+     * track(clean title) when it differs -> video(query) if still unmatched.
+     *
+     * Each stage is exactly one raw InnerTube request. Candidates are merged
+     * by video id and re-scored as a set, including Liner's ambiguity check.
+     */
+    private suspend fun searchCandidates(
+        source: SpotifyImportTrack,
+        suffix: String? = null,
+    ): List<Song> {
+        val query = LinerSpotifyMatcher.searchQuery(source)
+        val cleanTitle = LinerSpotifyMatcher.cleanedTitle(source)
         val failures = mutableListOf<String>()
-        var successfulRequests = 0
+        var candidates = emptyList<Song>()
+        var decision: LinerSpotifyMatcher.Decision? = null
 
-        val queries = spotifyImportFastPathQueries(target)
-        val recoveryQueries = spotifyImportRecoveryQueries(target)
+        suspend fun search(
+            searchQuery: String,
+            kind: YtMusicRepository.SpotifyImportSearchKind,
+        ): List<Song> {
+            if (searchQuery.isBlank()) return emptyList()
+            return YtMusicRepository.searchSpotifyImportRaw(searchQuery, kind).fold(
+                onSuccess = { it },
+                onFailure = { failure ->
+                    if (failure is CancellationException) throw failure
+                    failures += "${kind.name.lowercase()} search '$searchQuery': ${failure.message}"
+                    emptyList()
+                },
+            )
+        }
 
-        // A trusted credit alone is not enough to stop discovery: the first
-        // search row can be a shorter edit or a near-runtime regional upload.
-        // Keep looking until the title/credit match also has a close runtime.
-        fun hasHighConfidenceAudioMatch(): Boolean =
-            found.values.any { candidate ->
-                !candidate.isVideo &&
-                    TrackMatcher.hasTrustedArtistCredit(candidate, target) &&
-                    TrackMatcher.best(listOf(candidate), target) != null &&
-                    (target.durationSec == null ||
-                        TrackMatcher.withinSeconds(candidate, target, STRONG_MATCH_RUNTIME_SEC))
-            }
-
-        fun hasHighConfidenceVideoMatch(): Boolean =
-            found.values.any { candidate ->
-                candidate.isVideo &&
-                    TrackMatcher.hasTrustedArtistCredit(candidate, target) &&
-                    TrackMatcher.best(listOf(candidate), target) != null &&
-                    (target.durationSec == null ||
-                        TrackMatcher.withinSeconds(candidate, target, STRONG_MATCH_RUNTIME_SEC))
-            }
-
-        suspend fun searchFilter(
-            filter: SearchFilter,
-            querySet: List<String> = queries,
-            includeLanguageSuffix: Boolean = false,
+        suspend fun attempt(
+            searchQuery: String,
+            kind: YtMusicRepository.SpotifyImportSearchKind,
         ) {
-            fun hasHighConfidenceMatch(): Boolean = when (filter) {
-                SearchFilter.SONGS, SearchFilter.ALL -> hasHighConfidenceAudioMatch()
-                SearchFilter.VIDEOS -> hasHighConfidenceVideoMatch()
-                else -> false
+            val extra = search(searchQuery, kind)
+            if (extra.isEmpty()) return
+            val combined = LinkedHashMap<String, Song>()
+            (candidates + extra).forEach { candidate ->
+                val id = candidate.videoId.trim()
+                if (id.isNotEmpty()) combined.putIfAbsent(id, candidate)
             }
-
-            for ((queryIndex, baseQuery) in querySet.withIndex()) {
-                val query = listOf(
-                    baseQuery,
-                    suffix?.takeIf { includeLanguageSuffix && it.isNotBlank() },
-                )
-                    .filterNotNull()
-                    .joinToString(" ")
-
-                // Liner Desktop searches one catalogue page per query. MusikKu
-                // now does the same on the fast path: don't walk five
-                // continuation pages when the requested track is already in
-                // the first result shelf.
-                var page = YtMusicRepository.searchPage(
-                    query = query,
-                    filter = filter,
-                    anonymous = false,
-                ).fold(
-                    onSuccess = { successfulRequests++; it },
-                    onFailure = { failure ->
-                        failures += "search '$query' (${filter.name}): ${failure.message}"
-                        null
-                    },
-                ) ?: continue
-
-                var pagesRead = 0
-                while (pagesRead < MAX_CANDIDATE_SEARCH_PAGES) {
-                    page.rows.forEach { row ->
-                        when (row) {
-                            is SearchResult.Browse -> {
-                                spotifyImportAlbumBrowseId(row)?.let(albumBrowseIds::add)
-                                spotifyImportArtistCredits(target).forEach { expectedArtist ->
-                                    spotifyArtistBrowseId(row, expectedArtist)?.let(artistBrowseIds::add)
-                                }
-                            }
-                            else -> {
-                                val candidate = spotifyImportCandidate(row)
-                                val id = candidate?.videoId?.trim().orEmpty()
-                                if (candidate != null && id.isNotEmpty()) {
-                                    found.putIfAbsent(id, candidate)
-                                    spotifyImportArtistCredits(target).forEach { expectedArtist ->
-                                        spotifyArtistBrowseId(candidate, expectedArtist)?.let(artistBrowseIds::add)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    pagesRead++
-                    if (pagesRead >= MAX_CANDIDATE_SEARCH_PAGES) break
-
-                    val continuation = page.continuation ?: break
-                    page = YtMusicRepository.searchContinuation(continuation, filter).fold(
-                        onSuccess = { successfulRequests++; it },
-                        onFailure = { failure ->
-                            failures += "continuation '$query' (${filter.name}): ${failure.message}"
-                            null
-                        },
-                    ) ?: break
-                }
-
-                // Stop immediately once title, version, trusted artist and
-                // runtime all pass the real matcher. Checking more query
-                // variants after that only delays the next playlist track.
-                if (shouldStopSpotifyQueryExpansion(hasHighConfidenceMatch())) {
-                    DebugLog.d(
-                        "SpotifyImport",
-                        "Fast match for '${target.title}' by '${target.artist}' " +
-                            "using query ${queryIndex + 1}; stopping after ${successfulRequests} requests",
-                    )
-                    break
-                }
+            val nextCandidates = combined.values.toList()
+            val nextDecision = LinerSpotifyMatcher.evaluate(source, nextCandidates)
+            // Match Liner's importer: only replace the previous decision when
+            // the new pool wins or no earlier decision existed.
+            if (nextDecision.matched || decision == null) {
+                candidates = nextCandidates
+                decision = nextDecision
             }
         }
 
-        // Follow Liner Desktop's catalogue-search sequence: try the dedicated
-        // Songs shelf first, then broaden to ALL (promoted TopTrack plus artist
-        // and album cards) only when no trusted audio match was found.
-        searchFilter(SearchFilter.SONGS)
-        if (!hasHighConfidenceAudioMatch()) {
-            searchFilter(SearchFilter.ALL)
+        candidates = search(query, YtMusicRepository.SpotifyImportSearchKind.TRACK)
+            .distinctBy { it.videoId }
+        if (candidates.isNotEmpty()) {
+            decision = LinerSpotifyMatcher.evaluate(source, candidates)
         }
-        // Spend the wider title/artist/album variants only when the fast path
-        // cannot validate a trusted recording. This keeps ordinary imports
-        // quick without discarding the difficult-track recovery strategy.
-        if (!hasHighConfidenceAudioMatch() && recoveryQueries.isNotEmpty()) {
-            searchFilter(SearchFilter.SONGS, querySet = recoveryQueries)
+
+        if (decision?.matched != true || (decision?.score ?: Int.MIN_VALUE) < 75) {
+            attempt(query, YtMusicRepository.SpotifyImportSearchKind.ALL)
         }
-        if (!hasHighConfidenceAudioMatch() && recoveryQueries.isNotEmpty()) {
-            searchFilter(SearchFilter.ALL, querySet = recoveryQueries)
+        if (decision?.matched != true && cleanTitle.isNotBlank() && cleanTitle != query) {
+            attempt(cleanTitle, YtMusicRepository.SpotifyImportSearchKind.TRACK)
         }
-        // A preferred language is a fallback, never part of the first query.
-        if (!suffix.isNullOrBlank() && bestSpotifyImportMatch(found.values.toList(), target) == null) {
-            DebugLog.d(
-                "SpotifyImport",
-                "No safe match for '${target.title}' without language suffix; retrying with '$suffix'",
-            )
-            searchFilter(SearchFilter.SONGS, includeLanguageSuffix = true)
-            if (!hasHighConfidenceAudioMatch()) {
-                searchFilter(SearchFilter.ALL, includeLanguageSuffix = true)
+        if (decision?.matched != true) {
+            attempt(query, YtMusicRepository.SpotifyImportSearchKind.VIDEO)
+        }
+
+        // Preserve MusikKu's explicit language preference as an optional
+        // extension after Liner's exact default sequence; it never changes
+        // the default query path.
+        if (decision?.matched != true && !suffix.isNullOrBlank()) {
+            val languageQuery = "$query $suffix".trim()
+            attempt(languageQuery, YtMusicRepository.SpotifyImportSearchKind.TRACK)
+            if (decision?.matched != true) {
+                attempt(languageQuery, YtMusicRepository.SpotifyImportSearchKind.ALL)
             }
-            if (!hasHighConfidenceAudioMatch() && recoveryQueries.isNotEmpty()) {
-                searchFilter(
-                    SearchFilter.SONGS,
-                    querySet = recoveryQueries,
-                    includeLanguageSuffix = true,
-                )
+            if (decision?.matched != true) {
+                attempt(languageQuery, YtMusicRepository.SpotifyImportSearchKind.VIDEO)
             }
         }
 
-        // Search may return an album card rather than an individual track.
-        // Open a small, bounded set of those albums before giving up; rows from
-        // them still pass the same strict title/artist/version/runtime matcher.
-        if (!hasHighConfidenceAudioMatch()) {
-            for (browseId in albumBrowseIds.take(MAX_ALBUM_PAGE_FALLBACKS)) {
-                albumSongs(browseId).fold(
-                    onSuccess = { songs ->
-                        successfulRequests++
-                        songs.forEach { song ->
-                            val id = song.videoId.trim()
-                            if (id.isNotEmpty()) found.putIfAbsent(id, song)
-                        }
-                    },
-                    onFailure = { failure ->
-                        failures += "album page '$browseId': ${failure.message}"
-                    },
-                )
-                if (hasHighConfidenceAudioMatch()) break
-            }
-        }
-
-        if (!hasHighConfidenceAudioMatch()) {
-            // Global search may show a duration-only composer/uploader candidate
-            // without exposing the requested singer. Keep searching artist
-            // pages until a candidate has a trusted credit; every Top Song still
-            // passes the strict title/version/runtime matcher.
-            spotifyImportArtistCredits(target).take(MAX_ARTIST_PAGE_FALLBACKS).forEach { artistName ->
-                discoverArtistBrowseId(artistName).fold(
-                    onSuccess = { browseId -> browseId?.let(artistBrowseIds::add) },
-                    onFailure = { failure ->
-                        failures += "artist lookup '$artistName': ${failure.message}"
-                    },
-                )
-            }
-        }
-
-        if (!hasHighConfidenceAudioMatch()) {
-            for (browseId in artistBrowseIds) {
-                artistSongs(browseId).fold(
-                    onSuccess = { songs ->
-                        successfulRequests++
-                        songs.forEach { song ->
-                            val id = song.videoId.trim()
-                            if (id.isNotEmpty()) found.putIfAbsent(id, song)
-                        }
-                    },
-                    onFailure = { failure ->
-                        failures += "artist page '$browseId': ${failure.message}"
-                    },
-                )
-                if (hasHighConfidenceAudioMatch()) break
-            }
-        }
-
-        // Search the dedicated Videos tab too when no trusted audio/video
-        // recording has been established. A duration-only fallback is not proof.
-        if (!hasHighConfidenceAudioMatch() && !hasHighConfidenceVideoMatch()) {
-            searchFilter(SearchFilter.VIDEOS)
-        }
-
-        val match = bestSpotifyImportMatch(found.values.toList(), target)
-        if (match == null) {
-            DebugLog.w(
-                "SpotifyImport",
-                "No match for '${target.title}' by '${target.artist}' " +
-                    "(lead='${target.requiredArtistName}', duration=${target.durationSec}s, " +
-                    "queries=${queries.size}, requests=${successfulRequests}, " +
-                    "candidates=${found.size}, failures=${failures.size}). " +
-                    found.values.take(8).joinToString { "${it.title} — ${it.artist} [${it.durationText}]" },
-            )
-        }
-        // A transport/API failure is not proof that a song is absent. Propagate
-        // an incomplete lookup so the UI can leave the row retryable instead
-        // of permanently labelling it as missing.
-        if (match == null && failures.isNotEmpty()) {
+        if (candidates.isEmpty() && failures.isNotEmpty()) {
             throw IllegalStateException(
-                "Spotify lookup incomplete ($successfulRequests successful requests): " +
-                    failures.take(3).joinToString("; "),
+                "Spotify lookup incomplete: ${failures.take(3).joinToString("; ")}",
             )
         }
-        if (match == null && successfulRequests == 0 && queries.isNotEmpty()) {
+        if (candidates.isEmpty() && query.isNotBlank()) {
             throw IllegalStateException("Spotify lookup returned no usable YouTube Music response")
         }
-        return found.values.toList()
+
+        if (decision?.matched != true) {
+            DebugLog.d(
+                "SpotifyImport",
+                "Liner matcher found no confident match for '${source.title}' by '${source.artist}' " +
+                    "(queries tried=${if (cleanTitle == query) 3 else 4}, candidates=${candidates.size})",
+            )
+        }
+        return candidates
     }
 
     /** Tracks the embed page lists before it cuts off. */
@@ -616,19 +481,8 @@ object SpotifyImporter {
         val deferredResults = uniqueTracks.map { track ->
             async(Dispatchers.IO) {
                 semaphore.withPermit {
-                    val target = TrackMatcher.Target(
-                        title = track.title,
-                        artist = track.artist,
-                        durationSec = track.durationMs?.takeIf { it > 0 }?.div(1000)?.toInt(),
-                        album = track.album,
-                        requireSharedArtist = true,
-                        requiredArtistName = track.leadArtist
-                            ?: track.artist.substringBefore(",").trim().takeIf { it.isNotBlank() },
-                        requireExactTitle = true,
-                        artistCredits = track.artistCredits,
-                    )
                     val candidates = try {
-                        searchCandidates(target, cleanLang).let { found ->
+                        searchCandidates(track, cleanLang).let { found ->
                             if (cleanLang == null) found else {
                                 val conflictingLangs = knownLanguages.filter { !it.equals(cleanLang, ignoreCase = true) }
                                 found.filter { candidate ->
@@ -653,10 +507,8 @@ object SpotifyImporter {
                         // playlist import. This Spotify row stays retryable.
                         emptyList()
                     }
-                    // Never import the search engine's first row as a fallback:
-                    // a popular cover/remix with a similar title is worse than
-                    // leaving this Spotify entry unmatched for the user to review.
-                    val matchedSong = bestSpotifyImportMatch(candidates, target)
+                    // Liner's weighted evaluator rejects weak/ambiguous matches.
+                    val matchedSong = LinerSpotifyMatcher.evaluate(track, candidates).track
 
                     val done = completedCount.incrementAndGet()
                     onProgress(done, total)

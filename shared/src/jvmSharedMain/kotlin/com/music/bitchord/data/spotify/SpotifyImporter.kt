@@ -191,6 +191,65 @@ object SpotifyImporter {
     }
 
     /**
+     * The starting query for a user-selected replacement in the import review.
+     * It uses the same primary-credit/title ordering as automatic resolution.
+     */
+    fun replacementSearchQuery(track: SpotifyImportTrack): String =
+        LinerSpotifyMatcher.searchQuery(track)
+
+    /**
+     * Searches candidates for a manual replacement. Start with the song-only
+     * catalogue, then widen to mixed results and music videos when the first
+     * page is too sparse. Unlike automatic resolution, this deliberately
+     * returns candidates without silently selecting one: the user chooses.
+     */
+    suspend fun searchReplacementCandidates(query: String): List<Song> =
+        searchReplacementCandidates(query) { searchQuery, kind ->
+            YtMusicRepository.searchSpotifyImportRaw(searchQuery, kind)
+        }
+
+    internal suspend fun searchReplacementCandidates(
+        query: String,
+        searchRaw: suspend (
+            String,
+            YtMusicRepository.SpotifyImportSearchKind,
+        ) -> Result<List<Song>>,
+    ): List<Song> {
+        val cleanQuery = query.trim()
+        if (cleanQuery.isEmpty()) return emptyList()
+
+        val candidates = LinkedHashMap<String, Song>()
+        val failures = mutableListOf<String>()
+        val searchKinds = listOf(
+            YtMusicRepository.SpotifyImportSearchKind.TRACK,
+            YtMusicRepository.SpotifyImportSearchKind.ALL,
+            YtMusicRepository.SpotifyImportSearchKind.VIDEO,
+        )
+
+        for (kind in searchKinds) {
+            if (candidates.size >= MIN_REPLACEMENT_CANDIDATES) break
+            searchRaw(cleanQuery, kind).fold(
+                onSuccess = { songs ->
+                    songs.forEach { song ->
+                        val id = song.videoId.trim()
+                        if (id.isNotEmpty()) candidates.putIfAbsent(id, song)
+                    }
+                },
+                onFailure = { failure ->
+                    if (failure is CancellationException) throw failure
+                    failures += "${kind.name.lowercase()}: ${failure.message.orEmpty()}"
+                },
+            )
+        }
+
+        if (candidates.isEmpty() && failures.isNotEmpty()) {
+            throw IllegalStateException(failures.take(3).joinToString("; "))
+        }
+        return candidates.values.take(MAX_REPLACEMENT_CANDIDATES)
+    }
+
+
+    /**
      * Liner Desktop's actual import order, not its interactive search UI:
      * track(query) -> all(query) when confidence is insufficient ->
      * track(clean title) when it differs -> video(query) if still unmatched.
@@ -356,6 +415,8 @@ object SpotifyImporter {
     }
 
     /** Tracks the embed page lists before it cuts off. */
+    private const val MIN_REPLACEMENT_CANDIDATES = 8
+    private const val MAX_REPLACEMENT_CANDIDATES = 15
     private const val EMBED_TRACK_LIMIT = 100
     private const val PAGE_SIZE = 100
     private const val PATHFINDER_URL = "https://api-partner.spotify.com/pathfinder/v1/query"

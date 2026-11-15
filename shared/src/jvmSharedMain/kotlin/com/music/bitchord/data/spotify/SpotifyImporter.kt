@@ -204,6 +204,7 @@ object SpotifyImporter {
         val query = LinerSpotifyMatcher.searchQuery(source)
         val cleanTitle = LinerSpotifyMatcher.cleanedTitle(source)
         val failures = mutableListOf<String>()
+        val searchDiagnostics = mutableListOf<String>()
         var candidates = emptyList<Song>()
         var decision: LinerSpotifyMatcher.Decision? = null
 
@@ -213,10 +214,14 @@ object SpotifyImporter {
         ): List<Song> {
             if (searchQuery.isBlank()) return emptyList()
             return YtMusicRepository.searchSpotifyImportRaw(searchQuery, kind).fold(
-                onSuccess = { it },
+                onSuccess = {
+                    searchDiagnostics += "${kind.name.lowercase()} '$searchQuery' -> ${it.size} candidates"
+                    it
+                },
                 onFailure = { failure ->
                     if (failure is CancellationException) throw failure
                     failures += "${kind.name.lowercase()} search '$searchQuery': ${failure.message}"
+                    searchDiagnostics += "${kind.name.lowercase()} '$searchQuery' -> ERROR ${failure.message}"
                     emptyList()
                 },
             )
@@ -235,6 +240,9 @@ object SpotifyImporter {
             }
             val nextCandidates = combined.values.toList()
             val nextDecision = LinerSpotifyMatcher.evaluate(source, nextCandidates)
+            searchDiagnostics += "${kind.name.lowercase()} '$searchQuery' -> ${nextDecision.reason ?: "matched"}" +
+                " (score=${nextDecision.score ?: 0}, candidates=${nextCandidates.size})" +
+                nextDecision.proposedTrack?.let { ", proposed='${it.title}' by '${it.artist}'" }.orEmpty()
             if (nextDecision.matched || decision == null) {
                 candidates = nextCandidates
                 decision = nextDecision
@@ -257,6 +265,20 @@ object SpotifyImporter {
             attempt(query, YtMusicRepository.SpotifyImportSearchKind.VIDEO)
         }
 
+        // Spotify may credit a label/channel first (for example Gasentra
+        // Pajampangan) while YouTube Music indexes the singer (Nina, Nanih,
+        // Friska, Revina). Search the remaining structured credits as a
+        // discovery fallback, but keep the exact same strict matcher.
+        if (decision?.matched != true) {
+            for (alternateQuery in LinerSpotifyMatcher.alternateArtistSearchQueries(source)) {
+                attempt(alternateQuery, YtMusicRepository.SpotifyImportSearchKind.TRACK)
+                if (decision?.matched != true) {
+                    attempt(alternateQuery, YtMusicRepository.SpotifyImportSearchKind.VIDEO)
+                }
+                if (decision?.matched == true) break
+            }
+        }
+
         // An explicit in-app language preference is an optional extension to
         // Liner's default query sequence; no extra language terms are used by
         // default.
@@ -269,6 +291,14 @@ object SpotifyImporter {
             if (decision?.matched != true) {
                 attempt(languageQuery, YtMusicRepository.SpotifyImportSearchKind.VIDEO)
             }
+        }
+
+        if (decision?.matched != true) {
+            DebugLog.w(
+                "SpotifyImport",
+                "No confident match for '${source.title}' by '${source.artist}'. " +
+                    "Searches: ${searchDiagnostics.joinToString("; ")}",
+            )
         }
 
         if (candidates.isEmpty() && failures.isNotEmpty()) {

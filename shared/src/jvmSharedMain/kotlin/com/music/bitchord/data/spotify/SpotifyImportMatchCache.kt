@@ -21,17 +21,23 @@ internal class SpotifyImportMatchCache(
         require(maxEntries > 0) { "Maximum cache size must be greater than zero" }
     }
 
-    fun get(spotifyId: String?): Song? {
-        val key = spotifyId?.trim()?.takeIf(String::isNotEmpty) ?: return null
+    fun get(spotifyId: String?, language: String? = null): Song? {
+        val key = cacheKey(spotifyId, language) ?: return null
         return synchronized(entries) { entries[key] }
     }
 
-    fun put(spotifyId: String?, song: Song) {
-        val key = spotifyId?.trim()?.takeIf(String::isNotEmpty) ?: return
+    fun put(spotifyId: String?, song: Song, language: String? = null) {
+        val key = cacheKey(spotifyId, language) ?: return
         if (song.videoId.isBlank()) return
         synchronized(entries) {
             entries[key] = song
         }
+    }
+
+    private fun cacheKey(spotifyId: String?, language: String?): String? {
+        val id = spotifyId?.trim()?.takeIf(String::isNotEmpty) ?: return null
+        val lang = language?.trim()?.lowercase()?.takeIf(String::isNotEmpty)
+        return if (lang == null) id else "$id|$lang"
     }
 
     internal fun clear() {

@@ -12,9 +12,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.cancellation.CancellationException
@@ -27,7 +25,6 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
 /** Single track metadata extracted from a Spotify playlist. */
@@ -193,189 +190,6 @@ object SpotifyImporter {
         return LinerSpotifyMatcher.evaluate(source, searchCandidates(source)).track
     }
 
-    /**
-     * Search budget per query. The unfiltered music catalogue can contain
-     * promoted cards and regional releases below the first shelf; pagination
-     * stays bounded so a long playlist cannot overwhelm the service.
-     */
-    // Mirror Liner Desktop's bounded search path: first result page, then at
-    // most one high-value alternate query before the deeper recovery paths.
-    private const val MAX_CANDIDATE_SEARCH_PAGES = 1
-    private const val MAX_ARTIST_PAGE_FALLBACKS = 3
-    private const val MAX_ALBUM_PAGE_FALLBACKS = 3
-    private const val STRONG_MATCH_RUNTIME_SEC = 8
-
-    private val artistPageLocks = ConcurrentHashMap<String, Mutex>()
-    // Cache exact artist lookups, including misses, across tracks in the playlist.
-    private val artistBrowseIdCache = ConcurrentHashMap<String, String>()
-    private val artistSongCache = object : LinkedHashMap<String, List<Song>>(16, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<Song>>?): Boolean =
-            size > 32
-    }
-    private val albumPageLocks = ConcurrentHashMap<String, Mutex>()
-    private val albumSongCache = object : LinkedHashMap<String, List<Song>>(32, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<Song>>?): Boolean =
-            size > 64
-    }
-
-    /**
-     * Reuse the artist catalogue between tracks in the same Spotify playlist.
-     * A per-artist mutex prevents six parallel track lookups from fetching the
-     * same large discography at once.
-     */
-    private suspend fun artistSongs(browseId: String): Result<List<Song>> {
-        val lock = artistPageLocks.computeIfAbsent(browseId) { Mutex() }
-        return lock.withLock {
-            synchronized(artistSongCache) {
-                artistSongCache[browseId]?.let { return@withLock Result.success(it) }
-            }
-            YtMusicRepository.artistSongsForSpotifyImport(browseId).onSuccess { songs ->
-                if (songs.isNotEmpty()) {
-                    synchronized(artistSongCache) { artistSongCache[browseId] = songs }
-                }
-            }
-        }
-    }
-
-    /** Reuse complete album pages across tracks from the same imported playlist. */
-    private suspend fun albumSongs(browseId: String): Result<List<Song>> {
-        val lock = albumPageLocks.computeIfAbsent(browseId) { Mutex() }
-        return lock.withLock {
-            synchronized(albumSongCache) {
-                albumSongCache[browseId]?.let { return@withLock Result.success(it) }
-            }
-            YtMusicRepository.browseSongsForSpotifyImport(browseId).onSuccess { songs ->
-                if (songs.isNotEmpty()) {
-                    synchronized(albumSongCache) { albumSongCache[browseId] = songs }
-                }
-            }
-        }
-    }
-
-    /** Find a real artist page by exact displayed name, not a partial search hit. */
-    private suspend fun discoverArtistBrowseId(name: String): Result<String?> {
-        val key = name.trim().lowercase()
-        if (key.isBlank()) return Result.success(null)
-        artistBrowseIdCache[key]?.let { cached ->
-            return Result.success(cached.takeIf { it.isNotBlank() })
-        }
-        return YtMusicRepository.findArtistPageId(name).onSuccess { browseId ->
-            artistBrowseIdCache.putIfAbsent(key, browseId.orEmpty())
-        }
-    }
-
-    /**
-     * Search the same authenticated YouTube Music catalogue as the manual
-     * Search screen. Gather promoted tracks and normal track rows, but keep
-     * artist cards too: when a track is missing from global search, the
-     * artist's own Top Songs catalogue is a second, more specific source.
-     *
-     * Audio matches are always preferred. A music video is a fallback only
-     * after the audio catalogue and the matching artist page have been tried.
-     */
-    /**
-     * Liner Desktop's actual import order, not its interactive search UI:
-     * track(query) -> all(query) when confidence is insufficient ->
-     * track(clean title) when it differs -> video(query) if still unmatched.
-     *
-     * Each stage is exactly one raw InnerTube request. Candidates are merged
-     * by video id and re-scored as a set, including Liner's ambiguity check.
-     */
-    private suspend fun searchCandidates(
-        source: SpotifyImportTrack,
-        suffix: String? = null,
-    ): List<Song> {
-        val query = LinerSpotifyMatcher.searchQuery(source)
-        val cleanTitle = LinerSpotifyMatcher.cleanedTitle(source)
-        val failures = mutableListOf<String>()
-        var candidates = emptyList<Song>()
-        var decision: LinerSpotifyMatcher.Decision? = null
-
-        suspend fun search(
-            searchQuery: String,
-            kind: YtMusicRepository.SpotifyImportSearchKind,
-        ): List<Song> {
-            if (searchQuery.isBlank()) return emptyList()
-            return YtMusicRepository.searchSpotifyImportRaw(searchQuery, kind).fold(
-                onSuccess = { it },
-                onFailure = { failure ->
-                    if (failure is CancellationException) throw failure
-                    failures += "${kind.name.lowercase()} search '$searchQuery': ${failure.message}"
-                    emptyList()
-                },
-            )
-        }
-
-        suspend fun attempt(
-            searchQuery: String,
-            kind: YtMusicRepository.SpotifyImportSearchKind,
-        ) {
-            val extra = search(searchQuery, kind)
-            if (extra.isEmpty()) return
-            val combined = LinkedHashMap<String, Song>()
-            (candidates + extra).forEach { candidate ->
-                val id = candidate.videoId.trim()
-                if (id.isNotEmpty()) combined.putIfAbsent(id, candidate)
-            }
-            val nextCandidates = combined.values.toList()
-            val nextDecision = LinerSpotifyMatcher.evaluate(source, nextCandidates)
-            // Match Liner's importer: only replace the previous decision when
-            // the new pool wins or no earlier decision existed.
-            if (nextDecision.matched || decision == null) {
-                candidates = nextCandidates
-                decision = nextDecision
-            }
-        }
-
-        candidates = search(query, YtMusicRepository.SpotifyImportSearchKind.TRACK)
-            .distinctBy { it.videoId }
-        if (candidates.isNotEmpty()) {
-            decision = LinerSpotifyMatcher.evaluate(source, candidates)
-        }
-
-        if (decision?.matched != true || (decision?.score ?: Int.MIN_VALUE) < 75) {
-            attempt(query, YtMusicRepository.SpotifyImportSearchKind.ALL)
-        }
-        if (decision?.matched != true && cleanTitle.isNotBlank() && cleanTitle != query) {
-            attempt(cleanTitle, YtMusicRepository.SpotifyImportSearchKind.TRACK)
-        }
-        if (decision?.matched != true) {
-            attempt(query, YtMusicRepository.SpotifyImportSearchKind.VIDEO)
-        }
-
-        // Preserve MusikKu's explicit language preference as an optional
-        // extension after Liner's exact default sequence; it never changes
-        // the default query path.
-        if (decision?.matched != true && !suffix.isNullOrBlank()) {
-            val languageQuery = "$query $suffix".trim()
-            attempt(languageQuery, YtMusicRepository.SpotifyImportSearchKind.TRACK)
-            if (decision?.matched != true) {
-                attempt(languageQuery, YtMusicRepository.SpotifyImportSearchKind.ALL)
-            }
-            if (decision?.matched != true) {
-                attempt(languageQuery, YtMusicRepository.SpotifyImportSearchKind.VIDEO)
-            }
-        }
-
-        if (candidates.isEmpty() && failures.isNotEmpty()) {
-            throw IllegalStateException(
-                "Spotify lookup incomplete: ${failures.take(3).joinToString("; ")}",
-            )
-        }
-        if (candidates.isEmpty() && query.isNotBlank()) {
-            throw IllegalStateException("Spotify lookup returned no usable YouTube Music response")
-        }
-
-        if (decision?.matched != true) {
-            DebugLog.d(
-                "SpotifyImport",
-                "Liner matcher found no confident match for '${source.title}' by '${source.artist}' " +
-                    "(queries tried=${if (cleanTitle == query) 3 else 4}, candidates=${candidates.size})",
-            )
-        }
-        return candidates
-    }
-
     /** Tracks the embed page lists before it cuts off. */
     private const val EMBED_TRACK_LIMIT = 100
     private const val PAGE_SIZE = 100
@@ -534,13 +348,6 @@ object SpotifyImporter {
 }
 
 
-/**
- * Stop expanding the catalogue search as soon as the current query yields a
- * candidate that passes the full track identity matcher.
- */
-internal fun shouldStopSpotifyQueryExpansion(hasHighConfidenceMatch: Boolean): Boolean =
-    hasHighConfidenceMatch
-
 /** Converts playable rows from both mixed and filtered YouTube Music search pages. */
 internal fun spotifyImportCandidate(row: SearchResult): Song? = when (row) {
     is SearchResult.Track -> row.song
@@ -640,63 +447,6 @@ internal fun bestSpotifyImportMatch(candidates: List<Song>, target: TrackMatcher
                 Int.MAX_VALUE
             }
         }
-}
-
-/**
- * The two highest-value queries mirror Liner Desktop's fast path: the title
- * as typed, then the same title qualified by Spotify's lead artist. Broader
- * spelling and album variants remain available to recovery paths.
- */
-internal fun spotifyImportFastPathQueries(target: TrackMatcher.Target): List<String> =
-    spotifyImportSearchQueries(target).take(2)
-
-/** The next small batch of spelling/artist/album alternatives, used only on misses. */
-internal fun spotifyImportRecoveryQueries(target: TrackMatcher.Target): List<String> =
-    spotifyImportSearchQueries(target).drop(2).take(4)
-
-/**
- * Query both Spotify's original spelling and TrackMatcher's normalized form.
- *
- * Manual Search receives the title/artist text the listener types. Import used
- * to search only the stripped title generated by TrackMatcher; a packaging
- * suffix, transliteration, or unusual DJ/language label could therefore change
- * the query enough for YouTube Music to return a different result set.
- */
-internal fun spotifyImportSearchQueries(target: TrackMatcher.Target): List<String> {
-    val normalized = TrackMatcher.queries(target)
-    val rawTitle = target.title.trim()
-    val fullArtist = target.artist.trim()
-    val leadArtist = target.requiredArtistName?.trim().orEmpty()
-    val album = target.album?.trim().orEmpty()
-
-    return buildList {
-        // Match the simplest manual Search first. Adding an artist or album
-        // can change YouTube Music's ranking enough to bury a track that is
-        // plainly visible when the listener searches by title alone.
-        if (rawTitle.isNotBlank()) add(rawTitle)
-        // Then progressively add Spotify's structured performer/release data.
-        if (rawTitle.isNotBlank() && leadArtist.isNotBlank()) add("$rawTitle $leadArtist")
-        if (rawTitle.isNotBlank() && fullArtist.isNotBlank()) add("$rawTitle $fullArtist")
-        // Album-qualified variants help when the global title query ranks an
-        // unrelated cover above the exact regional/album catalogue entry.
-        if (rawTitle.isNotBlank() && leadArtist.isNotBlank() && album.isNotBlank()) {
-            add("$rawTitle $leadArtist $album")
-        }
-        if (rawTitle.isNotBlank() && album.isNotBlank()) add("$rawTitle $album")
-        if (rawTitle.isNotBlank()) {
-            target.artistCredits.take(3).forEach { credit ->
-                if (credit.isNotBlank()) add("$rawTitle $credit")
-            }
-            add(rawTitle)
-        }
-        addAll(normalized)
-        if (album.isNotBlank() && normalized.firstOrNull() != null) {
-            add("${normalized.first()} $album")
-        }
-    }
-        .map { it.replace(Regex("\\s+"), " ").trim() }
-        .filter { it.isNotBlank() }
-        .distinct()
 }
 
 internal fun distinctSpotifyImportTracks(tracks: List<SpotifyImportTrack>): List<SpotifyImportTrack> =

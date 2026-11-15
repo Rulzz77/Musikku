@@ -67,11 +67,85 @@ class SpotifyImporterIdentityTest {
     }
 
     @Test
-    fun spotifyImportStopsQueryExpansionAfterOneConfirmingVariant() {
-        assertFalse(shouldStopSpotifyQueryExpansion(null, 0, hasHighConfidenceMatch = true))
-        assertFalse(shouldStopSpotifyQueryExpansion(1, 1, hasHighConfidenceMatch = true))
-        assertTrue(shouldStopSpotifyQueryExpansion(1, 2, hasHighConfidenceMatch = true))
-        assertFalse(shouldStopSpotifyQueryExpansion(1, 2, hasHighConfidenceMatch = false))
+    fun linerSpotifyMatcherUsesWeightedFuzzyTitleAndArtistScoring() {
+        val source = SpotifyImportTrack(
+            title = "Talaga Reumis",
+            artist = "Gasantra Pajampangan, Nanih",
+            durationMs = 243_000,
+            leadArtist = "Gasantra Pajampangan",
+            artistCredits = listOf("Gasantra Pajampangan", "Nanih"),
+        )
+        val regionalSpelling = Song(
+            videoId = "liner-regional-spelling",
+            title = "Telaga Reumis",
+            artist = "Gasentra Pajampangan",
+            thumbnailUrl = null,
+            durationText = "4:03",
+        )
+
+        val decision = LinerSpotifyMatcher.evaluate(source, listOf(regionalSpelling))
+        assertEquals(regionalSpelling, decision.track)
+        assertTrue((decision.score ?: 0) >= 75)
+        assertEquals(
+            "Gasantra Pajampangan Talaga Reumis",
+            LinerSpotifyMatcher.searchQuery(source),
+        )
+    }
+
+    @Test
+    fun linerSpotifyMatcherRejectsDifferentSingerAndWrongVersion() {
+        val source = SpotifyImportTrack(
+            title = "Dumes (Live)",
+            artist = "Guyon Waton",
+            durationMs = 210_000,
+            leadArtist = "Guyon Waton",
+            artistCredits = listOf("Guyon Waton"),
+        )
+        val wrongSinger = Song(
+            videoId = "liner-wrong-singer",
+            title = "Dumes (Live)",
+            artist = "Different Singer",
+            thumbnailUrl = null,
+            durationText = "3:30",
+        )
+        val wrongVersion = Song(
+            videoId = "liner-wrong-version",
+            title = "Dumes",
+            artist = "Guyon Waton",
+            thumbnailUrl = null,
+            durationText = "3:30",
+        )
+
+        assertNull(LinerSpotifyMatcher.evaluate(source, listOf(wrongSinger)).track)
+        assertNull(LinerSpotifyMatcher.evaluate(source, listOf(wrongVersion)).track)
+    }
+
+    @Test
+    fun linerSpotifyMatcherDoesNotApproveAmbiguousNearTitleCandidates() {
+        val source = SpotifyImportTrack(
+            title = "Pulang",
+            artist = "Insomniacks",
+            durationMs = 230_000,
+            leadArtist = "Insomniacks",
+            artistCredits = listOf("Insomniacks"),
+        )
+        val first = Song(
+            videoId = "liner-pulang-one",
+            title = "Pulangx",
+            artist = "Insomniacks",
+            thumbnailUrl = null,
+            durationText = "3:56",
+        )
+        val second = Song(
+            videoId = "liner-pulang-two",
+            title = "Pulangy",
+            artist = "Insomniacks",
+            thumbnailUrl = null,
+            durationText = "3:57",
+        )
+
+        val decision = LinerSpotifyMatcher.evaluate(source, listOf(first, second))
+        assertNull(decision.track)
     }
 
     @Test
@@ -739,29 +813,18 @@ class SpotifyImporterIdentityTest {
     }
 
     @Test
-    fun spotifyImportSearchIncludesOriginalSpotifyTitleAndFullArtistText() {
-        val target = TrackMatcher.Target(
+    fun linerSpotifyMatcherBuildsSearchQueryFromLeadArtistAndCleanTitle() {
+        val source = SpotifyImportTrack(
             title = "Tanpo Tresnamu (Official Audio)",
             artist = "Denny Caknan, Yeni Inka",
-            durationSec = 252,
+            durationMs = 252_000,
             album = "Album Contoh",
-            requiredArtistName = "Denny Caknan",
-            requireExactTitle = true,
+            leadArtist = "Denny Caknan",
+            artistCredits = listOf("Denny Caknan", "Yeni Inka"),
         )
 
-        val queries = spotifyImportSearchQueries(target)
-
-        assertEquals("Tanpo Tresnamu (Official Audio)", queries.first())
-        assertEquals("Tanpo Tresnamu (Official Audio) Denny Caknan", queries[1])
-        assertTrue("Tanpo Tresnamu (Official Audio) Denny Caknan Album Contoh" in queries)
-        assertTrue("Tanpo Tresnamu (Official Audio) Album Contoh" in queries)
-        assertTrue("Tanpo Tresnamu (Official Audio) Denny Caknan, Yeni Inka" in queries)
-        assertTrue("Tanpo Tresnamu (Official Audio) Denny Caknan" in queries)
-        assertTrue("Tanpo Tresnamu (Official Audio)" in queries)
-        assertTrue(TrackMatcher.queries(target).all { it in queries })
-        // The import's first lookup must not add artist/album/language terms:
-        // it should return the same catalogue page as a title-only manual search.
-        assertEquals(queries.size, queries.distinct().size)
+        assertEquals("Tanpo Tresnamu", LinerSpotifyMatcher.cleanedTitle(source))
+        assertEquals("Denny Caknan Tanpo Tresnamu", LinerSpotifyMatcher.searchQuery(source))
     }
 
     @Test

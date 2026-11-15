@@ -355,6 +355,39 @@ object YtMusicRepository {
             }
         }
 
+    /**
+     * The raw one-request search used by Liner Desktop's Spotify importer.
+     * Unlike the screen's Songs tab, this passes Liner's WEB_REMIX filter
+     * parameters as-is and returns only playable music rows. The importer
+     * chooses the next stage (ALL/title/video) after scoring this response.
+     */
+    enum class SpotifyImportSearchKind { TRACK, ALL, VIDEO }
+
+    suspend fun searchSpotifyImportRaw(
+        query: String,
+        kind: SpotifyImportSearchKind,
+    ): Result<List<Song>> = call("spotify-import-search:${kind.name.lowercase()}") {
+        val params = when (kind) {
+            SpotifyImportSearchKind.TRACK -> "EgWKAQIIAWoKEAkQBRAKEAMQBA=="
+            SpotifyImportSearchKind.ALL -> null
+            SpotifyImportSearchKind.VIDEO -> "EgWKAQIQAWoKEAkQBRAKEAMQBA=="
+        }
+        val response = Innertube.search(query, params, anonymous = false)
+        val page = InnertubeParser.parseSearchPage(
+            response,
+            includeVideos = kind == SpotifyImportSearchKind.VIDEO,
+            includeAllTrackTypes = kind == SpotifyImportSearchKind.ALL,
+            musicOnly = true,
+        )
+        page.rows.mapNotNull { row ->
+            when (row) {
+                is SearchResult.Track -> row.song
+                is SearchResult.TopTrack -> row.song
+                is SearchResult.Browse -> null
+            }
+        }
+    }
+
     /** Fetches the next page of a search only when the result list needs it. */
     suspend fun searchContinuation(token: String, filter: SearchFilter): Result<SearchPage> = call("search:continuation") {
         InnertubeParser.parseSearchPage(

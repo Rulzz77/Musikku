@@ -36,7 +36,11 @@ internal class SpotifyImportMatchCache(
 
     private fun cacheKey(spotifyId: String?, language: String?): String? {
         val id = spotifyId?.trim()?.takeIf(String::isNotEmpty) ?: return null
-        val lang = language?.trim()?.lowercase()?.takeIf(String::isNotEmpty)
+        val lang = language?.trim()?.takeIf {
+            it.isNotEmpty() &&
+                !it.equals("No Preference", ignoreCase = true) &&
+                !it.equals("Multilingual", ignoreCase = true)
+        }?.lowercase()
         return if (lang == null) id else "$id|$lang"
     }
 

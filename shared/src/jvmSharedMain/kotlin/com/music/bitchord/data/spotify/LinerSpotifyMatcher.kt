@@ -435,8 +435,7 @@ internal object LinerSpotifyMatcher {
             artistsMatch(profile.primaryArtist, it)
         }
         val uncreditedBylineArtist = candidateArtists.any { candidateArtist ->
-            looksLikePerformerSegment(candidateArtist) &&
-                profile.artists.none { artistsMatch(it, candidateArtist) }
+            containsUncreditedArtistName(candidateArtist, profile.artists)
         }
         val uncreditedTitleArtist = rawParts.any { possibleArtist ->
             val titlePartIsExact = rawParts.any { possibleTitle ->
@@ -687,11 +686,23 @@ internal object LinerSpotifyMatcher {
             "official", "audio", "video", "music", "lyrics", "lyric", "visualizer",
             "cover", "karaoke", "remix", "live", "edit", "version", "slowed",
             "reverb", "sped", "speed", "up", "instrumental", "acoustic", "pop",
-            "sunda", "jawa", "full", "hd", "4k", "mv", "radio",
+            "sunda", "jawa", "full", "hd", "4k", "mv", "radio", "feat", "ft",
+            "featuring", "with", "and",
         )
         val nameTokens = tokens.filterNot { it in packagingWords }
         return nameTokens.isNotEmpty() && nameTokens.size <= 4 &&
             nameTokens.any { token -> token.any(Char::isLetter) }
+    }
+
+    private fun containsUncreditedArtistName(candidateArtist: String, sourceArtists: List<String>): Boolean {
+        var remaining = normalizeTrackString(candidateArtist)
+        sourceArtists.forEach { sourceArtist ->
+            val credit = normalizeTrackString(sourceArtist)
+            if (credit.isNotBlank()) {
+                remaining = remaining.replace(credit, " ")
+            }
+        }
+        return looksLikePerformerSegment(remaining)
     }
 
     private fun artistsMatch(source: String, candidate: String): Boolean {

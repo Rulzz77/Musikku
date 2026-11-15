@@ -187,7 +187,10 @@ object SpotifyImporter {
             leadArtist = track.leadArtist,
             artistCredits = track.artistCredits,
         )
-        return LinerSpotifyMatcher.evaluate(source, searchCandidates(source)).track
+        matchCache.get(source.spotifyId)?.let { return it }
+        val matched = LinerSpotifyMatcher.evaluate(source, searchCandidates(source)).track
+        if (matched != null) matchCache.put(source.spotifyId, matched)
+        return matched
     }
 
     /**
@@ -197,6 +200,11 @@ object SpotifyImporter {
     fun replacementSearchQuery(track: SpotifyImportTrack): String =
         LinerSpotifyMatcher.alternateArtistSearchQueries(track).firstOrNull()
             ?: LinerSpotifyMatcher.searchQuery(track)
+
+    /** Remembers a deliberate user-selected replacement for future imports. */
+    fun rememberManualMatch(track: SpotifyImportTrack, song: Song, language: String? = null) {
+        if (song.videoId.isNotBlank()) matchCache.put(track.spotifyId, song, language)
+    }
 
     /**
      * Searches candidates for a manual replacement. Start with the song-only
@@ -514,22 +522,26 @@ object SpotifyImporter {
         val deferredResults = uniqueTracks.map { track ->
             async(Dispatchers.IO) {
                 semaphore.withPermit {
-                    val candidates = try {
-                        searchCandidates(track, cleanLang)
-                    } catch (cancelled: CancellationException) {
-                        throw cancelled
-                    } catch (failure: Exception) {
-                        DebugLog.w(
-                            "SpotifyImport",
-                            "Lookup failed for '${track.title}' by '${track.artist}': ${failure.message}",
-                            failure,
-                        )
-                        // One unavailable search must not abort the entire
-                        // playlist import. This Spotify row stays retryable.
-                        emptyList()
+                    val matchedSong = matchCache.get(track.spotifyId, cleanLang) ?: run {
+                        val candidates = try {
+                            searchCandidates(track, cleanLang)
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (failure: Exception) {
+                            DebugLog.w(
+                                "SpotifyImport",
+                                "Lookup failed for '${track.title}' by '${track.artist}': ${failure.message}",
+                                failure,
+                            )
+                            // One unavailable search must not abort the entire
+                            // playlist import. This Spotify row stays retryable.
+                            emptyList()
+                        }
+                        // Liner's weighted evaluator rejects weak/ambiguous matches.
+                        LinerSpotifyMatcher.evaluate(track, candidates).track?.also { matched ->
+                            matchCache.put(track.spotifyId, matched, cleanLang)
+                        }
                     }
-                    // Liner's weighted evaluator rejects weak/ambiguous matches.
-                    val matchedSong = LinerSpotifyMatcher.evaluate(track, candidates).track
 
                     val done = completedCount.incrementAndGet()
                     onProgress(done, total)

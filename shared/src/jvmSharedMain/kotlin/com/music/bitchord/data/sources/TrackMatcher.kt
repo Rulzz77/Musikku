@@ -249,7 +249,14 @@ object TrackMatcher {
         // three seconds. Version identity is checked below as usual.
         val nearTitleSpellingMatch = target.requireExactTitle &&
             nearTitleSpelling(wanted.words, got.words)
-        if (!isTitleMatch && !nearTitleSpellingMatch) return null
+        // Liner Desktop uses token-sorted similarity instead of requiring every
+        // title token to be byte-for-byte identical. Keep the fallback bounded:
+        // same token count, at least one shared token and a high overall ratio.
+        // Version markers are still checked strictly below.
+        val linerFuzzyTitleMatch = target.requireExactTitle &&
+            !isTitleMatch &&
+            linerTitleSimilarity(wanted.words, got.words)
+        if (!isTitleMatch && !nearTitleSpellingMatch && !linerFuzzyTitleMatch) return null
         // Direction matters both ways round: asking for the album cut must not
         // land on the live take, and asking for the live take must not land on
         // the album cut. Markers living on the release rather than the row come
@@ -283,6 +290,11 @@ object TrackMatcher {
             .toSet()
         val nearLeadArtistMatched = requiredArtist != null &&
             candidateCreditNames.any { nearArtistSpelling(requiredArtist, it) }
+        // Port Liner's weighted artist similarity for regional spellings and
+        // transpositions. Whole-name token boundaries prevent "X Ambassadors"
+        // from collapsing into the unrelated artist "Ambassadors".
+        val linerFuzzyLeadArtistMatched = requiredArtist != null &&
+            candidateCreditNames.any { linerArtistSimilarity(requiredArtist, it) }
         val requiredArtistMatched = if (requiredArtist != null) {
             // Keep this as one complete name. Splitting the required artist
             // with collaboration separators would turn names such as
@@ -294,6 +306,9 @@ object TrackMatcher {
         }
         if (nearTitleSpellingMatch && !isTitleMatch &&
             (!requiredArtistMatched || !withinSeconds(candidate, target, DURATION_TIGHT_SEC))
+        ) return null
+        if (linerFuzzyTitleMatch &&
+            !requiredArtistMatched && !linerFuzzyLeadArtistMatched
         ) return null
         val spotifyCredits = target.artistCredits.ifEmpty {
             artistNames(target.artist).map { it.joinToString(" ") }
@@ -315,7 +330,8 @@ object TrackMatcher {
                 listOf(candidate.artist) + candidate.artists.map { it.name },
             )
         if (requiredArtist != null && !requiredArtistMatched &&
-            !secondarySpotifyArtistMatched && !compositeArtistAlias && !nearLeadArtistMatched
+            !secondarySpotifyArtistMatched && !compositeArtistAlias &&
+            !nearLeadArtistMatched && !linerFuzzyLeadArtistMatched
         ) {
             // YouTube Music sometimes files a recording under its composer,
             // label, or uploader rather than the credited singer. Keep the
@@ -369,13 +385,19 @@ object TrackMatcher {
         if ((secondarySpotifyArtistMatched || compositeArtistAlias) &&
             !withinSeconds(candidate, target, collaborativeCreditRuntimeWindow)
         ) return null
+        // Liner-style fuzzy matches need a close, known runtime. The broader
+        // visual-video allowance above remains reserved for trusted exact credits.
+        if ((linerFuzzyTitleMatch || linerFuzzyLeadArtistMatched) &&
+            !withinSeconds(candidate, target, LINER_FUZZY_RUNTIME_SEC)
+        ) return null
         val artist = creditedArtist
             ?: ARTIST_EXACT.takeIf { requiredArtistMatched }
             ?: ARTIST_SHARED.takeIf { secondarySpotifyArtistMatched || compositeArtistAlias }
             // A one-character spelling alias is lower confidence than an exact
             // credit and needs a known runtime within eight seconds.
             ?: ARTIST_NEAR_SPELLING.takeIf {
-                nearLeadArtistMatched && withinSeconds(candidate, target, ARTIST_SPELLING_RUNTIME_SEC)
+                (nearLeadArtistMatched || linerFuzzyLeadArtistMatched) &&
+                    withinSeconds(candidate, target, LINER_FUZZY_RUNTIME_SEC)
             }
         // The credits don't merely differ in spelling, they name different
         // people — and sometimes that is because they are describing the
@@ -451,8 +473,9 @@ object TrackMatcher {
             )
         ) return true
 
-        return candidateCredits.any { nearArtistSpelling(required, it) } &&
-            withinSeconds(candidate, target, ARTIST_SPELLING_RUNTIME_SEC)
+        return candidateCredits.any {
+            nearArtistSpelling(required, it) || linerArtistSimilarity(required, it)
+        } && withinSeconds(candidate, target, LINER_FUZZY_RUNTIME_SEC)
     }
 
     /** Candidate byline and linked credits, also split at known artist joiners. */
@@ -1017,6 +1040,67 @@ object TrackMatcher {
         return differingTokens == 1
     }
 
+    /**
+     * Liner Desktop-style token-sorted Levenshtein ratio. The surrounding
+     * Spotify matcher still owns version, performer and runtime safeguards.
+     */
+    private fun linerTokenSortRatio(first: List<String>, second: List<String>): Int {
+        val left = first.map(::titleAccentKey).sorted().joinToString(" ")
+        val right = second.map(::titleAccentKey).sorted().joinToString(" ")
+        if (left.isBlank() || right.isBlank()) return 0
+        if (left == right) return 100
+        val distance = levenshteinDistance(left, right)
+        return ((1.0 - distance.toDouble() / maxOf(left.length, right.length)) * 100)
+            .toInt()
+            .coerceIn(0, 100)
+    }
+
+    private fun levenshteinDistance(first: String, second: String): Int {
+        if (first == second) return 0
+        if (first.isEmpty()) return second.length
+        if (second.isEmpty()) return first.length
+        var previous = IntArray(second.length + 1) { it }
+        var current = IntArray(second.length + 1)
+        for (i in first.indices) {
+            current[0] = i + 1
+            for (j in second.indices) {
+                val cost = if (first[i] == second[j]) 0 else 1
+                current[j + 1] = minOf(
+                    current[j] + 1,
+                    previous[j + 1] + 1,
+                    previous[j] + cost,
+                )
+            }
+            val swap = previous
+            previous = current
+            current = swap
+        }
+        return previous[second.length]
+    }
+
+    /** Full-title fuzzy match: no subset-title or one-token coincidence. */
+    private fun linerTitleSimilarity(first: List<String>, second: List<String>): Boolean {
+        if (first.isEmpty() || first.size != second.size) return false
+        val left = first.map(::titleAccentKey)
+        val right = second.map(::titleAccentKey)
+        val shared = left.toSet().intersect(right.toSet()).size
+        val ratio = linerTokenSortRatio(left, right)
+        return if (left.size == 1) {
+            left[0].length >= 7 && ratio >= 90
+        } else {
+            shared >= left.size - 1 && ratio >= 85
+        }
+    }
+
+    /** Fuzzy full-name artist match with at least one exact token in common. */
+    private fun linerArtistSimilarity(first: String, second: String): Boolean {
+        val left = artistSpacedKey(first).split(' ').filter(String::isNotBlank)
+        val right = artistSpacedKey(second).split(' ').filter(String::isNotBlank)
+        if (left.size < 2 || left.size != right.size) return false
+        val shared = left.toSet().intersect(right.toSet()).size
+        return shared >= left.size - 1 && linerTokenSortRatio(left, right) >= 85
+    }
+
     /** True only when two strings differ by one insertion, deletion or substitution. */
     private fun differsByOneCharacter(first: String, second: String): Boolean {
         if (kotlin.math.abs(first.length - second.length) > 1) return false
@@ -1188,6 +1272,8 @@ object TrackMatcher {
     private const val DURATION_TIGHT_SEC = 3
     /** A one-character artist spelling mismatch still needs a close runtime. */
     private const val ARTIST_SPELLING_RUNTIME_SEC = 8
+    /** Liner-style fuzzy title/artist matches need a close known runtime. */
+    private const val LINER_FUZZY_RUNTIME_SEC = 10
 
     /**
      * Past this, two tracks sharing a title are not sharing a recording.

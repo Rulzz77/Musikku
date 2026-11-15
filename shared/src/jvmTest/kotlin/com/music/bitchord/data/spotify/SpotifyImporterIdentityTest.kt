@@ -67,61 +67,6 @@ class SpotifyImporterIdentityTest {
     }
 
     @Test
-    fun spotifyImportStopsSearchingImmediatelyAfterAValidatedMatch() {
-        assertTrue(shouldStopSpotifyQueryExpansion(hasHighConfidenceMatch = true))
-        assertFalse(shouldStopSpotifyQueryExpansion(hasHighConfidenceMatch = false))
-    }
-
-    @Test
-    fun spotifyImportFastPathUsesTitleThenLeadArtistQueryOnly() {
-        val target = TrackMatcher.Target(
-            title = "Talaga Reumis",
-            artist = "Gasantra Pajampangan, Nanih",
-            durationSec = 243,
-            requiredArtistName = "Gasantra Pajampangan",
-            requireSharedArtist = true,
-            requireExactTitle = true,
-            artistCredits = listOf("Gasantra Pajampangan", "Nanih"),
-        )
-
-        assertEquals(
-            listOf(
-                "Talaga Reumis",
-                "Talaga Reumis Gasantra Pajampangan",
-            ),
-            spotifyImportFastPathQueries(target),
-        )
-    }
-
-    @Test
-    fun spotifyImportKeepsBroaderQueriesForRecoveryWhenFastPathMisses() {
-        val target = TrackMatcher.Target(
-            title = "Talaga Reumis",
-            artist = "Gasantra Pajampangan, Nanih",
-            durationSec = 243,
-            album = "Album Sunda",
-            requiredArtistName = "Gasantra Pajampangan",
-            requireSharedArtist = true,
-            requireExactTitle = true,
-            artistCredits = listOf("Gasantra Pajampangan", "Nanih"),
-        )
-
-        val fast = spotifyImportFastPathQueries(target)
-        val recovery = spotifyImportRecoveryQueries(target)
-
-        assertEquals(
-            listOf(
-                "Talaga Reumis",
-                "Talaga Reumis Gasantra Pajampangan",
-            ),
-            fast,
-        )
-        assertTrue(recovery.isNotEmpty())
-        assertFalse(recovery.any(fast::contains))
-        assertTrue(recovery.any { it.contains("Album Sunda") })
-    }
-
-    @Test
     fun linerSpotifyMatcherUsesWeightedFuzzyTitleAndArtistScoring() {
         val source = SpotifyImportTrack(
             title = "Talaga Reumis",

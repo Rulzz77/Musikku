@@ -781,7 +781,7 @@ internal fun bestSpotifyImportMatch(candidates: List<Song>, target: TrackMatcher
  * spellings and album variants remain available to other recovery paths.
  */
 internal fun spotifyImportFastPathQueries(target: TrackMatcher.Target): List<String> =
-    spotifyImportSearchQueries(target).take(2)
+    spotifyImportSearchQueries(target).take(MAX_SEARCH_QUERY_VARIANTS)
 
 internal fun spotifyImportSearchQueries(target: TrackMatcher.Target): List<String> {
     val normalized = TrackMatcher.queries(target)

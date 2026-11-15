@@ -241,6 +241,108 @@ class SpotifyImporterIdentityTest {
     }
 
     @Test
+    fun linerSpotifyMatcherBuildsFallbackQueriesFromSecondarySingers() {
+        val tracks = listOf(
+            SpotifyImportTrack(
+                title = "Jalir Janji",
+                artist = "Gasentra Pajampangan, Nina",
+                leadArtist = "Gasentra Pajampangan",
+                artistCredits = listOf("Gasentra Pajampangan", "Nina"),
+            ),
+            SpotifyImportTrack(
+                title = "Ulah Ceurik",
+                artist = "Gasentra Pajampangan, Revina Alvira",
+                leadArtist = "Gasentra Pajampangan",
+                artistCredits = listOf("Gasentra Pajampangan", "Revina Alvira"),
+            ),
+            SpotifyImportTrack(
+                title = "Talaga Reumis",
+                artist = "Gasentra Pajampangan, Nanih",
+                leadArtist = "Gasentra Pajampangan",
+                artistCredits = listOf("Gasentra Pajampangan", "Nanih"),
+            ),
+            SpotifyImportTrack(
+                title = "Kamana Cintana",
+                artist = "Gasentra Pajampangan, Nina",
+                leadArtist = "Gasentra Pajampangan",
+                artistCredits = listOf("Gasentra Pajampangan", "Nina"),
+            ),
+            SpotifyImportTrack(
+                title = "Bogoh Kasaha",
+                artist = "Gasentra Pajampangan, Friska",
+                leadArtist = "Gasentra Pajampangan",
+                artistCredits = listOf("Gasentra Pajampangan", "Friska"),
+            ),
+        )
+
+        assertEquals(
+            listOf(
+                listOf("Nina Jalir Janji"),
+                listOf("Revina Alvira Ulah Ceurik"),
+                listOf("Nanih Talaga Reumis"),
+                listOf("Nina Kamana Cintana"),
+                listOf("Friska Bogoh Kasaha"),
+            ),
+            tracks.map(LinerSpotifyMatcher::alternateArtistSearchQueries),
+        )
+    }
+
+    @Test
+    fun linerSpotifyMatcherRecognizesBothRegionalTitleArtistOrders() {
+        fun source(title: String, singer: String, durationMs: Long) = SpotifyImportTrack(
+            title = title,
+            artist = "Gasentra Pajampangan, $singer",
+            durationMs = durationMs,
+            leadArtist = "Gasentra Pajampangan",
+            artistCredits = listOf("Gasentra Pajampangan", singer),
+        )
+        fun candidate(id: String, title: String, duration: String) = Song(
+            videoId = id,
+            title = title,
+            artist = "Gasentra Pajampangan",
+            thumbnailUrl = null,
+            durationText = duration,
+        )
+
+        val samples = listOf(
+            source("Jalir Janji", "Nina", 302_000) to candidate(
+                "jalir-janji-nina",
+                "JALIR JANJI - Nina (Pop Sunda Cover)",
+                "5:02",
+            ),
+            source("Ulah Ceurik", "Revina Alvira", 270_000) to candidate(
+                "ulah-ceurik-revina",
+                "Revina Alvira - ULAH CEURIK (Official Music Video)",
+                "4:30",
+            ),
+            source("Talaga Reumis", "Nanih", 403_000) to candidate(
+                "talaga-reumis-nanih",
+                "TALAGA REUMIS (Nining Meida) - Nanih (Pop Sunda Cover)",
+                "6:43",
+            ),
+            source("Kamana Cintana", "Nina", 360_000) to candidate(
+                "kamana-cintana-nina",
+                "NINA - KAMANA CINTANA (Official Music Video) | Pop Sunda",
+                "6:00",
+            ),
+            source("Bogoh Kasaha", "Friska", 341_000) to candidate(
+                "bogoh-kasaha-friska",
+                "BOGOH KASAHA - FRISKA",
+                "5:41",
+            ),
+        )
+
+        for ((spotifyTrack, youtubeTrack) in samples) {
+            val decision = LinerSpotifyMatcher.evaluate(spotifyTrack, listOf(youtubeTrack))
+            assertEquals(
+                youtubeTrack,
+                decision.track,
+                "failed title/artist order: ${spotifyTrack.title} -> ${youtubeTrack.title}; reason=${decision.reason}, score=${decision.score}",
+            )
+        }
+    }
+
+    @Test
     fun linerSpotifyMatcherRejectsDifferentSingerAndWrongVersion() {
         val source = SpotifyImportTrack(
             title = "Dumes (Live)",

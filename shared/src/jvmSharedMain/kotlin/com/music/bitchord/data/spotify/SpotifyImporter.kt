@@ -313,9 +313,8 @@ object SpotifyImporter {
             // latency without meaningful identity evidence.
             var firstStrongMatchQueryIndex: Int? = null
             fun hasHighConfidenceMatch(): Boolean = when (filter) {
-                SearchFilter.ALL -> hasHighConfidenceAudioMatch()
+                SearchFilter.TRACK, SearchFilter.ALL -> hasHighConfidenceAudioMatch()
                 SearchFilter.VIDEOS -> hasHighConfidenceVideoMatch()
-                else -> false
             }
 
             for ((queryIndex, baseQuery) in queries.take(MAX_SEARCH_QUERY_VARIANTS).withIndex()) {
@@ -323,7 +322,8 @@ object SpotifyImporter {
                 // spelling/album query. Queries without a strong result still
                 // receive the full page budget.
                 val pageLimitForQuery = if (
-                    (filter == SearchFilter.ALL && hasHighConfidenceAudioMatch()) ||
+                    ((filter == SearchFilter.TRACK || filter == SearchFilter.ALL) &&
+                        hasHighConfidenceAudioMatch()) ||
                     (filter == SearchFilter.VIDEOS && hasHighConfidenceVideoMatch())
                 ) 1 else MAX_CANDIDATE_SEARCH_PAGES
                 // Match the manual Search query first, without silently
@@ -432,17 +432,23 @@ object SpotifyImporter {
             }
         }
 
-        // ALL is the same authenticated catalogue used by the normal Search
-        // screen. Its promoted TopTrack and regular Track rows are both kept.
-        // First run the exact, unqualified queries. Only add the optional
-        // language term when those queries cannot produce any safe match.
-        searchFilter(SearchFilter.ALL)
+        // Follow Liner Desktop's catalogue-search sequence: try the dedicated
+        // Songs shelf first, then broaden to ALL (promoted TopTrack plus artist
+        // and album cards) only when no trusted audio match was found.
+        searchFilter(SearchFilter.TRACK)
+        if (!hasHighConfidenceAudioMatch()) {
+            searchFilter(SearchFilter.ALL)
+        }
+        // A preferred language is a fallback, never part of the first query.
         if (!suffix.isNullOrBlank() && bestSpotifyImportMatch(found.values.toList(), target) == null) {
             DebugLog.d(
                 "SpotifyImport",
                 "No safe match for '${target.title}' without language suffix; retrying with '$suffix'",
             )
-            searchFilter(SearchFilter.ALL, includeLanguageSuffix = true)
+            searchFilter(SearchFilter.TRACK, includeLanguageSuffix = true)
+            if (!hasHighConfidenceAudioMatch()) {
+                searchFilter(SearchFilter.ALL, includeLanguageSuffix = true)
+            }
         }
 
         // Search may return an album card rather than an individual track.

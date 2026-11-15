@@ -556,7 +556,7 @@ internal object LinerSpotifyMatcher {
         value.lowercase()
             .replace("ё", "е")
             .replace("!", "i")
-            .replace("\\$", "s")
+            .replace("\$", "s")
             .replace(Regex("""[()\[\]\-–—_"'!?.,:;/\\|#]"""), " ")
             .replace(Regex("""\s+"""), " ")
             .trim()

@@ -195,7 +195,8 @@ object SpotifyImporter {
      * It uses the same primary-credit/title ordering as automatic resolution.
      */
     fun replacementSearchQuery(track: SpotifyImportTrack): String =
-        LinerSpotifyMatcher.searchQuery(track)
+        LinerSpotifyMatcher.alternateArtistSearchQueries(track).firstOrNull()
+            ?: LinerSpotifyMatcher.searchQuery(track)
 
     /**
      * Searches candidates for a manual replacement. Start with the song-only

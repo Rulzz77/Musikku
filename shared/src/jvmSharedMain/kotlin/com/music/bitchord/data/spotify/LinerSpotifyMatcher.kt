@@ -206,18 +206,22 @@ internal object LinerSpotifyMatcher {
     fun evaluate(source: SpotifyImportTrack, candidates: List<Song>): Decision {
         val profile = buildProfile(source)
         val ranked = candidates.map { rank(profile, it) }.sortedByDescending { it.score }
-        val best = ranked.firstOrNull() ?: return Decision(reason = "low_confidence_match")
-        if (best.disqualified) {
-            return Decision(score = best.score, reason = "duration_mismatch", proposedTrack = best.track)
-        }
-        // Liner's exact-title + duration acceptance can otherwise approve a
-        // same-title cover with a clearly unrelated credited singer. Spotify
-        // provides structured credits, so retain a hard performer-conflict
-        // veto when both catalogues actually name different people.
-        if (best.artistConflict) {
-            return Decision(score = best.score, reason = "artist_mismatch", proposedTrack = best.track)
-        }
-        val second = ranked.getOrNull(1)
+        val topRanked = ranked.firstOrNull() ?: return Decision(reason = "low_confidence_match")
+
+        // A high-scoring bad result must not block a valid second result. Remove
+        // candidates with impossible duration or explicit performer conflicts
+        // before applying the normal confidence and ambiguity rules.
+        val eligible = ranked.filterNot { it.disqualified || it.artistConflict }
+        val best = eligible.firstOrNull() ?: return Decision(
+            score = topRanked.score,
+            reason = when {
+                topRanked.disqualified -> "duration_mismatch"
+                topRanked.artistConflict -> "artist_mismatch"
+                else -> "low_confidence_match"
+            },
+            proposedTrack = topRanked.track,
+        )
+        val second = eligible.getOrNull(1)
         if (isAmbiguous(best, second)) {
             return Decision(score = best.score, reason = "ambiguous_match", proposedTrack = best.track)
         }

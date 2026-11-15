@@ -122,6 +122,88 @@ class SpotifyImporterIdentityTest {
     }
 
     @Test
+    fun linerSpotifyMatcherUsesWeightedFuzzyTitleAndArtistScoring() {
+        val source = SpotifyImportTrack(
+            title = "Talaga Reumis",
+            artist = "Gasantra Pajampangan, Nanih",
+            durationMs = 243_000,
+            leadArtist = "Gasantra Pajampangan",
+            artistCredits = listOf("Gasantra Pajampangan", "Nanih"),
+        )
+        val regionalSpelling = Song(
+            videoId = "liner-regional-spelling",
+            title = "Telaga Reumis",
+            artist = "Gasentra Pajampangan",
+            thumbnailUrl = null,
+            durationText = "4:03",
+        )
+
+        val decision = LinerSpotifyMatcher.evaluate(source, listOf(regionalSpelling))
+        assertEquals(regionalSpelling, decision.track)
+        assertTrue((decision.score ?: 0) >= 75)
+        assertEquals(
+            "Gasantra Pajampangan Talaga Reumis",
+            LinerSpotifyMatcher.searchQuery(source),
+        )
+    }
+
+    @Test
+    fun linerSpotifyMatcherRejectsDifferentSingerAndWrongVersion() {
+        val source = SpotifyImportTrack(
+            title = "Dumes (Live)",
+            artist = "Guyon Waton",
+            durationMs = 210_000,
+            leadArtist = "Guyon Waton",
+            artistCredits = listOf("Guyon Waton"),
+        )
+        val wrongSinger = Song(
+            videoId = "liner-wrong-singer",
+            title = "Dumes (Live)",
+            artist = "Different Singer",
+            thumbnailUrl = null,
+            durationText = "3:30",
+        )
+        val wrongVersion = Song(
+            videoId = "liner-wrong-version",
+            title = "Dumes",
+            artist = "Guyon Waton",
+            thumbnailUrl = null,
+            durationText = "3:30",
+        )
+
+        assertNull(LinerSpotifyMatcher.evaluate(source, listOf(wrongSinger)).track)
+        assertNull(LinerSpotifyMatcher.evaluate(source, listOf(wrongVersion)).track)
+    }
+
+    @Test
+    fun linerSpotifyMatcherDoesNotApproveAmbiguousNearTitleCandidates() {
+        val source = SpotifyImportTrack(
+            title = "Pulang",
+            artist = "Insomniacks",
+            durationMs = 230_000,
+            leadArtist = "Insomniacks",
+            artistCredits = listOf("Insomniacks"),
+        )
+        val first = Song(
+            videoId = "liner-pulang-one",
+            title = "Pulanglah",
+            artist = "Insomniacks",
+            thumbnailUrl = null,
+            durationText = "3:50",
+        )
+        val second = Song(
+            videoId = "liner-pulang-two",
+            title = "Pulang Lagi",
+            artist = "Insomniacks",
+            thumbnailUrl = null,
+            durationText = "3:51",
+        )
+
+        val decision = LinerSpotifyMatcher.evaluate(source, listOf(first, second))
+        assertNull(decision.track)
+    }
+
+    @Test
     fun durationOnlyComposerOverrideDoesNotCountAsTrustedArtistCredit() {
         val target = TrackMatcher.Target(
             title = "Terlalu Sayang",

@@ -74,8 +74,8 @@ private val IMPORT_LANGUAGES = listOf(
  * The same frosted card as the addon editor, rather than a Material dialog.
  * The "who can see it" row exists only for [signedIn]: it is a YouTube Music
  * setting, and a playlist kept on this device has no audience to choose.
- * Songs that matched nothing are listed once the playlist is made, instead of
- * being dropped without a word.
+ * Unmatched tracks remain retryable and can be manually resolved from
+ * YouTube Music search before the import is confirmed.
  */
 @OptIn(ExperimentalHazeMaterialsApi::class)
 @Composable
@@ -158,7 +158,7 @@ fun SpotifyImportAlert(
         }
         // A deliberate user selection is a trusted positive mapping for
         // subsequent playlists containing this same Spotify track ID.
-        SpotifyImporter.rememberManualMatch(track, candidate)
+        SpotifyImporter.rememberManualMatch(track, candidate, effectiveLanguage())
         closeManualSearch()
         if (remaining.isEmpty()) finishImport()
     }

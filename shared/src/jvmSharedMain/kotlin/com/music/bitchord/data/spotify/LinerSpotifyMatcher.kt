@@ -153,6 +153,33 @@ internal object LinerSpotifyMatcher {
 
     fun cleanedTitle(source: SpotifyImportTrack): String = sourceMetadata(source).title
 
+    /**
+     * Alternate lookup queries for tracks whose Spotify primary credit is a
+     * label/channel while YouTube Music indexes the actual vocalist. The
+     * matcher still evaluates every result against all structured credits;
+     * these queries only widen discovery, never acceptance.
+     */
+    fun alternateArtistSearchQueries(source: SpotifyImportTrack): List<String> {
+        val title = cleanedTitle(source)
+        if (title.isBlank()) return emptyList()
+
+        val credits = source.artistCredits.ifEmpty {
+            source.artist.split(
+                Regex("""\\s*(?:,|&| feat\\.? | ft\\.? | featuring | with )\\s*""", RegexOption.IGNORE_CASE),
+            )
+        }
+        val primaryArtist = sourceMetadata(source).artist
+        return credits.asSequence()
+            .map(String::trim)
+            .filter(String::isNotBlank)
+            .filterNot { artistsMatch(it, primaryArtist) }
+            .distinct()
+            .take(3)
+            .map { artist -> "$artist $title".replace(Regex("""\\s+"""), " ").trim() }
+            .distinct()
+            .toList()
+    }
+
     fun evaluate(source: SpotifyImportTrack, candidates: List<Song>): Decision {
         val profile = buildProfile(source)
         val ranked = candidates.map { rank(profile, it) }.sortedByDescending { it.score }

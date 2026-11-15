@@ -67,11 +67,30 @@ class SpotifyImporterIdentityTest {
     }
 
     @Test
-    fun spotifyImportStopsQueryExpansionAfterOneConfirmingVariant() {
-        assertFalse(shouldStopSpotifyQueryExpansion(null, 0, hasHighConfidenceMatch = true))
-        assertFalse(shouldStopSpotifyQueryExpansion(1, 1, hasHighConfidenceMatch = true))
-        assertTrue(shouldStopSpotifyQueryExpansion(1, 2, hasHighConfidenceMatch = true))
-        assertFalse(shouldStopSpotifyQueryExpansion(1, 2, hasHighConfidenceMatch = false))
+    fun spotifyImportStopsSearchingImmediatelyAfterAValidatedMatch() {
+        assertTrue(shouldStopSpotifyQueryExpansion(hasHighConfidenceMatch = true))
+        assertFalse(shouldStopSpotifyQueryExpansion(hasHighConfidenceMatch = false))
+    }
+
+    @Test
+    fun spotifyImportFastPathUsesTitleThenLeadArtistQueryOnly() {
+        val target = TrackMatcher.Target(
+            title = "Talaga Reumis",
+            artist = "Gasantra Pajampangan, Nanih",
+            durationSec = 243,
+            requiredArtistName = "Gasantra Pajampangan",
+            requireSharedArtist = true,
+            requireExactTitle = true,
+            artistCredits = listOf("Gasantra Pajampangan", "Nanih"),
+        )
+
+        assertEquals(
+            listOf(
+                "Talaga Reumis",
+                "Talaga Reumis Gasantra Pajampangan",
+            ),
+            spotifyImportFastPathQueries(target),
+        )
     }
 
     @Test

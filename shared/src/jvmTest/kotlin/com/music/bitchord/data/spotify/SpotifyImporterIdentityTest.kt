@@ -1910,6 +1910,17 @@ class SpotifyImporterIdentityTest {
         )
 
         assertNull(LinerSpotifyMatcher.evaluate(source, listOf(wrongSinger)).track)
+
+        // Some catalogue bylines combine the label and the actual vocalist
+        // into one string instead of exposing separate ArtistRef entries.
+        val wrongSingerInCombinedByline = wrongSinger.copy(
+            videoId = "bogoh-kasaha-wrong-byline",
+            title = "Bogoh Kasaha",
+            artist = "Gasentra Pajampangan, Nanih",
+        )
+        assertNull(
+            LinerSpotifyMatcher.evaluate(source, listOf(wrongSingerInCombinedByline)).track,
+        )
         assertEquals(
             correctSinger,
             LinerSpotifyMatcher.evaluate(source, listOf(wrongSinger, correctSinger)).track,

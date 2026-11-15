@@ -200,11 +200,12 @@ object SpotifyImporter {
      * promoted cards and regional releases below the first shelf; pagination
      * stays bounded so a long playlist cannot overwhelm the service.
      */
-    private const val MAX_CANDIDATE_SEARCH_PAGES = 5
-    private const val MAX_SEARCH_QUERY_VARIANTS = 10
-    private const val MIN_PAGES_TO_COMPARE_AFTER_MATCH = 2
-    private const val MAX_ARTIST_PAGE_FALLBACKS = 5
-    private const val MAX_ALBUM_PAGE_FALLBACKS = 5
+    // Mirror Liner Desktop's bounded search path: first result page, then at
+    // most one high-value alternate query before the deeper recovery paths.
+    private const val MAX_CANDIDATE_SEARCH_PAGES = 1
+    private const val MAX_SEARCH_QUERY_VARIANTS = 2
+    private const val MAX_ARTIST_PAGE_FALLBACKS = 3
+    private const val MAX_ALBUM_PAGE_FALLBACKS = 3
     private const val STRONG_MATCH_RUNTIME_SEC = 8
 
     private val artistPageLocks = ConcurrentHashMap<String, Mutex>()
@@ -282,7 +283,7 @@ object SpotifyImporter {
         val failures = mutableListOf<String>()
         var successfulRequests = 0
 
-        val queries = spotifyImportSearchQueries(target)
+        val queries = spotifyImportFastPathQueries(target)
 
         // A trusted credit alone is not enough to stop discovery: the first
         // search row can be a shorter edit or a near-runtime regional upload.
@@ -291,6 +292,7 @@ object SpotifyImporter {
             found.values.any { candidate ->
                 !candidate.isVideo &&
                     TrackMatcher.hasTrustedArtistCredit(candidate, target) &&
+                    TrackMatcher.best(listOf(candidate), target) != null &&
                     (target.durationSec == null ||
                         TrackMatcher.withinSeconds(candidate, target, STRONG_MATCH_RUNTIME_SEC))
             }
@@ -299,6 +301,7 @@ object SpotifyImporter {
             found.values.any { candidate ->
                 candidate.isVideo &&
                     TrackMatcher.hasTrustedArtistCredit(candidate, target) &&
+                    TrackMatcher.best(listOf(candidate), target) != null &&
                     (target.durationSec == null ||
                         TrackMatcher.withinSeconds(candidate, target, STRONG_MATCH_RUNTIME_SEC))
             }
@@ -307,41 +310,19 @@ object SpotifyImporter {
             filter: SearchFilter,
             includeLanguageSuffix: Boolean = false,
         ) {
-            // A strong match is still compared against one independent query,
-            // so a raw-title hit cannot hide a better artist-qualified release.
-            // Once that second query has been sampled, further variants add
-            // latency without meaningful identity evidence.
-            var firstStrongMatchQueryIndex: Int? = null
-            fun hasHighConfidenceMatch(): Boolean = when (filter) {
-                SearchFilter.SONGS, SearchFilter.ALL -> hasHighConfidenceAudioMatch()
-                SearchFilter.VIDEOS -> hasHighConfidenceVideoMatch()
-                else -> false
-            }
-
-            for ((queryIndex, baseQuery) in queries.take(MAX_SEARCH_QUERY_VARIANTS).withIndex()) {
-                // Once a strong result exists, sample just one additional
-                // spelling/album query. Queries without a strong result still
-                // receive the full page budget.
-                val pageLimitForQuery = if (
-                    ((filter == SearchFilter.SONGS || filter == SearchFilter.ALL) &&
-                        hasHighConfidenceAudioMatch()) ||
-                    (filter == SearchFilter.VIDEOS && hasHighConfidenceVideoMatch())
-                ) 1 else MAX_CANDIDATE_SEARCH_PAGES
-                // Match the manual Search query first, without silently
-                // changing the words the listener would type. A preferred
-                // language is a fallback query, not part of the primary query:
-                // appending it up front can hide an otherwise visible result.
+            for ((queryIndex, baseQuery) in queries.withIndex()) {
                 val query = listOf(
                     baseQuery,
                     suffix?.takeIf { includeLanguageSuffix && it.isNotBlank() },
                 )
                     .filterNotNull()
                     .joinToString(" ")
-                // Manual Search uses the authenticated endpoint. Starting the
-                // import anonymously caused the same query to return a
-                // different catalogue, and its continuation then switched
-                // back to the authenticated endpoint halfway through.
-                val firstPage = YtMusicRepository.searchPage(
+
+                // Liner Desktop searches one catalogue page per query. MusikKu
+                // now does the same on the fast path: don't walk five
+                // continuation pages when the requested track is already in
+                // the first result shelf.
+                var page = YtMusicRepository.searchPage(
                     query = query,
                     filter = filter,
                     anonymous = false,
@@ -351,20 +332,10 @@ object SpotifyImporter {
                         failures += "search '$query' (${filter.name}): ${failure.message}"
                         null
                     },
-                )
-                if (firstPage == null) {
-                    if (shouldStopSpotifyQueryExpansion(
-                            firstStrongMatchQueryIndex,
-                            queryIndex,
-                            hasHighConfidenceMatch(),
-                        )
-                    ) return
-                    continue
-                }
+                ) ?: continue
 
-                var page: YtMusicRepository.SearchPage = firstPage ?: continue
                 var pagesRead = 0
-                while (pagesRead < pageLimitForQuery) {
+                while (pagesRead < MAX_CANDIDATE_SEARCH_PAGES) {
                     page.rows.forEach { row ->
                         when (row) {
                             is SearchResult.Browse -> {
@@ -386,24 +357,7 @@ object SpotifyImporter {
                         }
                     }
                     pagesRead++
-
-                    // The normal Search screen shows the same authenticated
-                    // ALL catalogue. Once a candidate has a trusted artist
-                    // credit, read two pages so a canonical release can outrank
-                    // a near-runtime upload. A duration-only composer/uploader
-                    // fallback is not trusted enough to stop alternate queries.
-                    if (filter == SearchFilter.ALL && hasHighConfidenceAudioMatch() &&
-                        pagesRead >= MIN_PAGES_TO_COMPARE_AFTER_MATCH
-                    ) {
-                        DebugLog.d(
-                            "SpotifyImport",
-                            "Matched '${target.title}' by '${target.artist}' after ${successfulRequests} search requests; checking one alternate query",
-                        )
-                        break
-                    }
-                    if (filter == SearchFilter.VIDEOS && hasHighConfidenceVideoMatch() &&
-                        pagesRead >= MIN_PAGES_TO_COMPARE_AFTER_MATCH
-                    ) break
+                    if (pagesRead >= MAX_CANDIDATE_SEARCH_PAGES) break
 
                     val continuation = page.continuation ?: break
                     page = YtMusicRepository.searchContinuation(continuation, filter).fold(
@@ -414,19 +368,15 @@ object SpotifyImporter {
                         },
                     ) ?: break
                 }
-                val hasStrongMatch = hasHighConfidenceMatch()
-                if (hasStrongMatch && firstStrongMatchQueryIndex == null) {
-                    firstStrongMatchQueryIndex = queryIndex
-                } else if (shouldStopSpotifyQueryExpansion(
-                        firstStrongMatchQueryIndex,
-                        queryIndex,
-                        hasStrongMatch,
-                    )
-                ) {
+
+                // Stop immediately once title, version, trusted artist and
+                // runtime all pass the real matcher. Checking more query
+                // variants after that only delays the next playlist track.
+                if (shouldStopSpotifyQueryExpansion(hasHighConfidenceMatch())) {
                     DebugLog.d(
                         "SpotifyImport",
-                        "Strong match for '${target.title}' by '${target.artist}' confirmed by " +
-                            "query ${queryIndex + 1}; stopping query expansion after ${successfulRequests} requests",
+                        "Fast match for '${target.title}' by '${target.artist}' " +
+                            "using query ${queryIndex + 1}; stopping after ${successfulRequests} requests",
                     )
                     break
                 }
@@ -624,7 +574,7 @@ object SpotifyImporter {
         val uniqueTracks = distinctSpotifyImportTracks(tracks)
         val total = uniqueTracks.size
         val completedCount = AtomicInteger(0)
-        val semaphore = Semaphore(3) // Keep YouTube search bursts below the rate-limit threshold.
+        val semaphore = Semaphore(4) // Match Liner Desktop's four concurrent track lookups.
 
         val cleanLang = language?.trim()?.takeIf {
             !it.equals("No Preference", ignoreCase = true) &&
@@ -713,13 +663,8 @@ object SpotifyImporter {
  * Once one query produced a high-confidence match, allow one additional
  * independent query to compare alternate catalogue releases, then stop.
  */
-internal fun shouldStopSpotifyQueryExpansion(
-    firstStrongMatchQueryIndex: Int?,
-    currentQueryIndex: Int,
-    hasHighConfidenceMatch: Boolean,
-): Boolean = hasHighConfidenceMatch &&
-    firstStrongMatchQueryIndex != null &&
-    currentQueryIndex > firstStrongMatchQueryIndex
+internal fun shouldStopSpotifyQueryExpansion(hasHighConfidenceMatch: Boolean): Boolean =
+    hasHighConfidenceMatch
 
 /** Converts playable rows from both mixed and filtered YouTube Music search pages. */
 internal fun spotifyImportCandidate(row: SearchResult): Song? = when (row) {
@@ -830,6 +775,14 @@ internal fun bestSpotifyImportMatch(candidates: List<Song>, target: TrackMatcher
  * suffix, transliteration, or unusual DJ/language label could therefore change
  * the query enough for YouTube Music to return a different result set.
  */
+/**
+ * The two highest-value queries mirror Liner Desktop's fast path: the title
+ * as typed, then the same title qualified by Spotify's lead artist. Broader
+ * spellings and album variants remain available to other recovery paths.
+ */
+internal fun spotifyImportFastPathQueries(target: TrackMatcher.Target): List<String> =
+    spotifyImportSearchQueries(target).take(2)
+
 internal fun spotifyImportSearchQueries(target: TrackMatcher.Target): List<String> {
     val normalized = TrackMatcher.queries(target)
     val rawTitle = target.title.trim()

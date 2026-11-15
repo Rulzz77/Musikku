@@ -66,13 +66,16 @@ object InnertubeParser {
         // for the top result, then one shelf per category). Its promoted top
         // result lives on the card itself, not in a responsive row, so read it
         // first before walking the ordinary result rows.
-        val topResults: List<SearchResult> = if (includeVideos) emptyList() else {
+        val topResults: List<SearchResult> =
             collectRenderers(response, "musicCardShelfRenderer")
                 .mapNotNull { card ->
-                    parseCardShelfSong(card, excludePodcastEpisodes = musicOnly)?.let(SearchResult::TopTrack)
+                    parseCardShelfSong(
+                        card,
+                        videoFallback = includeVideos,
+                        excludePodcastEpisodes = musicOnly,
+                    )?.let(SearchResult::TopTrack)
                         ?: parseCardShelfBrowse(card, musicOnly = musicOnly)?.let(SearchResult::Browse)
                 }
-        }
         val rows = collectRenderers(response, "musicResponsiveListItemRenderer")
 
         // The rows tucked inside an artist's promoted card, paired with the
@@ -91,9 +94,11 @@ object InnertubeParser {
             topResults.forEach { result ->
                 when (result) {
                     is SearchResult.TopTrack -> {
-                        // The mixed All page stays music-only; music-video uploads
-                        // belong exclusively to the dedicated Videos tab.
-                        if ((!result.song.isVideo || includeAllTrackTypes) && seen.add("v:${result.song.videoId}")) add(result)
+                        // Match the responsive-row filter: keep the requested media
+                        // type, unless the caller explicitly asks for every track type.
+                        if ((includeAllTrackTypes || result.song.isVideo == includeVideos) &&
+                            seen.add("v:${result.song.videoId}")
+                        ) add(result)
                     }
                     is SearchResult.Browse -> {
                         if (seen.add("b:${result.item.browseId}")) add(result)
@@ -879,7 +884,11 @@ object InnertubeParser {
      * credits are placed directly on the card, so it would otherwise vanish
      * from the All tab while remaining first in the Songs tab.
      */
-    private fun parseCardShelfSong(renderer: JsonObject, excludePodcastEpisodes: Boolean = false): Song? {
+    private fun parseCardShelfSong(
+        renderer: JsonObject,
+        videoFallback: Boolean = false,
+        excludePodcastEpisodes: Boolean = false,
+    ): Song? {
         val videoId = renderer.o("onTap").o("watchEndpoint").s("videoId") ?: return null
         val title = renderer.o("title").runs()
         if (title.isBlank()) return null
@@ -913,10 +922,9 @@ object InnertubeParser {
             artists = completeArtistCredits(artist.orEmpty(), credits.artists),
             albumId = credits.albumId,
             albumName = credits.albumName,
-            // A card's artwork aspect ratio describes its image, not its media.
-            // Use the same metadata-first classification as responsive search rows.
-            // Keep the original row-label + artwork heuristic for search results.
-            isVideo = !episode && isVideoTrack(rowType, thumbnails.isNotSquare()),
+            // The dedicated Videos filter is authoritative even when the promoted
+            // card uses square artwork and omits an explicit "Video" row label.
+            isVideo = !episode && isVideoTrack(rowType, thumbnails.isNotSquare(), videoFallback),
             isPodcastEpisode = episode,
             isExplicit = renderer["subtitleBadges"].hasExplicitBadge(),
         )

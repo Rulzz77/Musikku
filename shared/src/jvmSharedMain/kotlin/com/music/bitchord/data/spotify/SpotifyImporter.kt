@@ -190,6 +190,98 @@ object SpotifyImporter {
         return LinerSpotifyMatcher.evaluate(source, searchCandidates(source)).track
     }
 
+    /**
+     * Liner Desktop's actual import order, not its interactive search UI:
+     * track(query) -> all(query) when confidence is insufficient ->
+     * track(clean title) when it differs -> video(query) if still unmatched.
+     * Each stage is one raw InnerTube request and candidates are re-scored as
+     * a merged set, including Liner's ambiguity check.
+     */
+    private suspend fun searchCandidates(
+        source: SpotifyImportTrack,
+        suffix: String? = null,
+    ): List<Song> {
+        val query = LinerSpotifyMatcher.searchQuery(source)
+        val cleanTitle = LinerSpotifyMatcher.cleanedTitle(source)
+        val failures = mutableListOf<String>()
+        var candidates = emptyList<Song>()
+        var decision: LinerSpotifyMatcher.Decision? = null
+
+        suspend fun search(
+            searchQuery: String,
+            kind: YtMusicRepository.SpotifyImportSearchKind,
+        ): List<Song> {
+            if (searchQuery.isBlank()) return emptyList()
+            return YtMusicRepository.searchSpotifyImportRaw(searchQuery, kind).fold(
+                onSuccess = { it },
+                onFailure = { failure ->
+                    if (failure is CancellationException) throw failure
+                    failures += "${kind.name.lowercase()} search '$searchQuery': ${failure.message}"
+                    emptyList()
+                },
+            )
+        }
+
+        suspend fun attempt(
+            searchQuery: String,
+            kind: YtMusicRepository.SpotifyImportSearchKind,
+        ) {
+            val extra = search(searchQuery, kind)
+            if (extra.isEmpty()) return
+            val combined = LinkedHashMap<String, Song>()
+            (candidates + extra).forEach { candidate ->
+                val id = candidate.videoId.trim()
+                if (id.isNotEmpty()) combined.putIfAbsent(id, candidate)
+            }
+            val nextCandidates = combined.values.toList()
+            val nextDecision = LinerSpotifyMatcher.evaluate(source, nextCandidates)
+            if (nextDecision.matched || decision == null) {
+                candidates = nextCandidates
+                decision = nextDecision
+            }
+        }
+
+        candidates = search(query, YtMusicRepository.SpotifyImportSearchKind.TRACK)
+            .distinctBy { it.videoId }
+        if (candidates.isNotEmpty()) {
+            decision = LinerSpotifyMatcher.evaluate(source, candidates)
+        }
+
+        if (decision?.matched != true || (decision?.score ?: Int.MIN_VALUE) < 75) {
+            attempt(query, YtMusicRepository.SpotifyImportSearchKind.ALL)
+        }
+        if (decision?.matched != true && cleanTitle.isNotBlank() && cleanTitle != query) {
+            attempt(cleanTitle, YtMusicRepository.SpotifyImportSearchKind.TRACK)
+        }
+        if (decision?.matched != true) {
+            attempt(query, YtMusicRepository.SpotifyImportSearchKind.VIDEO)
+        }
+
+        // An explicit in-app language preference is an optional extension to
+        // Liner's default query sequence; no extra language terms are used by
+        // default.
+        if (decision?.matched != true && !suffix.isNullOrBlank()) {
+            val languageQuery = "$query $suffix".trim()
+            attempt(languageQuery, YtMusicRepository.SpotifyImportSearchKind.TRACK)
+            if (decision?.matched != true) {
+                attempt(languageQuery, YtMusicRepository.SpotifyImportSearchKind.ALL)
+            }
+            if (decision?.matched != true) {
+                attempt(languageQuery, YtMusicRepository.SpotifyImportSearchKind.VIDEO)
+            }
+        }
+
+        if (candidates.isEmpty() && failures.isNotEmpty()) {
+            throw IllegalStateException(
+                "Spotify lookup incomplete: ${failures.take(3).joinToString("; ")}",
+            )
+        }
+        if (candidates.isEmpty() && query.isNotBlank()) {
+            throw IllegalStateException("Spotify lookup returned no usable YouTube Music response")
+        }
+        return candidates
+    }
+
     /** Tracks the embed page lists before it cuts off. */
     private const val EMBED_TRACK_LIMIT = 100
     private const val PAGE_SIZE = 100

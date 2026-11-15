@@ -779,6 +779,8 @@ fun DetailScreen(
                     ) { position, entry ->
                         val song = entry.value
                         val isCurrent = isCurrentRow(song)
+                        val canRemoveTrack = onRemoveSongFromPlaylist != null &&
+                            (song.setVideoId != null || page.browseId.startsWith("local:"))
                         SongRow(
                             song = if (numbered) {
                                 song
@@ -800,13 +802,10 @@ fun DetailScreen(
                             isPlaying = isCurrent && isPlaying,
                             activeTint = palette.accent,
                             searchPlayingStyle = true,
-                            trailing = if (
-                                onRemoveSongFromPlaylist != null &&
-                                (song.setVideoId != null || page.browseId.startsWith("local:"))
-                            ) {
+                            trailing = if (canRemoveTrack) {
                                 {
                                     IconButton(
-                                        onClick = { onRemoveSongFromPlaylist(song) },
+                                        onClick = { onRemoveSongFromPlaylist?.invoke(song) },
                                         modifier = Modifier.size(40.dp),
                                     ) {
                                         Icon(
@@ -817,6 +816,7 @@ fun DetailScreen(
                                     }
                                 }
                             } else null,
+                            showTrailingWhenUnavailable = canRemoveTrack,
                         )
                         if (position < matches.lastIndex) {
                             HorizontalDivider(

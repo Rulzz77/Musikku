@@ -697,13 +697,20 @@ internal object LinerSpotifyMatcher {
     }
 
     private fun containsUncreditedArtistName(candidateArtist: String, sourceArtists: List<String>): Boolean {
-        var remaining = normalizeTrackString(candidateArtist)
-        sourceArtists.forEach { sourceArtist ->
-            val credit = normalizeTrackString(sourceArtist)
-            if (credit.isNotBlank()) {
-                remaining = remaining.replace(credit, " ")
+        val candidateTokens = normalizeTrackString(candidateArtist)
+            .split(' ')
+            .filter(String::isNotBlank)
+        val creditedTokens = sourceArtists
+            .flatMap { normalizeTrackString(it).split(' ') }
+            .filter(String::isNotBlank)
+            .distinct()
+        // Remove token-level spelling variants too (for example Gasantra /
+        // Gasentra), but do not let a similar label hide an extra singer name.
+        val remaining = candidateTokens.filter { candidateToken ->
+            creditedTokens.none { creditedToken ->
+                tokenSortRatio(candidateToken, creditedToken) >= 85
             }
-        }
+        }.joinToString(" ")
         return looksLikePerformerSegment(remaining)
     }
 

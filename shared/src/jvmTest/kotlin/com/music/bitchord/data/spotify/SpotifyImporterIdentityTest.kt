@@ -10,6 +10,7 @@ import com.music.bitchord.data.sources.TrackMatcher
 import com.music.bitchord.data.innertube.InnertubeParser
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
+import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -1835,4 +1836,209 @@ class SpotifyImporterIdentityTest {
 
         assertEquals(2, distinctSpotifyImportTracks(tracks).size)
     }
+
+
+    @Test
+    fun linerSpotifyMatcherPreservesHyphenAndColonInsideSpotifyTitles() {
+        val slowed = SpotifyImportTrack(
+            title = "Heat Waves - Slowed",
+            artist = "Glass Animals",
+            durationMs = 180_000,
+            leadArtist = "Glass Animals",
+            artistCredits = listOf("Glass Animals"),
+        )
+        assertEquals("Heat Waves - Slowed", LinerSpotifyMatcher.cleanedTitle(slowed))
+        assertEquals(
+            "Glass Animals Heat Waves - Slowed",
+            LinerSpotifyMatcher.searchQuery(slowed),
+        )
+        val slowedCandidate = Song(
+            videoId = "heat-waves-slowed",
+            title = "Heat Waves (Slowed)",
+            artist = "Glass Animals",
+            thumbnailUrl = null,
+            durationText = "3:00",
+        )
+        assertEquals(slowedCandidate, LinerSpotifyMatcher.evaluate(slowed, listOf(slowedCandidate)).track)
+
+        val colonTitle = SpotifyImportTrack(
+            title = "Voor Dilan #III: Dulu Kita Masih Remaja",
+            artist = "The Panasdalam Bank",
+            durationMs = 240_000,
+            leadArtist = "The Panasdalam Bank",
+            artistCredits = listOf("The Panasdalam Bank"),
+        )
+        assertEquals(
+            "The Panasdalam Bank Voor Dilan #III: Dulu Kita Masih Remaja",
+            LinerSpotifyMatcher.searchQuery(colonTitle),
+        )
+        val colonCandidate = Song(
+            videoId = "voor-dilan-iii",
+            title = "Voor Dilan #III: Dulu Kita Masih Remaja",
+            artist = "The Panasdalam Bank",
+            thumbnailUrl = null,
+            durationText = "4:00",
+        )
+        assertEquals(
+            colonCandidate,
+            LinerSpotifyMatcher.evaluate(colonTitle, listOf(colonCandidate)).track,
+        )
+    }
+
+    @Test
+    fun linerSpotifyMatcherRejectsAnExplicitWrongVocalistAndChoosesCreditedSinger() {
+        val source = SpotifyImportTrack(
+            title = "Bogoh Kasaha",
+            artist = "Gasentra Pajampangan, Friska",
+            durationMs = 341_000,
+            leadArtist = "Gasentra Pajampangan",
+            artistCredits = listOf("Gasentra Pajampangan", "Friska"),
+        )
+        val wrongSinger = Song(
+            videoId = "bogoh-kasaha-nanih",
+            title = "Bogoh Kasaha - Nanih",
+            artist = "Gasentra Pajampangan",
+            thumbnailUrl = null,
+            durationText = "5:41",
+        )
+        val correctSinger = Song(
+            videoId = "bogoh-kasaha-friska",
+            title = "Bogoh Kasaha - Friska",
+            artist = "Gasentra Pajampangan",
+            thumbnailUrl = null,
+            durationText = "5:41",
+        )
+
+        assertNull(LinerSpotifyMatcher.evaluate(source, listOf(wrongSinger)).track)
+        assertEquals(
+            correctSinger,
+            LinerSpotifyMatcher.evaluate(source, listOf(wrongSinger, correctSinger)).track,
+        )
+    }
+
+    @Test
+    fun linerSpotifyMatcherSkipsInvalidTopRankedCandidateAndUsesNextEligibleOne() {
+        val source = SpotifyImportTrack(
+            title = "Bogoh Kasaha",
+            artist = "Gasentra Pajampangan, Friska",
+            durationMs = 341_000,
+            leadArtist = "Gasentra Pajampangan",
+            artistCredits = listOf("Gasentra Pajampangan", "Friska"),
+        )
+        val higherScoringButConflicting = Song(
+            videoId = "wrong-vocalist-higher-score",
+            title = "Bogoh Kasaha - Nanih",
+            artist = "Gasentra Pajampangan",
+            thumbnailUrl = null,
+            durationText = "5:41",
+        )
+        val lowerScoringValid = Song(
+            videoId = "valid-next-candidate",
+            title = "Bogoh Kas",
+            artist = "Friska",
+            thumbnailUrl = null,
+            durationText = null,
+        )
+
+        assertEquals(
+            lowerScoringValid,
+            LinerSpotifyMatcher.evaluate(
+                source,
+                listOf(higherScoringButConflicting, lowerScoringValid),
+            ).track,
+        )
+    }
+
+    @Test
+    fun spotifyImporterSearchesSecondaryVocalistAfterProvisionalLabelMatch() = runBlocking {
+        val source = SpotifyImportTrack(
+            title = "Kamana Cintana",
+            artist = "Gasentra Pajampangan, Nina",
+            durationMs = 360_000,
+            leadArtist = "Gasentra Pajampangan",
+            artistCredits = listOf("Gasentra Pajampangan", "Nina"),
+        )
+        val labelOnly = Song(
+            videoId = "kamana-label-only",
+            title = "Kamana Cintana",
+            artist = "Gasentra Pajampangan",
+            thumbnailUrl = null,
+            durationText = "6:00",
+        )
+        val singerIdentified = Song(
+            videoId = "kamana-nina",
+            title = "Nina - Kamana Cintana",
+            artist = "Gasentra Pajampangan",
+            thumbnailUrl = null,
+            durationText = "6:00",
+        )
+        val searchedQueries = mutableListOf<String>()
+
+        val candidates = SpotifyImporter.searchCandidates(
+            source = source,
+            searchRaw = { query, kind ->
+                searchedQueries += "$query [${kind.name}]"
+                when {
+                    query == "Gasentra Pajampangan Kamana Cintana" &&
+                        kind == YtMusicRepository.SpotifyImportSearchKind.TRACK ->
+                        Result.success(listOf(labelOnly))
+                    query == "Nina Kamana Cintana" &&
+                        kind == YtMusicRepository.SpotifyImportSearchKind.TRACK ->
+                        Result.success(listOf(singerIdentified))
+                    else -> Result.success(emptyList())
+                }
+            },
+        )
+
+        assertTrue(searchedQueries.any { it.startsWith("Nina Kamana Cintana") })
+        assertEquals(singerIdentified, LinerSpotifyMatcher.evaluate(source, candidates).track)
+    }
+
+    @Test
+    fun spotifyImporterContinuesSearchWhenLanguageFilterRejectsInitialCandidate() = runBlocking {
+        val source = SpotifyImportTrack(
+            title = "Song",
+            artist = "Singer",
+            durationMs = 180_000,
+            leadArtist = "Singer",
+            artistCredits = listOf("Singer"),
+        )
+        val hindi = Song(
+            videoId = "song-hindi",
+            title = "Song (Hindi Version)",
+            artist = "Singer",
+            thumbnailUrl = null,
+            durationText = "3:00",
+        )
+        val tamil = Song(
+            videoId = "song-tamil",
+            title = "Song (Tamil Version)",
+            artist = "Singer",
+            thumbnailUrl = null,
+            durationText = "3:00",
+        )
+        val searchedQueries = mutableListOf<String>()
+
+        val candidates = SpotifyImporter.searchCandidates(
+            source = source,
+            suffix = "Tamil",
+            searchRaw = { query, kind ->
+                searchedQueries += "$query [${kind.name}]"
+                when {
+                    query == "Singer Song" &&
+                        kind == YtMusicRepository.SpotifyImportSearchKind.TRACK ->
+                        Result.success(listOf(hindi))
+                    query == "Singer Song Tamil" &&
+                        kind == YtMusicRepository.SpotifyImportSearchKind.TRACK ->
+                        Result.success(listOf(tamil))
+                    else -> Result.success(emptyList())
+                }
+            },
+        )
+
+        assertTrue(searchedQueries.any { it.startsWith("Singer Song Tamil") })
+        assertFalse(candidates.any { it.videoId == hindi.videoId })
+        assertEquals(tamil, LinerSpotifyMatcher.evaluate(source, candidates).track)
+    }
+
 }

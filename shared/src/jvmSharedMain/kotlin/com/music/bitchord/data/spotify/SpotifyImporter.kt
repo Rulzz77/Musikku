@@ -283,6 +283,7 @@ object SpotifyImporter {
         var successfulRequests = 0
 
         val queries = spotifyImportFastPathQueries(target)
+        val recoveryQueries = spotifyImportRecoveryQueries(target)
 
         // A trusted credit alone is not enough to stop discovery: the first
         // search row can be a shorter edit or a near-runtime regional upload.
@@ -307,6 +308,7 @@ object SpotifyImporter {
 
         suspend fun searchFilter(
             filter: SearchFilter,
+            querySet: List<String> = queries,
             includeLanguageSuffix: Boolean = false,
         ) {
             fun hasHighConfidenceMatch(): Boolean = when (filter) {
@@ -315,7 +317,7 @@ object SpotifyImporter {
                 else -> false
             }
 
-            for ((queryIndex, baseQuery) in queries.withIndex()) {
+            for ((queryIndex, baseQuery) in querySet.withIndex()) {
                 val query = listOf(
                     baseQuery,
                     suffix?.takeIf { includeLanguageSuffix && it.isNotBlank() },
@@ -395,6 +397,15 @@ object SpotifyImporter {
         if (!hasHighConfidenceAudioMatch()) {
             searchFilter(SearchFilter.ALL)
         }
+        // Spend the wider title/artist/album variants only when the fast path
+        // cannot validate a trusted recording. This keeps ordinary imports
+        // quick without discarding the difficult-track recovery strategy.
+        if (!hasHighConfidenceAudioMatch() && recoveryQueries.isNotEmpty()) {
+            searchFilter(SearchFilter.SONGS, querySet = recoveryQueries)
+        }
+        if (!hasHighConfidenceAudioMatch() && recoveryQueries.isNotEmpty()) {
+            searchFilter(SearchFilter.ALL, querySet = recoveryQueries)
+        }
         // A preferred language is a fallback, never part of the first query.
         if (!suffix.isNullOrBlank() && bestSpotifyImportMatch(found.values.toList(), target) == null) {
             DebugLog.d(
@@ -404,6 +415,13 @@ object SpotifyImporter {
             searchFilter(SearchFilter.SONGS, includeLanguageSuffix = true)
             if (!hasHighConfidenceAudioMatch()) {
                 searchFilter(SearchFilter.ALL, includeLanguageSuffix = true)
+            }
+            if (!hasHighConfidenceAudioMatch() && recoveryQueries.isNotEmpty()) {
+                searchFilter(
+                    SearchFilter.SONGS,
+                    querySet = recoveryQueries,
+                    includeLanguageSuffix = true,
+                )
             }
         }
 
@@ -779,6 +797,10 @@ internal fun bestSpotifyImportMatch(candidates: List<Song>, target: TrackMatcher
  */
 internal fun spotifyImportFastPathQueries(target: TrackMatcher.Target): List<String> =
     spotifyImportSearchQueries(target).take(2)
+
+/** The next small batch of spelling/artist/album alternatives, used only on misses. */
+internal fun spotifyImportRecoveryQueries(target: TrackMatcher.Target): List<String> =
+    spotifyImportSearchQueries(target).drop(2).take(4)
 
 /**
  * Query both Spotify's original spelling and TrackMatcher's normalized form.

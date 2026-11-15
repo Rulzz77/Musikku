@@ -94,9 +94,11 @@ object InnertubeParser {
             topResults.forEach { result ->
                 when (result) {
                     is SearchResult.TopTrack -> {
-                        // The mixed All page stays music-only; music-video uploads
-                        // belong exclusively to the dedicated Videos tab.
-                        if ((!result.song.isVideo || includeAllTrackTypes) && seen.add("v:${result.song.videoId}")) add(result)
+                        // Match the responsive-row filter: keep the requested media
+                        // type, unless the caller explicitly asks for every track type.
+                        if ((includeAllTrackTypes || result.song.isVideo == includeVideos) &&
+                            seen.add("v:${result.song.videoId}")
+                        ) add(result)
                     }
                     is SearchResult.Browse -> {
                         if (seen.add("b:${result.item.browseId}")) add(result)

@@ -171,6 +171,9 @@ fun SpotifyImportAlert(
             resolvedSongs = resolvedSongs + song
         }
         unmatched = unmatched.orEmpty().filterNot { it == original }
+        // A deliberate selection is a trusted positive mapping for the same
+        // Spotify track in later imports, respecting the selected language.
+        SpotifyImporter.rememberManualMatch(original, song, effectiveLanguage())
         closeReplacementEditor()
     }
 

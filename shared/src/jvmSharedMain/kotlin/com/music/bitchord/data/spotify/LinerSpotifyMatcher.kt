@@ -42,6 +42,7 @@ internal object LinerSpotifyMatcher {
         val titleClean: String,
         val primaryArtist: String,
         val versionMatches: Boolean,
+        val artistConflict: Boolean,
     )
 
     private data class ParsedArtistTitle(
@@ -158,6 +159,13 @@ internal object LinerSpotifyMatcher {
         val best = ranked.firstOrNull() ?: return Decision(reason = "low_confidence_match")
         if (best.disqualified) {
             return Decision(score = best.score, reason = "duration_mismatch", proposedTrack = best.track)
+        }
+        // Liner's exact-title + duration acceptance can otherwise approve a
+        // same-title cover with a clearly unrelated credited singer. Spotify
+        // provides structured credits, so retain a hard performer-conflict
+        // veto when both catalogues actually name different people.
+        if (best.artistConflict) {
+            return Decision(score = best.score, reason = "artist_mismatch", proposedTrack = best.track)
         }
         val second = ranked.getOrNull(1)
         if (isAmbiguous(best, second)) {
@@ -344,6 +352,9 @@ internal object LinerSpotifyMatcher {
             titleClean = candidateBase,
             primaryArtist = primaryCandidate,
             versionMatches = versions.matches,
+            artistConflict = profile.artists.isNotEmpty() &&
+                candidateArtists.any { it.isNotBlank() && !isGenericArtistLabel(it) } &&
+                !artistExact && artistRatio < 70,
         )
     }
 
@@ -525,6 +536,11 @@ internal object LinerSpotifyMatcher {
         }
         return previous[b.length]
     }
+
+    private fun isGenericArtistLabel(value: String): Boolean =
+        normalizeTrackString(value) in setOf(
+            "unknown artist", "various artists", "various", "soundtrack",
+        )
 
     private fun artistsMatch(source: String, candidate: String): Boolean {
         if (source.isBlank() || candidate.isBlank()) return false

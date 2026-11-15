@@ -81,8 +81,8 @@ internal object LinerSpotifyMatcher {
         Regex("""(?:\(|\[|\{)?\s*(?:tgk|tg|t\.me|vk\.com|soundcloud\.com|soundcloud|instagram\.com|instagram|insta|inst|twitter\.com|x\.com)\s*[:/]?\s*[^)\]}]+(?:\)|\]|\})?""", RegexOption.IGNORE_CASE),
         Regex("""@[\w.-]+"""),
         Regex("""(?:\(|\[|\{)?\s*(?:prod(?:uced)?\s+by|beat\s+by|prod\b\.?|beat\b\.?)\s*[:/]?\s*[^)\]}]+(?:\)|\]|\})?""", RegexOption.IGNORE_CASE),
-        Regex("""(?:\(|\[|\{)\s*(?:free\s*(?:dl|download)|download(?:\s*link)?|free\s*beat|link\s+in\s+(?:bio|desc(?:ription)?)|out\s+now|stream\s+now|buy\s+now|premiere|exclusive|clip\s+officiel|official\s+video|official\s+audio|official\s+music\s+video|music\s+video|lyric\s+video|visualizer|official\s+visualizer|audio\s+visualizer|og\s+version|og\s+beat|full\s+version|hq|hd|4k)[^)]*[)\]}]""", RegexOption.IGNORE_CASE),
-        Regex("""\s*[([{]\s*(?:remaster(?:ed)?(?:\s*\d{4})?|ремастеринг(?:\s*\d{4})?|deluxe(?:\s+edition)?|anniversary(?:\s+edition)?|original\s+mix|album\s+version|single\s+version|ost|soundtrack|из\s+(?:телесериала|фильма|к/ф)[^)]*)[)\]}]""", RegexOption.IGNORE_CASE),
+        Regex("""(?:\(|\[|\{)\s*(?:free\s*(?:dl|download)|download(?:\s*link)?|free\s*beat|link\s+in\s+(?:bio|desc(?:ription)?)|out\s+now|stream\s+now|buy\s+now|premiere|exclusive|clip\s+officiel|official\s+video|official\s+audio|official\s+music\s+video|music\s+video|lyric\s+video|visualizer|official\s+visualizer|audio\s+visualizer|og\s+version|og\s+beat|full\s+version|hq|hd|4k)[^)]*(?:\)|\]|\})""", RegexOption.IGNORE_CASE),
+        Regex("""\s*(?:\(|\[|\{)\s*(?:remaster(?:ed)?(?:\s*\d{4})?|ремастеринг(?:\s*\d{4})?|deluxe(?:\s+edition)?|anniversary(?:\s+edition)?|original\s+mix|album\s+version|single\s+version|ost|soundtrack|из\s+(?:телесериала|фильма|к/ф)[^)]*)(?:\)|\]|\})""", RegexOption.IGNORE_CASE),
         Regex("""\s*[-–—|]\s*(?:out\s+now|premiere|exclusive|free\s*dl|official\s*video|visualizer|audio|remaster(?:ed)?|ремастеринг|prod\s+by[^\s]+).*$""", RegexOption.IGNORE_CASE),
         Regex("""\*+[^*]+\*+"""),
         Regex("""\(\s*\)|\[\s*\]|\{\s*\}"""),
@@ -287,7 +287,7 @@ internal object LinerSpotifyMatcher {
     private fun cleanBaseTitle(value: String): String {
         var result = stripJunk(value)
         result = result.replace(
-            Regex("""[([{]?\s*(?:feat\.?|ft\.?|with)\s+[^)\]}]+[)\]}]?""", RegexOption.IGNORE_CASE),
+            Regex("""(?:\(|\[|\{)?\s*(?:feat\.?|ft\.?|with)\s+[^)\]}]+(?:\)|\]|\})?""", RegexOption.IGNORE_CASE),
             "",
         )
         result = result.replace(

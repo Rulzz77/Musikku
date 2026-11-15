@@ -1917,6 +1917,7 @@ class SpotifyImporterIdentityTest {
             videoId = "bogoh-kasaha-wrong-byline",
             title = "Bogoh Kasaha",
             artist = "Gasentra Pajampangan, Nanih",
+            artists = listOf(ArtistRef(name = "Gasentra Pajampangan", browseId = null)),
         )
         assertNull(
             LinerSpotifyMatcher.evaluate(source, listOf(wrongSingerInCombinedByline)).track,

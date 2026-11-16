@@ -22,6 +22,20 @@ class StorageUsageTest {
     }
 
     @Test
+    fun fileUriBytesCountsWholeOfflinePackageForPlaylistEntry() {
+        val packageDir = createTempDir(prefix = "musikku-offline-")
+        try {
+            File(packageDir, "playlist.m3u8").writeText("#EXTM3U")
+            File(packageDir, "segment-0001.m4s").writeBytes(ByteArray(128))
+            File(packageDir, "cover.jpg").writeBytes(ByteArray(64))
+
+            assertEquals(198L, StorageUsage.fileUriBytes(File(packageDir, "playlist.m3u8").path))
+        } finally {
+            packageDir.deleteRecursively()
+        }
+    }
+
+    @Test
     fun directoryBytesReturnsZeroForMissingPaths() {
         val root = File(createTempDir(prefix = "musikku-storage-"), "not-created")
         assertEquals(0L, StorageUsage.directoryBytes(root))

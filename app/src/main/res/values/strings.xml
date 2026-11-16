@@ -228,6 +228,8 @@
     <string name="backup_preview_spotify">Spotify-imported playlists: %1$d (%2$d tracks)</string>
     <string name="backup_preview_device">Device playlists, including Liked: %1$d (%2$d tracks)</string>
     <string name="backup_preview_remote">Remote playlist mappings: %1$d</string>
+    <string name="backup_preview_queue">Last playback queue: %1$d tracks (current track: %2$d)</string>
+    <string name="backup_preview_legacy_note">This is an older backup format. It does not contain playlist or playback queue data, so existing playlists and the current saved queue will be left unchanged.</string>
     <string name="backup_preview_warning">Settings and listening history will be replaced. Choose whether to merge or replace playlists. Downloaded audio and login credentials are not included. Local file references may need to be relinked on another device.</string>
     <string name="merge_playlists">Merge playlists</string>
     <string name="replace_playlists">Replace playlists</string>
@@ -931,9 +933,9 @@
     <string name="import_backup_warning">Choose a backup file to preview its contents. Settings and listening history will be replaced; you can choose whether to merge or replace playlists.</string>
     <string name="youtube_music_account">YouTube Music account</string>
     <string name="tap_to_sign_in_google">Tap to sign in with Google</string>
-    <string name="export_succeeded">Exported %1$d playlists (%2$d tracks), settings and %3$s of listening history</string>
+    <string name="export_succeeded">Exported %1$d playlists (%2$d tracks), settings, %3$s of listening history and %4$d tracks in the saved queue</string>
     <string name="export_failed">Export failed: %1$s</string>
-    <string name="import_succeeded">Restored %1$d playlists (%2$d tracks), %3$s of listening history and %4$d settings from v%5$s (%6$s)</string>
+    <string name="import_succeeded">Restored %1$d playlists (%2$d tracks), %3$s of listening history, %4$d settings and %7$d saved queue tracks from v%5$s (%6$s)</string>
     <string name="import_failed">Import failed: %1$s</string>
     <string name="unknown_error">unknown error</string>
     <string name="no_listening_history">no listening history</string>

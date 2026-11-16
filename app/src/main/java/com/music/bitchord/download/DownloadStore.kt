@@ -163,11 +163,38 @@ object DownloadStore {
         }
 
     @RequiresApi(Build.VERSION_CODES.Q)
+    private fun discardPendingMediaStoreRows(context: Context, name: String) {
+        val stale = mutableListOf<Uri>()
+        runCatching {
+            context.contentResolver.query(
+                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                arrayOf(MediaStore.MediaColumns._ID),
+                "${MediaStore.MediaColumns.DISPLAY_NAME} = ? AND " +
+                    "${MediaStore.MediaColumns.RELATIVE_PATH} = ? AND " +
+                    "${MediaStore.MediaColumns.IS_PENDING} = 1",
+                arrayOf(name, relativePath),
+                null,
+            )?.use { cursor ->
+                while (cursor.moveToNext()) {
+                    stale += MediaStore.Audio.Media.EXTERNAL_CONTENT_URI.buildUpon()
+                        .appendPath(cursor.getLong(0).toString())
+                        .build()
+                }
+            }
+        }.onFailure { Log.w(TAG, "could not inspect an interrupted download for $name: ${it.message}") }
+        stale.forEach { uri ->
+            runCatching { context.contentResolver.delete(uri, null, null) }
+                .onFailure { Log.w(TAG, "could not discard interrupted download $uri: ${it.message}") }
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.Q)
     private fun mediaStoreEntry(context: Context, name: String): Uri? = runCatching {
         context.contentResolver.query(
             MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
             arrayOf(MediaStore.MediaColumns._ID),
-            "${MediaStore.MediaColumns.DISPLAY_NAME} = ? AND " +
+            "${MediaStore.MediaColumns.IS_PENDING} = 0 AND " +
+                "${MediaStore.MediaColumns.DISPLAY_NAME} = ? AND " +
                 "${MediaStore.MediaColumns.RELATIVE_PATH} LIKE ?",
             arrayOf(name, "%$FOLDER%"),
             null,
@@ -278,6 +305,9 @@ object DownloadStore {
             return Pending(context, Uri.fromFile(target), name, part = part, target = target)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            // A process death can leave an IS_PENDING row behind. It is not a
+            // completed download and must not be adopted or duplicated on retry.
+            discardPendingMediaStoreRows(context, name)
             val values = ContentValues().apply {
                 put(MediaStore.MediaColumns.DISPLAY_NAME, name)
                 put(MediaStore.MediaColumns.MIME_TYPE, mimeType)

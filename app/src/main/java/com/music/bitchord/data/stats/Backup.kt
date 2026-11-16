@@ -7,6 +7,7 @@ import com.music.bitchord.data.OfflinePlaylist
 import com.music.bitchord.data.OfflinePlaylists
 import com.music.bitchord.data.model.ArtistRef
 import com.music.bitchord.data.model.Song
+import com.music.bitchord.playback.LastPlayed
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.settings.SearchHistory
 import com.music.bitchord.data.spotify.LocalPlaylist
@@ -62,6 +63,13 @@ object Backup {
                 remoteSpotifyImports = LocalPlaylistStore.remoteSpotifyImportsSnapshot()
                     .mapValues { (_, ids) -> ids.toList() },
                 devicePlaylists = devicePlaylists,
+                lastPlayedQueue = LastPlayed.backupSnapshot()?.let { snapshot ->
+                    BackupQueue(
+                        songs = snapshot.songs.map { it.toBackupSong() },
+                        index = snapshot.index,
+                        positionMs = snapshot.positionMs,
+                    )
+                },
             )
             val text = json.encodeToString(BackupFile.serializer(), file)
             context.contentResolver.openOutputStream(target, "wt")
@@ -102,11 +110,15 @@ object Backup {
             val remoteImports = file.remoteSpotifyImports.mapValues { (_, ids) -> ids.toSet() }
 
             // All parsing and structural validation happens before the first
-            // write. Each store commits its own snapshot before publishing it.
+            // write. Schema 1 predates playlist and queue backup sections, so
+            // importing it must not erase data those older files never held.
             ListeningStats.importAll(file.listening)
             AppSettings.importPrefs(settings)
-            LocalPlaylistStore.restoreFromBackup(spotifyPlaylists, remoteImports, mergePlaylists)
-            OfflinePlaylists.restoreFromBackup(devicePlaylists, mergePlaylists)
+            if (file.version >= 2) {
+                LocalPlaylistStore.restoreFromBackup(spotifyPlaylists, remoteImports, mergePlaylists)
+                OfflinePlaylists.restoreFromBackup(devicePlaylists, mergePlaylists)
+                LastPlayed.restoreBackupSnapshot(file.lastPlayedQueue?.toSnapshot())
+            }
             // Search history lives in the same preference file as AppSettings.
             SearchHistory.reload()
 
@@ -116,6 +128,7 @@ object Backup {
                 spotifyPlaylists = spotifyPlaylists.size,
                 devicePlaylists = devicePlaylists.size,
                 tracks = spotifyPlaylists.sumOf { it.songs.size } + devicePlaylists.sumOf { it.songs.size },
+                queueTracks = file.lastPlayedQueue?.songs?.size ?: 0,
                 from = file.versionName,
                 at = file.exportedAt,
                 mergedPlaylists = mergePlaylists,
@@ -159,6 +172,16 @@ object Backup {
         val trackCount = file.spotifyPlaylists.sumOf { it.songs.size } +
             file.devicePlaylists.sumOf { it.songs.size }
         require(trackCount <= MAX_TRACKS) { "Backup contains too many playlist tracks" }
+        file.lastPlayedQueue?.let { queue ->
+            require(queue.songs.size <= MAX_QUEUE_TRACKS) { "Backup contains too many queued tracks" }
+            require(queue.index in queue.songs.indices || queue.songs.isEmpty()) {
+                "Backup contains an invalid playback queue position"
+            }
+            require(queue.positionMs >= 0L) { "Backup contains an invalid playback queue position" }
+            require(queue.songs.all { it.videoId.isNotBlank() || !it.localUri.isNullOrBlank() }) {
+                "Backup contains an invalid track in the playback queue"
+            }
+        }
         require(file.remoteSpotifyImports.size <= MAX_PLAYLISTS) {
             "Backup contains too many remote playlist mappings"
         }
@@ -206,6 +229,9 @@ object Backup {
         devicePlaylists = devicePlaylists.size,
         deviceTracks = devicePlaylists.sumOf { it.songs.size },
         remotePlaylistMappings = remoteSpotifyImports.size,
+        schemaVersion = version,
+        queueTracks = lastPlayedQueue?.songs?.size ?: 0,
+        queueIndex = lastPlayedQueue?.index?.let { (it + 1).coerceIn(1, lastPlayedQueue.songs.size.coerceAtLeast(1)) } ?: 0,
     )
 
     private fun Song.toBackupSong() = BackupSong(
@@ -280,6 +306,7 @@ object Backup {
         val spotifyPlaylists: Int,
         val devicePlaylists: Int,
         val tracks: Int,
+        val queueTracks: Int,
     ) {
         val playlistCount: Int get() = spotifyPlaylists + devicePlaylists
     }
@@ -295,6 +322,9 @@ object Backup {
         val devicePlaylists: Int,
         val deviceTracks: Int,
         val remotePlaylistMappings: Int,
+        val schemaVersion: Int,
+        val queueTracks: Int,
+        val queueIndex: Int,
     ) {
         val playlistCount: Int get() = spotifyPlaylists + devicePlaylists
         val trackCount: Int get() = spotifyTracks + deviceTracks
@@ -306,6 +336,7 @@ object Backup {
         val spotifyPlaylists: Int,
         val devicePlaylists: Int,
         val tracks: Int,
+        val queueTracks: Int,
         val from: String,
         val at: String,
         val mergedPlaylists: Boolean,
@@ -322,6 +353,7 @@ object Backup {
     private const val MAX_SETTING_STRING_LENGTH = 16_384
     private const val MAX_PLAYLISTS = 10_000
     private const val MAX_TRACKS = 500_000
+    private const val MAX_QUEUE_TRACKS = 100
     private const val MAX_LISTENING_MONTHS = 120
 
     @Serializable
@@ -335,7 +367,21 @@ object Backup {
         val spotifyPlaylists: List<BackupPlaylist> = emptyList(),
         val remoteSpotifyImports: Map<String, List<String>> = emptyMap(),
         val devicePlaylists: List<BackupPlaylist> = emptyList(),
+        val lastPlayedQueue: BackupQueue? = null,
     )
+
+    @Serializable
+    data class BackupQueue(
+        val songs: List<BackupSong> = emptyList(),
+        val index: Int = 0,
+        val positionMs: Long = 0L,
+    ) {
+        fun toSnapshot() = LastPlayed.Snapshot(
+            songs = songs.map { it.toSong() },
+            index = index.coerceIn(songs.indices),
+            positionMs = positionMs.coerceAtLeast(0L),
+        )
+    }
 
     @Serializable
     data class BackupPlaylist(

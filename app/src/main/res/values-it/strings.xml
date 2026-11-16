@@ -1443,6 +1443,6 @@
     <string name="playlist_folder_move_notice">Le playlist selezionate vengono spostate in questa cartella; le playlist originali restano nella tua raccolta.</string>
     <string name="playlist_folder_empty">Questa cartella è vuota.</string>
     <string name="playlist_folder_no_playlists">Nessuna playlist disponibile per ora.</string>
-    <string name="playlist_folder_delete_notice">L'eliminazione di questa cartella non elimina playlist o brani.</string>
+    <string name="playlist_folder_delete_notice">L\'eliminazione di questa cartella non elimina playlist o brani.</string>
     <string name="playlist_folder_count">%1$d playlist</string>
 </resources>

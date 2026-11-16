@@ -1483,4 +1483,25 @@
     <string name="playlist_folder_no_playlists">Belum ada playlist yang tersedia.</string>
     <string name="playlist_folder_delete_notice">Menghapus folder ini tidak akan menghapus playlist atau lagu.</string>
     <string name="playlist_folder_count">%1$d playlist</string>
+    <string name="smart_playlists_title">Playlist pintar</string>
+    <string name="smart_playlist_hint">Campuran otomatis yang mengikuti kebiasaan mendengarkanmu.</string>
+    <string name="smart_playlist_create">Buat playlist pintar</string>
+    <string name="smart_playlist_edit">Edit playlist pintar</string>
+    <string name="smart_playlist_edit_action">Edit</string>
+    <string name="smart_playlist_most_played">Paling sering diputar</string>
+    <string name="smart_playlist_recently_played">Baru diputar</string>
+    <string name="smart_playlist_most_listened">Paling banyak didengarkan</string>
+    <string name="smart_playlist_forgotten">Lagu yang terlupakan</string>
+    <string name="smart_playlist_track_count">%1$d lagu</string>
+    <string name="smart_playlist_empty">Putar beberapa lagu untuk membangun playlist pintarmu. Aturan yang disimpan juga akan muncul di sini.</string>
+    <string name="smart_playlist_loading">Memuat riwayat mendengarkan…</string>
+    <string name="smart_playlist_name">Nama playlist</string>
+    <string name="smart_playlist_artist_filter">Nama artis mengandung (opsional)</string>
+    <string name="smart_playlist_minimum_plays_value">Minimal %1$d kali diputar</string>
+    <string name="smart_playlist_sort">Urutkan lagu berdasarkan</string>
+    <string name="smart_playlist_sort_played">Jumlah pemutaran</string>
+    <string name="smart_playlist_sort_recent">Baru diputar</string>
+    <string name="smart_playlist_sort_listened">Durasi mendengarkan</string>
+    <string name="smart_playlist_editor_description">Daftar ini dibuat dari riwayat mendengarkan dan diperbarui saat statistik disimpan. Playlist biasa tidak akan diubah.</string>
+    <string name="smart_playlist_max_reached">Maksimal 20 playlist pintar kustom yang bisa dibuat.</string>
 </resources>

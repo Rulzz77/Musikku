@@ -42,6 +42,15 @@ class BackupFormatTest {
             artist = "Artist",
             artists = listOf(Backup.BackupArtist("Artist", "artist-channel")),
             albumName = "Album",
+            queueTier = "USER_QUEUE",
+            queueEntryId = "queue-entry-1",
+            radioName = "Radio seed",
+            playbackSource = "Search",
+            playbackSourceType = "SEARCH",
+            playbackSourceId = "search-page",
+            isExplicit = false,
+            sourceQuality = "LOSSLESS",
+            sourceHiRes = true,
         )
         val local = Backup.BackupPlaylist(
             id = "spotify-local-1",

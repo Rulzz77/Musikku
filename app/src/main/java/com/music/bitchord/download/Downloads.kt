@@ -76,6 +76,7 @@ object Downloads {
     private const val TAG = "BitChord"
     private const val KEY_SAVED_METADATA = "downloaded_tracks_metadata"
     private const val KEY_SAVED_COLLECTIONS = "downloaded_collections"
+    private const val KEY_DOWNLOAD_RECOVERY = "download_recovery_session_v1"
 
     private lateinit var prefs: SharedPreferences
     private val json = Json { ignoreUnknownKeys = true }
@@ -158,6 +159,74 @@ object Downloads {
         _collections.value = runCatching {
             json.decodeFromString(collectionSerializer, prefs.getString(KEY_SAVED_COLLECTIONS, null) ?: "{}")
         }.getOrDefault(emptyMap())
+
+        // The queue is restored before MainActivity starts. Running tracks are
+        // converted to Queued by the snapshot mapper so a dead process never
+        // leaves an id stranded in the running map.
+        val restored = runCatching {
+            prefs.getString(KEY_DOWNLOAD_RECOVERY, null)
+                ?.let { json.decodeFromString(DownloadRecoverySnapshot.serializer(), it) }
+                ?.toDownloadSessionState()
+        }.getOrNull() ?: DownloadSession.State()
+        DownloadSession.restore(restored)
+        DownloadSession.installPersistence(::persistDownloadSession)
+        DownloadSession.persistNow()
+
+        synchronized(lock) {
+            pending.clear()
+            running.clear()
+            fromCache.clear()
+            restored.items
+                .filter { it.recoverable && !it.progress.settled }
+                .sortedBy { it.sequence }
+                .forEach { item ->
+                    pending[item.videoId] = item.song
+                    if (item.fromCache) fromCache += item.videoId
+                }
+        }
+        _active.value = buildMap {
+            restored.items.forEach { item ->
+                when (val progress = item.progress) {
+                    DownloadProgress.Queued, is DownloadProgress.Running ->
+                        put(item.videoId, DownloadState.Queued)
+                    is DownloadProgress.Failed ->
+                        put(item.videoId, DownloadState.Failed(progress.reason))
+                    DownloadProgress.Done -> Unit
+                }
+            }
+        }
+    }
+
+    /** Save only the durable session snapshot; intermediate byte progress stays in memory. */
+    private fun persistDownloadSession(state: DownloadSession.State) {
+        if (!::prefs.isInitialized) return
+        val encoded = runCatching {
+            json.encodeToString(DownloadRecoverySnapshot.serializer(), state.toRecoverySnapshot())
+        }.getOrElse {
+            Log.w(TAG, "could not encode download recovery state: ${it.message}")
+            return
+        }
+        synchronized(recoveryLock) {
+            prefs.edit().putString(KEY_DOWNLOAD_RECOVERY, encoded).apply()
+        }
+    }
+
+    private val recoveryLock = Any()
+
+    /**
+     * Called while MainActivity is visible. Android permits starting the
+     * foreground service from this user-visible state; a persisted queue is
+     * otherwise left dormant until the next app launch.
+     */
+    fun resumeQueued(context: Context) {
+        val hasPending = synchronized(lock) { pending.isNotEmpty() }
+        if (!hasPending) return
+        val app = context.applicationContext
+        runCatching {
+            ContextCompat.startForegroundService(app, Intent(app, DownloadService::class.java))
+        }.onFailure {
+            Log.w(TAG, "could not resume the saved download queue: ${it.message}")
+        }
     }
 
     // ---- Asking -------------------------------------------------------------
@@ -201,7 +270,11 @@ object Downloads {
             pending[id] = song
         }
         _active.update { it + (id to DownloadState.Queued) }
-        DownloadSession.queued(song, from)
+        DownloadSession.queued(
+            song,
+            from,
+            fromCache = true.takeIf { id in fromCache },
+        )
 
         val app = context.applicationContext
         runCatching {
@@ -297,7 +370,7 @@ object Downloads {
         }
         claimed.forEach { song ->
             _active.update { it + (song.videoId to DownloadState.Queued) }
-            DownloadSession.queued(song, from)
+            DownloadSession.queued(song, from, recoverable = false)
         }
         val slots = Semaphore(BATCH_WORKERS)
         try {
@@ -918,7 +991,29 @@ object Downloads {
      * forever as already in flight.
      */
     internal fun onStopped() {
-        synchronized(lock) { running.clear() }
+        // The service may be torn down while one or more independent track
+        // jobs are still in flight. Requeue those rows instead of forgetting
+        // them; the next visible app launch can start the foreground service
+        // again. WorkManager-owned PlaylistSync rows are not requeued here.
+        val byId = DownloadSession.state.value.items.associateBy { it.videoId }
+        val interrupted = synchronized(lock) {
+            val ids = running.keys.toList()
+            running.clear()
+            ids.mapNotNull { id ->
+                byId[id]?.takeIf { it.recoverable && !it.progress.settled }?.also { item ->
+                    pending.putIfAbsent(id, item.song)
+                }
+            }
+        }
+        interrupted.forEach { item ->
+            _active.update { it + (item.videoId to DownloadState.Queued) }
+            DownloadSession.queued(
+                item.song,
+                item.from,
+                recoverable = true,
+                fromCache = item.fromCache,
+            )
+        }
     }
 
     /**

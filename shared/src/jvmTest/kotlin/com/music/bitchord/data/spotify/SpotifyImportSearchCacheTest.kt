@@ -15,6 +15,20 @@ import java.util.concurrent.atomic.AtomicInteger
 class SpotifyImportSearchCacheTest {
 
     @Test
+    fun blankQueriesDoNotReachTheNetworkLoader() = runBlocking {
+        val cache = SpotifyImportSearchCache()
+        val calls = AtomicInteger()
+
+        val result = cache.search("   ", YtMusicRepository.SpotifyImportSearchKind.TRACK) { _, _ ->
+            calls.incrementAndGet()
+            Result.success(listOf(song("unexpected")))
+        }
+
+        assertTrue(result.getOrThrow().isEmpty())
+        assertEquals(0, calls.get())
+    }
+
+    @Test
     fun reusesSuccessfulSearchesWithNormalizedQueryAndSameFilter() = runBlocking {
         val cache = SpotifyImportSearchCache()
         val calls = AtomicInteger()

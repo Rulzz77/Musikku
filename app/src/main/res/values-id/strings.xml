@@ -1473,4 +1473,14 @@
     <string name="clear_canvas_cache">Bersihkan cache Canvas</string>
     <string name="clear_canvas_cache_subtitle">Hapus klip berulang yang tersimpan di cache. MusikKu akan mengunduhnya lagi saat diperlukan.</string>
     <string name="canvas_cache_cleared">Cache Canvas berhasil dibersihkan</string>
+    <string name="playlist_folders_title">Folder playlist</string>
+    <string name="create_playlist_folder">Folder baru</string>
+    <string name="edit_playlist_folder">Atur folder</string>
+    <string name="playlist_folder_name">Nama folder</string>
+    <string name="playlist_folder_select_playlists">Pilih playlist</string>
+    <string name="playlist_folder_move_notice">Playlist yang dipilih dipindahkan ke folder ini; playlist aslinya tetap ada di Library.</string>
+    <string name="playlist_folder_empty">Folder ini masih kosong.</string>
+    <string name="playlist_folder_no_playlists">Belum ada playlist yang tersedia.</string>
+    <string name="playlist_folder_delete_notice">Menghapus folder ini tidak akan menghapus playlist atau lagu.</string>
+    <string name="playlist_folder_count">%1$d playlist</string>
 </resources>

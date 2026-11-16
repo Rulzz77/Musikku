@@ -87,6 +87,28 @@ object SmartPlaylists {
     }
 
     /**
+     * Restores saved rules without copying any generated tracks. Merge keeps
+     * current rules for matching ids and appends rules that are not on device.
+     */
+    fun restoreFromBackup(incoming: List<SmartPlaylistRule>, merge: Boolean): Int {
+        check(this::prefs.isInitialized) { "Smart Playlist storage is not initialized" }
+        val normalizedIncoming = normalizeSmartPlaylistRules(incoming)
+        synchronized(lock) {
+            val next = if (merge) {
+                normalizeSmartPlaylistRules(
+                    _rules.value + normalizedIncoming.filterNot { incomingRule ->
+                        _rules.value.any { currentRule -> currentRule.id == incomingRule.id }
+                    },
+                )
+            } else {
+                normalizedIncoming
+            }
+            persist(next)
+            return next.size
+        }
+    }
+
+    /**
      * Restores saved rules as part of Backup & Restore. Merge keeps rules already
      * on this device when ids collide; replace uses the backup's complete set.
      */
@@ -179,6 +201,22 @@ object SmartPlaylists {
     private const val MAX_NAME_LENGTH = 40
     private const val MAX_ARTIST_FILTER_LENGTH = 80
     private const val MAX_MINIMUM_PLAYS = 100
+}
+
+/** Removes invalid/duplicate ids and keeps the persisted rule set bounded. */
+internal fun normalizeSmartPlaylistRules(rules: List<SmartPlaylistRule>): List<SmartPlaylistRule> {
+    val seen = HashSet<String>()
+    return rules.mapNotNull { rule ->
+        val id = rule.id.trim().takeIf(String::isNotEmpty) ?: return@mapNotNull null
+        val name = rule.name.trim().takeIf(String::isNotEmpty) ?: return@mapNotNull null
+        if (!seen.add(id)) return@mapNotNull null
+        rule.copy(
+            id = id,
+            name = name.take(40),
+            artistContains = rule.artistContains.trim().take(80),
+            minimumPlays = rule.minimumPlays.coerceIn(1, 100),
+        )
+    }.take(20)
 }
 
 /** Applies a saved rule to the current stats. Stable tie-breaks prevent cards jumping around. */

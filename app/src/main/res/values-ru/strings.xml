@@ -1528,4 +1528,14 @@
     <string name="clear_canvas_cache">Очистить кэш Canvas</string>
     <string name="clear_canvas_cache_subtitle">Удалить кэшированные зацикленные клипы. MusikKu загрузит их снова при необходимости.</string>
     <string name="canvas_cache_cleared">Кэш Canvas очищен</string>
+    <string name="playlist_folders_title">Папки плейлистов</string>
+    <string name="create_playlist_folder">Новая папка</string>
+    <string name="edit_playlist_folder">Изменить папку</string>
+    <string name="playlist_folder_name">Название папки</string>
+    <string name="playlist_folder_select_playlists">Выбрать плейлисты</string>
+    <string name="playlist_folder_move_notice">Выбранные плейлисты будут перемещены в эту папку; исходные плейлисты останутся в вашей библиотеке.</string>
+    <string name="playlist_folder_empty">Эта папка пуста.</string>
+    <string name="playlist_folder_no_playlists">Плейлисты пока недоступны.</string>
+    <string name="playlist_folder_delete_notice">Удаление папки не удалит плейлисты или песни.</string>
+    <string name="playlist_folder_count">Плейлистов: %1$d</string>
 </resources>

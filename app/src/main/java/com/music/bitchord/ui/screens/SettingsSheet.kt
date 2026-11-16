@@ -3269,6 +3269,7 @@ private fun StorageUsageOverview(
                     stringResource(
                         R.string.storage_usage_available,
                         StorageUsage.formatBytes(usage.availableBytes),
+                        StorageUsage.formatBytes(usage.totalDeviceBytes),
                     )
                 },
                 style = MaterialTheme.typography.bodySmall,

@@ -319,6 +319,7 @@ object Backup {
     private const val SCHEMA_VERSION = 2
     private const val MAX_BACKUP_BYTES = 64 * 1024 * 1024
     private const val MAX_SETTINGS = 20_000
+    private const val MAX_SETTING_STRING_LENGTH = 16_384
     private const val MAX_PLAYLISTS = 10_000
     private const val MAX_TRACKS = 500_000
     private const val MAX_LISTENING_MONTHS = 120
@@ -390,7 +391,7 @@ object Backup {
             LONG -> value?.toLongOrNull() != null
             FLOAT -> value?.toFloatOrNull()?.isFinite() == true
             STRING -> value != null
-            STRING_SET -> values.all(String::isNotBlank)
+            STRING_SET -> values.all { it.length <= MAX_SETTING_STRING_LENGTH }
             else -> false
         }
 

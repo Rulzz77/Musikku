@@ -129,6 +129,45 @@ object LocalPlaylistStore {
         return nextPlaylists.size
     }
 
+    private fun normalizeImportedPlaylists(playlists: List<LocalPlaylist>): List<LocalPlaylist> {
+        val unique = LinkedHashMap<String, LocalPlaylist>()
+        playlists.forEach { playlist ->
+            val id = playlist.id.trim()
+            val title = playlist.title.trim()
+            if (id.isEmpty() || title.isEmpty()) return@forEach
+            unique[id] = playlist.copy(
+                id = id,
+                title = title,
+                songs = dedupeSongs(playlist.songs),
+                coverUrl = playlist.coverUrl?.takeIf(String::isNotBlank),
+            )
+        }
+        return unique.values.toList()
+    }
+
+    private fun mergeImportedPlaylists(
+        current: List<LocalPlaylist>,
+        incoming: List<LocalPlaylist>,
+    ): List<LocalPlaylist> {
+        val merged = current.toMutableList()
+        val indexes = merged.mapIndexed { index, playlist -> playlist.id to index }.toMap().toMutableMap()
+        incoming.forEach { playlist ->
+            val index = indexes[playlist.id]
+            if (index == null) {
+                indexes[playlist.id] = merged.size
+                merged += playlist
+            } else {
+                val existing = merged[index]
+                merged[index] = existing.copy(
+                    title = existing.title.ifBlank { playlist.title },
+                    songs = appendUniqueImportedTracks(existing.songs, playlist.songs).first,
+                    coverUrl = existing.coverUrl ?: playlist.coverUrl,
+                )
+            }
+        }
+        return normalizeImportedPlaylists(merged)
+    }
+
     private fun encodeRemoteSpotifyImports(value: Map<String, Set<String>>): String {
         val root = JSONObject()
         value.forEach { (id, videoIds) -> root.put(id, JSONArray(videoIds.toList())) }

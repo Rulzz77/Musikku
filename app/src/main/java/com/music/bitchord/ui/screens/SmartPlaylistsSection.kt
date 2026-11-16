@@ -1,0 +1,384 @@
+package com.music.bitchord.ui.screens
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil3.compose.AsyncImage
+import com.music.bitchord.R
+import com.music.bitchord.data.model.Song
+import com.music.bitchord.data.stats.ListeningStats
+import com.music.bitchord.data.stats.ReplayPeriod
+import com.music.bitchord.data.stats.SmartPlaylistItem
+import com.music.bitchord.data.stats.SmartPlaylistRule
+import com.music.bitchord.data.stats.SmartPlaylistSort
+import com.music.bitchord.data.stats.SmartPlaylists
+import com.music.bitchord.data.stats.buildSmartPlaylistItems
+
+/**
+ * Compact, Library-native entry to dynamic playlists. The cards are generated
+ * from the existing listening aggregates; only custom rules are persisted.
+ */
+@Composable
+fun SmartPlaylistsSection(
+    onPlay: (String, List<Song>) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val rules by SmartPlaylists.rules.collectAsStateWithLifecycle()
+    val revision by ListeningStats.revision.collectAsStateWithLifecycle()
+    var summary by remember { mutableStateOf<com.music.bitchord.data.stats.ReplaySummary?>(null) }
+    var loading by remember { mutableStateOf(true) }
+    var editorOpen by remember { mutableStateOf(false) }
+    var editingRule by remember { mutableStateOf<SmartPlaylistRule?>(null) }
+
+    LaunchedEffect(revision) {
+        loading = summary == null
+        summary = ListeningStats.summary(ReplayPeriod.ALL_TIME)
+        loading = false
+    }
+
+    val items = remember(summary, rules) {
+        buildSmartPlaylistItems(
+            tracks = summary?.songs.orEmpty(),
+            rules = rules,
+            nowMs = System.currentTimeMillis(),
+        )
+    }
+
+    Column(modifier = modifier.fillMaxWidth().padding(bottom = 14.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.smart_playlists_title),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onBackground,
+                )
+                Text(
+                    text = stringResource(R.string.smart_playlist_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            TextButton(
+                onClick = {
+                    editingRule = null
+                    editorOpen = true
+                },
+            ) {
+                Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(4.dp))
+                Text(stringResource(R.string.smart_playlist_create))
+            }
+        }
+
+        when {
+            loading && summary == null -> {
+                Text(
+                    text = stringResource(R.string.loading),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+                )
+            }
+            items.isEmpty() -> {
+                Text(
+                    text = stringResource(R.string.smart_playlist_empty),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+                )
+            }
+            else -> {
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 20.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    items(items, key = SmartPlaylistItem::id) { item ->
+                        val title = when (item.id) {
+                            "most_played" -> stringResource(R.string.smart_playlist_most_played)
+                            "recently_played" -> stringResource(R.string.smart_playlist_recently_played)
+                            "most_listened" -> stringResource(R.string.smart_playlist_most_listened)
+                            "forgotten_tracks" -> stringResource(R.string.smart_playlist_forgotten)
+                            else -> item.title
+                        }
+                        SmartPlaylistCard(
+                            item = item,
+                            title = title,
+                            onPlay = { onPlay(title, item.tracks.map { it.song }) },
+                            onEdit = {
+                                editingRule = item.rule
+                                editorOpen = true
+                            },
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    if (editorOpen) {
+        val current = editingRule
+        var name by remember(editorOpen, current?.id) { mutableStateOf(current?.name.orEmpty()) }
+        var artist by remember(editorOpen, current?.id) { mutableStateOf(current?.artistContains.orEmpty()) }
+        var minimumPlays by remember(editorOpen, current?.id) {
+            mutableStateOf(current?.minimumPlays?.coerceIn(1, 20) ?: 1)
+        }
+        var sort by remember(editorOpen, current?.id) {
+            mutableStateOf(current?.sort ?: SmartPlaylistSort.MOST_PLAYED)
+        }
+        var saveFailed by remember(editorOpen, current?.id) { mutableStateOf(false) }
+
+        AlertDialog(
+            onDismissRequest = { editorOpen = false },
+            title = {
+                Text(
+                    stringResource(
+                        if (current == null) R.string.smart_playlist_create
+                        else R.string.smart_playlist_edit,
+                    ),
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 520.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(9.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.smart_playlist_editor_description),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = {
+                            name = it.take(40)
+                            saveFailed = false
+                        },
+                        label = { Text(stringResource(R.string.smart_playlist_name)) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    OutlinedTextField(
+                        value = artist,
+                        onValueChange = { artist = it.take(80) },
+                        label = { Text(stringResource(R.string.smart_playlist_artist_filter)) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Text(
+                        text = stringResource(R.string.smart_playlist_minimum_plays_value, minimumPlays),
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    Slider(
+                        value = minimumPlays.toFloat(),
+                        onValueChange = { minimumPlays = it.toInt().coerceIn(1, 20) },
+                        valueRange = 1f..20f,
+                        steps = 18,
+                    )
+                    Text(
+                        text = stringResource(R.string.smart_playlist_sort),
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        SmartPlaylistSort.entries.forEach { option ->
+                            val selected = sort == option
+                            TextButton(
+                                onClick = { sort = option },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text(
+                                    text = (if (selected) "✓ " else "") + when (option) {
+                                        SmartPlaylistSort.MOST_PLAYED -> stringResource(R.string.smart_playlist_sort_played)
+                                        SmartPlaylistSort.RECENTLY_PLAYED -> stringResource(R.string.smart_playlist_sort_recent)
+                                        SmartPlaylistSort.MOST_LISTENED -> stringResource(R.string.smart_playlist_sort_listened)
+                                    },
+                                    color = if (selected) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurface,
+                                )
+                                Spacer(Modifier.weight(1f))
+                            }
+                        }
+                    }
+                    if (saveFailed) {
+                        Text(
+                            text = stringResource(R.string.smart_playlist_max_reached),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = name.isNotBlank(),
+                    onClick = {
+                        val saved = SmartPlaylists.save(
+                            SmartPlaylistRule(
+                                id = current?.id.orEmpty(),
+                                name = name,
+                                artistContains = artist,
+                                minimumPlays = minimumPlays,
+                                sort = sort,
+                            ),
+                        )
+                        if (saved != null) {
+                            editingRule = saved
+                            editorOpen = false
+                        } else {
+                            saveFailed = true
+                        }
+                    },
+                ) {
+                    Text(stringResource(R.string.save))
+                }
+            },
+            dismissButton = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (current != null) {
+                        TextButton(
+                            onClick = {
+                                SmartPlaylists.delete(current.id)
+                                editorOpen = false
+                            },
+                        ) {
+                            Text(stringResource(R.string.delete))
+                        }
+                    }
+                    TextButton(onClick = { editorOpen = false }) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun SmartPlaylistCard(
+    item: SmartPlaylistItem,
+    title: String,
+    onPlay: () -> Unit,
+    onEdit: () -> Unit,
+) {
+    Card(
+        modifier = Modifier
+            .width(184.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .clickable(enabled = item.tracks.isNotEmpty(), onClick = onPlay),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+    ) {
+        Column {
+            val artwork = item.tracks.firstOrNull()?.song?.thumbnailUrl
+            if (artwork != null) {
+                AsyncImage(
+                    model = artwork,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxWidth().height(92.dp),
+                    contentScale = ContentScale.Crop,
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(92.dp)
+                        .background(MaterialTheme.colorScheme.surface),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.AutoAwesome,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(32.dp),
+                    )
+                }
+            }
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (item.tracks.isNotEmpty()) {
+                        Icon(
+                            imageVector = Icons.Rounded.PlayArrow,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                }
+                Text(
+                    text = stringResource(R.string.smart_playlist_track_count, item.tracks.size),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                item.rule?.let {
+                    TextButton(
+                        onClick = onEdit,
+                        contentPadding = PaddingValues(0.dp),
+                        modifier = Modifier.align(Alignment.End),
+                    ) {
+                        Icon(Icons.Rounded.Edit, contentDescription = null, modifier = Modifier.size(15.dp))
+                        Spacer(Modifier.width(3.dp))
+                        Text(stringResource(R.string.edit))
+                    }
+                }
+            }
+        }
+    }
+}

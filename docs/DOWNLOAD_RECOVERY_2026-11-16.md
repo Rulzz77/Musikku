@@ -30,7 +30,7 @@ The snapshot is updated at meaningful state transitions, not on every byte-progr
 
 The downloader intentionally publishes files only after their bytes and tags are complete:
 
-- MediaStore rows use `IS_PENDING=1`; recovery lookup now only adopts rows with `IS_PENDING=0`. A retry removes stale pending rows for that exact filename before creating a new one.
+- MediaStore rows use `IS_PENDING=1`; recovery lookup only adopts rows with `IS_PENDING=0`. At new-process startup, MusikKu removes stale pending rows from its own Music folder before any recovered worker can start. This is deliberately done once at startup rather than per filename, so a live worker cannot have its pending row deleted by another worker downloading a same-named track.
 - Legacy and app-private single-file downloads use `.part` files, which are discarded when a new attempt begins.
 - Offline HLS/DASH packages clean their private package directory before a new attempt.
 

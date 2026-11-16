@@ -379,6 +379,28 @@ object SpotifyImporter {
             }
         }
 
+        // When normal title/artist searches cannot find a confident result,
+        // use Spotify's album as additional discovery context. This is only a
+        // search fallback: every candidate still passes the same strict
+        // title, performer, duration, and version checks above.
+        if (decision?.matched != true) {
+            val album = source.album
+                ?.trim()
+                ?.replace(Regex("""\\s+"""), " ")
+                ?.take(100)
+                ?.takeIf { it.isNotBlank() && !query.contains(it, ignoreCase = true) }
+            if (album != null) {
+                val albumQuery = "$query $album".take(250)
+                attempt(albumQuery, YtMusicRepository.SpotifyImportSearchKind.TRACK)
+                if (decision?.matched != true) {
+                    attempt(albumQuery, YtMusicRepository.SpotifyImportSearchKind.ALL)
+                }
+                if (decision?.matched != true) {
+                    attempt(albumQuery, YtMusicRepository.SpotifyImportSearchKind.VIDEO)
+                }
+            }
+        }
+
         // An explicit in-app language preference is an optional extension to
         // Liner's default query sequence; no extra language terms are used by
         // default.

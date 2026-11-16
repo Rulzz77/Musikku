@@ -188,7 +188,7 @@ fun SpotifyImportAlert(
         status = context.getString(R.string.spotify_import_matching, 0, missed.size)
         scope.launch {
             try {
-                val (newSongs, stillMissing) = SpotifyImporter.resolveToSongs(
+                val (newSongs, stillMissing) = SpotifyImporter.resolveToSongsWithDiagnostics(
                     missed,
                     effectiveLanguage(),
                     onLookupFailures = { lookupFailedTracks = it },
@@ -227,7 +227,7 @@ fun SpotifyImportAlert(
         scope.launch {
             try {
                 val (name, tracks) = SpotifyImporter.fetchPlaylistTracks(id)
-                val (songs, missed) = SpotifyImporter.resolveToSongs(
+                val (songs, missed) = SpotifyImporter.resolveToSongsWithDiagnostics(
                     tracks,
                     effectiveLanguage(),
                     onLookupFailures = { lookupFailedTracks = it },

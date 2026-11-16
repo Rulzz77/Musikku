@@ -3,40 +3,34 @@ package com.music.bitchord.data.stats
 import android.content.Context
 import android.net.Uri
 import com.music.bitchord.BuildConfig
+import com.music.bitchord.data.OfflinePlaylist
+import com.music.bitchord.data.OfflinePlaylists
+import com.music.bitchord.data.model.ArtistRef
+import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.settings.SearchHistory
+import com.music.bitchord.data.spotify.LocalPlaylist
+import com.music.bitchord.data.spotify.LocalPlaylistStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import java.io.ByteArrayOutputStream
 import java.time.Instant
+import java.time.YearMonth
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 /**
- * The whole of what this app knows about you, as one JSON file you own.
+ * A portable snapshot of user-owned MusikKu data.
  *
- * Two errands, and they are the same errand: moving to a new phone, and being
- * able to see what is being kept. Everything Replay counts lives only on this
- * device, which is the point of it — and the flip side of that is that a factory
- * reset takes it with no way back, so there has to be a way out.
+ * Credentials, downloaded audio files, download-file indexes, cache files and
+ * device permission grants are deliberately excluded. Playlist metadata and
+ * local file references are included; a content:// or file:// reference may
+ * need relinking when the backup is restored on a different device.
  *
- * ## What is in it
- *
- * Every preference except credentials (see [AppSettings.exportPrefs]), and every
- * month of listening. Not the audio cache, the downloads or the artwork: those
- * are megabytes that re-fetch themselves, and a backup that is mostly cache is
- * one nobody keeps.
- *
- * ## Typed values rather than a JSON object
- *
- * Preferences come off Android as `Map<String, Any?>` and go back the same way,
- * where the *type* decides which `put` is called. Written as plain JSON, `0.5`
- * comes back a Double and lands in a Float preference as a class-cast crash the
- * first time it is read — weeks later, in a settings screen, with nothing
- * pointing at the import. So each value carries its type and is parsed back into
- * exactly the type it left as, and anything unrecognised is skipped rather than
- * guessed at.
+ * Preferences are stored with explicit primitive types because JSON numbers
+ * otherwise cannot distinguish Android's Int, Long and Float preferences.
  */
 object Backup {
 
@@ -48,21 +42,15 @@ object Backup {
 
     /** A suggested filename, dated so successive exports don't collide. */
     fun suggestedName(): String =
-        "bitchord-backup-${DateTimeFormatter.ofPattern("yyyy-MM-dd").format(
+        "musikku-backup-${DateTimeFormatter.ofPattern("yyyy-MM-dd").format(
             Instant.now().atZone(ZoneId.systemDefault()),
         )}.json"
 
-    /**
-     * Writes a backup to [target], a document the user picked.
-     *
-     * Through the content resolver rather than a [java.io.File] because the
-     * destination is wherever they chose — Drive, a USB stick, a folder this app
-     * has no path to and no permission for. The picker grants access to that one
-     * document and nothing else, which is the correct amount.
-     */
-    suspend fun exportTo(context: Context, target: Uri): Result<Int> = withContext(Dispatchers.IO) {
+    suspend fun exportTo(context: Context, target: Uri): Result<ExportSummary> = withContext(Dispatchers.IO) {
         runCatching {
             val buckets = ListeningStats.exportAll()
+            val spotifyPlaylists = LocalPlaylistStore.playlists.value.map { it.toBackupPlaylist() }
+            val devicePlaylists = OfflinePlaylists.playlists.value.map { it.toBackupPlaylist() }
             val file = BackupFile(
                 versionName = BuildConfig.VERSION_NAME,
                 exportedAt = Instant.now().toString(),
@@ -70,78 +58,315 @@ object Backup {
                     PrefValue.of(value)?.let { key to it }
                 }.toMap(),
                 listening = buckets,
+                spotifyPlaylists = spotifyPlaylists,
+                remoteSpotifyImports = LocalPlaylistStore.remoteSpotifyImportsSnapshot()
+                    .mapValues { (_, ids) -> ids.toList() },
+                devicePlaylists = devicePlaylists,
             )
             val text = json.encodeToString(BackupFile.serializer(), file)
             context.contentResolver.openOutputStream(target, "wt")
-                ?.use { it.write(text.toByteArray()) }
+                ?.use { it.write(text.toByteArray(Charsets.UTF_8)) }
                 ?: error("Couldn't open that file for writing")
-            buckets.size
-        }
-    }
 
-    /**
-     * Reads [source] and replaces this device's settings and listening with it.
-     *
-     * Validated before anything is written: a file that isn't one of ours, or is
-     * from a schema this build can't read, is refused whole. A half-applied
-     * import is worse than a refused one — it leaves settings from two devices
-     * mixed together with nothing to say which came from where.
-     */
-    suspend fun importFrom(context: Context, source: Uri): Result<Summary> = withContext(Dispatchers.IO) {
-        runCatching {
-            val text = context.contentResolver.openInputStream(source)
-                ?.use { it.readBytes().decodeToString() }
-                ?: error("Couldn't open that file")
-            val file = runCatching { json.decodeFromString(BackupFile.serializer(), text) }
-                .getOrElse { error("That doesn't look like a BitChord backup") }
-            require(file.app == APP_TAG) { "That backup is from another app" }
-            require(file.version <= SCHEMA_VERSION) {
-                "That backup was written by a newer version of BitChord"
-            }
-
-            ListeningStats.importAll(file.listening)
-            AppSettings.importPrefs(file.settings.mapValues { it.value.decoded() })
-            // Shares AppSettings' preference file, so it has already been
-            // overwritten by the line above — it just doesn't know yet.
-            SearchHistory.reload()
-            Summary(
-                months = file.listening.size,
-                settings = file.settings.size,
-                from = file.versionName,
-                at = file.exportedAt,
+            ExportSummary(
+                months = buckets.size,
+                spotifyPlaylists = spotifyPlaylists.size,
+                devicePlaylists = devicePlaylists.size,
+                tracks = spotifyPlaylists.sumOf { it.songs.size } + devicePlaylists.sumOf { it.songs.size },
             )
         }
     }
 
-    /** What an import turned out to contain, for the line shown afterwards. */
+    /** Parses and validates a backup without changing anything on this device. */
+    suspend fun previewFrom(context: Context, source: Uri): Result<Preview> = withContext(Dispatchers.IO) {
+        runCatching { readBackup(context, source).toPreview() }
+    }
+
+    /**
+     * Restores settings and listening totals, then either merges or replaces
+     * both local playlist collections. Cloud account credentials and
+     * device-specific download indexes are left untouched.
+     */
+    suspend fun importFrom(
+        context: Context,
+        source: Uri,
+        mergePlaylists: Boolean = false,
+    ): Result<Summary> = withContext(Dispatchers.IO) {
+        runCatching {
+            val file = readBackup(context, source)
+            val settings = file.settings.mapValues { (_, value) ->
+                value.decoded() ?: error("Backup contains an invalid setting value")
+            }
+            val spotifyPlaylists = file.spotifyPlaylists.map { it.toLocalPlaylist() }
+            val devicePlaylists = file.devicePlaylists.map { it.toOfflinePlaylist() }
+            val remoteImports = file.remoteSpotifyImports.mapValues { (_, ids) -> ids.toSet() }
+
+            // All parsing and structural validation happens before the first
+            // write. Each store commits its own snapshot before publishing it.
+            ListeningStats.importAll(file.listening)
+            AppSettings.importPrefs(settings)
+            LocalPlaylistStore.restoreFromBackup(spotifyPlaylists, remoteImports, mergePlaylists)
+            OfflinePlaylists.restoreFromBackup(devicePlaylists, mergePlaylists)
+            // Search history lives in the same preference file as AppSettings.
+            SearchHistory.reload()
+
+            Summary(
+                months = file.listening.size,
+                settings = file.settings.size,
+                spotifyPlaylists = spotifyPlaylists.size,
+                devicePlaylists = devicePlaylists.size,
+                tracks = spotifyPlaylists.sumOf { it.songs.size } + devicePlaylists.sumOf { it.songs.size },
+                from = file.versionName,
+                at = file.exportedAt,
+                mergedPlaylists = mergePlaylists,
+            )
+        }
+    }
+
+    private fun readBackup(context: Context, source: Uri): BackupFile {
+        val bytes = context.contentResolver.openInputStream(source)?.use { input ->
+            ByteArrayOutputStream().use { output ->
+                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                var total = 0
+                while (true) {
+                    val count = input.read(buffer)
+                    if (count < 0) break
+                    total += count
+                    require(total <= MAX_BACKUP_BYTES) { "Backup is too large to import safely" }
+                    output.write(buffer, 0, count)
+                }
+                output.toByteArray()
+            }
+        } ?: error("Couldn't open that file")
+        val text = bytes.decodeToString(throwOnInvalidSequence = true)
+        val file = runCatching { json.decodeFromString(BackupFile.serializer(), text) }
+            .getOrElse { error("That doesn't look like a MusikKu backup") }
+
+        require(file.app == APP_TAG) { "That backup is from another app" }
+        require(file.version in MIN_SCHEMA_VERSION..SCHEMA_VERSION) {
+            if (file.version > SCHEMA_VERSION) "That backup was created by a newer MusikKu version"
+            else "That backup version is not supported"
+        }
+        require(file.settings.size <= MAX_SETTINGS) { "Backup contains too many settings" }
+        file.settings.forEach { (key, value) ->
+            require(key.isNotBlank() && value.isValid()) { "Backup contains an invalid setting" }
+        }
+        validatePlaylists(file.spotifyPlaylists, "Spotify")
+        validatePlaylists(file.devicePlaylists, "device")
+        require(file.spotifyPlaylists.size + file.devicePlaylists.size <= MAX_PLAYLISTS) {
+            "Backup contains too many playlists"
+        }
+        val trackCount = file.spotifyPlaylists.sumOf { it.songs.size } +
+            file.devicePlaylists.sumOf { it.songs.size }
+        require(trackCount <= MAX_TRACKS) { "Backup contains too many playlist tracks" }
+        require(file.remoteSpotifyImports.size <= MAX_PLAYLISTS) {
+            "Backup contains too many remote playlist mappings"
+        }
+        file.remoteSpotifyImports.forEach { (playlistId, ids) ->
+            require(playlistId.isNotBlank() && ids.size <= MAX_TRACKS && ids.all(String::isNotBlank)) {
+                "Backup contains an invalid Spotify playlist mapping"
+            }
+        }
+        require(file.listening.size <= MAX_LISTENING_MONTHS) { "Backup contains too much listening history" }
+        val months = HashSet<String>()
+        file.listening.forEach { bucket ->
+            val month = runCatching { YearMonth.parse(bucket.month).toString() }.getOrNull()
+                ?: error("Backup contains an invalid listening-history month")
+            require(months.add(month)) { "Backup contains duplicate listening-history months" }
+        }
+        return file
+    }
+
+    private fun validatePlaylists(playlists: List<BackupPlaylist>, label: String) {
+        val ids = HashSet<String>()
+        playlists.forEach { playlist ->
+            require(playlist.id.isNotBlank() && playlist.id.length <= 512) {
+                "Backup contains an invalid $label playlist id"
+            }
+            require(ids.add(playlist.id)) { "Backup contains duplicate $label playlists" }
+            require(playlist.title.isNotBlank() && playlist.title.length <= 2_000) {
+                "Backup contains an invalid $label playlist title"
+            }
+            require(playlist.songs.all { song ->
+                (song.videoId.isNotBlank() || !song.localUri.isNullOrBlank()) &&
+                    song.videoId.length <= 4_096 &&
+                    song.title.length <= 4_096 &&
+                    song.artist.length <= 4_096
+            }) { "Backup contains an invalid track in a $label playlist" }
+        }
+    }
+
+    private fun BackupFile.toPreview() = Preview(
+        versionName = versionName,
+        exportedAt = exportedAt,
+        months = listening.size,
+        settings = settings.size,
+        spotifyPlaylists = spotifyPlaylists.size,
+        spotifyTracks = spotifyPlaylists.sumOf { it.songs.size },
+        devicePlaylists = devicePlaylists.size,
+        deviceTracks = devicePlaylists.sumOf { it.songs.size },
+        remotePlaylistMappings = remoteSpotifyImports.size,
+    )
+
+    private fun Song.toBackupSong() = BackupSong(
+        videoId = videoId,
+        title = title,
+        artist = artist,
+        thumbnailUrl = thumbnailUrl,
+        durationText = durationText,
+        artistId = artistId,
+        artists = artists.map { BackupArtist(it.name, it.browseId) },
+        albumId = albumId,
+        albumName = albumName,
+        isVideo = isVideo,
+        isVideoOrigin = isVideoOrigin,
+        localUri = localUri,
+        localPath = localPath,
+        localDateAddedSeconds = localDateAddedSeconds,
+        localDateModifiedSeconds = localDateModifiedSeconds,
+        trackNumber = trackNumber,
+    )
+
+    private fun BackupSong.toSong() = Song(
+        videoId = videoId.ifBlank { localUri.orEmpty() },
+        title = title,
+        artist = artist,
+        thumbnailUrl = thumbnailUrl,
+        durationText = durationText,
+        artistId = artistId,
+        artists = artists.map { ArtistRef(it.name, it.browseId) },
+        albumId = albumId,
+        albumName = albumName,
+        isVideo = isVideo,
+        isVideoOrigin = isVideoOrigin || isVideo,
+        localUri = localUri,
+        localPath = localPath,
+        localDateAddedSeconds = localDateAddedSeconds,
+        localDateModifiedSeconds = localDateModifiedSeconds,
+        trackNumber = trackNumber,
+    )
+
+    private fun LocalPlaylist.toBackupPlaylist() = BackupPlaylist(
+        id = id,
+        title = title,
+        coverUrl = coverUrl,
+        songs = songs.map { it.toBackupSong() },
+    )
+
+    private fun OfflinePlaylist.toBackupPlaylist() = BackupPlaylist(
+        id = id,
+        title = title,
+        coverUrl = coverUrl,
+        songs = songs.map { it.toBackupSong() },
+    )
+
+    private fun BackupPlaylist.toLocalPlaylist() = LocalPlaylist(
+        id = id,
+        title = title,
+        songs = songs.map { it.toSong() },
+        coverUrl = coverUrl,
+    )
+
+    private fun BackupPlaylist.toOfflinePlaylist() = OfflinePlaylist(
+        id = id,
+        title = title,
+        songs = songs.map { it.toSong() },
+        coverUrl = coverUrl,
+    )
+
+    /** What an export contains, for the status shown on the Export row. */
+    data class ExportSummary(
+        val months: Int,
+        val spotifyPlaylists: Int,
+        val devicePlaylists: Int,
+        val tracks: Int,
+    ) {
+        val playlistCount: Int get() = spotifyPlaylists + devicePlaylists
+    }
+
+    /** Counts shown before the user confirms a restore. */
+    data class Preview(
+        val versionName: String,
+        val exportedAt: String,
+        val months: Int,
+        val settings: Int,
+        val spotifyPlaylists: Int,
+        val spotifyTracks: Int,
+        val devicePlaylists: Int,
+        val deviceTracks: Int,
+        val remotePlaylistMappings: Int,
+    ) {
+        val playlistCount: Int get() = spotifyPlaylists + devicePlaylists
+        val trackCount: Int get() = spotifyTracks + deviceTracks
+    }
+
     data class Summary(
         val months: Int,
         val settings: Int,
+        val spotifyPlaylists: Int,
+        val devicePlaylists: Int,
+        val tracks: Int,
         val from: String,
         val at: String,
-    )
+        val mergedPlaylists: Boolean,
+    ) {
+        val playlistCount: Int get() = spotifyPlaylists + devicePlaylists
+    }
 
-    private const val APP_TAG = "bitchord"
-
-    /**
-     * Bump when the shape below stops being readable by an older build. A file
-     * from a *newer* schema is refused rather than partially read; one from an
-     * older schema is read as-is, since every field has a default.
-     */
-    private const val SCHEMA_VERSION = 1
+    private const val APP_TAG = "musikku"
+    private const val MIN_SCHEMA_VERSION = 1
+    private const val SCHEMA_VERSION = 2
+    private const val MAX_BACKUP_BYTES = 64 * 1024 * 1024
+    private const val MAX_SETTINGS = 20_000
+    private const val MAX_PLAYLISTS = 10_000
+    private const val MAX_TRACKS = 500_000
+    private const val MAX_LISTENING_MONTHS = 120
 
     @Serializable
     data class BackupFile(
         val app: String = APP_TAG,
         val version: Int = SCHEMA_VERSION,
-        /** Which build wrote it — for the reader, not for any logic here. */
         val versionName: String = "",
         val exportedAt: String = "",
         val settings: Map<String, PrefValue> = emptyMap(),
         val listening: List<StoredBucket> = emptyList(),
+        val spotifyPlaylists: List<BackupPlaylist> = emptyList(),
+        val remoteSpotifyImports: Map<String, List<String>> = emptyMap(),
+        val devicePlaylists: List<BackupPlaylist> = emptyList(),
     )
 
-    /** One preference, with the type it has to be restored as. */
+    @Serializable
+    data class BackupPlaylist(
+        val id: String,
+        val title: String,
+        val coverUrl: String? = null,
+        val songs: List<BackupSong> = emptyList(),
+    )
+
+    @Serializable
+    data class BackupSong(
+        val videoId: String,
+        val title: String,
+        val artist: String,
+        val thumbnailUrl: String? = null,
+        val durationText: String? = null,
+        val artistId: String? = null,
+        val artists: List<BackupArtist> = emptyList(),
+        val albumId: String? = null,
+        val albumName: String? = null,
+        val isVideo: Boolean = false,
+        val isVideoOrigin: Boolean = false,
+        val localUri: String? = null,
+        val localPath: String? = null,
+        val localDateAddedSeconds: Long? = null,
+        val localDateModifiedSeconds: Long? = null,
+        val trackNumber: Int? = null,
+    )
+
+    @Serializable
+    data class BackupArtist(val name: String, val browseId: String? = null)
+
+    /** One preference, with the primitive type it must be restored as. */
     @Serializable
     data class PrefValue(
         val type: String,
@@ -152,23 +377,28 @@ object Backup {
             BOOLEAN -> value?.toBooleanStrictOrNull()
             INT -> value?.toIntOrNull()
             LONG -> value?.toLongOrNull()
-            FLOAT -> value?.toFloatOrNull()
+            FLOAT -> value?.toFloatOrNull()?.takeIf(Float::isFinite)
             STRING -> value
             STRING_SET -> values.toSet()
             else -> null
         }
 
+        fun isValid(): Boolean = when (type) {
+            BOOLEAN -> value?.toBooleanStrictOrNull() != null
+            INT -> value?.toIntOrNull() != null
+            LONG -> value?.toLongOrNull() != null
+            FLOAT -> value?.toFloatOrNull()?.isFinite() == true
+            STRING -> value != null
+            STRING_SET -> values.all(String::isNotBlank)
+            else -> false
+        }
+
         companion object {
-            /**
-             * Numbers go out as strings on purpose. JSON has one number type and
-             * every parser picks its own Kotlin type back off it, which is
-             * exactly the ambiguity this whole class exists to remove.
-             */
             fun of(value: Any?): PrefValue? = when (value) {
                 is Boolean -> PrefValue(BOOLEAN, value.toString())
                 is Int -> PrefValue(INT, value.toString())
                 is Long -> PrefValue(LONG, value.toString())
-                is Float -> PrefValue(FLOAT, value.toString())
+                is Float -> value.takeIf(Float::isFinite)?.let { PrefValue(FLOAT, it.toString()) }
                 is String -> PrefValue(STRING, value)
                 is Set<*> -> PrefValue(STRING_SET, values = value.filterIsInstance<String>())
                 else -> null

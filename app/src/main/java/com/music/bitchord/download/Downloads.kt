@@ -18,9 +18,12 @@ import com.music.bitchord.data.sources.StreamFormat
 import com.music.bitchord.data.sources.TrackMatcher
 import com.music.bitchord.playback.AudioCache
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -199,26 +202,92 @@ object Downloads {
         }
     }
 
-    /** Save only the durable session snapshot; intermediate byte progress stays in memory. */
+    /**
+     * Coalesce queue bursts before serialising the snapshot. Album/playlist
+     * downloads enqueue hundreds of rows on the main thread; writing the
+     * growing JSON list synchronously for every row would turn that into
+     * quadratic disk I/O and freeze the screen.
+     */
+    private val recoveryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val recoveryLock = Any()
+    private var pendingRecoveryState: DownloadSession.State? = null
+    private var recoveryGeneration = 0L
+    private var recoveryWriterScheduled = false
+
     private fun persistDownloadSession(state: DownloadSession.State) {
         if (!::prefs.isInitialized) return
-        val encoded = runCatching {
-            json.encodeToString(DownloadRecoverySnapshot.serializer(), state.toRecoverySnapshot())
-        }.getOrElse {
-            Log.w(TAG, "could not encode download recovery state: ${it.message}")
-            return
+        val scheduleWriter = synchronized(recoveryLock) {
+            pendingRecoveryState = state
+            recoveryGeneration++
+            if (recoveryWriterScheduled) {
+                false
+            } else {
+                recoveryWriterScheduled = true
+                true
+            }
         }
-        synchronized(recoveryLock) {
-            // These writes happen only at queue/state transitions, not on each
-            // byte-progress tick. Commit synchronously so a process killed
-            // immediately after a queue or completion transition still has
-            // the latest recoverable snapshot on disk.
-            val saved = prefs.edit().putString(KEY_DOWNLOAD_RECOVERY, encoded).commit()
-            if (!saved) Log.w(TAG, "could not commit download recovery state")
+        if (!scheduleWriter) return
+
+        recoveryScope.launch {
+            while (true) {
+                // A short debounce lets a whole playlist enqueue burst collapse
+                // into one snapshot. Newer states replace older pending ones.
+                delay(40L)
+                val next = synchronized(recoveryLock) {
+                    val latest = pendingRecoveryState
+                    if (latest == null) {
+                        recoveryWriterScheduled = false
+                        null
+                    } else {
+                        pendingRecoveryState = null
+                        latest to recoveryGeneration
+                    }
+                } ?: return@launch
+
+                val encoded = runCatching {
+                    json.encodeToString(
+                        DownloadRecoverySnapshot.serializer(),
+                        next.first.toRecoverySnapshot(),
+                    )
+                }.getOrElse {
+                    Log.w(TAG, "could not encode download recovery state: ${it.message}")
+                    null
+                } ?: continue
+
+                synchronized(recoveryLock) {
+                    // A queue update or lifecycle flush may have superseded the
+                    // snapshot while it was being encoded. Never write stale data.
+                    if (next.second == recoveryGeneration) {
+                        prefs.edit().putString(KEY_DOWNLOAD_RECOVERY, encoded).apply()
+                    }
+                }
+            }
         }
     }
 
-    private val recoveryLock = Any()
+    /**
+     * Synchronously flush the latest state when the Activity stops or the
+     * service is destroyed. The regular writer is asynchronous/coalesced; this
+     * final checkpoint closes the process-backgrounding window.
+     */
+    fun flushRecoveryState() {
+        if (!::prefs.isInitialized) return
+        synchronized(recoveryLock) {
+            recoveryGeneration++
+            pendingRecoveryState = null
+            val encoded = runCatching {
+                json.encodeToString(
+                    DownloadRecoverySnapshot.serializer(),
+                    DownloadSession.state.value.toRecoverySnapshot(),
+                )
+            }.getOrElse {
+                Log.w(TAG, "could not encode final download recovery state: ${it.message}")
+                return
+            }
+            val saved = prefs.edit().putString(KEY_DOWNLOAD_RECOVERY, encoded).commit()
+            if (!saved) Log.w(TAG, "could not commit final download recovery state")
+        }
+    }
 
     /**
      * Called while MainActivity is visible. Android permits starting the

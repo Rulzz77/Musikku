@@ -5,6 +5,8 @@ import android.net.Uri
 import com.music.bitchord.BuildConfig
 import com.music.bitchord.data.OfflinePlaylist
 import com.music.bitchord.data.OfflinePlaylists
+import com.music.bitchord.data.PlaylistFolder
+import com.music.bitchord.data.PlaylistFolders
 import com.music.bitchord.data.model.ArtistRef
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.settings.AppSettings
@@ -51,6 +53,7 @@ object Backup {
             val buckets = ListeningStats.exportAll()
             val spotifyPlaylists = LocalPlaylistStore.playlists.value.map { it.toBackupPlaylist() }
             val devicePlaylists = OfflinePlaylists.playlists.value.map { it.toBackupPlaylist() }
+            val playlistFolders = PlaylistFolders.folders.value.map { it.toBackupFolder() }
             val file = BackupFile(
                 versionName = BuildConfig.VERSION_NAME,
                 exportedAt = Instant.now().toString(),
@@ -62,6 +65,7 @@ object Backup {
                 remoteSpotifyImports = LocalPlaylistStore.remoteSpotifyImportsSnapshot()
                     .mapValues { (_, ids) -> ids.toList() },
                 devicePlaylists = devicePlaylists,
+                playlistFolders = playlistFolders,
 
             )
             val text = json.encodeToString(BackupFile.serializer(), file)
@@ -74,6 +78,7 @@ object Backup {
                 spotifyPlaylists = spotifyPlaylists.size,
                 devicePlaylists = devicePlaylists.size,
                 tracks = spotifyPlaylists.sumOf { it.songs.size } + devicePlaylists.sumOf { it.songs.size },
+                playlistFolders = playlistFolders.size,
             )
         }
     }
@@ -100,6 +105,7 @@ object Backup {
             }
             val spotifyPlaylists = file.spotifyPlaylists.map { it.toLocalPlaylist() }
             val devicePlaylists = file.devicePlaylists.map { it.toOfflinePlaylist() }
+            val playlistFolders = file.playlistFolders.map { it.toPlaylistFolder() }
             val remoteImports = file.remoteSpotifyImports.mapValues { (_, ids) -> ids.toSet() }
 
             // All parsing and structural validation happens before the first
@@ -110,9 +116,11 @@ object Backup {
                 val previousSpotifyPlaylists = LocalPlaylistStore.playlists.value.toList()
                 val previousRemoteImports = LocalPlaylistStore.remoteSpotifyImportsSnapshot()
                 val previousDevicePlaylists = OfflinePlaylists.playlists.value.toList()
+                val previousPlaylistFolders = PlaylistFolders.folders.value.toList()
                 try {
                     LocalPlaylistStore.restoreFromBackup(spotifyPlaylists, remoteImports, mergePlaylists)
                     OfflinePlaylists.restoreFromBackup(devicePlaylists, mergePlaylists)
+                    if (file.version >= 3) PlaylistFolders.restoreFromBackup(playlistFolders, mergePlaylists)
                 } catch (failure: Throwable) {
                     val rollbackFailures = mutableListOf<Throwable>()
                     runCatching {
@@ -124,6 +132,9 @@ object Backup {
                     }.exceptionOrNull()?.let(rollbackFailures::add)
                     runCatching {
                         OfflinePlaylists.restoreFromBackup(previousDevicePlaylists, merge = false)
+                    }.exceptionOrNull()?.let(rollbackFailures::add)
+                    runCatching {
+                        PlaylistFolders.restoreFromBackup(previousPlaylistFolders, merge = false)
                     }.exceptionOrNull()?.let(rollbackFailures::add)
                     if (rollbackFailures.isNotEmpty()) {
                         throw IllegalStateException(
@@ -157,11 +168,13 @@ object Backup {
                 settings = file.settings.size,
                 spotifyPlaylists = restoredSpotifyPlaylists.size,
                 devicePlaylists = restoredDevicePlaylists.size,
+                playlistFolders = if (file.version >= 3) PlaylistFolders.folders.value.size else PlaylistFolders.folders.value.size,
                 tracks = restoredSpotifyPlaylists.sumOf { it.songs.size } +
                     restoredDevicePlaylists.sumOf { it.songs.size },
                 from = file.versionName,
                 at = file.exportedAt,
                 mergedPlaylists = mergePlaylists,
+                playlistFolders = PlaylistFolders.folders.value.size,
                 schemaVersion = file.version,
             )
         }
@@ -197,10 +210,14 @@ object Backup {
         }
         validatePlaylists(file.spotifyPlaylists, "Spotify")
         validatePlaylists(file.devicePlaylists, "device")
+        if (file.version >= 3) validatePlaylistFolders(file.playlistFolders)
         if (file.version >= 2) {
             require(file.devicePlaylists.any { it.id == OfflinePlaylists.LIKED_ID }) {
                 "Backup is missing the built-in Liked songs playlist"
             }
+        }
+        require(file.playlistFolders.size <= MAX_PLAYLIST_FOLDERS) {
+            "Backup contains too many playlist folders"
         }
         require(file.spotifyPlaylists.size + file.devicePlaylists.size <= MAX_PLAYLISTS) {
             "Backup contains too many playlists"
@@ -245,6 +262,30 @@ object Backup {
         }
     }
 
+    private fun validatePlaylistFolders(folders: List<BackupPlaylistFolder>) {
+        val ids = HashSet<String>()
+        val assignedPlaylists = HashSet<String>()
+        var membershipCount = 0
+        folders.forEach { folder ->
+            require(folder.id.isNotBlank() && folder.id.length <= 512) {
+                "Backup contains an invalid playlist folder id"
+            }
+            require(ids.add(folder.id)) { "Backup contains duplicate playlist folders" }
+            require(folder.title.isNotBlank() && folder.title.length <= 2_000) {
+                "Backup contains an invalid playlist folder title"
+            }
+            folder.playlists.forEach { browseId ->
+                membershipCount++
+                require(browseId.isNotBlank() && browseId.length <= 4_096 && assignedPlaylists.add(browseId)) {
+                    "Backup contains an invalid or duplicate playlist folder membership"
+                }
+            }
+        }
+        require(membershipCount <= MAX_FOLDER_MEMBERSHIPS) {
+            "Backup contains too many playlist folder memberships"
+        }
+    }
+
     private fun BackupFile.toPreview() = Preview(
         versionName = versionName,
         exportedAt = exportedAt,
@@ -255,6 +296,7 @@ object Backup {
         devicePlaylists = devicePlaylists.size,
         deviceTracks = devicePlaylists.sumOf { it.songs.size },
         remotePlaylistMappings = remoteSpotifyImports.size,
+        playlistFolders = playlistFolders.size,
         schemaVersion = version,
     )
 
@@ -311,6 +353,18 @@ object Backup {
         songs = songs.map { it.toBackupSong() },
     )
 
+    private fun PlaylistFolder.toBackupFolder() = BackupPlaylistFolder(
+        id = id,
+        title = title,
+        playlists = playlistBrowseIds,
+    )
+
+    private fun BackupPlaylistFolder.toPlaylistFolder() = PlaylistFolder(
+        id = id,
+        title = title,
+        playlistBrowseIds = playlists,
+    )
+
     private fun OfflinePlaylist.toBackupPlaylist() = BackupPlaylist(
         id = id,
         title = title,
@@ -338,6 +392,7 @@ object Backup {
         val spotifyPlaylists: Int,
         val devicePlaylists: Int,
         val tracks: Int,
+        val playlistFolders: Int = 0,
     ) {
         val playlistCount: Int get() = spotifyPlaylists + devicePlaylists
     }
@@ -353,6 +408,7 @@ object Backup {
         val devicePlaylists: Int,
         val deviceTracks: Int,
         val remotePlaylistMappings: Int,
+        val playlistFolders: Int = 0,
         val schemaVersion: Int,
     ) {
         val playlistCount: Int get() = spotifyPlaylists + devicePlaylists
@@ -368,6 +424,7 @@ object Backup {
         val from: String,
         val at: String,
         val mergedPlaylists: Boolean,
+        val playlistFolders: Int = 0,
         val schemaVersion: Int,
     ) {
         val playlistCount: Int get() = spotifyPlaylists + devicePlaylists
@@ -376,11 +433,13 @@ object Backup {
     // Kept stable so backups made by earlier BitChord-branded builds remain readable.
     private const val APP_TAG = "bitchord"
     private const val MIN_SCHEMA_VERSION = 1
-    private const val SCHEMA_VERSION = 2
+    private const val SCHEMA_VERSION = 3
     private const val MAX_BACKUP_BYTES = 64 * 1024 * 1024
     private const val MAX_SETTINGS = 20_000
     private const val MAX_SETTING_STRING_LENGTH = 16_384
     private const val MAX_PLAYLISTS = 10_000
+    private const val MAX_PLAYLIST_FOLDERS = 10_000
+    private const val MAX_FOLDER_MEMBERSHIPS = 100_000
     private const val MAX_TRACKS = 500_000
     private const val MAX_LISTENING_MONTHS = 120
 
@@ -395,6 +454,14 @@ object Backup {
         val spotifyPlaylists: List<BackupPlaylist> = emptyList(),
         val remoteSpotifyImports: Map<String, List<String>> = emptyMap(),
         val devicePlaylists: List<BackupPlaylist> = emptyList(),
+        val playlistFolders: List<BackupPlaylistFolder> = emptyList(),
+    )
+
+    @Serializable
+    data class BackupPlaylistFolder(
+        val id: String,
+        val title: String,
+        val playlists: List<String> = emptyList(),
     )
 
     @Serializable

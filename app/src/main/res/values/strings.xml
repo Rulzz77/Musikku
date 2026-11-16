@@ -1365,4 +1365,14 @@
     <string name="clear_canvas_cache">Clear Canvas cache</string>
     <string name="clear_canvas_cache_subtitle">Remove cached looping clips. MusikKu fetches them again when needed.</string>
     <string name="canvas_cache_cleared">Canvas cache cleared</string>
+    <string name="playlist_folders_title">Playlist folders</string>
+    <string name="create_playlist_folder">New folder</string>
+    <string name="edit_playlist_folder">Edit folder</string>
+    <string name="playlist_folder_name">Folder name</string>
+    <string name="playlist_folder_select_playlists">Choose playlists</string>
+    <string name="playlist_folder_move_notice">Selected playlists move into this folder; the original playlists stay in your library.</string>
+    <string name="playlist_folder_empty">This folder is empty.</string>
+    <string name="playlist_folder_no_playlists">No playlists are available yet.</string>
+    <string name="playlist_folder_delete_notice">Deleting this folder won't delete any playlists or songs.</string>
+    <string name="playlist_folder_count">%1$d playlists</string>
 </resources>

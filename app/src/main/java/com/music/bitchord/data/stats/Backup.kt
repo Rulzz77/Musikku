@@ -81,6 +81,7 @@ object Backup {
                 spotifyPlaylists = spotifyPlaylists.size,
                 devicePlaylists = devicePlaylists.size,
                 tracks = spotifyPlaylists.sumOf { it.songs.size } + devicePlaylists.sumOf { it.songs.size },
+                queueTracks = file.lastPlayedQueue?.songs?.size ?: 0,
             )
         }
     }
@@ -231,7 +232,8 @@ object Backup {
         remotePlaylistMappings = remoteSpotifyImports.size,
         schemaVersion = version,
         queueTracks = lastPlayedQueue?.songs?.size ?: 0,
-        queueIndex = lastPlayedQueue?.index?.let { (it + 1).coerceIn(1, lastPlayedQueue.songs.size.coerceAtLeast(1)) } ?: 0,
+        queueIndex = lastPlayedQueue?.takeIf { it.songs.isNotEmpty() }
+            ?.let { (it.index + 1).coerceIn(1, it.songs.size) } ?: 0,
     )
 
     private fun Song.toBackupSong() = BackupSong(
@@ -376,11 +378,15 @@ object Backup {
         val index: Int = 0,
         val positionMs: Long = 0L,
     ) {
-        fun toSnapshot() = LastPlayed.Snapshot(
-            songs = songs.map { it.toSong() },
-            index = index.coerceIn(songs.indices),
-            positionMs = positionMs.coerceAtLeast(0L),
-        )
+        fun toSnapshot(): LastPlayed.Snapshot? {
+            if (songs.isEmpty()) return null
+            val restoredSongs = songs.map { it.toSong() }
+            return LastPlayed.Snapshot(
+                songs = restoredSongs,
+                index = index.coerceIn(restoredSongs.indices),
+                positionMs = positionMs.coerceAtLeast(0L),
+            )
+        }
     }
 
     @Serializable

@@ -1991,6 +1991,10 @@ fun SettingsScreen(
                                 else R.string.backup_preview_warning,
                             ),
                         )
+                        if (preview.schemaVersion < 4) {
+                            appendLine()
+                            append(context.getString(R.string.backup_preview_smart_rules_legacy))
+                        }
                     },
                 )
             },

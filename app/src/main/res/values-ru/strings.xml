@@ -1538,4 +1538,30 @@
     <string name="playlist_folder_no_playlists">Плейлисты пока недоступны.</string>
     <string name="playlist_folder_delete_notice">Удаление папки не удалит плейлисты или песни.</string>
     <string name="playlist_folder_count">Плейлистов: %1$d</string>
+
+    <!-- Smart Playlists -->
+    <string name="backup_preview_folders">Папки плейлистов: %1$d</string>
+    <string name="backup_preview_smart_playlists">Пользовательские правила умных плейлистов: %1$d</string>
+    <string name="backup_preview_smart_rules_legacy">Эта резервная копия создана до появления поддержки правил умных плейлистов. Существующие пользовательские правила на этом устройстве останутся без изменений.</string>
+    <string name="smart_playlists_title">Умные плейлисты</string>
+    <string name="smart_playlist_hint">Динамические подборки на основе ваших прослушиваний.</string>
+    <string name="smart_playlist_create">Создать умный плейлист</string>
+    <string name="smart_playlist_edit">Изменить умный плейлист</string>
+    <string name="smart_playlist_edit_action">Изменить</string>
+    <string name="smart_playlist_most_played">Чаще всего воспроизводимые</string>
+    <string name="smart_playlist_recently_played">Недавно прослушанные</string>
+    <string name="smart_playlist_most_listened">Дольше всего прослушанные</string>
+    <string name="smart_playlist_forgotten">Забытые треки</string>
+    <string name="smart_playlist_track_count">%1$d треков</string>
+    <string name="smart_playlist_empty">Послушайте несколько песен, чтобы создать умные плейлисты. Сохранённые правила также появятся здесь.</string>
+    <string name="smart_playlist_loading">Загрузка истории прослушивания…</string>
+    <string name="smart_playlist_name">Название плейлиста</string>
+    <string name="smart_playlist_artist_filter">В имени исполнителя есть (необязательно)</string>
+    <string name="smart_playlist_minimum_plays_value">Не менее %1$d воспроизведений</string>
+    <string name="smart_playlist_sort">Сортировать треки по</string>
+    <string name="smart_playlist_sort_played">Количеству воспроизведений</string>
+    <string name="smart_playlist_sort_recent">Недавнему прослушиванию</string>
+    <string name="smart_playlist_sort_listened">Времени прослушивания</string>
+    <string name="smart_playlist_editor_description">Эти списки создаются на основе истории прослушивания и обновляются при сохранении статистики. Обычные плейлисты остаются без изменений.</string>
+    <string name="smart_playlist_max_reached">Можно создать до 20 пользовательских умных плейлистов.</string>
 </resources>

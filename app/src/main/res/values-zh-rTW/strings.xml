@@ -1300,6 +1300,7 @@
     <string name="spotify_import_none">這些歌曲都未在 YouTube Music 上找到。</string>
     <string name="spotify_import_title">匯入 Spotify 播放列表</string>
     <string name="spotify_import_unmatched">%1$d 首歌曲未在 YouTube Music 上找到</string>
+    <string name="spotify_import_lookup_failures">因 YouTube Music 搜尋失敗，無法檢查 %1$d 首歌曲。請重新搜尋這些歌曲。</string>
     <string name="spotify_library_subtitle">你的 Spotify 播放列表</string>
     <string name="spotify_sign_in">使用 Spotify 登入</string>
     <string name="spotify_track_unavailable">在 YouTube Music 上找不到該歌曲</string>

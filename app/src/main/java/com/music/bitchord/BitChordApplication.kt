@@ -28,6 +28,8 @@ import com.music.bitchord.data.smb.SmbCoverFetcher
 import com.music.bitchord.data.webdav.WebDavCoilAuth
 import com.music.bitchord.data.canvas.SpotifyToken
 import com.music.bitchord.data.spotify.SpotifyLibrary
+import com.music.bitchord.data.spotify.SpotifyImporter
+import com.music.bitchord.data.spotify.AndroidSpotifyImportMatchCachePersistence
 import com.music.bitchord.data.spotify.LocalPlaylistStore
 import com.music.bitchord.playback.AudioCache
 import com.music.bitchord.playback.LastPlayed
@@ -97,6 +99,9 @@ class BitChordApplication : Application(), SingletonImageLoader.Factory, Configu
         // asks for its refresh rate itself (MainActivity.applyPerformanceMode),
         // so those votes buy nothing — and they kept resetting that request.
         ComposeUiFlags.isAdaptiveRefreshRateEnabled = false
+        // Restore confirmed Spotify -> YouTube Music matches before the first
+        // import. Manual replacements therefore survive a process restart.
+        SpotifyImporter.installMatchCachePersistence(AndroidSpotifyImportMatchCachePersistence(this))
         // The Spotify library and import live in the shared module; the tokens are the WebView's.
         SpotifyLibrary.auth = SpotifyLibrary.Auth {
             SpotifyToken.accessToken()?.let { SpotifyLibrary.Tokens(it, SpotifyToken.clientToken()) }

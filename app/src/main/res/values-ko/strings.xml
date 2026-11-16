@@ -1333,4 +1333,17 @@
     <string name="replace_playlists">Replace playlists</string>
     <string name="backup_playlists_merged">merged</string>
     <string name="backup_playlists_replaced">replaced</string>
+    <string name="storage_usage_title">MusikKu에서 사용 중인 저장공간</string>
+    <string name="storage_usage_total">관리 중인 저장공간: %1$s</string>
+    <string name="storage_usage_available">기기 여유 공간: 전체 %2$s 중 %1$s 남음</string>
+    <string name="storage_usage_loading">저장공간 계산 중…</string>
+    <string name="storage_usage_refresh">새로고침</string>
+    <string name="storage_downloaded_files">다운로드한 음악 및 아트워크</string>
+    <string name="storage_audio_cache">오디오 캐시(오프라인 재생 가능)</string>
+    <string name="storage_artwork_cache">아트워크 이미지 캐시</string>
+    <string name="storage_canvas_cache">Canvas 동영상 캐시</string>
+    <string name="storage_usage_safety_note">다운로드한 항목은 직접 삭제할 때까지 유지됩니다. 캐시를 지워도 로컬 음악, 재생목록 또는 백업은 삭제되지 않습니다.</string>
+    <string name="clear_canvas_cache">Canvas 캐시 지우기</string>
+    <string name="clear_canvas_cache_subtitle">캐시에 저장된 반복 클립을 삭제합니다. 필요할 때 MusikKu가 다시 가져옵니다.</string>
+    <string name="canvas_cache_cleared">Canvas 캐시를 지웠습니다</string>
 </resources>

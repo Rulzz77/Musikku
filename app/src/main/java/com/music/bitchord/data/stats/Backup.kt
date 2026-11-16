@@ -248,15 +248,11 @@ object Backup {
         albumName = albumName,
         isVideo = isVideo,
         isVideoOrigin = isVideoOrigin,
-        queueTier = queueTier?.let {
-            runCatching { com.music.bitchord.data.model.QueueTier.valueOf(it) }.getOrNull()
-        } ?: com.music.bitchord.data.model.QueueTier.CONTEXT,
+        queueTier = queueTier.name,
         queueEntryId = queueEntryId,
         radioName = radioName,
         playbackSource = playbackSource,
-        playbackSourceType = playbackSourceType?.let {
-            runCatching { com.music.bitchord.data.model.PlaybackSourceType.valueOf(it) }.getOrNull()
-        },
+        playbackSourceType = playbackSourceType?.name,
         playbackSourceId = playbackSourceId,
         isExplicit = isExplicit,
         sourceQuality = sourceQuality,
@@ -281,6 +277,20 @@ object Backup {
         albumName = albumName,
         isVideo = isVideo,
         isVideoOrigin = isVideoOrigin || isVideo,
+        queueTier = queueTier?.let {
+            runCatching { com.music.bitchord.data.model.QueueTier.valueOf(it) }.getOrNull()
+        } ?: com.music.bitchord.data.model.QueueTier.CONTEXT,
+        queueEntryId = queueEntryId,
+        radioName = radioName,
+        playbackSource = playbackSource,
+        playbackSourceType = playbackSourceType?.let {
+            runCatching { com.music.bitchord.data.model.PlaybackSourceType.valueOf(it) }.getOrNull()
+        },
+        playbackSourceId = playbackSourceId,
+        isExplicit = isExplicit,
+        sourceQuality = sourceQuality,
+        sourceHiRes = sourceHiRes,
+        isPodcastEpisode = isPodcastEpisode,
         localUri = localUri,
         localPath = localPath,
         localDateAddedSeconds = localDateAddedSeconds,

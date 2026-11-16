@@ -3209,3 +3209,97 @@ internal fun <T> ChoiceGroup(
         }
     }
 }
+
+
+/** Compact inventory for storage the app manages without claiming ownership of the user's local library. */
+@Composable
+private fun StorageUsageOverview(
+    usage: StorageUsage.Snapshot?,
+    loading: Boolean,
+    onRefresh: () -> Unit,
+) {
+    SettingsGroup(topSpacing = 0.dp) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = ROW_INSET, vertical = 16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.storage_usage_title),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        text = if (usage == null) {
+                            stringResource(R.string.storage_usage_loading)
+                        } else {
+                            stringResource(
+                                R.string.storage_usage_total,
+                                StorageUsage.formatBytes(usage.managedBytes),
+                            )
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                TextButton(onClick = onRefresh, enabled = !loading) {
+                    Text(stringResource(R.string.storage_usage_refresh))
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            StorageUsageLine(
+                label = stringResource(R.string.storage_downloaded_files),
+                bytes = usage?.downloadedBytes,
+            )
+            StorageUsageLine(
+                label = stringResource(R.string.storage_audio_cache),
+                bytes = usage?.audioCacheBytes,
+            )
+            StorageUsageLine(
+                label = stringResource(R.string.storage_artwork_cache),
+                bytes = usage?.imageCacheBytes,
+            )
+            StorageUsageLine(
+                label = stringResource(R.string.storage_canvas_cache),
+                bytes = usage?.canvasCacheBytes,
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = if (usage == null) {
+                    stringResource(R.string.storage_usage_loading)
+                } else {
+                    stringResource(
+                        R.string.storage_usage_available,
+                        StorageUsage.formatBytes(usage.availableBytes),
+                    )
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = stringResource(R.string.storage_usage_safety_note),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun StorageUsageLine(label: String, bytes: Long?) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Text(
+            text = bytes?.let(StorageUsage::formatBytes) ?: "—",
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}

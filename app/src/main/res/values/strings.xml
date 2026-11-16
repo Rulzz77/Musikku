@@ -230,6 +230,8 @@
     <string name="backup_preview_remote">Remote playlist mappings: %1$d</string>
     <string name="backup_preview_queue">Last playback queue: %1$d tracks (current track: %2$d)</string>
     <string name="backup_preview_legacy_note">This is an older backup format. It does not contain playlist or playback queue data, so existing playlists and the current saved queue will be left unchanged.</string>
+    <string name="restore_legacy_backup">Restore available data</string>
+    <string name="import_legacy_succeeded">Restored settings and %1$s of listening history from v%2$s. Existing playlists and the saved playback queue were left unchanged.</string>
     <string name="backup_preview_warning">Settings and listening history will be replaced. Choose whether to merge or replace playlists. Downloaded audio and login credentials are not included. Local file references may need to be relinked on another device.</string>
     <string name="merge_playlists">Merge playlists</string>
     <string name="replace_playlists">Replace playlists</string>

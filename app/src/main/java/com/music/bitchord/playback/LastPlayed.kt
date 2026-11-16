@@ -109,7 +109,6 @@ object LastPlayed {
     }
 
     fun clear() {
-        if (!::prefs.isInitialized) return
         prefs.edit().clear().apply()
     }
 

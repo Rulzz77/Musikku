@@ -108,6 +108,35 @@ class BackupFormatTest {
 
         assertEquals(3, restored.version)
         assertEquals(original.playlistFolders, restored.playlistFolders)
+        assertTrue(restored.smartPlaylistRules.isEmpty())
+    }
+
+    @Test
+    fun `schema four round trips custom Smart Playlist rules`() {
+        val original = Backup.BackupFile(
+            version = 4,
+            smartPlaylistRules = listOf(
+                Backup.BackupSmartPlaylistRule(
+                    id = "rule-roadtrip",
+                    name = "Road trip",
+                    artistContains = "Kerispatih",
+                    minimumPlays = 3,
+                    sort = "MOST_LISTENED",
+                ),
+                Backup.BackupSmartPlaylistRule(
+                    id = "rule-focus",
+                    name = "Focus",
+                    minimumPlays = 1,
+                    sort = "RECENTLY_PLAYED",
+                ),
+            ),
+        )
+
+        val encoded = json.encodeToString(Backup.BackupFile.serializer(), original)
+        val restored = json.decodeFromString(Backup.BackupFile.serializer(), encoded)
+
+        assertEquals(4, restored.version)
+        assertEquals(original.smartPlaylistRules, restored.smartPlaylistRules)
     }
 
     @Test

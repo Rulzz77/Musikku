@@ -128,14 +128,12 @@ object SmartPlaylists {
                 rule.minimumPlays in 1..MAX_MINIMUM_PLAYS) {
                 "Backup contains invalid Smart Playlist filters"
             }
-            require(imported.putIfAbsent(
-                id,
-                rule.copy(
-                    id = id,
-                    name = name,
-                    artistContains = rule.artistContains.trim(),
-                ),
-            ) == null) { "Backup contains duplicate Smart Playlist rules" }
+            require(id !in imported) { "Backup contains duplicate Smart Playlist rules" }
+            imported[id] = rule.copy(
+                id = id,
+                name = name,
+                artistContains = rule.artistContains.trim(),
+            )
         }
 
         val next = if (merge) {

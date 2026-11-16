@@ -1506,4 +1506,30 @@
     <string name="playlist_folder_no_playlists">Noch keine Playlists verfügbar.</string>
     <string name="playlist_folder_delete_notice">Beim Löschen dieses Ordners werden keine Playlists oder Songs gelöscht.</string>
     <string name="playlist_folder_count">%1$d Playlists</string>
+
+    <!-- Smart Playlists -->
+    <string name="backup_preview_folders">Playlist-Ordner: %1$d</string>
+    <string name="backup_preview_smart_playlists">Benutzerdefinierte Smart-Playlist-Regeln: %1$d</string>
+    <string name="backup_preview_smart_rules_legacy">Dieses Backup wurde erstellt, bevor Smart-Playlist-Regeln unterstützt wurden. Vorhandene benutzerdefinierte Regeln auf diesem Gerät bleiben unverändert.</string>
+    <string name="smart_playlists_title">Smart-Playlists</string>
+    <string name="smart_playlist_hint">Dynamische Mixe, die sich an dein Hörverhalten anpassen.</string>
+    <string name="smart_playlist_create">Smart-Playlist erstellen</string>
+    <string name="smart_playlist_edit">Smart-Playlist bearbeiten</string>
+    <string name="smart_playlist_edit_action">Bearbeiten</string>
+    <string name="smart_playlist_most_played">Am häufigsten gespielt</string>
+    <string name="smart_playlist_recently_played">Zuletzt gespielt</string>
+    <string name="smart_playlist_most_listened">Am meisten gehört</string>
+    <string name="smart_playlist_forgotten">Vergessene Titel</string>
+    <string name="smart_playlist_track_count">%1$d Titel</string>
+    <string name="smart_playlist_empty">Spiele ein paar Songs, um deine Smart-Playlists aufzubauen. Gespeicherte Regeln erscheinen ebenfalls hier.</string>
+    <string name="smart_playlist_loading">Hörverlauf wird geladen…</string>
+    <string name="smart_playlist_name">Playlistname</string>
+    <string name="smart_playlist_artist_filter">Künstlername enthält (optional)</string>
+    <string name="smart_playlist_minimum_plays_value">Mindestens %1$d Wiedergaben</string>
+    <string name="smart_playlist_sort">Titel sortieren nach</string>
+    <string name="smart_playlist_sort_played">Anzahl der Wiedergaben</string>
+    <string name="smart_playlist_sort_recent">Zuletzt gespielt</string>
+    <string name="smart_playlist_sort_listened">Hörzeit</string>
+    <string name="smart_playlist_editor_description">Diese Listen werden aus deinem Hörverlauf erstellt und aktualisiert, sobald Hörstatistiken gespeichert werden. Deine normalen Playlists bleiben unverändert.</string>
+    <string name="smart_playlist_max_reached">Du kannst bis zu 20 benutzerdefinierte Smart-Playlists erstellen.</string>
 </resources>

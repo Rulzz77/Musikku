@@ -1506,4 +1506,30 @@
     <string name="playlist_folder_no_playlists">अभी कोई प्लेलिस्ट उपलब्ध नहीं है।</string>
     <string name="playlist_folder_delete_notice">इस फ़ोल्डर को हटाने से प्लेलिस्ट या गाने नहीं हटेंगे।</string>
     <string name="playlist_folder_count">%1$d प्लेलिस्ट</string>
+
+    <!-- Smart Playlists -->
+    <string name="backup_preview_folders">प्लेलिस्ट फ़ोल्डर: %1$d</string>
+    <string name="backup_preview_smart_playlists">कस्टम स्मार्ट प्लेलिस्ट नियम: %1$d</string>
+    <string name="backup_preview_smart_rules_legacy">यह बैकअप स्मार्ट प्लेलिस्ट नियमों के समर्थन से पहले बनाया गया था। इस डिवाइस पर मौजूद कस्टम नियम वैसे ही बने रहेंगे।</string>
+    <string name="smart_playlists_title">स्मार्ट प्लेलिस्ट</string>
+    <string name="smart_playlist_hint">आपकी सुनने की आदतों के अनुसार बदलने वाली डायनेमिक मिक्स।</string>
+    <string name="smart_playlist_create">स्मार्ट प्लेलिस्ट बनाएँ</string>
+    <string name="smart_playlist_edit">स्मार्ट प्लेलिस्ट संपादित करें</string>
+    <string name="smart_playlist_edit_action">संपादित करें</string>
+    <string name="smart_playlist_most_played">सबसे ज़्यादा चलाए गए</string>
+    <string name="smart_playlist_recently_played">हाल ही में सुने गए</string>
+    <string name="smart_playlist_most_listened">सबसे अधिक सुने गए</string>
+    <string name="smart_playlist_forgotten">भूले हुए ट्रैक</string>
+    <string name="smart_playlist_track_count">%1$d ट्रैक</string>
+    <string name="smart_playlist_empty">अपनी स्मार्ट प्लेलिस्ट बनाने के लिए कुछ गाने चलाएँ। आपके सहेजे गए नियम भी यहाँ दिखेंगे।</string>
+    <string name="smart_playlist_loading">आपका सुनने का इतिहास लोड हो रहा है…</string>
+    <string name="smart_playlist_name">प्लेलिस्ट का नाम</string>
+    <string name="smart_playlist_artist_filter">कलाकार के नाम में यह शब्द हो (वैकल्पिक)</string>
+    <string name="smart_playlist_minimum_plays_value">कम से कम %1$d बार चलाया गया</string>
+    <string name="smart_playlist_sort">ट्रैक क्रमबद्ध करें</string>
+    <string name="smart_playlist_sort_played">चलाए जाने की संख्या</string>
+    <string name="smart_playlist_sort_recent">हाल ही में सुने गए</string>
+    <string name="smart_playlist_sort_listened">सुनने का समय</string>
+    <string name="smart_playlist_editor_description">ये सूचियाँ आपके सुनने के इतिहास से बनती हैं और सुनने के आँकड़े सहेजे जाने पर अपडेट होती हैं। ये आपकी सामान्य प्लेलिस्ट में बदलाव नहीं करतीं।</string>
+    <string name="smart_playlist_max_reached">आप अधिकतम 20 कस्टम स्मार्ट प्लेलिस्ट बना सकते हैं।</string>
 </resources>

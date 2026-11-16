@@ -1373,6 +1373,6 @@
     <string name="playlist_folder_move_notice">Selected playlists move into this folder; the original playlists stay in your library.</string>
     <string name="playlist_folder_empty">This folder is empty.</string>
     <string name="playlist_folder_no_playlists">No playlists are available yet.</string>
-    <string name="playlist_folder_delete_notice">Deleting this folder won't delete any playlists or songs.</string>
+    <string name="playlist_folder_delete_notice">Deleting this folder won\'t delete any playlists or songs.</string>
     <string name="playlist_folder_count">%1$d playlists</string>
 </resources>

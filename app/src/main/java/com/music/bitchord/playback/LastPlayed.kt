@@ -116,17 +116,21 @@ object LastPlayed {
      * Replaces the device's restart snapshot with the queue from a backup.
      * This does not start playback; it only restores the durable recovery state.
      */
-    fun restoreBackupSnapshot(snapshot: Snapshot?) {
-        check(::prefs.isInitialized) { "Playback queue storage is not initialized" }
+    fun restoreBackupSnapshot(snapshot: Snapshot?): Boolean {
+        if (!::prefs.isInitialized) return false
         if (snapshot == null || snapshot.songs.isEmpty()) {
             clearImmediately()
-        } else {
-            saveQueueImmediately(
-                songs = snapshot.songs,
-                index = snapshot.index,
-                positionMs = snapshot.positionMs,
-            )
+            return !prefs.contains(KEY_QUEUE)
         }
+        saveQueueImmediately(
+            songs = snapshot.songs,
+            index = snapshot.index,
+            positionMs = snapshot.positionMs,
+        )
+        val restored = load() ?: return false
+        return restored.songs == snapshot.songs &&
+            restored.index == snapshot.index.coerceIn(snapshot.songs.indices) &&
+            restored.positionMs == snapshot.positionMs.coerceAtLeast(0L)
     }
 
     fun clear() {

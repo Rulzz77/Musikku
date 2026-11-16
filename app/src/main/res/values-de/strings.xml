@@ -1323,6 +1323,7 @@
     <string name="spotify_import_none">Keiner dieser Titel wurde auf YouTube Music gefunden.</string>
     <string name="spotify_import_title">Spotify-Playlist importieren</string>
     <string name="spotify_import_unmatched">%1$d Titel wurden auf YouTube Music nicht gefunden</string>
+    <string name="spotify_import_lookup_failures">%1$d Titel konnten wegen eines Fehlers bei der YouTube-Music-Suche nicht überprüft werden. Versuche es mit diesen Titeln erneut.</string>
     <string name="spotify_library_subtitle">Deine Spotify-Playlists</string>
     <string name="spotify_sign_in">Bei Spotify anmelden</string>
     <string name="spotify_use_spdc_token">sp_dc-Token verwenden</string>

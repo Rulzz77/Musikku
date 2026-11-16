@@ -1483,4 +1483,17 @@
     <string name="replace_playlists">Replace playlists</string>
     <string name="backup_playlists_merged">merged</string>
     <string name="backup_playlists_replaced">replaced</string>
+    <string name="storage_usage_title">Von MusikKu verwendeter Speicher</string>
+    <string name="storage_usage_total">Verwalteter Speicher: %1$s</string>
+    <string name="storage_usage_available">Gerätespeicher: %1$s von %2$s frei</string>
+    <string name="storage_usage_loading">Speicher wird berechnet…</string>
+    <string name="storage_usage_refresh">Aktualisieren</string>
+    <string name="storage_downloaded_files">Heruntergeladene Musik und Cover</string>
+    <string name="storage_audio_cache">Audio-Cache (offline verfügbar)</string>
+    <string name="storage_artwork_cache">Cover-Bildcache</string>
+    <string name="storage_canvas_cache">Canvas-Videocache</string>
+    <string name="storage_usage_safety_note">Downloads bleiben erhalten, bis du sie löschst. Das Leeren von Caches löscht weder lokale Musik noch Playlists oder Sicherungen.</string>
+    <string name="clear_canvas_cache">Canvas-Cache leeren</string>
+    <string name="clear_canvas_cache_subtitle">Zwischengespeicherte Loop-Clips entfernen. MusikKu lädt sie bei Bedarf erneut.</string>
+    <string name="canvas_cache_cleared">Canvas-Cache geleert</string>
 </resources>

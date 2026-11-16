@@ -35,11 +35,13 @@ sealed interface DownloadProgress {
  * March. Neither can answer "did the thing I asked for actually all arrive?",
  * and that is the only question a download manager exists to answer.
  *
- * Deliberately not persisted. This is a record of one sitting: the question it
- * answers is about a batch the user remembers starting, and after a restart
- * there is no such batch — what is on disk is then the whole truth and the
- * Downloads page is where to read it. Being a Kotlin object, the list dies with
- * the process, which is precisely the intended lifetime and needs no code.
+ * The Android host persists a compact, versioned snapshot of recoverable
+ * rows through [installPersistence]. The in-memory model stays platform-neutral:
+ * it owns ordering and presentation state, while [DownloadRecoverySnapshot]
+ * owns the Android preference format. A running row is restored as Queued
+ * because the writer's pending destinations are not byte-resumable; the next
+ * attempt starts that track again from byte zero. WorkManager-owned rows opt
+ * out through [Item.recoverable] because their worker owns their lifetime.
  *
  * ### Why [State.visible] is not just "something is downloading"
  *

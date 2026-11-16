@@ -1942,11 +1942,12 @@ fun SettingsScreen(
                         appendLine(context.getString(R.string.backup_preview_remote, preview.remotePlaylistMappings))
                         appendLine(context.getString(R.string.backup_preview_queue, preview.queueTracks, preview.queueIndex))
                         appendLine()
-                        append(context.getString(R.string.backup_preview_warning))
-                        if (preview.schemaVersion < 2) {
-                            appendLine()
-                            append(context.getString(R.string.backup_preview_legacy_note))
-                        }
+                        append(
+                            context.getString(
+                                if (preview.schemaVersion < 2) R.string.backup_preview_legacy_warning
+                                else R.string.backup_preview_warning,
+                            ),
+                        )
                     },
                 )
             },

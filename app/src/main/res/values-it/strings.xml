@@ -1445,4 +1445,30 @@
     <string name="playlist_folder_no_playlists">Nessuna playlist disponibile per ora.</string>
     <string name="playlist_folder_delete_notice">L\'eliminazione di questa cartella non elimina playlist o brani.</string>
     <string name="playlist_folder_count">%1$d playlist</string>
+
+    <!-- Smart Playlists -->
+    <string name="backup_preview_folders">Cartelle playlist: %1$d</string>
+    <string name="backup_preview_smart_playlists">Regole personalizzate delle Smart Playlist: %1$d</string>
+    <string name="backup_preview_smart_rules_legacy">Questo backup è stato creato prima che fosse disponibile il supporto alle regole Smart Playlist. Le regole personalizzate già presenti su questo dispositivo resteranno invariate.</string>
+    <string name="smart_playlists_title">Smart Playlist</string>
+    <string name="smart_playlist_hint">Mix dinamici che seguono i tuoi ascolti.</string>
+    <string name="smart_playlist_create">Crea Smart Playlist</string>
+    <string name="smart_playlist_edit">Modifica Smart Playlist</string>
+    <string name="smart_playlist_edit_action">Modifica</string>
+    <string name="smart_playlist_most_played">Più riprodotti</string>
+    <string name="smart_playlist_recently_played">Riprodotti di recente</string>
+    <string name="smart_playlist_most_listened">Più ascoltati</string>
+    <string name="smart_playlist_forgotten">Brani dimenticati</string>
+    <string name="smart_playlist_track_count">%1$d brani</string>
+    <string name="smart_playlist_empty">Riproduci qualche brano per creare le tue Smart Playlist. Anche le regole salvate appariranno qui.</string>
+    <string name="smart_playlist_loading">Caricamento della cronologia degli ascolti…</string>
+    <string name="smart_playlist_name">Nome della playlist</string>
+    <string name="smart_playlist_artist_filter">Il nome dell\'artista contiene (facoltativo)</string>
+    <string name="smart_playlist_minimum_plays_value">Almeno %1$d riproduzioni</string>
+    <string name="smart_playlist_sort">Ordina i brani per</string>
+    <string name="smart_playlist_sort_played">Numero di riproduzioni</string>
+    <string name="smart_playlist_sort_recent">Riprodotti di recente</string>
+    <string name="smart_playlist_sort_listened">Tempo di ascolto</string>
+    <string name="smart_playlist_editor_description">Queste liste vengono create dalla cronologia degli ascolti e si aggiornano quando vengono salvate le statistiche. Non modificano le playlist normali.</string>
+    <string name="smart_playlist_max_reached">Puoi creare fino a 20 Smart Playlist personalizzate.</string>
 </resources>

@@ -1484,4 +1484,30 @@
     <string name="playlist_folder_no_playlists">利用できるプレイリストはまだありません。</string>
     <string name="playlist_folder_delete_notice">このフォルダを削除しても、プレイリストや曲は削除されません。</string>
     <string name="playlist_folder_count">プレイリスト %1$d 件</string>
+
+    <!-- Smart Playlists -->
+    <string name="backup_preview_folders">プレイリストフォルダ: %1$d</string>
+    <string name="backup_preview_smart_playlists">カスタムスマートプレイリストルール: %1$d</string>
+    <string name="backup_preview_smart_rules_legacy">このバックアップはスマートプレイリストルールに対応する前に作成されました。この端末に保存されている既存のカスタムルールは変更されません。</string>
+    <string name="smart_playlists_title">スマートプレイリスト</string>
+    <string name="smart_playlist_hint">再生履歴に合わせて変化するダイナミックミックス。</string>
+    <string name="smart_playlist_create">スマートプレイリストを作成</string>
+    <string name="smart_playlist_edit">スマートプレイリストを編集</string>
+    <string name="smart_playlist_edit_action">編集</string>
+    <string name="smart_playlist_most_played">再生回数が多い曲</string>
+    <string name="smart_playlist_recently_played">最近再生した曲</string>
+    <string name="smart_playlist_most_listened">再生時間が長い曲</string>
+    <string name="smart_playlist_forgotten">しばらく再生していない曲</string>
+    <string name="smart_playlist_track_count">%1$d 曲</string>
+    <string name="smart_playlist_empty">曲をいくつか再生すると、スマートプレイリストが作成されます。保存したルールもここに表示されます。</string>
+    <string name="smart_playlist_loading">再生履歴を読み込み中…</string>
+    <string name="smart_playlist_name">プレイリスト名</string>
+    <string name="smart_playlist_artist_filter">アーティスト名に含む文字（任意）</string>
+    <string name="smart_playlist_minimum_plays_value">%1$d 回以上再生</string>
+    <string name="smart_playlist_sort">曲の並び順</string>
+    <string name="smart_playlist_sort_played">再生回数</string>
+    <string name="smart_playlist_sort_recent">最近再生した順</string>
+    <string name="smart_playlist_sort_listened">再生時間</string>
+    <string name="smart_playlist_editor_description">これらのリストは再生履歴から作成され、再生統計の保存時に更新されます。通常のプレイリストは変更されません。</string>
+    <string name="smart_playlist_max_reached">カスタムスマートプレイリストは最大20件作成できます。</string>
 </resources>

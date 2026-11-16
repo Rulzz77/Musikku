@@ -1546,4 +1546,30 @@
     <string name="playlist_folder_no_playlists">Nie ma jeszcze dostępnych playlist.</string>
     <string name="playlist_folder_delete_notice">Usunięcie folderu nie usunie playlist ani utworów.</string>
     <string name="playlist_folder_count">Playlisty: %1$d</string>
+
+    <!-- Smart Playlists -->
+    <string name="backup_preview_folders">Foldery playlist: %1$d</string>
+    <string name="backup_preview_smart_playlists">Niestandardowe reguły inteligentnych playlist: %1$d</string>
+    <string name="backup_preview_smart_rules_legacy">Ta kopia zapasowa powstała przed wprowadzeniem obsługi reguł inteligentnych playlist. Istniejące niestandardowe reguły na tym urządzeniu pozostaną bez zmian.</string>
+    <string name="smart_playlists_title">Inteligentne playlisty</string>
+    <string name="smart_playlist_hint">Dynamiczne miksy dopasowane do tego, czego słuchasz.</string>
+    <string name="smart_playlist_create">Utwórz inteligentną playlistę</string>
+    <string name="smart_playlist_edit">Edytuj inteligentną playlistę</string>
+    <string name="smart_playlist_edit_action">Edytuj</string>
+    <string name="smart_playlist_most_played">Najczęściej odtwarzane</string>
+    <string name="smart_playlist_recently_played">Ostatnio odtwarzane</string>
+    <string name="smart_playlist_most_listened">Najdłużej słuchane</string>
+    <string name="smart_playlist_forgotten">Zapomniane utwory</string>
+    <string name="smart_playlist_track_count">%1$d utworów</string>
+    <string name="smart_playlist_empty">Odtwórz kilka utworów, aby utworzyć inteligentne playlisty. Zapisane reguły również pojawią się tutaj.</string>
+    <string name="smart_playlist_loading">Wczytywanie historii słuchania…</string>
+    <string name="smart_playlist_name">Nazwa playlisty</string>
+    <string name="smart_playlist_artist_filter">Nazwa wykonawcy zawiera (opcjonalnie)</string>
+    <string name="smart_playlist_minimum_plays_value">Co najmniej %1$d odtworzeń</string>
+    <string name="smart_playlist_sort">Sortuj utwory według</string>
+    <string name="smart_playlist_sort_played">Liczba odtworzeń</string>
+    <string name="smart_playlist_sort_recent">Ostatnio odtwarzane</string>
+    <string name="smart_playlist_sort_listened">Czas słuchania</string>
+    <string name="smart_playlist_editor_description">Te listy są tworzone na podstawie historii słuchania i odświeżane po zapisaniu statystyk. Nie zmieniają zwykłych playlist.</string>
+    <string name="smart_playlist_max_reached">Możesz utworzyć maksymalnie 20 własnych inteligentnych playlist.</string>
 </resources>

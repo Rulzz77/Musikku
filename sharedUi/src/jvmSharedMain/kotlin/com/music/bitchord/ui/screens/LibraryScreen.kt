@@ -117,6 +117,8 @@ fun LibraryScreen(
     showTitle: Boolean = true,
     /** Optional Android-owned folder shelf, since its contents are device-persisted. */
     playlistFolderContent: @Composable () -> Unit = {},
+    /** Smart playlists use the app's private listening record and live in the phone layer. */
+    smartPlaylistContent: @Composable () -> Unit = {},
 ) {
     val pinnedPlaylists by AppUi.host.pinnedPlaylists.collectAsStateWithLifecycle()
     val onDevice = stringResource(Res.string.on_device)
@@ -142,6 +144,7 @@ fun LibraryScreen(
                 }
             }
             item(key = "replay") { replay() }
+            item(key = "smart-playlists") { smartPlaylistContent() }
             if (links.isNotEmpty()) {
                 item(key = "links") { LibraryLinkList(links = links, onClick = onShelfItemClick) }
             }

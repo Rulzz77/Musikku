@@ -1511,4 +1511,30 @@
     <string name="playlist_folder_no_playlists">אין עדיין פלייליסטים זמינים.</string>
     <string name="playlist_folder_delete_notice">מחיקת התיקייה לא תמחק פלייליסטים או שירים.</string>
     <string name="playlist_folder_count">%1$d פלייליסטים</string>
+
+    <!-- Smart Playlists -->
+    <string name="backup_preview_folders">תיקיות פלייליסטים: %1$d</string>
+    <string name="backup_preview_smart_playlists">כללי Smart Playlist מותאמים אישית: %1$d</string>
+    <string name="backup_preview_smart_rules_legacy">הגיבוי הזה נוצר לפני שנוספה תמיכה בכללי Smart Playlist. הכללים המותאמים שכבר קיימים במכשיר הזה יישארו ללא שינוי.</string>
+    <string name="smart_playlists_title">פלייליסטים חכמים</string>
+    <string name="smart_playlist_hint">מיקסים דינמיים שמתעדכנים בהתאם להרגלי ההאזנה שלך.</string>
+    <string name="smart_playlist_create">יצירת פלייליסט חכם</string>
+    <string name="smart_playlist_edit">עריכת פלייליסט חכם</string>
+    <string name="smart_playlist_edit_action">עריכה</string>
+    <string name="smart_playlist_most_played">המושמעים ביותר</string>
+    <string name="smart_playlist_recently_played">הושמעו לאחרונה</string>
+    <string name="smart_playlist_most_listened">האזנה ממושכת ביותר</string>
+    <string name="smart_playlist_forgotten">רצועות שנשכחו</string>
+    <string name="smart_playlist_track_count">%1$d רצועות</string>
+    <string name="smart_playlist_empty">השמע כמה שירים כדי לבנות את הפלייליסטים החכמים שלך. גם הכללים ששמרת יופיעו כאן.</string>
+    <string name="smart_playlist_loading">טוען את היסטוריית ההאזנה שלך…</string>
+    <string name="smart_playlist_name">שם הפלייליסט</string>
+    <string name="smart_playlist_artist_filter">שם האמן מכיל (אופציונלי)</string>
+    <string name="smart_playlist_minimum_plays_value">לפחות %1$d השמעות</string>
+    <string name="smart_playlist_sort">מיון רצועות לפי</string>
+    <string name="smart_playlist_sort_played">מספר השמעות</string>
+    <string name="smart_playlist_sort_recent">הושמעו לאחרונה</string>
+    <string name="smart_playlist_sort_listened">משך ההאזנה</string>
+    <string name="smart_playlist_editor_description">הרשימות האלה נוצרות מהיסטוריית ההאזנה שלך ומתעדכנות כשסטטיסטיקת ההאזנה נשמרת. הן לא משנות את הפלייליסטים הרגילים שלך.</string>
+    <string name="smart_playlist_max_reached">אפשר ליצור עד 20 פלייליסטים חכמים מותאמים אישית.</string>
 </resources>

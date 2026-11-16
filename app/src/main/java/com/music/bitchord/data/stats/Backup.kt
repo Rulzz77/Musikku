@@ -54,6 +54,7 @@ object Backup {
             val spotifyPlaylists = LocalPlaylistStore.playlists.value.map { it.toBackupPlaylist() }
             val devicePlaylists = OfflinePlaylists.playlists.value.map { it.toBackupPlaylist() }
             val playlistFolders = PlaylistFolders.folders.value.map { it.toBackupFolder() }
+            val smartPlaylistRules = SmartPlaylists.rules.value.map { it.toBackupSmartPlaylistRule() }
             val file = BackupFile(
                 versionName = BuildConfig.VERSION_NAME,
                 exportedAt = Instant.now().toString(),
@@ -66,7 +67,7 @@ object Backup {
                     .mapValues { (_, ids) -> ids.toList() },
                 devicePlaylists = devicePlaylists,
                 playlistFolders = playlistFolders,
-
+                smartPlaylistRules = smartPlaylistRules,
             )
             val text = json.encodeToString(BackupFile.serializer(), file)
             context.contentResolver.openOutputStream(target, "wt")
@@ -79,6 +80,7 @@ object Backup {
                 devicePlaylists = devicePlaylists.size,
                 tracks = spotifyPlaylists.sumOf { it.songs.size } + devicePlaylists.sumOf { it.songs.size },
                 playlistFolders = playlistFolders.size,
+                smartPlaylistRules = smartPlaylistRules.size,
             )
         }
     }
@@ -89,8 +91,8 @@ object Backup {
     }
 
     /**
-     * Restores settings and listening totals, then either merges or replaces
-     * both local playlist collections. Cloud account credentials and
+     * Restores settings, listening totals, playlist collections, folders,
+     * and (for schema v4) custom Smart Playlist rules. Credentials and
      * device-specific download indexes are left untouched.
      */
     suspend fun importFrom(
@@ -106,21 +108,23 @@ object Backup {
             val spotifyPlaylists = file.spotifyPlaylists.map { it.toLocalPlaylist() }
             val devicePlaylists = file.devicePlaylists.map { it.toOfflinePlaylist() }
             val playlistFolders = file.playlistFolders.map { it.toPlaylistFolder() }
+            val smartPlaylistRules = file.smartPlaylistRules.map { it.toSmartPlaylistRule() }
             val remoteImports = file.remoteSpotifyImports.mapValues { (_, ids) -> ids.toSet() }
 
             // All parsing and structural validation happens before the first
-            // write. Commit both playlist stores before replacing settings or
-            // listening history, and roll the first store back if the second
-            // cannot be committed.
+            // write. Commit the collection stores together and roll each one
+            // back if any playlist, folder, or Smart Playlist write fails.
             if (file.version >= 2) {
                 val previousSpotifyPlaylists = LocalPlaylistStore.playlists.value.toList()
                 val previousRemoteImports = LocalPlaylistStore.remoteSpotifyImportsSnapshot()
                 val previousDevicePlaylists = OfflinePlaylists.playlists.value.toList()
                 val previousPlaylistFolders = PlaylistFolders.folders.value.toList()
+                val previousSmartPlaylistRules = SmartPlaylists.rules.value.toList()
                 try {
                     LocalPlaylistStore.restoreFromBackup(spotifyPlaylists, remoteImports, mergePlaylists)
                     OfflinePlaylists.restoreFromBackup(devicePlaylists, mergePlaylists)
                     if (file.version >= 3) PlaylistFolders.restoreFromBackup(playlistFolders, mergePlaylists)
+                    if (file.version >= 4) SmartPlaylists.restoreFromBackup(smartPlaylistRules, mergePlaylists)
                 } catch (failure: Throwable) {
                     val rollbackFailures = mutableListOf<Throwable>()
                     runCatching {
@@ -135,6 +139,9 @@ object Backup {
                     }.exceptionOrNull()?.let(rollbackFailures::add)
                     runCatching {
                         PlaylistFolders.restoreFromBackup(previousPlaylistFolders, merge = false)
+                    }.exceptionOrNull()?.let(rollbackFailures::add)
+                    runCatching {
+                        SmartPlaylists.restoreFromBackup(previousSmartPlaylistRules, merge = false)
                     }.exceptionOrNull()?.let(rollbackFailures::add)
                     if (rollbackFailures.isNotEmpty()) {
                         throw IllegalStateException(
@@ -175,6 +182,7 @@ object Backup {
                 mergedPlaylists = mergePlaylists,
                 playlistFolders = PlaylistFolders.folders.value.size,
                 schemaVersion = file.version,
+                smartPlaylistRules = if (file.version >= 4) SmartPlaylists.rules.value.size else 0,
             )
         }
     }
@@ -210,6 +218,7 @@ object Backup {
         validatePlaylists(file.spotifyPlaylists, "Spotify")
         validatePlaylists(file.devicePlaylists, "device")
         if (file.version >= 3) validatePlaylistFolders(file.playlistFolders)
+        if (file.version >= 4) validateSmartPlaylistRules(file.smartPlaylistRules)
         if (file.version >= 2) {
             require(file.devicePlaylists.any { it.id == OfflinePlaylists.LIKED_ID }) {
                 "Backup is missing the built-in Liked songs playlist"
@@ -285,6 +294,30 @@ object Backup {
         }
     }
 
+    private fun validateSmartPlaylistRules(rules: List<BackupSmartPlaylistRule>) {
+        require(rules.size <= MAX_SMART_PLAYLIST_RULES) {
+            "Backup contains too many Smart Playlist rules"
+        }
+        val ids = HashSet<String>()
+        rules.forEach { rule ->
+            require(rule.id.isNotBlank() && rule.id.length <= 512 && ids.add(rule.id)) {
+                "Backup contains an invalid or duplicate Smart Playlist rule id"
+            }
+            require(rule.name.isNotBlank() && rule.name.length <= MAX_SMART_PLAYLIST_NAME_LENGTH) {
+                "Backup contains an invalid Smart Playlist name"
+            }
+            require(rule.artistContains.length <= MAX_SMART_PLAYLIST_ARTIST_LENGTH) {
+                "Backup contains an oversized Smart Playlist artist filter"
+            }
+            require(rule.minimumPlays in 1..MAX_SMART_PLAYLIST_MINIMUM_PLAYS) {
+                "Backup contains an invalid Smart Playlist play-count filter"
+            }
+            require(runCatching { SmartPlaylistSort.valueOf(rule.sort) }.isSuccess) {
+                "Backup contains an invalid Smart Playlist sort order"
+            }
+        }
+    }
+
     private fun BackupFile.toPreview() = Preview(
         versionName = versionName,
         exportedAt = exportedAt,
@@ -297,6 +330,7 @@ object Backup {
         remotePlaylistMappings = remoteSpotifyImports.size,
         playlistFolders = playlistFolders.size,
         schemaVersion = version,
+        smartPlaylistRules = smartPlaylistRules.size,
     )
 
     private fun Song.toBackupSong() = BackupSong(
@@ -364,6 +398,22 @@ object Backup {
         playlistBrowseIds = playlists,
     )
 
+    private fun SmartPlaylistRule.toBackupSmartPlaylistRule() = BackupSmartPlaylistRule(
+        id = id,
+        name = name,
+        artistContains = artistContains,
+        minimumPlays = minimumPlays,
+        sort = sort.name,
+    )
+
+    private fun BackupSmartPlaylistRule.toSmartPlaylistRule() = SmartPlaylistRule(
+        id = id,
+        name = name,
+        artistContains = artistContains,
+        minimumPlays = minimumPlays,
+        sort = SmartPlaylistSort.valueOf(sort),
+    )
+
     private fun OfflinePlaylist.toBackupPlaylist() = BackupPlaylist(
         id = id,
         title = title,
@@ -392,6 +442,7 @@ object Backup {
         val devicePlaylists: Int,
         val tracks: Int,
         val playlistFolders: Int = 0,
+        val smartPlaylistRules: Int = 0,
     ) {
         val playlistCount: Int get() = spotifyPlaylists + devicePlaylists
     }
@@ -409,6 +460,7 @@ object Backup {
         val remotePlaylistMappings: Int,
         val playlistFolders: Int = 0,
         val schemaVersion: Int,
+        val smartPlaylistRules: Int = 0,
     ) {
         val playlistCount: Int get() = spotifyPlaylists + devicePlaylists
         val trackCount: Int get() = spotifyTracks + deviceTracks
@@ -425,6 +477,7 @@ object Backup {
         val mergedPlaylists: Boolean,
         val playlistFolders: Int = 0,
         val schemaVersion: Int,
+        val smartPlaylistRules: Int = 0,
     ) {
         val playlistCount: Int get() = spotifyPlaylists + devicePlaylists
     }
@@ -432,13 +485,17 @@ object Backup {
     // Kept stable so backups made by earlier BitChord-branded builds remain readable.
     private const val APP_TAG = "bitchord"
     private const val MIN_SCHEMA_VERSION = 1
-    private const val SCHEMA_VERSION = 3
+    private const val SCHEMA_VERSION = 4
     private const val MAX_BACKUP_BYTES = 64 * 1024 * 1024
     private const val MAX_SETTINGS = 20_000
     private const val MAX_SETTING_STRING_LENGTH = 16_384
     private const val MAX_PLAYLISTS = 10_000
     private const val MAX_PLAYLIST_FOLDERS = 10_000
     private const val MAX_FOLDER_MEMBERSHIPS = 100_000
+    private const val MAX_SMART_PLAYLIST_RULES = 20
+    private const val MAX_SMART_PLAYLIST_NAME_LENGTH = 40
+    private const val MAX_SMART_PLAYLIST_ARTIST_LENGTH = 80
+    private const val MAX_SMART_PLAYLIST_MINIMUM_PLAYS = 100
     private const val MAX_TRACKS = 500_000
     private const val MAX_LISTENING_MONTHS = 120
 
@@ -454,6 +511,16 @@ object Backup {
         val remoteSpotifyImports: Map<String, List<String>> = emptyMap(),
         val devicePlaylists: List<BackupPlaylist> = emptyList(),
         val playlistFolders: List<BackupPlaylistFolder> = emptyList(),
+        val smartPlaylistRules: List<BackupSmartPlaylistRule> = emptyList(),
+    )
+
+    @Serializable
+    data class BackupSmartPlaylistRule(
+        val id: String,
+        val name: String,
+        val artistContains: String = "",
+        val minimumPlays: Int = 1,
+        val sort: String = "MOST_PLAYED",
     )
 
     @Serializable

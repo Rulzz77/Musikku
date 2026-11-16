@@ -1511,4 +1511,30 @@
     <string name="playlist_folder_no_playlists">Ainda não há playlists disponíveis.</string>
     <string name="playlist_folder_delete_notice">Excluir esta pasta não exclui playlists nem músicas.</string>
     <string name="playlist_folder_count">%1$d playlists</string>
+
+    <!-- Smart Playlists -->
+    <string name="backup_preview_folders">Pastas de playlists: %1$d</string>
+    <string name="backup_preview_smart_playlists">Regras personalizadas de playlists inteligentes: %1$d</string>
+    <string name="backup_preview_smart_rules_legacy">Este backup foi criado antes do suporte às regras de playlists inteligentes. As regras personalizadas já existentes neste dispositivo serão mantidas.</string>
+    <string name="smart_playlists_title">Playlists inteligentes</string>
+    <string name="smart_playlist_hint">Misturas dinâmicas que acompanham o que você ouve.</string>
+    <string name="smart_playlist_create">Criar playlist inteligente</string>
+    <string name="smart_playlist_edit">Editar playlist inteligente</string>
+    <string name="smart_playlist_edit_action">Editar</string>
+    <string name="smart_playlist_most_played">Mais reproduzidas</string>
+    <string name="smart_playlist_recently_played">Reproduzidas recentemente</string>
+    <string name="smart_playlist_most_listened">Mais ouvidas</string>
+    <string name="smart_playlist_forgotten">Faixas esquecidas</string>
+    <string name="smart_playlist_track_count">%1$d faixas</string>
+    <string name="smart_playlist_empty">Reproduza algumas músicas para criar suas playlists inteligentes. Suas regras salvas também aparecerão aqui.</string>
+    <string name="smart_playlist_loading">Carregando seu histórico de reprodução…</string>
+    <string name="smart_playlist_name">Nome da playlist</string>
+    <string name="smart_playlist_artist_filter">O nome do artista contém (opcional)</string>
+    <string name="smart_playlist_minimum_plays_value">Pelo menos %1$d reproduções</string>
+    <string name="smart_playlist_sort">Ordenar faixas por</string>
+    <string name="smart_playlist_sort_played">Número de reproduções</string>
+    <string name="smart_playlist_sort_recent">Reproduzidas recentemente</string>
+    <string name="smart_playlist_sort_listened">Tempo de reprodução</string>
+    <string name="smart_playlist_editor_description">Estas listas são geradas a partir do seu histórico de reprodução e atualizadas quando as estatísticas são salvas. Elas não alteram suas playlists normais.</string>
+    <string name="smart_playlist_max_reached">Você pode criar até 20 playlists inteligentes personalizadas.</string>
 </resources>

@@ -347,6 +347,7 @@ import com.music.bitchord.ui.screens.HomeScreen
 import com.music.bitchord.ui.screens.LibraryGridPage
 import com.music.bitchord.ui.screens.LibraryScreen
 import com.music.bitchord.ui.screens.PlaylistFoldersSection
+import com.music.bitchord.ui.screens.SmartPlaylistsSection
 import com.music.bitchord.ui.screens.MoodGenrePlaylistsScreen
 import com.music.bitchord.ui.screens.SearchScreen
 import com.music.bitchord.data.settings.SongSort
@@ -3835,6 +3836,19 @@ private fun BitChordApp(
                                         onSave = { id, title, members -> PlaylistFolders.save(id, title, members) },
                                         onDelete = PlaylistFolders::delete,
                                         onOpen = { shelf -> navigator.push(AppRoute.LibraryShowAll(shelf)) },
+                                    )
+                                },
+                                smartPlaylistContent = {
+                                    SmartPlaylistsSection(
+                                        onPlay = { title, songs ->
+                                            if (songs.isNotEmpty()) {
+                                                playFrom(
+                                                    songs,
+                                                    0,
+                                                    QueueSource(title, PlaybackSourceType.BROWSE),
+                                                )
+                                            }
+                                        },
                                     )
                                 },
                             )

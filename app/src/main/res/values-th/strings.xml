@@ -1489,4 +1489,30 @@
     <string name="playlist_folder_no_playlists">ยังไม่มีเพลย์ลิสต์ที่พร้อมใช้งาน</string>
     <string name="playlist_folder_delete_notice">การลบโฟลเดอร์นี้จะไม่ลบเพลย์ลิสต์หรือเพลง</string>
     <string name="playlist_folder_count">เพลย์ลิสต์ %1$d รายการ</string>
+
+    <!-- Smart Playlists -->
+    <string name="backup_preview_folders">โฟลเดอร์เพลย์ลิสต์: %1$d</string>
+    <string name="backup_preview_smart_playlists">กฎเพลย์ลิสต์อัจฉริยะที่กำหนดเอง: %1$d</string>
+    <string name="backup_preview_smart_rules_legacy">ข้อมูลสำรองนี้สร้างขึ้นก่อนที่จะรองรับกฎเพลย์ลิสต์อัจฉริยะ กฎที่กำหนดเองซึ่งมีอยู่ในอุปกรณ์นี้จะไม่เปลี่ยนแปลง</string>
+    <string name="smart_playlists_title">เพลย์ลิสต์อัจฉริยะ</string>
+    <string name="smart_playlist_hint">มิกซ์แบบไดนามิกที่ปรับตามประวัติการฟังของคุณ</string>
+    <string name="smart_playlist_create">สร้างเพลย์ลิสต์อัจฉริยะ</string>
+    <string name="smart_playlist_edit">แก้ไขเพลย์ลิสต์อัจฉริยะ</string>
+    <string name="smart_playlist_edit_action">แก้ไข</string>
+    <string name="smart_playlist_most_played">เล่นบ่อยที่สุด</string>
+    <string name="smart_playlist_recently_played">เล่นล่าสุด</string>
+    <string name="smart_playlist_most_listened">ฟังมากที่สุด</string>
+    <string name="smart_playlist_forgotten">เพลงที่ถูกลืม</string>
+    <string name="smart_playlist_track_count">%1$d เพลง</string>
+    <string name="smart_playlist_empty">ลองเล่นเพลงสักสองสามเพลงเพื่อสร้างเพลย์ลิสต์อัจฉริยะ รายการกฎที่บันทึกไว้จะแสดงที่นี่ด้วย</string>
+    <string name="smart_playlist_loading">กำลังโหลดประวัติการฟัง…</string>
+    <string name="smart_playlist_name">ชื่อเพลย์ลิสต์</string>
+    <string name="smart_playlist_artist_filter">ชื่อศิลปินมีคำว่า (ไม่บังคับ)</string>
+    <string name="smart_playlist_minimum_plays_value">เล่นอย่างน้อย %1$d ครั้ง</string>
+    <string name="smart_playlist_sort">เรียงเพลงตาม</string>
+    <string name="smart_playlist_sort_played">จำนวนครั้งที่เล่น</string>
+    <string name="smart_playlist_sort_recent">เล่นล่าสุด</string>
+    <string name="smart_playlist_sort_listened">ระยะเวลาการฟัง</string>
+    <string name="smart_playlist_editor_description">รายการเหล่านี้สร้างจากประวัติการฟังและจะอัปเดตเมื่อบันทึกสถิติการฟัง โดยไม่เปลี่ยนแปลงเพลย์ลิสต์ปกติของคุณ</string>
+    <string name="smart_playlist_max_reached">คุณสร้างเพลย์ลิสต์อัจฉริยะที่กำหนดเองได้สูงสุด 20 รายการ</string>
 </resources>

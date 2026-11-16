@@ -1400,4 +1400,17 @@
     <string name="replace_playlists">Replace playlists</string>
     <string name="backup_playlists_merged">merged</string>
     <string name="backup_playlists_replaced">replaced</string>
+    <string name="storage_usage_title">Dung lượng lưu trữ MusikKu đang sử dụng</string>
+    <string name="storage_usage_total">Dung lượng được quản lý: %1$s</string>
+    <string name="storage_usage_available">Dung lượng còn trống trên thiết bị: %1$s / %2$s</string>
+    <string name="storage_usage_loading">Đang tính dung lượng lưu trữ…</string>
+    <string name="storage_usage_refresh">Làm mới</string>
+    <string name="storage_downloaded_files">Nhạc và ảnh bìa đã tải xuống</string>
+    <string name="storage_audio_cache">Bộ nhớ đệm âm thanh (sẵn sàng phát ngoại tuyến)</string>
+    <string name="storage_artwork_cache">Bộ nhớ đệm ảnh bìa</string>
+    <string name="storage_canvas_cache">Bộ nhớ đệm video Canvas</string>
+    <string name="storage_usage_safety_note">Các nội dung đã tải xuống sẽ được giữ lại cho đến khi bạn xóa. Xóa bộ nhớ đệm không xóa nhạc cục bộ, danh sách phát hoặc bản sao lưu.</string>
+    <string name="clear_canvas_cache">Xóa bộ nhớ đệm Canvas</string>
+    <string name="clear_canvas_cache_subtitle">Xóa các đoạn video lặp đã lưu trong bộ nhớ đệm. MusikKu sẽ tải lại khi cần.</string>
+    <string name="canvas_cache_cleared">Đã xóa bộ nhớ đệm Canvas</string>
 </resources>

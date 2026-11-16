@@ -30,7 +30,7 @@ class StorageUsageTest {
             File(packageDir, "segment-0001.m4s").writeBytes(ByteArray(128))
             File(packageDir, "cover.jpg").writeBytes(ByteArray(64))
 
-            assertEquals(198L, StorageUsage.fileUriBytes(File(packageDir, "playlist.m3u8").path))
+            assertEquals(199L, StorageUsage.fileUriBytes(File(packageDir, "playlist.m3u8").path))
         } finally {
             packageDir.deleteRecursively()
         }

@@ -1422,4 +1422,17 @@
     <string name="replace_playlists">Replace playlists</string>
     <string name="backup_playlists_merged">merged</string>
     <string name="backup_playlists_replaced">replaced</string>
+    <string name="storage_usage_title">Spazio usato da MusikKu</string>
+    <string name="storage_usage_total">Spazio gestito: %1$s</string>
+    <string name="storage_usage_available">Spazio disponibile sul dispositivo: %1$s su %2$s</string>
+    <string name="storage_usage_loading">Calcolo dello spazio…</string>
+    <string name="storage_usage_refresh">Aggiorna</string>
+    <string name="storage_downloaded_files">Musica e copertine scaricate</string>
+    <string name="storage_audio_cache">Cache audio (pronta per l’ascolto offline)</string>
+    <string name="storage_artwork_cache">Cache delle immagini delle copertine</string>
+    <string name="storage_canvas_cache">Cache video Canvas</string>
+    <string name="storage_usage_safety_note">I download restano disponibili finché non li rimuovi. Svuotare la cache non elimina musica locale, playlist o backup.</string>
+    <string name="clear_canvas_cache">Svuota cache Canvas</string>
+    <string name="clear_canvas_cache_subtitle">Rimuove i clip in loop memorizzati nella cache. MusikKu li scaricherà di nuovo quando necessario.</string>
+    <string name="canvas_cache_cleared">Cache Canvas svuotata</string>
 </resources>

@@ -1375,4 +1375,25 @@
     <string name="playlist_folder_no_playlists">No playlists are available yet.</string>
     <string name="playlist_folder_delete_notice">Deleting this folder won\'t delete any playlists or songs.</string>
     <string name="playlist_folder_count">%1$d playlists</string>
+    <string name="smart_playlists_title">Smart playlists</string>
+    <string name="smart_playlist_hint">Dynamic mixes that follow your listening.</string>
+    <string name="smart_playlist_create">Create smart playlist</string>
+    <string name="smart_playlist_edit">Edit smart playlist</string>
+    <string name="smart_playlist_edit_action">Edit</string>
+    <string name="smart_playlist_most_played">Most played</string>
+    <string name="smart_playlist_recently_played">Recently played</string>
+    <string name="smart_playlist_most_listened">Most listened</string>
+    <string name="smart_playlist_forgotten">Forgotten tracks</string>
+    <string name="smart_playlist_track_count">%1$d tracks</string>
+    <string name="smart_playlist_empty">Play a few songs to build your smart playlists. Your saved rules will appear here too.</string>
+    <string name="smart_playlist_loading">Loading your listening history…</string>
+    <string name="smart_playlist_name">Playlist name</string>
+    <string name="smart_playlist_artist_filter">Artist contains (optional)</string>
+    <string name="smart_playlist_minimum_plays_value">At least %1$d plays</string>
+    <string name="smart_playlist_sort">Order tracks by</string>
+    <string name="smart_playlist_sort_played">Play count</string>
+    <string name="smart_playlist_sort_recent">Recently played</string>
+    <string name="smart_playlist_sort_listened">Listening time</string>
+    <string name="smart_playlist_editor_description">These lists are generated from your listening history and refresh when listening stats are saved. They never change your regular playlists.</string>
+    <string name="smart_playlist_max_reached">You can create up to 20 custom Smart Playlists.</string>
 </resources>

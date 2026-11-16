@@ -1300,6 +1300,7 @@
     <string name="spotify_import_none">Tidak ada lagu itu yang ditemukan di YouTube Music.</string>
     <string name="spotify_import_title">Impor playlist Spotify</string>
     <string name="spotify_import_unmatched">%1$d lagu tidak ditemukan di YouTube Music</string>
+    <string name="spotify_import_lookup_failures">%1$d lagu belum bisa diperiksa karena pencarian YouTube Music gagal. Coba ulangi lagu tersebut.</string>
     <string name="spotify_library_subtitle">Playlist Spotify Anda</string>
     <string name="spotify_sign_in">Masuk dengan Spotify</string>
     <string name="spotify_use_spdc_token">Gunakan token sp_dc</string>

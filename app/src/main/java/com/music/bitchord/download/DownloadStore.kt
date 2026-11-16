@@ -175,9 +175,10 @@ object DownloadStore {
             context.contentResolver.query(
                 MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
                 arrayOf(MediaStore.MediaColumns._ID),
-                "${MediaStore.MediaColumns.RELATIVE_PATH} LIKE ? AND " +
+                "(${MediaStore.MediaColumns.RELATIVE_PATH} = ? OR " +
+                    "${MediaStore.MediaColumns.RELATIVE_PATH} = ?) AND " +
                     "${MediaStore.MediaColumns.IS_PENDING} = 1",
-                arrayOf("$relativePath/%"),
+                arrayOf(relativePath, "$relativePath/"),
                 null,
             )?.use { cursor ->
                 while (cursor.moveToNext()) {

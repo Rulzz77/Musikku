@@ -1435,4 +1435,17 @@
     <string name="download_addon_not_allowed">%1$s 不允許下載，因此你的歌曲將從其他來源儲存。</string>
     <string name="download_addon_needs_lossless_output">%1$s 僅在連接有線、USB 或 LDAC 等級耳機時提供音樂。在連接此類耳機前，下載會略過它，因此你的歌曲將從其他來源儲存。</string>
     <string name="source_downloads_on">允許下載</string>
+    <string name="storage_usage_title">MusikKu 使用的儲存空間</string>
+    <string name="storage_usage_total">已管理的儲存空間：%1$s</string>
+    <string name="storage_usage_available">裝置可用空間：%2$s 中剩餘 %1$s</string>
+    <string name="storage_usage_loading">正在計算儲存空間…</string>
+    <string name="storage_usage_refresh">重新整理</string>
+    <string name="storage_downloaded_files">已下載的音樂與封面</string>
+    <string name="storage_audio_cache">音訊快取（可離線播放）</string>
+    <string name="storage_artwork_cache">封面圖片快取</string>
+    <string name="storage_canvas_cache">Canvas 影片快取</string>
+    <string name="storage_usage_safety_note">下載內容會一直保留，直到你手動刪除。清除快取不會刪除本機音樂、播放清單或備份。</string>
+    <string name="clear_canvas_cache">清除 Canvas 快取</string>
+    <string name="clear_canvas_cache_subtitle">刪除已快取的循環短片。需要時 MusikKu 會重新取得。</string>
+    <string name="canvas_cache_cleared">Canvas 快取已清除</string>
 </resources>

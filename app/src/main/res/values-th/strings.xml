@@ -1466,4 +1466,17 @@
     <string name="replace_playlists">Replace playlists</string>
     <string name="backup_playlists_merged">merged</string>
     <string name="backup_playlists_replaced">replaced</string>
+    <string name="storage_usage_title">พื้นที่จัดเก็บที่ MusikKu ใช้</string>
+    <string name="storage_usage_total">พื้นที่จัดเก็บที่จัดการ: %1$s</string>
+    <string name="storage_usage_available">พื้นที่ว่างในอุปกรณ์: เหลือ %1$s จาก %2$s</string>
+    <string name="storage_usage_loading">กำลังคำนวณพื้นที่จัดเก็บ…</string>
+    <string name="storage_usage_refresh">รีเฟรช</string>
+    <string name="storage_downloaded_files">เพลงและภาพปกที่ดาวน์โหลด</string>
+    <string name="storage_audio_cache">แคชเสียง (พร้อมเล่นแบบออฟไลน์)</string>
+    <string name="storage_artwork_cache">แคชภาพปก</string>
+    <string name="storage_canvas_cache">แคชวิดีโอ Canvas</string>
+    <string name="storage_usage_safety_note">ไฟล์ที่ดาวน์โหลดจะยังคงอยู่จนกว่าคุณจะลบ การล้างแคชจะไม่ลบเพลงในเครื่อง เพลย์ลิสต์ หรือข้อมูลสำรอง</string>
+    <string name="clear_canvas_cache">ล้างแคช Canvas</string>
+    <string name="clear_canvas_cache_subtitle">ลบคลิปวนซ้ำที่เก็บไว้ในแคช MusikKu จะดึงข้อมูลใหม่เมื่อจำเป็น</string>
+    <string name="canvas_cache_cleared">ล้างแคช Canvas แล้ว</string>
 </resources>

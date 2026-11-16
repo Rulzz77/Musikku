@@ -221,10 +221,14 @@ object AudioCache {
      * [SimpleCache] still copes with files disappearing underneath it by
      * dropping the spans that named them.
      */
+    /** Directory holding the persistent audio cache, also used by Storage settings for size reporting. */
+    internal fun storageDirectory(context: Context): File =
+        File(context.noBackupFilesDir, CACHE_DIR_NAME)
+
     fun init(context: Context) {
         appContext = context.applicationContext
         evictor.maxBytes = AppSettings.audioCacheLimitBytes.value
-        val dir = File(context.noBackupFilesDir, CACHE_DIR_NAME)
+        val dir = storageDirectory(context)
         val databaseProvider = StandaloneDatabaseProvider(context)
         migrateFromCacheDir(File(context.cacheDir, LEGACY_CACHE_DIR_NAME), dir, databaseProvider)
         cache = SimpleCache(dir, evictor, databaseProvider)

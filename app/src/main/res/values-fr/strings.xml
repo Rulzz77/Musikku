@@ -1484,4 +1484,17 @@
     <string name="replace_playlists">Replace playlists</string>
     <string name="backup_playlists_merged">merged</string>
     <string name="backup_playlists_replaced">replaced</string>
+    <string name="storage_usage_title">Stockage utilisé par MusikKu</string>
+    <string name="storage_usage_total">Stockage géré : %1$s</string>
+    <string name="storage_usage_available">Espace disponible sur l’appareil : %1$s sur %2$s</string>
+    <string name="storage_usage_loading">Calcul du stockage…</string>
+    <string name="storage_usage_refresh">Actualiser</string>
+    <string name="storage_downloaded_files">Musique et pochettes téléchargées</string>
+    <string name="storage_audio_cache">Cache audio (disponible hors ligne)</string>
+    <string name="storage_artwork_cache">Cache des pochettes</string>
+    <string name="storage_canvas_cache">Cache vidéo Canvas</string>
+    <string name="storage_usage_safety_note">Les téléchargements sont conservés jusqu’à leur suppression. Vider les caches ne supprime ni la musique locale, ni les playlists, ni les sauvegardes.</string>
+    <string name="clear_canvas_cache">Vider le cache Canvas</string>
+    <string name="clear_canvas_cache_subtitle">Supprimer les clips en boucle mis en cache. MusikKu les récupérera à nouveau si nécessaire.</string>
+    <string name="canvas_cache_cleared">Cache Canvas vidé</string>
 </resources>

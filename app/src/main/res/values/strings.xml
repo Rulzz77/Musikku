@@ -1352,4 +1352,17 @@
     <string name="diwali_title">BitChord wishes you a Happy Diwali</string>
     <string name="diwali_subtitle">May this festival of lights fill your home with joy and your days with music.</string>
     <string name="diwali_cta">Let\'s Celebrate</string>
+    <string name="storage_usage_title">Storage used by MusikKu</string>
+    <string name="storage_usage_total">Managed storage: %1$s</string>
+    <string name="storage_usage_available">Device space: %1$s free of %2$s</string>
+    <string name="storage_usage_loading">Calculating storage…</string>
+    <string name="storage_usage_refresh">Refresh</string>
+    <string name="storage_downloaded_files">Downloaded music and artwork</string>
+    <string name="storage_audio_cache">Audio cache (offline-ready)</string>
+    <string name="storage_artwork_cache">Artwork image cache</string>
+    <string name="storage_canvas_cache">Canvas video cache</string>
+    <string name="storage_usage_safety_note">Downloads stay until you remove them. Clearing caches does not delete local music, playlists, or backups.</string>
+    <string name="clear_canvas_cache">Clear Canvas cache</string>
+    <string name="clear_canvas_cache_subtitle">Remove cached looping clips. MusikKu fetches them again when needed.</string>
+    <string name="canvas_cache_cleared">Canvas cache cleared</string>
 </resources>

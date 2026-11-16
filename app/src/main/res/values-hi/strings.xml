@@ -1483,4 +1483,17 @@
     <string name="replace_playlists">Replace playlists</string>
     <string name="backup_playlists_merged">merged</string>
     <string name="backup_playlists_replaced">replaced</string>
+    <string name="storage_usage_title">MusikKu द्वारा उपयोग किया गया स्टोरेज</string>
+    <string name="storage_usage_total">प्रबंधित स्टोरेज: %1$s</string>
+    <string name="storage_usage_available">डिवाइस में उपलब्ध जगह: %2$s में से %1$s खाली</string>
+    <string name="storage_usage_loading">स्टोरेज की गणना हो रही है…</string>
+    <string name="storage_usage_refresh">रीफ़्रेश करें</string>
+    <string name="storage_downloaded_files">डाउनलोड किया गया संगीत और आर्टवर्क</string>
+    <string name="storage_audio_cache">ऑडियो कैश (ऑफ़लाइन चलाने के लिए तैयार)</string>
+    <string name="storage_artwork_cache">आर्टवर्क इमेज कैश</string>
+    <string name="storage_canvas_cache">Canvas वीडियो कैश</string>
+    <string name="storage_usage_safety_note">डाउनलोड तब तक सुरक्षित रहते हैं जब तक आप उन्हें हटाते नहीं। कैश साफ़ करने से स्थानीय संगीत, प्लेलिस्ट या बैकअप नहीं हटते।</string>
+    <string name="clear_canvas_cache">Canvas कैश साफ़ करें</string>
+    <string name="clear_canvas_cache_subtitle">कैश में रखी गई लूपिंग क्लिप हटाएँ। ज़रूरत पड़ने पर MusikKu उन्हें फिर से प्राप्त करेगा।</string>
+    <string name="canvas_cache_cleared">Canvas कैश साफ़ किया गया</string>
 </resources>

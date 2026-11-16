@@ -8,6 +8,8 @@ import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
 import java.io.File
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * Disk cache for canvas clips — the looping video some releases publish
@@ -42,14 +44,27 @@ object CanvasCache {
 
     private lateinit var cache: SimpleCache
 
+    /** Directory used for Canvas clips, reported by the Storage page. */
+    internal fun storageDirectory(context: Context): File = File(context.cacheDir, CACHE_DIR_NAME)
+
     /** Opened once per process, alongside [com.music.bitchord.playback.AudioCache.init]. */
     fun init(context: Context) {
         cache = SimpleCache(
-            File(context.cacheDir, "canvas"),
+            storageDirectory(context),
             LeastRecentlyUsedCacheEvictor(CACHE_LIMIT_BYTES),
             StandaloneDatabaseProvider(context),
         )
     }
+
+    /** Removes only cached Canvas clips; the next playback fetches them again. */
+    suspend fun clear() = withContext(Dispatchers.IO) {
+        if (!::cache.isInitialized) return@withContext
+        cache.keys.toList().forEach { key ->
+            runCatching { cache.removeResource(key) }
+        }
+    }
+
+    private const val CACHE_DIR_NAME = "canvas"
 
     /**
      * [upstream] wrapped so a clip already on disk never touches the

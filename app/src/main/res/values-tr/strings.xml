@@ -1440,4 +1440,17 @@
     <string name="replace_playlists">Replace playlists</string>
     <string name="backup_playlists_merged">merged</string>
     <string name="backup_playlists_replaced">replaced</string>
+    <string name="storage_usage_title">MusikKu tarafından kullanılan depolama alanı</string>
+    <string name="storage_usage_total">Yönetilen depolama: %1$s</string>
+    <string name="storage_usage_available">Cihazda kullanılabilir alan: %2$s içinde %1$s boş</string>
+    <string name="storage_usage_loading">Depolama hesaplanıyor…</string>
+    <string name="storage_usage_refresh">Yenile</string>
+    <string name="storage_downloaded_files">İndirilen müzik ve kapak görselleri</string>
+    <string name="storage_audio_cache">Ses önbelleği (çevrimdışı dinlemeye hazır)</string>
+    <string name="storage_artwork_cache">Kapak görseli önbelleği</string>
+    <string name="storage_canvas_cache">Canvas video önbelleği</string>
+    <string name="storage_usage_safety_note">İndirilenler siz silene kadar saklanır. Önbelleği temizlemek yerel müzikleri, çalma listelerini veya yedekleri silmez.</string>
+    <string name="clear_canvas_cache">Canvas önbelleğini temizle</string>
+    <string name="clear_canvas_cache_subtitle">Önbelleğe alınmış döngü kliplerini kaldırır. MusikKu gerektiğinde bunları yeniden alır.</string>
+    <string name="canvas_cache_cleared">Canvas önbelleği temizlendi</string>
 </resources>

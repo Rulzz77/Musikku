@@ -1460,4 +1460,17 @@
     <string name="replace_playlists">Ganti playlist</string>
     <string name="backup_playlists_merged">digabung</string>
     <string name="backup_playlists_replaced">diganti</string>
+    <string name="storage_usage_title">Penyimpanan yang digunakan MusikKu</string>
+    <string name="storage_usage_total">Penyimpanan terkelola: %1$s</string>
+    <string name="storage_usage_available">Ruang perangkat: %1$s kosong dari %2$s</string>
+    <string name="storage_usage_loading">Menghitung penyimpanan…</string>
+    <string name="storage_usage_refresh">Muat ulang</string>
+    <string name="storage_downloaded_files">Musik dan artwork yang diunduh</string>
+    <string name="storage_audio_cache">Cache audio (siap diputar offline)</string>
+    <string name="storage_artwork_cache">Cache gambar artwork</string>
+    <string name="storage_canvas_cache">Cache video Canvas</string>
+    <string name="storage_usage_safety_note">Unduhan tetap tersimpan sampai kamu menghapusnya. Membersihkan cache tidak menghapus musik lokal, playlist, atau cadangan.</string>
+    <string name="clear_canvas_cache">Bersihkan cache Canvas</string>
+    <string name="clear_canvas_cache_subtitle">Hapus klip berulang yang tersimpan di cache. MusikKu akan mengunduhnya lagi saat diperlukan.</string>
+    <string name="canvas_cache_cleared">Cache Canvas berhasil dibersihkan</string>
 </resources>

@@ -154,6 +154,8 @@ import com.music.bitchord.ui.performance.resolvePerformanceRefreshRate
 import com.music.bitchord.ui.performance.supportedPerformanceRefreshRates
 import com.music.bitchord.data.model.Account
 import com.music.bitchord.data.LocalMediaRepository
+import com.music.bitchord.data.canvas.CanvasCache
+import com.music.bitchord.data.storage.StorageUsage
 import com.music.bitchord.data.NerdStats
 import com.music.bitchord.data.scrobbling.LastFM
 import com.music.bitchord.data.listentogether.ListenTogether
@@ -345,9 +347,20 @@ fun SettingsScreen(
     var pendingBackupUri by remember { mutableStateOf<Uri?>(null) }
     var confirmImport by remember { mutableStateOf(false) }
     var confirmClearSongCache by remember { mutableStateOf(false) }
+    var storageUsage by remember { mutableStateOf<StorageUsage.Snapshot?>(null) }
+    var storageUsageLoading by remember { mutableStateOf(false) }
+    var storageRefreshSignal by remember { mutableStateOf(0) }
     var showPerformanceWarning by remember { mutableStateOf(false) }
     var showPerformanceConfirmation by remember { mutableStateOf(false) }
     val backupScope = rememberCoroutineScope()
+
+    LaunchedEffect(section, storageRefreshSignal) {
+        if (section == SettingsCategory.STORAGE) {
+            storageUsageLoading = true
+            storageUsage = runCatching { StorageUsage.inspect(context) }.getOrNull()
+            storageUsageLoading = false
+        }
+    }
 
     val batterySettingsLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
@@ -1464,6 +1477,14 @@ fun SettingsScreen(
             }
         }
 
+        if (section == SettingsCategory.STORAGE) {
+            StorageUsageOverview(
+                usage = storageUsage,
+                loading = storageUsageLoading,
+                onRefresh = { storageRefreshSignal++ },
+            )
+        }
+
         val cacheUnlimited = cacheLimitBytes == AppSettings.UNLIMITED_CACHE_LIMIT_BYTES
         // The slider's last stop, one step past the largest fixed size, is
         // "Unlimited" — see [AppSettings.setAudioCacheLimitBytes].
@@ -1526,7 +1547,27 @@ fun SettingsScreen(
                         val loader = SingletonImageLoader.get(context)
                         loader.memoryCache?.clear()
                         loader.diskCache?.clear()
+                        storageRefreshSignal++
                         Toast.makeText(context, context.getString(R.string.image_cache_cleared), Toast.LENGTH_SHORT).show()
+                    },
+                )
+            }
+            val clearCanvasCacheTitle = stringResource(R.string.clear_canvas_cache)
+            row(clearCanvasCacheTitle, "cache", "canvas", "video artwork", "free space") {
+                SettingsRow(
+                    icon = SfIcons.DeleteSweep,
+                    title = clearCanvasCacheTitle,
+                    subtitle = stringResource(R.string.clear_canvas_cache_subtitle),
+                    onClick = {
+                        backupScope.launch {
+                            CanvasCache.clear()
+                            storageRefreshSignal++
+                            Toast.makeText(
+                                context,
+                                context.getString(R.string.canvas_cache_cleared),
+                                Toast.LENGTH_SHORT,
+                            ).show()
+                        }
                     },
                 )
             }
@@ -1881,6 +1922,7 @@ fun SettingsScreen(
                 TextButton(onClick = {
                     confirmClearSongCache = false
                     AudioCache.clear {
+                        storageRefreshSignal++
                         Toast.makeText(context, context.getString(R.string.song_cache_cleared), Toast.LENGTH_SHORT).show()
                     }
                 }) {
@@ -3165,5 +3207,100 @@ internal fun <T> ChoiceGroup(
                 }
             }
         }
+    }
+}
+
+
+/** Compact inventory for storage the app manages without claiming ownership of the user's local library. */
+@Composable
+private fun StorageUsageOverview(
+    usage: StorageUsage.Snapshot?,
+    loading: Boolean,
+    onRefresh: () -> Unit,
+) {
+    SettingsGroup(topSpacing = 0.dp) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = ROW_INSET, vertical = 16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.storage_usage_title),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        text = if (usage == null) {
+                            stringResource(R.string.storage_usage_loading)
+                        } else {
+                            stringResource(
+                                R.string.storage_usage_total,
+                                StorageUsage.formatBytes(usage.managedBytes),
+                            )
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                TextButton(onClick = onRefresh, enabled = !loading) {
+                    Text(stringResource(R.string.storage_usage_refresh))
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            StorageUsageLine(
+                label = stringResource(R.string.storage_downloaded_files),
+                bytes = usage?.downloadedBytes,
+            )
+            StorageUsageLine(
+                label = stringResource(R.string.storage_audio_cache),
+                bytes = usage?.audioCacheBytes,
+            )
+            StorageUsageLine(
+                label = stringResource(R.string.storage_artwork_cache),
+                bytes = usage?.imageCacheBytes,
+            )
+            StorageUsageLine(
+                label = stringResource(R.string.storage_canvas_cache),
+                bytes = usage?.canvasCacheBytes,
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = if (usage == null) {
+                    stringResource(R.string.storage_usage_loading)
+                } else {
+                    stringResource(
+                        R.string.storage_usage_available,
+                        StorageUsage.formatBytes(usage.availableBytes),
+                        StorageUsage.formatBytes(usage.totalDeviceBytes),
+                    )
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = stringResource(R.string.storage_usage_safety_note),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun StorageUsageLine(label: String, bytes: Long?) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Text(
+            text = bytes?.let(StorageUsage::formatBytes) ?: "—",
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }

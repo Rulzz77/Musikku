@@ -1515,4 +1515,17 @@
     <string name="replace_playlists">Replace playlists</string>
     <string name="backup_playlists_merged">merged</string>
     <string name="backup_playlists_replaced">replaced</string>
+    <string name="storage_usage_title">Хранилище, используемое MusikKu</string>
+    <string name="storage_usage_total">Управляемое хранилище: %1$s</string>
+    <string name="storage_usage_available">Свободно на устройстве: %1$s из %2$s</string>
+    <string name="storage_usage_loading">Подсчёт занятого места…</string>
+    <string name="storage_usage_refresh">Обновить</string>
+    <string name="storage_downloaded_files">Загруженная музыка и обложки</string>
+    <string name="storage_audio_cache">Аудиокэш (доступен офлайн)</string>
+    <string name="storage_artwork_cache">Кэш изображений обложек</string>
+    <string name="storage_canvas_cache">Видеокэш Canvas</string>
+    <string name="storage_usage_safety_note">Загрузки хранятся, пока вы их не удалите. Очистка кэша не удаляет локальную музыку, плейлисты и резервные копии.</string>
+    <string name="clear_canvas_cache">Очистить кэш Canvas</string>
+    <string name="clear_canvas_cache_subtitle">Удалить кэшированные зацикленные клипы. MusikKu загрузит их снова при необходимости.</string>
+    <string name="canvas_cache_cleared">Кэш Canvas очищен</string>
 </resources>

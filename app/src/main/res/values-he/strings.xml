@@ -1488,4 +1488,17 @@
     <string name="replace_playlists">Replace playlists</string>
     <string name="backup_playlists_merged">merged</string>
     <string name="backup_playlists_replaced">replaced</string>
+    <string name="storage_usage_title">אחסון בשימוש של MusikKu</string>
+    <string name="storage_usage_total">אחסון מנוהל: %1$s</string>
+    <string name="storage_usage_available">מקום פנוי במכשיר: %1$s מתוך %2$s</string>
+    <string name="storage_usage_loading">מחשב את נפח האחסון…</string>
+    <string name="storage_usage_refresh">רענון</string>
+    <string name="storage_downloaded_files">מוזיקה ועטיפות שהורדו</string>
+    <string name="storage_audio_cache">מטמון שמע (מוכן להפעלה במצב לא מקוון)</string>
+    <string name="storage_artwork_cache">מטמון תמונות עטיפה</string>
+    <string name="storage_canvas_cache">מטמון וידאו של Canvas</string>
+    <string name="storage_usage_safety_note">ההורדות נשמרות עד למחיקתן. ניקוי מטמון לא מוחק מוזיקה מקומית, פלייליסטים או גיבויים.</string>
+    <string name="clear_canvas_cache">ניקוי מטמון Canvas</string>
+    <string name="clear_canvas_cache_subtitle">הסרת קטעי הלולאה שבמטמון. MusikKu יוריד אותם שוב בעת הצורך.</string>
+    <string name="canvas_cache_cleared">מטמון Canvas נוקה</string>
 </resources>

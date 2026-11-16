@@ -120,6 +120,9 @@ object Downloads {
 
     private val _savedMetadata = MutableStateFlow<Map<String, SavedSongMetadata>>(emptyMap())
 
+    /** Read-only download metadata used by storage reporting and the Downloads UI. */
+    internal val savedMetadata: StateFlow<Map<String, SavedSongMetadata>> = _savedMetadata.asStateFlow()
+
     private val _collections = MutableStateFlow<Map<String, SavedCollection>>(emptyMap())
 
     /**

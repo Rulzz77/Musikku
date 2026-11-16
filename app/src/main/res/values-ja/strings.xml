@@ -1461,4 +1461,17 @@
     <string name="replace_playlists">Replace playlists</string>
     <string name="backup_playlists_merged">merged</string>
     <string name="backup_playlists_replaced">replaced</string>
+    <string name="storage_usage_title">MusikKu が使用しているストレージ</string>
+    <string name="storage_usage_total">管理対象ストレージ: %1$s</string>
+    <string name="storage_usage_available">端末の空き容量: %2$s 中 %1$s</string>
+    <string name="storage_usage_loading">ストレージを計算中…</string>
+    <string name="storage_usage_refresh">更新</string>
+    <string name="storage_downloaded_files">ダウンロードした音楽とアートワーク</string>
+    <string name="storage_audio_cache">オーディオキャッシュ（オフライン再生可能）</string>
+    <string name="storage_artwork_cache">アートワーク画像キャッシュ</string>
+    <string name="storage_canvas_cache">Canvas 動画キャッシュ</string>
+    <string name="storage_usage_safety_note">ダウンロードした曲は削除するまで保持されます。キャッシュを消去しても、ローカル音楽、プレイリスト、バックアップは削除されません。</string>
+    <string name="clear_canvas_cache">Canvas キャッシュを消去</string>
+    <string name="clear_canvas_cache_subtitle">キャッシュされたループ動画を削除します。必要に応じて MusikKu が再取得します。</string>
+    <string name="canvas_cache_cleared">Canvas キャッシュを消去しました</string>
 </resources>

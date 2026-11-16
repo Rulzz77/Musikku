@@ -82,6 +82,6 @@ class BackupFormatTest {
         assertEquals(0.5f, Backup.PrefValue.of(0.5f)?.decoded())
         assertEquals(42L, Backup.PrefValue.of(42L)?.decoded())
         assertEquals(true, Backup.PrefValue.of(true)?.decoded())
-        assertTrue(Backup.PrefValue.of(Float.NaN)?.isValid() == false)
+        assertTrue(!Backup.PrefValue("float", "NaN").isValid())
     }
 }

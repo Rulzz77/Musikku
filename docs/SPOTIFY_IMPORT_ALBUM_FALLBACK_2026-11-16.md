@@ -2,7 +2,7 @@
 
 ## What changed
 
-When the standard title/artist lookup, secondary credited-artist search, and optional language lookup have not produced a confident match, Android Spotify import now tries one bounded album-qualified query:
+When the standard title/artist lookup and secondary credited-artist search have not produced a confident match, Android Spotify import now tries one bounded album-qualified query before the optional language-specific fallback:
 
 - `<primary artist> <track title> <Spotify album>`
 

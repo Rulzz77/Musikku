@@ -91,8 +91,8 @@ object Backup {
     }
 
     /**
-     * Restores settings and listening totals, then either merges or replaces
-     * both local playlist collections. Cloud account credentials and
+     * Restores settings, listening totals, playlist collections, folders,
+     * and (for schema v4) custom Smart Playlist rules. Credentials and
      * device-specific download indexes are left untouched.
      */
     suspend fun importFrom(
@@ -112,9 +112,8 @@ object Backup {
             val remoteImports = file.remoteSpotifyImports.mapValues { (_, ids) -> ids.toSet() }
 
             // All parsing and structural validation happens before the first
-            // write. Commit both playlist stores before replacing settings or
-            // listening history, and roll the first store back if the second
-            // cannot be committed.
+            // write. Commit the collection stores together and roll each one
+            // back if any playlist, folder, or Smart Playlist write fails.
             if (file.version >= 2) {
                 val previousSpotifyPlaylists = LocalPlaylistStore.playlists.value.toList()
                 val previousRemoteImports = LocalPlaylistStore.remoteSpotifyImportsSnapshot()
@@ -183,7 +182,7 @@ object Backup {
                 mergedPlaylists = mergePlaylists,
                 playlistFolders = PlaylistFolders.folders.value.size,
                 schemaVersion = file.version,
-                smartPlaylistRules = SmartPlaylists.rules.value.size,
+                smartPlaylistRules = if (file.version >= 4) SmartPlaylists.rules.value.size else 0,
             )
         }
     }

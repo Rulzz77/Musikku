@@ -7,7 +7,6 @@ import com.music.bitchord.data.OfflinePlaylist
 import com.music.bitchord.data.OfflinePlaylists
 import com.music.bitchord.data.model.ArtistRef
 import com.music.bitchord.data.model.Song
-import com.music.bitchord.playback.LastPlayed
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.settings.SearchHistory
 import com.music.bitchord.data.spotify.LocalPlaylist
@@ -81,7 +80,6 @@ object Backup {
                 spotifyPlaylists = spotifyPlaylists.size,
                 devicePlaylists = devicePlaylists.size,
                 tracks = spotifyPlaylists.sumOf { it.songs.size } + devicePlaylists.sumOf { it.songs.size },
-                queueTracks = file.lastPlayedQueue?.songs?.size ?: 0,
             )
         }
     }
@@ -131,7 +129,6 @@ object Backup {
                 spotifyPlaylists = spotifyPlaylists.size,
                 devicePlaylists = devicePlaylists.size,
                 tracks = spotifyPlaylists.sumOf { it.songs.size } + devicePlaylists.sumOf { it.songs.size },
-                queueTracks = file.lastPlayedQueue?.songs?.size ?: 0,
                 from = file.versionName,
                 at = file.exportedAt,
                 mergedPlaylists = mergePlaylists,
@@ -175,18 +172,7 @@ object Backup {
         }
         val trackCount = file.spotifyPlaylists.sumOf { it.songs.size } +
             file.devicePlaylists.sumOf { it.songs.size }
-        require(trackCount <= MAX_TRACKS) { "Backup contains too many playlist tracks" }
-        file.lastPlayedQueue?.let { queue ->
-            require(queue.songs.size <= MAX_QUEUE_TRACKS) { "Backup contains too many queued tracks" }
-            require(queue.index in queue.songs.indices || queue.songs.isEmpty()) {
-                "Backup contains an invalid playback queue position"
-            }
-            require(queue.positionMs >= 0L) { "Backup contains an invalid playback queue position" }
-            require(queue.songs.all { it.videoId.isNotBlank() || !it.localUri.isNullOrBlank() }) {
-                "Backup contains an invalid track in the playback queue"
-            }
-        }
-        require(file.remoteSpotifyImports.size <= MAX_PLAYLISTS) {
+        require(trackCount <= MAX_TRACKS) { "Backup contains too many playlist tracks" }        require(file.remoteSpotifyImports.size <= MAX_PLAYLISTS) {
             "Backup contains too many remote playlist mappings"
         }
         file.remoteSpotifyImports.forEach { (playlistId, ids) ->
@@ -234,7 +220,6 @@ object Backup {
         deviceTracks = devicePlaylists.sumOf { it.songs.size },
         remotePlaylistMappings = remoteSpotifyImports.size,
         schemaVersion = version,
-        queueTracks = lastPlayedQueue?.songs?.size ?: 0,
         queueIndex = lastPlayedQueue?.takeIf { it.songs.isNotEmpty() }
             ?.let { (it.index + 1).coerceIn(1, it.songs.size) } ?: 0,
     )
@@ -251,16 +236,7 @@ object Backup {
         albumName = albumName,
         isVideo = isVideo,
         isVideoOrigin = isVideoOrigin,
-        queueTier = queueTier.name,
-        queueEntryId = queueEntryId,
-        radioName = radioName,
-        playbackSource = playbackSource,
-        playbackSourceType = playbackSourceType?.name,
-        playbackSourceId = playbackSourceId,
         isExplicit = isExplicit,
-        sourceQuality = sourceQuality,
-        sourceHiRes = sourceHiRes,
-        isPodcastEpisode = isPodcastEpisode,
         localUri = localUri,
         localPath = localPath,
         localDateAddedSeconds = localDateAddedSeconds,
@@ -280,20 +256,7 @@ object Backup {
         albumName = albumName,
         isVideo = isVideo,
         isVideoOrigin = isVideoOrigin || isVideo,
-        queueTier = queueTier?.let {
-            runCatching { com.music.bitchord.data.model.QueueTier.valueOf(it) }.getOrNull()
-        } ?: com.music.bitchord.data.model.QueueTier.CONTEXT,
-        queueEntryId = queueEntryId,
-        radioName = radioName,
-        playbackSource = playbackSource,
-        playbackSourceType = playbackSourceType?.let {
-            runCatching { com.music.bitchord.data.model.PlaybackSourceType.valueOf(it) }.getOrNull()
-        },
-        playbackSourceId = playbackSourceId,
         isExplicit = isExplicit,
-        sourceQuality = sourceQuality,
-        sourceHiRes = sourceHiRes,
-        isPodcastEpisode = isPodcastEpisode,
         localUri = localUri,
         localPath = localPath,
         localDateAddedSeconds = localDateAddedSeconds,
@@ -335,7 +298,6 @@ object Backup {
         val spotifyPlaylists: Int,
         val devicePlaylists: Int,
         val tracks: Int,
-        val queueTracks: Int,
     ) {
         val playlistCount: Int get() = spotifyPlaylists + devicePlaylists
     }
@@ -352,8 +314,6 @@ object Backup {
         val deviceTracks: Int,
         val remotePlaylistMappings: Int,
         val schemaVersion: Int,
-        val queueTracks: Int,
-        val queueIndex: Int,
     ) {
         val playlistCount: Int get() = spotifyPlaylists + devicePlaylists
         val trackCount: Int get() = spotifyTracks + deviceTracks
@@ -365,7 +325,6 @@ object Backup {
         val spotifyPlaylists: Int,
         val devicePlaylists: Int,
         val tracks: Int,
-        val queueTracks: Int,
         val from: String,
         val at: String,
         val mergedPlaylists: Boolean,
@@ -397,25 +356,7 @@ object Backup {
         val spotifyPlaylists: List<BackupPlaylist> = emptyList(),
         val remoteSpotifyImports: Map<String, List<String>> = emptyMap(),
         val devicePlaylists: List<BackupPlaylist> = emptyList(),
-        val lastPlayedQueue: BackupQueue? = null,
     )
-
-    @Serializable
-    data class BackupQueue(
-        val songs: List<BackupSong> = emptyList(),
-        val index: Int = 0,
-        val positionMs: Long = 0L,
-    ) {
-        fun toSnapshot(): LastPlayed.Snapshot? {
-            if (songs.isEmpty()) return null
-            val restoredSongs = songs.map { it.toSong() }
-            return LastPlayed.Snapshot(
-                songs = restoredSongs,
-                index = index.coerceIn(restoredSongs.indices),
-                positionMs = positionMs.coerceAtLeast(0L),
-            )
-        }
-    }
 
     @Serializable
     data class BackupPlaylist(
@@ -438,16 +379,7 @@ object Backup {
         val albumName: String? = null,
         val isVideo: Boolean = false,
         val isVideoOrigin: Boolean = false,
-        val queueTier: String? = null,
-        val queueEntryId: String? = null,
-        val radioName: String? = null,
-        val playbackSource: String? = null,
-        val playbackSourceType: String? = null,
-        val playbackSourceId: String? = null,
         val isExplicit: Boolean? = null,
-        val sourceQuality: String? = null,
-        val sourceHiRes: Boolean = false,
-        val isPodcastEpisode: Boolean = false,
         val localUri: String? = null,
         val localPath: String? = null,
         val localDateAddedSeconds: Long? = null,

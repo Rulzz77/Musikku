@@ -1355,6 +1355,7 @@
     <string name="spotify_import_none">Ни один из этих треков не найден на YouTube Music.</string>
     <string name="spotify_import_title">Импорт плейлиста из Spotify</string>
     <string name="spotify_import_unmatched">%1$d треков не найдено на YouTube Music</string>
+    <string name="spotify_import_lookup_failures">Не удалось проверить %1$d треков из-за сбоя поиска YouTube Music. Повторите поиск этих треков.</string>
     <string name="spotify_library_subtitle">Ваши плейлисты Spotify</string>
     <string name="spotify_sign_in">Войти через Spotify</string>
     <string name="spotify_use_spdc_token">Использовать токен sp_dc</string>

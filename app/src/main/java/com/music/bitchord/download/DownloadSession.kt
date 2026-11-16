@@ -68,6 +68,10 @@ object DownloadSession {
         val from: String? = null,
         /** Ask order, so the list reads the way the queue drains. */
         val sequence: Long,
+        /** Work owned by the foreground download queue, not a WorkManager sync. */
+        val recoverable: Boolean = true,
+        /** The request came from the Cached songs shelf and should keep that copy preference. */
+        val fromCache: Boolean = false,
     )
 
     data class State(
@@ -110,6 +114,43 @@ object DownloadSession {
     private val _state = MutableStateFlow(State())
     val state: StateFlow<State> = _state.asStateFlow()
 
+    @Volatile
+    private var persistence: ((State) -> Unit)? = null
+
+    /**
+     * Installs the platform-owned persistence callback. The session stays a
+     * pure in-memory model; Android owns the durable representation and calls
+     * [restore] once its storage is open.
+     */
+    fun installPersistence(listener: ((State) -> Unit)?) {
+        persistence = listener
+    }
+
+    /** Restore a previous session, converting interrupted running rows to a fresh queued attempt. */
+    fun restore(restored: State) {
+        val items = restored.items
+            .filter { it.recoverable }
+            .map { item ->
+                if (item.progress is DownloadProgress.Running) {
+                    item.copy(progress = DownloadProgress.Queued)
+                } else {
+                    item
+                }
+            }
+        _state.value = restored.copy(items = items)
+        val latest = maxOf(
+            restored.seenAt,
+            restored.settledAt,
+            items.maxOfOrNull { it.sequence } ?: 0L,
+        )
+        clock.set(latest)
+    }
+
+    /** Persist a sanitised snapshot after startup recovery has rewritten Running rows as Queued. */
+    fun persistNow() {
+        persistence?.invoke(_state.value)
+    }
+
     /**
      * A logical clock, shared by the ask order and the two timestamps.
      *
@@ -141,15 +182,23 @@ object DownloadSession {
      * and two rows for one song would leave the failure on screen next to its
      * own retry.
      */
-    fun queued(song: Song, from: String? = null) {
+    fun queued(
+        song: Song,
+        from: String? = null,
+        recoverable: Boolean = true,
+        fromCache: Boolean? = null,
+    ) {
         update { state ->
             val existing = state.items.indexOfFirst { it.videoId == song.videoId }
+            val previous = state.items.getOrNull(existing)
             val item = Item(
                 videoId = song.videoId,
                 song = song,
                 progress = DownloadProgress.Queued,
-                from = from ?: state.items.getOrNull(existing)?.from,
-                sequence = if (existing >= 0) state.items[existing].sequence else tick(),
+                from = from ?: previous?.from,
+                sequence = previous?.sequence ?: tick(),
+                recoverable = recoverable,
+                fromCache = fromCache ?: previous?.fromCache ?: false,
             )
             val items = if (existing >= 0) {
                 state.items.toMutableList().also { it[existing] = item }
@@ -212,10 +261,15 @@ object DownloadSession {
     /** Empty the list outright, at the user's request. */
     fun clear() {
         _state.value = State()
+        persistence?.invoke(_state.value)
     }
 
     private fun set(videoId: String, progress: DownloadProgress) {
-        update { state ->
+        // Byte-level progress can arrive many times a second. The durable
+        // checkpoint is the transition into Running; a restart always begins
+        // that track from a clean destination rather than trusting partial bytes.
+        val persist = progress !is DownloadProgress.Running || progress.fraction <= 0f
+        update(persist = persist) { state ->
             val index = state.items.indexOfFirst { it.videoId == videoId }
             if (index < 0) return@update state
             val items = state.items.toMutableList().also {
@@ -243,7 +297,8 @@ object DownloadSession {
      * on screen at whatever it last managed to write. [MutableStateFlow.update]
      * is the compare-and-set version of the same line.
      */
-    private inline fun update(block: (State) -> State) {
+    private inline fun update(persist: Boolean = true, block: (State) -> State) {
         _state.update(block)
+        if (persist) persistence?.invoke(_state.value)
     }
 }

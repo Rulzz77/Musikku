@@ -103,14 +103,13 @@ object Backup {
             val remoteImports = file.remoteSpotifyImports.mapValues { (_, ids) -> ids.toSet() }
 
             // All parsing and structural validation happens before the first
-            // write. Schema 1 predates playlist and queue backup sections, so
-            // importing it must not erase data those older files never held.
+            // write. Schema 1 predates playlist sections, so importing it must
+            // not erase data those older files never held.
             ListeningStats.importAll(file.listening)
             AppSettings.importPrefs(settings)
             if (file.version >= 2) {
                 LocalPlaylistStore.restoreFromBackup(spotifyPlaylists, remoteImports, mergePlaylists)
                 OfflinePlaylists.restoreFromBackup(devicePlaylists, mergePlaylists)
-                }
             }
             // Search history lives in the same preference file as AppSettings.
             SearchHistory.reload()

@@ -3826,8 +3826,8 @@ private fun BitChordApp(
                                 contentPadding = listPadding,
                                 links = libraryLinks(),
                                 deviceItems = libraryDeviceItems(downloadedReleases) +
-                                    localPlaylistItems.filter { it.browseId !in folderedPlaylistBrowseIds } +
-                                    offlinePlaylistItems.filter { it.browseId !in folderedPlaylistBrowseIds },
+                                    localPlaylistItems.filter { it.browseId == null || it.browseId !in folderedPlaylistBrowseIds } +
+                                    offlinePlaylistItems.filter { it.browseId == null || it.browseId !in folderedPlaylistBrowseIds },
                                 playlistFolderContent = {
                                     PlaylistFoldersSection(
                                         folders = playlistFolders,

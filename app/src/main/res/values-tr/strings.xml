@@ -1280,6 +1280,7 @@
     <string name="spotify_import_none">Bu şarkılardan hiçbiri YouTube Music’de bulunamadı.</string>
     <string name="spotify_import_title">Spotify çalma listesini içe aktar</string>
     <string name="spotify_import_unmatched">%1$d şarkı YouTube Music’de bulunamadı</string>
+    <string name="spotify_import_lookup_failures">YouTube Music araması başarısız olduğu için %1$d şarkı kontrol edilemedi. Bu şarkıları yeniden arayın.</string>
     <string name="spotify_library_subtitle">Spotify çalma listeleriniz</string>
     <string name="spotify_sign_in">Spotify ile oturum aç</string>
     <string name="spotify_use_spdc_token">sp_dc token\'ı kullan</string>

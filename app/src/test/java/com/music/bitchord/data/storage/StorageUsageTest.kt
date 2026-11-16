@@ -3,12 +3,13 @@ package com.music.bitchord.data.storage
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import java.io.File
+import java.nio.file.Files
 
 class StorageUsageTest {
 
     @Test
     fun directoryBytesCountsNestedFilesButNotDirectoryEntries() {
-        val root = createTempDir(prefix = "musikku-storage-")
+        val root = Files.createTempDirectory("musikku-storage-").toFile()
         try {
             File(root, "one.bin").writeBytes(ByteArray(12))
             val nested = File(root, "nested").apply { mkdirs() }
@@ -23,7 +24,7 @@ class StorageUsageTest {
 
     @Test
     fun fileUriBytesCountsWholeOfflinePackageForPlaylistEntry() {
-        val packageDir = createTempDir(prefix = "musikku-offline-")
+        val packageDir = Files.createTempDirectory("musikku-offline-").toFile()
         try {
             File(packageDir, "playlist.m3u8").writeText("#EXTM3U")
             File(packageDir, "segment-0001.m4s").writeBytes(ByteArray(128))
@@ -37,7 +38,7 @@ class StorageUsageTest {
 
     @Test
     fun directoryBytesReturnsZeroForMissingPaths() {
-        val root = File(createTempDir(prefix = "musikku-storage-"), "not-created")
+        val root = File(Files.createTempDirectory("musikku-storage-").toFile(), "not-created")
         assertEquals(0L, StorageUsage.directoryBytes(root))
         root.parentFile?.deleteRecursively()
     }

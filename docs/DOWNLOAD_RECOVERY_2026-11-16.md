@@ -15,7 +15,7 @@ The app stores a versioned `DownloadRecoverySnapshot` in the existing `bitchord_
 
 All unsettled foreground-queue rows are retained. The latest 200 settled rows are retained so a long-running install does not grow the manager snapshot without bound. WorkManager-owned `PlaylistSync.downloadNow` rows are excluded because their worker owns their lifecycle.
 
-The snapshot is updated at state transitions and uses a synchronous preference commit for those checkpoints. Intermediate byte-progress ticks remain in memory only, to avoid a preference write for every chunk.
+The snapshot is updated at meaningful state transitions, not on every byte-progress tick. A short background debounce coalesces playlist/album enqueue bursts so hundreds of rows do not trigger hundreds of full-snapshot writes. The latest snapshot is synchronously committed when the Activity backgrounds or the download service stops.
 
 ## Restart behaviour
 

@@ -1453,4 +1453,14 @@
     <string name="clear_canvas_cache">Canvas önbelleğini temizle</string>
     <string name="clear_canvas_cache_subtitle">Önbelleğe alınmış döngü kliplerini kaldırır. MusikKu gerektiğinde bunları yeniden alır.</string>
     <string name="canvas_cache_cleared">Canvas önbelleği temizlendi</string>
+    <string name="playlist_folders_title">Çalma listesi klasörleri</string>
+    <string name="create_playlist_folder">Yeni klasör</string>
+    <string name="edit_playlist_folder">Klasörü düzenle</string>
+    <string name="playlist_folder_name">Klasör adı</string>
+    <string name="playlist_folder_select_playlists">Çalma listelerini seç</string>
+    <string name="playlist_folder_move_notice">Seçilen çalma listeleri bu klasöre taşınır; özgün çalma listeleri kitaplığında kalır.</string>
+    <string name="playlist_folder_empty">Bu klasör boş.</string>
+    <string name="playlist_folder_no_playlists">Henüz kullanılabilir çalma listesi yok.</string>
+    <string name="playlist_folder_delete_notice">Bu klasörü silmek çalma listelerini veya şarkıları silmez.</string>
+    <string name="playlist_folder_count">%1$d çalma listesi</string>
 </resources>

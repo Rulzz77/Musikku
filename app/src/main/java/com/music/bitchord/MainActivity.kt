@@ -339,12 +339,14 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import com.music.bitchord.ui.screens.localizedLabel
 import com.music.bitchord.data.LocalGroups
 import com.music.bitchord.data.OfflinePlaylists
+import com.music.bitchord.data.PlaylistFolders
 import com.music.bitchord.data.toGroup
 import com.music.bitchord.data.settings.LibraryViewType
 import com.music.bitchord.data.settings.LocalMusicSort
 import com.music.bitchord.ui.screens.HomeScreen
 import com.music.bitchord.ui.screens.LibraryGridPage
 import com.music.bitchord.ui.screens.LibraryScreen
+import com.music.bitchord.ui.screens.PlaylistFoldersSection
 import com.music.bitchord.ui.screens.MoodGenrePlaylistsScreen
 import com.music.bitchord.ui.screens.SearchScreen
 import com.music.bitchord.data.settings.SongSort
@@ -1041,6 +1043,7 @@ private fun BitChordApp(
     // surface that draws a heart — the player and the track menu alike.
     val offlineLiked by OfflinePlaylists.liked.collectAsStateWithLifecycle()
     val offlinePlaylists by OfflinePlaylists.playlists.collectAsStateWithLifecycle()
+    val playlistFolders by PlaylistFolders.folders.collectAsStateWithLifecycle()
     val offlinePlaylistGroups = remember(offlinePlaylists) { offlinePlaylists.map { it.toGroup() } }
     val likeStatusOf: (Song) -> LikeStatus = { song ->
         val uri = song.localUri
@@ -1118,9 +1121,44 @@ private fun BitChordApp(
             browseId = playlist.browseId,
         )
     }
-    val homeLocalPlaylistShelves = remember(offlinePlaylistItems) {
-        if (offlinePlaylistItems.isEmpty()) emptyList() else listOf(
-            HomeShelf(context.getString(R.string.your_playlists), offlinePlaylistItems),
+    // Folders reference account playlists and both local playlist collections.
+    // They store browse ids only, never copies of playlist contents.
+    val accountPlaylistItems = (libraryState as? UiState.Success)
+        ?.data?.shelves
+        ?.firstOrNull { it.title == YtMusicRepository.PLAYLISTS_SHELF }
+        ?.items.orEmpty()
+    val folderablePlaylistItems = (accountPlaylistItems + localPlaylistItems + offlinePlaylistItems)
+        .filter { it.browseId != null }
+        .distinctBy { it.browseId }
+    val folderedPlaylistBrowseIds = remember(playlistFolders) {
+        playlistFolders.flatMapTo(HashSet()) { it.playlistBrowseIds }
+    }
+    // Once assigned, a playlist is shown from its folder rather than twice in
+    // the same Library. Its underlying record and source page are untouched.
+    val libraryStateWithoutFolderedPlaylists = when (val current = libraryState) {
+        is UiState.Success -> current.copy(
+            data = current.data.copy(
+                shelves = current.data.shelves.mapNotNull { shelf ->
+                    if (shelf.title != YtMusicRepository.PLAYLISTS_SHELF) {
+                        shelf
+                    } else {
+                        shelf.copy(
+                            items = shelf.items.filter { item ->
+                                item.browseId == null || item.browseId !in folderedPlaylistBrowseIds
+                            },
+                        ).takeIf { it.items.isNotEmpty() }
+                    }
+                },
+            ),
+        )
+        else -> libraryState
+    }
+    val unfolderedHomePlaylistItems = offlinePlaylistItems.filter { item ->
+        item.browseId == null || item.browseId !in folderedPlaylistBrowseIds
+    }
+    val homeLocalPlaylistShelves = remember(unfolderedHomePlaylistItems) {
+        if (unfolderedHomePlaylistItems.isEmpty()) emptyList() else listOf(
+            HomeShelf(context.getString(R.string.your_playlists), unfolderedHomePlaylistItems),
         )
     }
     // What a browse id is recorded under in Downloads.collections, when it names
@@ -3758,7 +3796,7 @@ private fun BitChordApp(
                             )
                             else -> LibraryScreen(
                                 signedIn = signedIn,
-                                state = libraryState,
+                                state = libraryStateWithoutFolderedPlaylists,
                                 listState = libraryListState,
                                 onShelfItemClick = onLibraryItemClick,
                                 // Every shelf here has a menu behind it now — the account's
@@ -3787,7 +3825,18 @@ private fun BitChordApp(
                                 pullState = libraryPull,
                                 contentPadding = listPadding,
                                 links = libraryLinks(),
-                                deviceItems = libraryDeviceItems(downloadedReleases) + localPlaylistItems + offlinePlaylistItems,
+                                deviceItems = libraryDeviceItems(downloadedReleases) +
+                                    localPlaylistItems.filter { it.browseId == null || it.browseId !in folderedPlaylistBrowseIds } +
+                                    offlinePlaylistItems.filter { it.browseId == null || it.browseId !in folderedPlaylistBrowseIds },
+                                playlistFolderContent = {
+                                    PlaylistFoldersSection(
+                                        folders = playlistFolders,
+                                        playlists = folderablePlaylistItems,
+                                        onSave = { id, title, members -> PlaylistFolders.save(id, title, members) },
+                                        onDelete = PlaylistFolders::delete,
+                                        onOpen = { shelf -> navigator.push(AppRoute.LibraryShowAll(shelf)) },
+                                    )
+                                },
                             )
                         }
                     }

@@ -1536,4 +1536,14 @@
     <string name="clear_canvas_cache">Wyczyść pamięć Canvas</string>
     <string name="clear_canvas_cache_subtitle">Usuń zapisane w pamięci podręcznej zapętlone klipy. MusikKu pobierze je ponownie w razie potrzeby.</string>
     <string name="canvas_cache_cleared">Pamięć Canvas została wyczyszczona</string>
+    <string name="playlist_folders_title">Foldery playlist</string>
+    <string name="create_playlist_folder">Nowy folder</string>
+    <string name="edit_playlist_folder">Edytuj folder</string>
+    <string name="playlist_folder_name">Nazwa folderu</string>
+    <string name="playlist_folder_select_playlists">Wybierz playlisty</string>
+    <string name="playlist_folder_move_notice">Wybrane playlisty zostaną przeniesione do tego folderu; oryginalne playlisty pozostaną w bibliotece.</string>
+    <string name="playlist_folder_empty">Ten folder jest pusty.</string>
+    <string name="playlist_folder_no_playlists">Nie ma jeszcze dostępnych playlist.</string>
+    <string name="playlist_folder_delete_notice">Usunięcie folderu nie usunie playlist ani utworów.</string>
+    <string name="playlist_folder_count">Playlisty: %1$d</string>
 </resources>

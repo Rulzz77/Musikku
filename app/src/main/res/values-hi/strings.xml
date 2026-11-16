@@ -1496,4 +1496,14 @@
     <string name="clear_canvas_cache">Canvas कैश साफ़ करें</string>
     <string name="clear_canvas_cache_subtitle">कैश में रखी गई लूपिंग क्लिप हटाएँ। ज़रूरत पड़ने पर MusikKu उन्हें फिर से प्राप्त करेगा।</string>
     <string name="canvas_cache_cleared">Canvas कैश साफ़ किया गया</string>
+    <string name="playlist_folders_title">प्लेलिस्ट फ़ोल्डर</string>
+    <string name="create_playlist_folder">नया फ़ोल्डर</string>
+    <string name="edit_playlist_folder">फ़ोल्डर संपादित करें</string>
+    <string name="playlist_folder_name">फ़ोल्डर का नाम</string>
+    <string name="playlist_folder_select_playlists">प्लेलिस्ट चुनें</string>
+    <string name="playlist_folder_move_notice">चुनी गई प्लेलिस्ट इस फ़ोल्डर में चली जाएँगी; मूल प्लेलिस्ट आपकी लाइब्रेरी में बनी रहेंगी।</string>
+    <string name="playlist_folder_empty">यह फ़ोल्डर खाली है।</string>
+    <string name="playlist_folder_no_playlists">अभी कोई प्लेलिस्ट उपलब्ध नहीं है।</string>
+    <string name="playlist_folder_delete_notice">इस फ़ोल्डर को हटाने से प्लेलिस्ट या गाने नहीं हटेंगे।</string>
+    <string name="playlist_folder_count">%1$d प्लेलिस्ट</string>
 </resources>

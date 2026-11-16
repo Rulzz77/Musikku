@@ -1501,4 +1501,14 @@
     <string name="clear_canvas_cache">Limpar cache do Canvas</string>
     <string name="clear_canvas_cache_subtitle">Remover clipes em loop armazenados em cache. O MusikKu irá buscá-los novamente quando necessário.</string>
     <string name="canvas_cache_cleared">Cache do Canvas limpo</string>
+    <string name="playlist_folders_title">Pastas de playlists</string>
+    <string name="create_playlist_folder">Nova pasta</string>
+    <string name="edit_playlist_folder">Editar pasta</string>
+    <string name="playlist_folder_name">Nome da pasta</string>
+    <string name="playlist_folder_select_playlists">Escolher playlists</string>
+    <string name="playlist_folder_move_notice">As playlists selecionadas serão movidas para esta pasta; as playlists originais continuarão na sua biblioteca.</string>
+    <string name="playlist_folder_empty">Esta pasta está vazia.</string>
+    <string name="playlist_folder_no_playlists">Ainda não há playlists disponíveis.</string>
+    <string name="playlist_folder_delete_notice">Excluir esta pasta não exclui playlists nem músicas.</string>
+    <string name="playlist_folder_count">%1$d playlists</string>
 </resources>

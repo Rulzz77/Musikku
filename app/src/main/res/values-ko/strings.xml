@@ -1346,4 +1346,14 @@
     <string name="clear_canvas_cache">Canvas 캐시 지우기</string>
     <string name="clear_canvas_cache_subtitle">캐시에 저장된 반복 클립을 삭제합니다. 필요할 때 MusikKu가 다시 가져옵니다.</string>
     <string name="canvas_cache_cleared">Canvas 캐시를 지웠습니다</string>
+    <string name="playlist_folders_title">플레이리스트 폴더</string>
+    <string name="create_playlist_folder">새 폴더</string>
+    <string name="edit_playlist_folder">폴더 편집</string>
+    <string name="playlist_folder_name">폴더 이름</string>
+    <string name="playlist_folder_select_playlists">플레이리스트 선택</string>
+    <string name="playlist_folder_move_notice">선택한 플레이리스트가 이 폴더로 이동하며 원본 플레이리스트는 라이브러리에 그대로 남습니다.</string>
+    <string name="playlist_folder_empty">이 폴더는 비어 있습니다.</string>
+    <string name="playlist_folder_no_playlists">아직 사용할 수 있는 플레이리스트가 없습니다.</string>
+    <string name="playlist_folder_delete_notice">이 폴더를 삭제해도 플레이리스트나 노래는 삭제되지 않습니다.</string>
+    <string name="playlist_folder_count">플레이리스트 %1$d개</string>
 </resources>

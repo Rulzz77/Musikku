@@ -1473,4 +1473,14 @@
     <string name="clear_canvas_cache">清理 Canvas 缓存</string>
     <string name="clear_canvas_cache_subtitle">删除缓存的循环短片。需要时 MusikKu 会重新获取。</string>
     <string name="canvas_cache_cleared">Canvas 缓存已清理</string>
+    <string name="playlist_folders_title">播放列表文件夹</string>
+    <string name="create_playlist_folder">新建文件夹</string>
+    <string name="edit_playlist_folder">编辑文件夹</string>
+    <string name="playlist_folder_name">文件夹名称</string>
+    <string name="playlist_folder_select_playlists">选择播放列表</string>
+    <string name="playlist_folder_move_notice">选中的播放列表会移到此文件夹；原始播放列表仍保留在你的媒体库中。</string>
+    <string name="playlist_folder_empty">此文件夹为空。</string>
+    <string name="playlist_folder_no_playlists">暂时没有可用的播放列表。</string>
+    <string name="playlist_folder_delete_notice">删除此文件夹不会删除播放列表或歌曲。</string>
+    <string name="playlist_folder_count">%1$d 个播放列表</string>
 </resources>

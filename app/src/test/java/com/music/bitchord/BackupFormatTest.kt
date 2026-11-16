@@ -32,6 +32,7 @@ class BackupFormatTest {
         assertTrue(backup.spotifyPlaylists.isEmpty())
         assertTrue(backup.remoteSpotifyImports.isEmpty())
         assertTrue(backup.devicePlaylists.isEmpty())
+        assertTrue(backup.playlistFolders.isEmpty())
     }
 
     @Test
@@ -82,6 +83,55 @@ class BackupFormatTest {
         assertEquals("LOSSLESS", restored.spotifyPlaylists.single().songs.single().sourceQuality)
         assertTrue(restored.spotifyPlaylists.single().songs.single().sourceHiRes)
         assertTrue(restored.spotifyPlaylists.single().songs.single().isPodcastEpisode)
+    }
+
+    @Test
+    fun `schema three round trips playlist folders without changing playlist data`() {
+        val original = Backup.BackupFile(
+            version = 3,
+            playlistFolders = listOf(
+                Backup.BackupPlaylistFolder(
+                    id = "folder-roadtrip",
+                    title = "Road trip",
+                    playlists = listOf("VLremote-playlist", "local:playlist:spotify-import"),
+                ),
+                Backup.BackupPlaylistFolder(
+                    id = "folder-focus",
+                    title = "Focus",
+                    playlists = listOf("local:offline:study"),
+                ),
+            ),
+        )
+
+        val encoded = json.encodeToString(Backup.BackupFile.serializer(), original)
+        val restored = json.decodeFromString(Backup.BackupFile.serializer(), encoded)
+
+        assertEquals(3, restored.version)
+        assertEquals(original.playlistFolders, restored.playlistFolders)
+    }
+
+    @Test
+    fun `schema two backup without folder metadata remains readable`() {
+        val schemaTwo = """
+            {
+              "app": "bitchord",
+              "version": 2,
+              "versionName": "0.1.51",
+              "exportedAt": "2026-11-16T12:00:00Z",
+              "settings": {},
+              "listening": [],
+              "spotifyPlaylists": [],
+              "remoteSpotifyImports": {},
+              "devicePlaylists": [
+                {"id":"liked","title":"Liked songs","songs":[]}
+              ]
+            }
+        """.trimIndent()
+
+        val restored = json.decodeFromString(Backup.BackupFile.serializer(), schemaTwo)
+
+        assertEquals(2, restored.version)
+        assertTrue(restored.playlistFolders.isEmpty())
     }
 
     @Test

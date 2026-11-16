@@ -1473,4 +1473,14 @@
     <string name="clear_canvas_cache">清除 Canvas 快取</string>
     <string name="clear_canvas_cache_subtitle">刪除已快取的循環短片。需要時 MusikKu 會重新取得。</string>
     <string name="canvas_cache_cleared">Canvas 快取已清除</string>
+    <string name="playlist_folders_title">播放清單資料夾</string>
+    <string name="create_playlist_folder">新增資料夾</string>
+    <string name="edit_playlist_folder">編輯資料夾</string>
+    <string name="playlist_folder_name">資料夾名稱</string>
+    <string name="playlist_folder_select_playlists">選擇播放清單</string>
+    <string name="playlist_folder_move_notice">所選播放清單會移至此資料夾；原始播放清單仍會保留在資料庫中。</string>
+    <string name="playlist_folder_empty">此資料夾是空的。</string>
+    <string name="playlist_folder_no_playlists">目前沒有可用的播放清單。</string>
+    <string name="playlist_folder_delete_notice">刪除此資料夾不會刪除播放清單或歌曲。</string>
+    <string name="playlist_folder_count">%1$d 個播放清單</string>
 </resources>

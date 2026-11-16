@@ -115,6 +115,8 @@ fun LibraryScreen(
     deviceItems: List<ShelfItem>,
     /** The big "Library" heading; the desktop's pages carry none. */
     showTitle: Boolean = true,
+    /** Optional Android-owned folder shelf, since its contents are device-persisted. */
+    playlistFolderContent: @Composable () -> Unit = {},
 ) {
     val pinnedPlaylists by AppUi.host.pinnedPlaylists.collectAsStateWithLifecycle()
     val onDevice = stringResource(Res.string.on_device)
@@ -143,6 +145,7 @@ fun LibraryScreen(
             if (links.isNotEmpty()) {
                 item(key = "links") { LibraryLinkList(links = links, onClick = onShelfItemClick) }
             }
+            item(key = "playlist-folders") { playlistFolderContent() }
             if (deviceItems.isNotEmpty()) {
                 item(key = "shelf:$onDevice") {
                     val onDeviceShelf = HomeShelf(title = onDevice, items = deviceItems)

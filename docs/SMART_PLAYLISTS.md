@@ -19,7 +19,7 @@ A listener can create up to 20 named Smart Playlists. Each rule supports:
 - Minimum completed play count (1–100).
 - Sort by play count, recent playback, or total listening time.
 
-The Library editor currently exposes a practical minimum-play range of 1–20. Rules are saved as JSON in app-private SharedPreferences and are re-evaluated against the listening aggregates when the Library loads or the stats revision changes. Deleting a rule removes only that rule; it does not remove any track or playlist.
+The Library editor currently exposes a practical minimum-play range of 1–20. Rules are saved as JSON in app-private SharedPreferences, included in Backup & Restore schema v4, and re-evaluated against the listening aggregates when the Library loads or the stats revision changes. Schema v1–v3 backups do not contain these rules, so importing one leaves the rules already on the device unchanged. Deleting a rule removes only that rule; it does not remove any track or playlist.
 
 ## Data and compatibility
 

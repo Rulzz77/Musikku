@@ -1479,4 +1479,14 @@
     <string name="clear_canvas_cache">ล้างแคช Canvas</string>
     <string name="clear_canvas_cache_subtitle">ลบคลิปวนซ้ำที่เก็บไว้ในแคช MusikKu จะดึงข้อมูลใหม่เมื่อจำเป็น</string>
     <string name="canvas_cache_cleared">ล้างแคช Canvas แล้ว</string>
+    <string name="playlist_folders_title">โฟลเดอร์เพลย์ลิสต์</string>
+    <string name="create_playlist_folder">โฟลเดอร์ใหม่</string>
+    <string name="edit_playlist_folder">แก้ไขโฟลเดอร์</string>
+    <string name="playlist_folder_name">ชื่อโฟลเดอร์</string>
+    <string name="playlist_folder_select_playlists">เลือกเพลย์ลิสต์</string>
+    <string name="playlist_folder_move_notice">เพลย์ลิสต์ที่เลือกจะย้ายมาอยู่ในโฟลเดอร์นี้ โดยเพลย์ลิสต์ต้นฉบับยังคงอยู่ในคลังของคุณ</string>
+    <string name="playlist_folder_empty">โฟลเดอร์นี้ว่างเปล่า</string>
+    <string name="playlist_folder_no_playlists">ยังไม่มีเพลย์ลิสต์ที่พร้อมใช้งาน</string>
+    <string name="playlist_folder_delete_notice">การลบโฟลเดอร์นี้จะไม่ลบเพลย์ลิสต์หรือเพลง</string>
+    <string name="playlist_folder_count">เพลย์ลิสต์ %1$d รายการ</string>
 </resources>

@@ -108,7 +108,29 @@ object LastPlayed {
         )
     }
 
+    /** A portable copy of the bounded queue used for playback recovery. */
+    fun backupSnapshot(): Snapshot? =
+        if (::prefs.isInitialized) load() else null
+
+    /**
+     * Replaces the device's restart snapshot with the queue from a backup.
+     * This does not start playback; it only restores the durable recovery state.
+     */
+    fun restoreBackupSnapshot(snapshot: Snapshot?) {
+        check(::prefs.isInitialized) { "Playback queue storage is not initialized" }
+        if (snapshot == null || snapshot.songs.isEmpty()) {
+            clearImmediately()
+        } else {
+            saveQueueImmediately(
+                songs = snapshot.songs,
+                index = snapshot.index,
+                positionMs = snapshot.positionMs,
+            )
+        }
+    }
+
     fun clear() {
+        if (!::prefs.isInitialized) return
         prefs.edit().clear().apply()
     }
 

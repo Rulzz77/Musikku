@@ -44,9 +44,17 @@ object StorageUsage {
         val savedUris = Downloads.saved.value.values.distinct()
         val savedBytes = savedUris.sumOf { savedUriBytes(app, it) }
 
-        // Covers kept beside app-private downloads and offline packages are
-        // part of the saved collection, not an expendable image cache.
-        val savedArtworkBytes = directoryBytes(File(app.filesDir, DOWNLOAD_ARTWORK_DIRECTORY))
+        // Count durable artwork sidecars from the metadata of saved downloads.
+        // HLS/DASH packages may already contain the same cover, so skip artwork
+        // paths covered by one of the package directories counted above.
+        val savedRoots = savedUris.mapNotNull(::savedFileRoot).toSet()
+        val artworkPaths = Downloads.savedMetadata.value.values
+            .asSequence()
+            .mapNotNull { metadata -> metadata.thumbnailUrl?.takeIf { it.startsWith("file://") } }
+            .mapNotNull { raw -> runCatching { Uri.parse(raw).path }.getOrNull() }
+            .distinct()
+            .filterNot { path -> savedRoots.any { root -> isInside(File(path), root) } }
+        val savedArtworkBytes = artworkPaths.sumOf { path -> directoryBytes(File(path)) }
 
         Snapshot(
             downloadedBytes = savedBytes + savedArtworkBytes,
@@ -56,6 +64,19 @@ object StorageUsage {
             availableBytes = app.filesDir.usableSpace.coerceAtLeast(0L),
             totalDeviceBytes = app.filesDir.totalSpace.coerceAtLeast(0L),
         )
+    }
+
+    private fun savedFileRoot(rawUri: String): File? {
+        val uri = runCatching { Uri.parse(rawUri) }.getOrNull() ?: return null
+        if (uri.scheme != "file") return null
+        val target = uri.path?.let(::File) ?: return null
+        return if (target.name == OFFLINE_PLAYLIST_FILE) target.parentFile ?: target else target
+    }
+
+    private fun isInside(file: File, root: File): Boolean {
+        val filePath = runCatching { file.canonicalPath }.getOrElse { file.absolutePath }
+        val rootPath = runCatching { root.canonicalPath }.getOrElse { root.absolutePath }
+        return filePath == rootPath || filePath.startsWith(rootPath.trimEnd(File.separatorChar) + File.separator)
     }
 
     private fun savedUriBytes(context: Context, rawUri: String): Long {
@@ -125,7 +146,6 @@ object StorageUsage {
         return String.format(Locale.ROOT, "%.1f %s", amount, units[unit])
     }
 
-    private const val DOWNLOAD_ARTWORK_DIRECTORY = "download-artwork"
     private const val IMAGE_CACHE_DIRECTORY = "image_cache"
     private const val OFFLINE_PLAYLIST_FILE = "playlist.m3u8"
 }

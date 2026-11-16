@@ -182,6 +182,69 @@ object OfflinePlaylists {
         }
     }
 
+    /**
+     * Restores local playlists, including the built-in device Liked playlist.
+     * Existing file URIs are retained as references, but the files themselves
+     * are intentionally not copied into a JSON backup.
+     */
+    fun restoreFromBackup(incoming: List<OfflinePlaylist>, merge: Boolean): Int {
+        check(this::prefs.isInitialized) { "Offline playlist storage is not initialized" }
+
+        val normalized = normalizeBackupPlaylists(incoming)
+        val next = if (merge) mergeOfflinePlaylists(_playlists.value, normalized) else normalized
+        synchronized(lock) {
+            val committed = prefs.edit().putString(KEY_PLAYLISTS, encodePlaylists(next)).commit()
+            check(committed) { "Could not save restored device playlists" }
+            publish(next)
+        }
+        return next.size
+    }
+
+    private fun normalizeBackupPlaylists(playlists: List<OfflinePlaylist>): List<OfflinePlaylist> {
+        val unique = LinkedHashMap<String, OfflinePlaylist>()
+        playlists.forEach { playlist ->
+            val id = playlist.id.trim()
+            if (id.isEmpty()) return@forEach
+            val title = if (id == LIKED_ID) likedTitle else playlist.title.trim()
+            if (title.isEmpty()) return@forEach
+            unique[id] = playlist.copy(
+                id = id,
+                title = title,
+                songs = playlist.songs.distinctBy { it.playlistKey() }.map { it.stored() },
+                coverUrl = playlist.coverUrl?.takeIf(String::isNotBlank),
+            )
+        }
+        if (LIKED_ID !in unique) {
+            unique[LIKED_ID] = OfflinePlaylist(LIKED_ID, likedTitle, emptyList())
+        }
+        return listOf(unique.remove(LIKED_ID)!!) + unique.values
+    }
+
+    private fun mergeOfflinePlaylists(
+        current: List<OfflinePlaylist>,
+        incoming: List<OfflinePlaylist>,
+    ): List<OfflinePlaylist> {
+        val merged = current.toMutableList()
+        val indexes = merged.mapIndexed { index, playlist -> playlist.id to index }.toMap().toMutableMap()
+        incoming.forEach { playlist ->
+            val index = indexes[playlist.id]
+            if (index == null) {
+                indexes[playlist.id] = merged.size
+                merged += playlist
+            } else {
+                val existing = merged[index]
+                val known = existing.songs.mapTo(HashSet()) { it.playlistKey() }
+                val additions = playlist.songs.filter { known.add(it.playlistKey()) }
+                merged[index] = existing.copy(
+                    title = existing.title.ifBlank { playlist.title },
+                    songs = (existing.songs + additions).map { it.stored() },
+                    coverUrl = existing.coverUrl ?: playlist.coverUrl,
+                )
+            }
+        }
+        return normalizeBackupPlaylists(merged)
+    }
+
     private inline fun mutate(change: (List<OfflinePlaylist>) -> List<OfflinePlaylist>) {
         synchronized(lock) { publish(change(_playlists.value)) }
     }
@@ -244,22 +307,26 @@ object OfflinePlaylists {
         }
     }
 
+    private fun encodePlaylists(list: List<OfflinePlaylist>): String {
+        val array = JSONArray()
+        list.forEach { playlist ->
+            val songs = JSONArray()
+            playlist.songs.forEach { songs.put(it.toJson()) }
+            array.put(
+                JSONObject().apply {
+                    put("id", playlist.id)
+                    put("title", playlist.title)
+                    putOpt("coverUrl", playlist.coverUrl)
+                    put("songs", songs)
+                },
+            )
+        }
+        return array.toString()
+    }
+
     private fun persist(list: List<OfflinePlaylist>) {
         runCatching {
-            val array = JSONArray()
-            list.forEach { playlist ->
-                val songs = JSONArray()
-                playlist.songs.forEach { songs.put(it.toJson()) }
-                array.put(
-                    JSONObject().apply {
-                        put("id", playlist.id)
-                        put("title", playlist.title)
-                        putOpt("coverUrl", playlist.coverUrl)
-                        put("songs", songs)
-                    },
-                )
-            }
-            prefs.edit().putString(KEY_PLAYLISTS, array.toString()).apply()
+            prefs.edit().putString(KEY_PLAYLISTS, encodePlaylists(list)).apply()
         }.onFailure { DebugLog.w("BitChord", "Offline playlists not saved: ${it.message}") }
     }
 

@@ -1501,4 +1501,14 @@
     <string name="clear_canvas_cache">ניקוי מטמון Canvas</string>
     <string name="clear_canvas_cache_subtitle">הסרת קטעי הלולאה שבמטמון. MusikKu יוריד אותם שוב בעת הצורך.</string>
     <string name="canvas_cache_cleared">מטמון Canvas נוקה</string>
+    <string name="playlist_folders_title">תיקיות פלייליסטים</string>
+    <string name="create_playlist_folder">תיקייה חדשה</string>
+    <string name="edit_playlist_folder">עריכת תיקייה</string>
+    <string name="playlist_folder_name">שם התיקייה</string>
+    <string name="playlist_folder_select_playlists">בחירת פלייליסטים</string>
+    <string name="playlist_folder_move_notice">הפלייליסטים שנבחרו יועברו לתיקייה הזו; הפלייליסטים המקוריים יישארו בספרייה שלך.</string>
+    <string name="playlist_folder_empty">התיקייה הזו ריקה.</string>
+    <string name="playlist_folder_no_playlists">אין עדיין פלייליסטים זמינים.</string>
+    <string name="playlist_folder_delete_notice">מחיקת התיקייה לא תמחק פלייליסטים או שירים.</string>
+    <string name="playlist_folder_count">%1$d פלייליסטים</string>
 </resources>

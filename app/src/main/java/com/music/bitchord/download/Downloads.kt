@@ -999,17 +999,17 @@ object Downloads {
      */
     internal fun onStopped() {
         // The service may be torn down while one or more independent track
-        // jobs are still in flight. Requeue those rows instead of forgetting
-        // them; the next visible app launch can start the foreground service
-        // again. WorkManager-owned PlaylistSync rows are not requeued here.
+        // jobs are still in flight. Requeue its recoverable rows instead of
+        // forgetting them; the next visible app launch can start the service
+        // again. Leave non-recoverable PlaylistSync claims alone: their worker
+        // and coroutine still own them even if this foreground service stops.
         val byId = DownloadSession.state.value.items.associateBy { it.videoId }
         val interrupted = synchronized(lock) {
-            val ids = running.keys.toList()
-            running.clear()
-            ids.mapNotNull { id ->
-                byId[id]?.takeIf { it.recoverable && !it.progress.settled }?.also { item ->
-                    pending.putIfAbsent(id, item.song)
-                }
+            val serviceOwnedIds = running.keys.filter { id -> byId[id]?.recoverable != false }
+            serviceOwnedIds.mapNotNull { id ->
+                val item = byId[id]
+                running.remove(id)
+                item?.takeIf { !it.progress.settled }?.also { pending.putIfAbsent(id, it.song) }
             }
         }
         interrupted.forEach { item ->

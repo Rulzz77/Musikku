@@ -25,7 +25,7 @@ The Library editor currently exposes a practical minimum-play range of 1–20. R
 
 The source of truth is `ListeningStats`, which already records aggregate plays, listening milliseconds, and the last playback timestamp in monthly files. Smart Playlists reads the all-time aggregate and runs its sort/filter locally; it does not send listening history to a server.
 
-The listening-stat `TrackEntry` format now also preserves optional playback metadata needed to reconstruct playable tracks, including local content URIs and paths, duration text, source quality, and video flags. Every added field has a default, so monthly JSON written by older versions remains readable. New metadata is populated as tracks are listened to on the updated app; an older entry that never stored a local URI cannot be retroactively given one.
+The listening-stat `TrackEntry` format now also preserves optional playback metadata needed to reconstruct playable tracks, including local content URIs and paths, duration text, source quality, download format, track number, podcast-episode state, and video flags. Every added field has a default, so monthly JSON written by older versions remains readable. New metadata is populated as tracks are listened to on the updated app; an older entry that never stored a local URI cannot be retroactively given one.
 
 ## Current scope
 

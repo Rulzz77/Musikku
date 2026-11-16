@@ -162,12 +162,45 @@ object DownloadStore {
             legacyFile(name).takeIf { it.exists() }?.let(Uri::fromFile)
         }
 
+    /**
+     * A pending MediaStore row belongs to an unfinished transfer. Run this
+     * once during process startup, when no transfer from the previous process
+     * can still be active. Doing this per filename during begin() could delete
+     * another worker's live pending row when two different ids share a title.
+     */
+    fun cleanupInterruptedPendingRows(context: Context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
+        val stale = mutableListOf<Uri>()
+        runCatching {
+            context.contentResolver.query(
+                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                arrayOf(MediaStore.MediaColumns._ID),
+                "(${MediaStore.MediaColumns.RELATIVE_PATH} = ? OR " +
+                    "${MediaStore.MediaColumns.RELATIVE_PATH} = ?) AND " +
+                    "${MediaStore.MediaColumns.IS_PENDING} = 1",
+                arrayOf(relativePath, "$relativePath/"),
+                null,
+            )?.use { cursor ->
+                while (cursor.moveToNext()) {
+                    stale += MediaStore.Audio.Media.EXTERNAL_CONTENT_URI.buildUpon()
+                        .appendPath(cursor.getLong(0).toString())
+                        .build()
+                }
+            }
+        }.onFailure { Log.w(TAG, "could not inspect interrupted download rows: ${it.message}") }
+        stale.forEach { uri ->
+            runCatching { context.contentResolver.delete(uri, null, null) }
+                .onFailure { Log.w(TAG, "could not discard interrupted download $uri: ${it.message}") }
+        }
+    }
+
     @RequiresApi(Build.VERSION_CODES.Q)
     private fun mediaStoreEntry(context: Context, name: String): Uri? = runCatching {
         context.contentResolver.query(
             MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
             arrayOf(MediaStore.MediaColumns._ID),
-            "${MediaStore.MediaColumns.DISPLAY_NAME} = ? AND " +
+            "${MediaStore.MediaColumns.IS_PENDING} = 0 AND " +
+                "${MediaStore.MediaColumns.DISPLAY_NAME} = ? AND " +
                 "${MediaStore.MediaColumns.RELATIVE_PATH} LIKE ?",
             arrayOf(name, "%$FOLDER%"),
             null,

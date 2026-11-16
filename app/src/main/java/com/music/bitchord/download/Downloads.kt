@@ -18,9 +18,12 @@ import com.music.bitchord.data.sources.StreamFormat
 import com.music.bitchord.data.sources.TrackMatcher
 import com.music.bitchord.playback.AudioCache
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -76,6 +79,7 @@ object Downloads {
     private const val TAG = "BitChord"
     private const val KEY_SAVED_METADATA = "downloaded_tracks_metadata"
     private const val KEY_SAVED_COLLECTIONS = "downloaded_collections"
+    private const val KEY_DOWNLOAD_RECOVERY = "download_recovery_session_v1"
 
     private lateinit var prefs: SharedPreferences
     private val json = Json { ignoreUnknownKeys = true }
@@ -149,6 +153,9 @@ object Downloads {
 
     fun init(context: Context) {
         prefs = context.getSharedPreferences("bitchord_settings", Context.MODE_PRIVATE)
+        // A new process means any still-pending MediaStore row belongs to an
+        // interrupted transfer. Clear those before a resumed worker can begin.
+        DownloadStore.cleanupInterruptedPendingRows(context)
         _saved.value = runCatching {
             json.decodeFromString(serializer, prefs.getString(KEY_SAVED, null) ?: "{}")
         }.getOrDefault(emptyMap())
@@ -158,6 +165,147 @@ object Downloads {
         _collections.value = runCatching {
             json.decodeFromString(collectionSerializer, prefs.getString(KEY_SAVED_COLLECTIONS, null) ?: "{}")
         }.getOrDefault(emptyMap())
+
+        // The queue is restored before MainActivity starts. Running tracks are
+        // converted to Queued by the snapshot mapper so a dead process never
+        // leaves an id stranded in the running map.
+        val restored = runCatching {
+            prefs.getString(KEY_DOWNLOAD_RECOVERY, null)
+                ?.let { json.decodeFromString(DownloadRecoverySnapshot.serializer(), it) }
+                ?.toDownloadSessionState()
+        }.getOrNull() ?: DownloadSession.State()
+        DownloadSession.restore(restored)
+        DownloadSession.installPersistence(::persistDownloadSession)
+        DownloadSession.persistNow()
+
+        synchronized(lock) {
+            pending.clear()
+            running.clear()
+            fromCache.clear()
+            restored.items
+                .filter { it.recoverable && it.fromCache }
+                .forEach { fromCache += it.videoId }
+            restored.items
+                .filter { it.recoverable && !it.progress.settled }
+                .sortedBy { it.sequence }
+                .forEach { item ->
+                    pending[item.videoId] = item.song
+                }
+        }
+        _active.value = buildMap {
+            restored.items.forEach { item ->
+                when (val progress = item.progress) {
+                    DownloadProgress.Queued, is DownloadProgress.Running ->
+                        put(item.videoId, DownloadState.Queued)
+                    is DownloadProgress.Failed ->
+                        put(item.videoId, DownloadState.Failed(progress.reason))
+                    DownloadProgress.Done -> Unit
+                }
+            }
+        }
+    }
+
+    /**
+     * Coalesce queue bursts before serialising the snapshot. Album/playlist
+     * downloads enqueue hundreds of rows on the main thread; writing the
+     * growing JSON list synchronously for every row would turn that into
+     * quadratic disk I/O and freeze the screen.
+     */
+    private val recoveryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val recoveryLock = Any()
+    private var pendingRecoveryState: DownloadSession.State? = null
+    private var recoveryGeneration = 0L
+    private var recoveryWriterScheduled = false
+
+    private fun persistDownloadSession(state: DownloadSession.State) {
+        if (!::prefs.isInitialized) return
+        val scheduleWriter = synchronized(recoveryLock) {
+            pendingRecoveryState = state
+            recoveryGeneration++
+            if (recoveryWriterScheduled) {
+                false
+            } else {
+                recoveryWriterScheduled = true
+                true
+            }
+        }
+        if (!scheduleWriter) return
+
+        recoveryScope.launch {
+            while (true) {
+                // A short debounce lets a whole playlist enqueue burst collapse
+                // into one snapshot. Newer states replace older pending ones.
+                delay(40L)
+                val next = synchronized(recoveryLock) {
+                    val latest = pendingRecoveryState
+                    if (latest == null) {
+                        recoveryWriterScheduled = false
+                        null
+                    } else {
+                        pendingRecoveryState = null
+                        latest to recoveryGeneration
+                    }
+                } ?: return@launch
+
+                val encoded = runCatching {
+                    json.encodeToString(
+                        DownloadRecoverySnapshot.serializer(),
+                        next.first.toRecoverySnapshot(),
+                    )
+                }.getOrElse {
+                    Log.w(TAG, "could not encode download recovery state: ${it.message}")
+                    null
+                } ?: continue
+
+                synchronized(recoveryLock) {
+                    // A queue update or lifecycle flush may have superseded the
+                    // snapshot while it was being encoded. Never write stale data.
+                    if (next.second == recoveryGeneration) {
+                        prefs.edit().putString(KEY_DOWNLOAD_RECOVERY, encoded).apply()
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Synchronously flush the latest state when the Activity stops or the
+     * service is destroyed. The regular writer is asynchronous/coalesced; this
+     * final checkpoint closes the process-backgrounding window.
+     */
+    fun flushRecoveryState() {
+        if (!::prefs.isInitialized) return
+        synchronized(recoveryLock) {
+            recoveryGeneration++
+            pendingRecoveryState = null
+            val encoded = runCatching {
+                json.encodeToString(
+                    DownloadRecoverySnapshot.serializer(),
+                    DownloadSession.state.value.toRecoverySnapshot(),
+                )
+            }.getOrElse {
+                Log.w(TAG, "could not encode final download recovery state: ${it.message}")
+                return
+            }
+            val saved = prefs.edit().putString(KEY_DOWNLOAD_RECOVERY, encoded).commit()
+            if (!saved) Log.w(TAG, "could not commit final download recovery state")
+        }
+    }
+
+    /**
+     * Called while MainActivity is visible. Android permits starting the
+     * foreground service from this user-visible state; a persisted queue is
+     * otherwise left dormant until the next app launch.
+     */
+    fun resumeQueued(context: Context) {
+        val hasPending = synchronized(lock) { pending.isNotEmpty() }
+        if (!hasPending) return
+        val app = context.applicationContext
+        runCatching {
+            ContextCompat.startForegroundService(app, Intent(app, DownloadService::class.java))
+        }.onFailure {
+            Log.w(TAG, "could not resume the saved download queue: ${it.message}")
+        }
     }
 
     // ---- Asking -------------------------------------------------------------
@@ -201,7 +349,11 @@ object Downloads {
             pending[id] = song
         }
         _active.update { it + (id to DownloadState.Queued) }
-        DownloadSession.queued(song, from)
+        DownloadSession.queued(
+            song,
+            from,
+            fromCache = true.takeIf { id in fromCache },
+        )
 
         val app = context.applicationContext
         runCatching {
@@ -297,7 +449,7 @@ object Downloads {
         }
         claimed.forEach { song ->
             _active.update { it + (song.videoId to DownloadState.Queued) }
-            DownloadSession.queued(song, from)
+            DownloadSession.queued(song, from, recoverable = false)
         }
         val slots = Semaphore(BATCH_WORKERS)
         try {
@@ -918,7 +1070,29 @@ object Downloads {
      * forever as already in flight.
      */
     internal fun onStopped() {
-        synchronized(lock) { running.clear() }
+        // The service may be torn down while one or more independent track
+        // jobs are still in flight. Requeue its recoverable rows instead of
+        // forgetting them; the next visible app launch can start the service
+        // again. Leave non-recoverable PlaylistSync claims alone: their worker
+        // and coroutine still own them even if this foreground service stops.
+        val byId = DownloadSession.state.value.items.associateBy { it.videoId }
+        val interrupted = synchronized(lock) {
+            val serviceOwnedIds = running.keys.filter { id -> byId[id]?.recoverable != false }
+            serviceOwnedIds.mapNotNull { id ->
+                val item = byId[id]
+                running.remove(id)
+                item?.takeIf { !it.progress.settled }?.also { pending.putIfAbsent(id, it.song) }
+            }
+        }
+        interrupted.forEach { item ->
+            _active.update { it + (item.videoId to DownloadState.Queued) }
+            DownloadSession.queued(
+                item.song,
+                item.from,
+                recoverable = true,
+                fromCache = item.fromCache,
+            )
+        }
     }
 
     /**

@@ -496,6 +496,10 @@ class MainActivity : AppCompatActivity() {
     override fun onStart() {
         super.onStart()
         TrackLog.i("PLAYBACK_LIFECYCLE", "MainActivity.onStart")
+        // A process may have died while a download was queued or running.
+        // Downloads.init restored those rows in BitChordApplication; the
+        // foreground Activity is the safe point to restart the data-sync FGS.
+        Downloads.resumeQueued(this)
     }
 
     override fun onResume() {
@@ -510,6 +514,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStop() {
         TrackLog.i("PLAYBACK_LIFECYCLE", "MainActivity.onStop")
+        Downloads.flushRecoveryState()
         super.onStop()
     }
 

@@ -159,6 +159,7 @@ class DownloadService : Service() {
     override fun onDestroy() {
         scope.cancel()
         Downloads.onStopped()
+        Downloads.flushRecoveryState()
         super.onDestroy()
     }
 

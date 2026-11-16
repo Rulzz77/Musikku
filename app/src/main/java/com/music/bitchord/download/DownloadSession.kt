@@ -35,11 +35,13 @@ sealed interface DownloadProgress {
  * March. Neither can answer "did the thing I asked for actually all arrive?",
  * and that is the only question a download manager exists to answer.
  *
- * Deliberately not persisted. This is a record of one sitting: the question it
- * answers is about a batch the user remembers starting, and after a restart
- * there is no such batch — what is on disk is then the whole truth and the
- * Downloads page is where to read it. Being a Kotlin object, the list dies with
- * the process, which is precisely the intended lifetime and needs no code.
+ * The Android host persists a compact, versioned snapshot of recoverable
+ * rows through [installPersistence]. The in-memory model stays platform-neutral:
+ * it owns ordering and presentation state, while [DownloadRecoverySnapshot]
+ * owns the Android preference format. A running row is restored as Queued
+ * because the writer's pending destinations are not byte-resumable; the next
+ * attempt starts that track again from byte zero. WorkManager-owned rows opt
+ * out through [Item.recoverable] because their worker owns their lifetime.
  *
  * ### Why [State.visible] is not just "something is downloading"
  *
@@ -68,6 +70,10 @@ object DownloadSession {
         val from: String? = null,
         /** Ask order, so the list reads the way the queue drains. */
         val sequence: Long,
+        /** Work owned by the foreground download queue, not a WorkManager sync. */
+        val recoverable: Boolean = true,
+        /** The request came from the Cached songs shelf and should keep that copy preference. */
+        val fromCache: Boolean = false,
     )
 
     data class State(
@@ -110,6 +116,43 @@ object DownloadSession {
     private val _state = MutableStateFlow(State())
     val state: StateFlow<State> = _state.asStateFlow()
 
+    @Volatile
+    private var persistence: ((State) -> Unit)? = null
+
+    /**
+     * Installs the platform-owned persistence callback. The session stays a
+     * pure in-memory model; Android owns the durable representation and calls
+     * [restore] once its storage is open.
+     */
+    fun installPersistence(listener: ((State) -> Unit)?) {
+        persistence = listener
+    }
+
+    /** Restore a previous session, converting interrupted running rows to a fresh queued attempt. */
+    fun restore(restored: State) {
+        val items = restored.items
+            .filter { it.recoverable }
+            .map { item ->
+                if (item.progress is DownloadProgress.Running) {
+                    item.copy(progress = DownloadProgress.Queued)
+                } else {
+                    item
+                }
+            }
+        _state.value = restored.copy(items = items)
+        val latest = maxOf(
+            restored.seenAt,
+            restored.settledAt,
+            items.maxOfOrNull { it.sequence } ?: 0L,
+        )
+        clock.updateAndGet { current -> maxOf(current, latest) }
+    }
+
+    /** Persist a sanitised snapshot after startup recovery has rewritten Running rows as Queued. */
+    fun persistNow() {
+        persistence?.invoke(_state.value)
+    }
+
     /**
      * A logical clock, shared by the ask order and the two timestamps.
      *
@@ -141,15 +184,23 @@ object DownloadSession {
      * and two rows for one song would leave the failure on screen next to its
      * own retry.
      */
-    fun queued(song: Song, from: String? = null) {
+    fun queued(
+        song: Song,
+        from: String? = null,
+        recoverable: Boolean = true,
+        fromCache: Boolean? = null,
+    ) {
         update { state ->
             val existing = state.items.indexOfFirst { it.videoId == song.videoId }
+            val previous = state.items.getOrNull(existing)
             val item = Item(
                 videoId = song.videoId,
                 song = song,
                 progress = DownloadProgress.Queued,
-                from = from ?: state.items.getOrNull(existing)?.from,
-                sequence = if (existing >= 0) state.items[existing].sequence else tick(),
+                from = from ?: previous?.from,
+                sequence = previous?.sequence ?: tick(),
+                recoverable = recoverable,
+                fromCache = fromCache ?: previous?.fromCache ?: false,
             )
             val items = if (existing >= 0) {
                 state.items.toMutableList().also { it[existing] = item }
@@ -207,15 +258,21 @@ object DownloadSession {
     /** The user has the manager open — see [State.visible]. */
     fun markSeen() {
         _state.update { it.copy(seenAt = tick()) }
+        persistence?.invoke(_state.value)
     }
 
     /** Empty the list outright, at the user's request. */
     fun clear() {
         _state.value = State()
+        persistence?.invoke(_state.value)
     }
 
     private fun set(videoId: String, progress: DownloadProgress) {
-        update { state ->
+        // Byte-level progress can arrive many times a second. The durable
+        // checkpoint is the transition into Running; a restart always begins
+        // that track from a clean destination rather than trusting partial bytes.
+        val persist = progress !is DownloadProgress.Running || progress.fraction <= 0f
+        update(persist = persist) { state ->
             val index = state.items.indexOfFirst { it.videoId == videoId }
             if (index < 0) return@update state
             val items = state.items.toMutableList().also {
@@ -243,7 +300,8 @@ object DownloadSession {
      * on screen at whatever it last managed to write. [MutableStateFlow.update]
      * is the compare-and-set version of the same line.
      */
-    private inline fun update(block: (State) -> State) {
+    private inline fun update(persist: Boolean = true, block: (State) -> State) {
         _state.update(block)
+        if (persist) persistence?.invoke(_state.value)
     }
 }

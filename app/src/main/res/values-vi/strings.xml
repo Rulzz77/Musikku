@@ -1413,4 +1413,14 @@
     <string name="clear_canvas_cache">Xóa bộ nhớ đệm Canvas</string>
     <string name="clear_canvas_cache_subtitle">Xóa các đoạn video lặp đã lưu trong bộ nhớ đệm. MusikKu sẽ tải lại khi cần.</string>
     <string name="canvas_cache_cleared">Đã xóa bộ nhớ đệm Canvas</string>
+    <string name="playlist_folders_title">Thư mục danh sách phát</string>
+    <string name="create_playlist_folder">Thư mục mới</string>
+    <string name="edit_playlist_folder">Chỉnh sửa thư mục</string>
+    <string name="playlist_folder_name">Tên thư mục</string>
+    <string name="playlist_folder_select_playlists">Chọn danh sách phát</string>
+    <string name="playlist_folder_move_notice">Danh sách phát được chọn sẽ chuyển vào thư mục này; bản gốc vẫn nằm trong thư viện của bạn.</string>
+    <string name="playlist_folder_empty">Thư mục này đang trống.</string>
+    <string name="playlist_folder_no_playlists">Chưa có danh sách phát nào.</string>
+    <string name="playlist_folder_delete_notice">Xóa thư mục này sẽ không xóa danh sách phát hoặc bài hát.</string>
+    <string name="playlist_folder_count">%1$d danh sách phát</string>
 </resources>

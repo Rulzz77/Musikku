@@ -1502,9 +1502,9 @@
     <string name="edit_playlist_folder">Modifier le dossier</string>
     <string name="playlist_folder_name">Nom du dossier</string>
     <string name="playlist_folder_select_playlists">Choisir des playlists</string>
-    <string name="playlist_folder_move_notice">Les playlists sélectionnées sont déplacées dans ce dossier ; les playlists d'origine restent dans votre bibliothèque.</string>
+    <string name="playlist_folder_move_notice">Les playlists sélectionnées sont déplacées dans ce dossier ; les playlists d\'origine restent dans votre bibliothèque.</string>
     <string name="playlist_folder_empty">Ce dossier est vide.</string>
-    <string name="playlist_folder_no_playlists">Aucune playlist n'est encore disponible.</string>
+    <string name="playlist_folder_no_playlists">Aucune playlist n\'est encore disponible.</string>
     <string name="playlist_folder_delete_notice">La suppression de ce dossier ne supprime aucune playlist ni aucune chanson.</string>
     <string name="playlist_folder_count">%1$d playlists</string>
 </resources>

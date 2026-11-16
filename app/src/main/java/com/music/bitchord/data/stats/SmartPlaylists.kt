@@ -87,68 +87,44 @@ object SmartPlaylists {
     }
 
     /**
-     * Restores saved rules without copying any generated tracks. Merge keeps
-     * current rules for matching ids and appends rules that are not on device.
+     * Restores saved rules without copying generated tracks. Merge keeps current
+     * rules for matching ids and appends imported rules that are not on device.
      */
     fun restoreFromBackup(incoming: List<SmartPlaylistRule>, merge: Boolean): Int {
         check(this::prefs.isInitialized) { "Smart Playlist storage is not initialized" }
+        require(incoming.size <= MAX_RULES) { "Backup contains too many Smart Playlists" }
+        incoming.forEach { rule ->
+            require(rule.id.isNotBlank() && rule.id.length <= 512) {
+                "Backup contains an invalid Smart Playlist rule id"
+            }
+            require(rule.name.isNotBlank() && rule.name.length <= MAX_NAME_LENGTH) {
+                "Backup contains an invalid Smart Playlist name"
+            }
+            require(rule.artistContains.length <= MAX_ARTIST_FILTER_LENGTH &&
+                rule.minimumPlays in 1..MAX_MINIMUM_PLAYS) {
+                "Backup contains invalid Smart Playlist filters"
+            }
+        }
         val normalizedIncoming = normalizeSmartPlaylistRules(incoming)
+        require(normalizedIncoming.size == incoming.size) {
+            "Backup contains duplicate or invalid Smart Playlist rules"
+        }
         synchronized(lock) {
+            val current = normalizeSmartPlaylistRules(_rules.value)
             val next = if (merge) {
-                normalizeSmartPlaylistRules(
-                    _rules.value + normalizedIncoming.filterNot { incomingRule ->
-                        _rules.value.any { currentRule -> currentRule.id == incomingRule.id }
-                    },
-                )
+                val combined = current + normalizedIncoming.filterNot { imported ->
+                    current.any { existing -> existing.id == imported.id }
+                }
+                require(combined.size <= MAX_RULES) {
+                    "Merging this backup would exceed the 20 Smart Playlist limit"
+                }
+                combined
             } else {
                 normalizedIncoming
             }
             persist(next)
             return next.size
         }
-    }
-
-    /**
-     * Restores saved rules as part of Backup & Restore. Merge keeps rules already
-     * on this device when ids collide; replace uses the backup's complete set.
-     */
-    fun restoreFromBackup(incoming: List<SmartPlaylistRule>, merge: Boolean): Int {
-        check(this::prefs.isInitialized) { "Smart Playlist storage is not initialized" }
-        require(incoming.size <= MAX_RULES) { "Backup contains too many Smart Playlists" }
-
-        val imported = LinkedHashMap<String, SmartPlaylistRule>()
-        incoming.forEach { rule ->
-            val id = rule.id.trim()
-            val name = rule.name.trim()
-            require(id.isNotEmpty() && name.isNotEmpty()) { "Backup contains an invalid Smart Playlist rule" }
-            require(id.length <= 512 && name.length <= MAX_NAME_LENGTH) {
-                "Backup contains an oversized Smart Playlist rule"
-            }
-            require(rule.artistContains.length <= MAX_ARTIST_FILTER_LENGTH &&
-                rule.minimumPlays in 1..MAX_MINIMUM_PLAYS) {
-                "Backup contains invalid Smart Playlist filters"
-            }
-            require(id !in imported) { "Backup contains duplicate Smart Playlist rules" }
-            imported[id] = rule.copy(
-                id = id,
-                name = name,
-                artistContains = rule.artistContains.trim(),
-            )
-        }
-
-        val next = if (merge) {
-            val combined = LinkedHashMap<String, SmartPlaylistRule>()
-            _rules.value.forEach { combined[it.id] = it }
-            imported.forEach { (id, rule) -> combined.putIfAbsent(id, rule) }
-            require(combined.size <= MAX_RULES) {
-                "Merging this backup would exceed the 20 Smart Playlist limit"
-            }
-            combined.values.toList()
-        } else {
-            imported.values.toList()
-        }
-        synchronized(lock) { persist(next) }
-        return next.size
     }
 
     private fun persist(value: List<SmartPlaylistRule>) {

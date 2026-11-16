@@ -1511,7 +1511,7 @@
     <!-- Smart Playlists -->
     <string name="backup_preview_folders">Dossiers de playlists : %1$d</string>
     <string name="backup_preview_smart_playlists">Règles personnalisées de playlists intelligentes : %1$d</string>
-    <string name="backup_preview_smart_rules_legacy">Cette sauvegarde date d'avant la prise en charge des règles de playlists intelligentes. Les règles personnalisées déjà présentes sur cet appareil seront conservées.</string>
+    <string name="backup_preview_smart_rules_legacy">Cette sauvegarde date d\'avant la prise en charge des règles de playlists intelligentes. Les règles personnalisées déjà présentes sur cet appareil seront conservées.</string>
     <string name="smart_playlists_title">Playlists intelligentes</string>
     <string name="smart_playlist_hint">Des mix dynamiques adaptés à votre écoute.</string>
     <string name="smart_playlist_create">Créer une playlist intelligente</string>
@@ -1523,14 +1523,14 @@
     <string name="smart_playlist_forgotten">Titres oubliés</string>
     <string name="smart_playlist_track_count">%1$d titres</string>
     <string name="smart_playlist_empty">Écoutez quelques morceaux pour créer vos playlists intelligentes. Vos règles enregistrées apparaîtront aussi ici.</string>
-    <string name="smart_playlist_loading">Chargement de votre historique d'écoute…</string>
+    <string name="smart_playlist_loading">Chargement de votre historique d\'écoute…</string>
     <string name="smart_playlist_name">Nom de la playlist</string>
-    <string name="smart_playlist_artist_filter">Le nom de l'artiste contient (facultatif)</string>
+    <string name="smart_playlist_artist_filter">Le nom de l\'artiste contient (facultatif)</string>
     <string name="smart_playlist_minimum_plays_value">Au moins %1$d écoutes</string>
     <string name="smart_playlist_sort">Trier les titres par</string>
-    <string name="smart_playlist_sort_played">Nombre d'écoutes</string>
+    <string name="smart_playlist_sort_played">Nombre d\'écoutes</string>
     <string name="smart_playlist_sort_recent">Écoutés récemment</string>
-    <string name="smart_playlist_sort_listened">Durée d'écoute</string>
-    <string name="smart_playlist_editor_description">Ces listes sont générées à partir de votre historique d'écoute et actualisées lorsque les statistiques sont enregistrées. Elles ne modifient pas vos playlists habituelles.</string>
-    <string name="smart_playlist_max_reached">Vous pouvez créer jusqu'à 20 playlists intelligentes personnalisées.</string>
+    <string name="smart_playlist_sort_listened">Durée d\'écoute</string>
+    <string name="smart_playlist_editor_description">Ces listes sont générées à partir de votre historique d\'écoute et actualisées lorsque les statistiques sont enregistrées. Elles ne modifient pas vos playlists habituelles.</string>
+    <string name="smart_playlist_max_reached">Vous pouvez créer jusqu\'à 20 playlists intelligentes personnalisées.</string>
 </resources>

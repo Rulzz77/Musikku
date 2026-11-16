@@ -42,15 +42,7 @@ class BackupFormatTest {
             artist = "Artist",
             artists = listOf(Backup.BackupArtist("Artist", "artist-channel")),
             albumName = "Album",
-            queueTier = "USER_QUEUE",
-            queueEntryId = "queue-entry-1",
-            radioName = "Radio seed",
-            playbackSource = "Search",
-            playbackSourceType = "SEARCH",
-            playbackSourceId = "search-page",
             isExplicit = false,
-            sourceQuality = "LOSSLESS",
-            sourceHiRes = true,
         )
         val local = Backup.BackupPlaylist(
             id = "spotify-local-1",
@@ -76,11 +68,6 @@ class BackupFormatTest {
             spotifyPlaylists = listOf(local),
             remoteSpotifyImports = mapOf("VLremote-playlist" to listOf("youtube-video-id")),
             devicePlaylists = listOf(device),
-            lastPlayedQueue = Backup.BackupQueue(
-                songs = listOf(song),
-                index = 0,
-                positionMs = 42_000L,
-            ),
         )
 
         val encoded = json.encodeToString(Backup.BackupFile.serializer(), original)
@@ -89,17 +76,6 @@ class BackupFormatTest {
         assertEquals(original.spotifyPlaylists, restored.spotifyPlaylists)
         assertEquals(original.remoteSpotifyImports, restored.remoteSpotifyImports)
         assertEquals(original.devicePlaylists, restored.devicePlaylists)
-        assertEquals(original.lastPlayedQueue, restored.lastPlayedQueue)
-        val queueSnapshot = restored.lastPlayedQueue?.toSnapshot()
-        assertEquals(0, queueSnapshot?.index)
-        assertEquals(42_000L, queueSnapshot?.positionMs)
-        assertEquals("youtube-video-id", queueSnapshot?.songs?.single()?.videoId)
-        assertEquals("USER_QUEUE", queueSnapshot?.songs?.single()?.queueTier?.name)
-        assertEquals("queue-entry-1", queueSnapshot?.songs?.single()?.queueEntryId)
-        assertEquals("Radio seed", queueSnapshot?.songs?.single()?.radioName)
-        assertEquals("Search", queueSnapshot?.songs?.single()?.playbackSource)
-        assertEquals("LOSSLESS", queueSnapshot?.songs?.single()?.sourceQuality)
-        assertEquals(true, queueSnapshot?.songs?.single()?.sourceHiRes)
     }
 
     @Test

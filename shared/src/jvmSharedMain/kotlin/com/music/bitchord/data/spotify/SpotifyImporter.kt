@@ -542,6 +542,24 @@ object SpotifyImporter {
     suspend fun resolveToSongs(
         tracks: List<SpotifyImportTrack>,
         language: String? = null,
+        onProgress: (completed: Int, total: Int) -> Unit,
+    ): Pair<List<Song>, List<SpotifyImportTrack>> =
+        resolveToSongsWithDiagnostics(tracks, language, onProgress = onProgress)
+
+    /**
+     * Resolves Spotify tracks while also reporting rows whose catalogue lookup
+     * was incomplete due to request failures. A successful empty search remains
+     * a normal unmatched result, not a temporary lookup error.
+     */
+    suspend fun resolveToSongsWithDiagnostics(
+        tracks: List<SpotifyImportTrack>,
+        language: String? = null,
+        searchRaw: suspend (
+            String,
+            YtMusicRepository.SpotifyImportSearchKind,
+        ) -> Result<List<Song>> = { query, kind ->
+            YtMusicRepository.searchSpotifyImportRaw(query, kind)
+        },
         onLookupFailures: (List<SpotifyImportTrack>) -> Unit = {},
         onProgress: (completed: Int, total: Int) -> Unit,
     ): Pair<List<Song>, List<SpotifyImportTrack>> = coroutineScope {
@@ -566,7 +584,7 @@ object SpotifyImporter {
                         val candidates = try {
                             searchCandidates(track, cleanLang) { query, kind ->
                                 searchCache.search(query, kind) { cachedQuery, cachedKind ->
-                                    YtMusicRepository.searchSpotifyImportRaw(cachedQuery, cachedKind)
+                                    searchRaw(cachedQuery, cachedKind)
                                 }
                             }
                         } catch (cancelled: CancellationException) {

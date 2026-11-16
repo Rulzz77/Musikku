@@ -88,7 +88,7 @@ fun PlaylistFoldersSection(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 folders.forEach { folder ->
-                    val availableItems = playlists.filter { it.browseId in folder.playlistBrowseIds }
+                    val availableItems = playlists.filter { item -> item.browseId != null && item.browseId in folder.playlistBrowseIds }
                     Card(
                         modifier = Modifier.width(208.dp),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),

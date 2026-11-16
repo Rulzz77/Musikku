@@ -6,6 +6,8 @@ import com.music.bitchord.data.model.Song
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -95,6 +97,10 @@ object ListeningStats {
     @Volatile
     private var version = 0L
 
+    /** Changes only after a listening snapshot reaches disk, not on every sample. */
+    private val _revision = MutableStateFlow(0L)
+    val revision = _revision.asStateFlow()
+
     /** The last summary handed out, and what it was computed from. */
     private var cached: Cached? = null
 
@@ -146,6 +152,16 @@ object ListeningStats {
                     albumId = song.albumId,
                     artistId = song.artistId,
                     art = song.thumbnailUrl,
+                    durationText = song.durationText,
+                    localUri = song.localUri,
+                    localPath = song.localPath,
+                    localDateAddedSeconds = song.localDateAddedSeconds,
+                    localDateModifiedSeconds = song.localDateModifiedSeconds,
+                    isVideo = song.isVideo,
+                    isVideoOrigin = song.isVideoOrigin,
+                    sourceQuality = song.sourceQuality,
+                    sourceHiRes = song.sourceHiRes,
+                    isExplicit = song.isExplicit,
                 )
             }
             track.ms += playedMs
@@ -157,6 +173,16 @@ object ListeningStats {
             if (track.albumId == null) track.albumId = song.albumId
             if (track.artistId == null) track.artistId = song.artistId
             if (track.art == null) track.art = song.thumbnailUrl
+            if (song.durationText != null) track.durationText = song.durationText
+            if (song.localUri != null) track.localUri = song.localUri
+            if (song.localPath != null) track.localPath = song.localPath
+            if (song.localDateAddedSeconds != null) track.localDateAddedSeconds = song.localDateAddedSeconds
+            if (song.localDateModifiedSeconds != null) track.localDateModifiedSeconds = song.localDateModifiedSeconds
+            track.isVideo = track.isVideo || song.isVideo
+            track.isVideoOrigin = track.isVideoOrigin || song.isVideoOrigin
+            if (song.sourceQuality != null) track.sourceQuality = song.sourceQuality
+            track.sourceHiRes = track.sourceHiRes || song.sourceHiRes
+            if (song.isExplicit != null) track.isExplicit = song.isExplicit
             if (countsAsPlay) track.plays++
 
             // Day-level sub-bucket for the track.
@@ -287,6 +313,7 @@ object ListeningStats {
                 if (file.delete() && temporary.renameTo(file)) Unit else temporary.delete()
             }
             version++
+            _revision.value = version
         }.onFailure { Log.w(TAG, "Could not write listening bucket $key", it) }
     }
 
@@ -449,6 +476,7 @@ object ListeningStats {
             directory.listFiles()?.forEach { it.delete() }
             directory.mkdirs()
             version++
+            _revision.value = version
             cached = null
             buckets.forEach { bucket ->
                 val key = runCatching { YearMonth.parse(bucket.month).toString() }.getOrNull()
@@ -609,12 +637,23 @@ object ListeningStats {
                                 title = entry.title,
                                 artist = entry.artist,
                                 thumbnailUrl = entry.art,
+                                durationText = entry.durationText,
                                 artistId = entry.artistId,
                                 albumId = entry.albumId,
                                 albumName = entry.album,
+                                isVideo = entry.isVideo,
+                                isVideoOrigin = entry.isVideoOrigin,
+                                localUri = entry.localUri,
+                                localPath = entry.localPath,
+                                localDateAddedSeconds = entry.localDateAddedSeconds,
+                                localDateModifiedSeconds = entry.localDateModifiedSeconds,
+                                sourceQuality = entry.sourceQuality,
+                                sourceHiRes = entry.sourceHiRes,
+                                isExplicit = entry.isExplicit,
                             ),
                             ms = ms,
                             plays = plays,
+                        lastPlayedAt = entry.last,
                         )
                     }
             } else {
@@ -627,12 +666,23 @@ object ListeningStats {
                                 title = it.title,
                                 artist = it.artist,
                                 thumbnailUrl = it.art,
+                                durationText = it.durationText,
                                 artistId = it.artistId,
                                 albumId = it.albumId,
                                 albumName = it.album,
+                                isVideo = it.isVideo,
+                                isVideoOrigin = it.isVideoOrigin,
+                                localUri = it.localUri,
+                                localPath = it.localPath,
+                                localDateAddedSeconds = it.localDateAddedSeconds,
+                                localDateModifiedSeconds = it.localDateModifiedSeconds,
+                                sourceQuality = it.sourceQuality,
+                                sourceHiRes = it.sourceHiRes,
+                                isExplicit = it.isExplicit,
                             ),
                             ms = it.ms,
                             plays = it.plays,
+                        lastPlayedAt = it.last,
                         )
                     }
             }
@@ -852,6 +902,16 @@ data class TrackEntry(
     var albumId: String? = null,
     var artistId: String? = null,
     var art: String? = null,
+    var durationText: String? = null,
+    var localUri: String? = null,
+    var localPath: String? = null,
+    var localDateAddedSeconds: Long? = null,
+    var localDateModifiedSeconds: Long? = null,
+    var isVideo: Boolean = false,
+    var isVideoOrigin: Boolean = false,
+    var sourceQuality: String? = null,
+    var sourceHiRes: Boolean = false,
+    var isExplicit: Boolean? = null,
     var ms: Long = 0L,
     var plays: Int = 0,
     var last: Long = 0L,
@@ -866,6 +926,16 @@ data class TrackEntry(
         if (albumId == null) albumId = other.albumId
         if (artistId == null) artistId = other.artistId
         if (art == null) art = other.art
+        if (durationText == null) durationText = other.durationText
+        if (localUri == null) localUri = other.localUri
+        if (localPath == null) localPath = other.localPath
+        if (localDateAddedSeconds == null) localDateAddedSeconds = other.localDateAddedSeconds
+        if (localDateModifiedSeconds == null) localDateModifiedSeconds = other.localDateModifiedSeconds
+        isVideo = isVideo || other.isVideo
+        isVideoOrigin = isVideoOrigin || other.isVideoOrigin
+        if (sourceQuality == null) sourceQuality = other.sourceQuality
+        sourceHiRes = sourceHiRes || other.sourceHiRes
+        if (isExplicit == null) isExplicit = other.isExplicit
         // Merge per-day sub-buckets.
         if (other.days.isNotEmpty()) {
             other.days.forEach { (dateKey, stats) ->
@@ -989,7 +1059,13 @@ data class RankedEntry(
 )
 
 /** A song row, which keeps the whole [Song] so tapping it can play it. */
-data class RankedSong(val song: Song, val ms: Long, val plays: Int)
+data class RankedSong(
+    val song: Song,
+    val ms: Long,
+    val plays: Int,
+    /** Epoch milliseconds of the most recent real playback sample. */
+    val lastPlayedAt: Long = 0L,
+)
 
 /** How far back a Replay reaches. */
 enum class ReplayPeriod(val chip: String) {

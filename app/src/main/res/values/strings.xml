@@ -230,6 +230,7 @@
     <string name="backup_preview_remote">Remote playlist mappings: %1$d</string>
     <string name="backup_preview_folders">Playlist folders: %1$d</string>
     <string name="backup_preview_smart_playlists">Custom Smart Playlist rules: %1$d</string>
+    <string name="backup_preview_smart_rules_legacy">This backup predates Smart Playlist rules. Existing custom rules on this device will be left unchanged.</string>
     <string name="backup_preview_legacy_warning">Settings and listening history will be replaced. This older backup does not contain playlist data, so existing playlists will be left unchanged. Downloaded audio and login credentials are not included.</string>
     <string name="restore_legacy_backup">Restore available data</string>
     <string name="import_legacy_succeeded">Restored settings and %1$s of listening history from v%2$s. Existing playlists and the saved playback queue were left unchanged.</string>

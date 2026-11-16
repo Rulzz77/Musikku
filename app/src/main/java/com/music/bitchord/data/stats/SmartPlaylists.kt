@@ -175,7 +175,16 @@ internal fun buildSmartPlaylistItems(
     rules: List<SmartPlaylistRule>,
     nowMs: Long,
 ): List<SmartPlaylistItem> {
-    if (tracks.isEmpty()) return emptyList()
+    if (tracks.isEmpty()) {
+        return rules.take(20).map { rule ->
+            SmartPlaylistItem(
+                id = "custom:${rule.id}",
+                title = rule.name,
+                tracks = emptyList(),
+                rule = rule,
+            )
+        }
+    }
 
     val result = buildList {
         val mostPlayed = tracks.filter { it.plays > 0 }.sortedWith(

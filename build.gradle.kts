@@ -1,4 +1,4 @@
-// Top-level build file where you can add configuration options common to all sub-projects/modules.
+// Top-level build file where you can add configuration options common to all the sub-projects/modules.
 buildscript {
     repositories {
         google()
@@ -41,8 +41,8 @@ buildscript {
  * No "v" in the name — the in-app updater reads it as a number; the "v" is the
  * release tag's alone.
  */
-extra["bitchordVersionCode"] = 54
-extra["bitchordVersionName"] = "0.1.53"
+extra["bitchordVersionCode"] = 55
+extra["bitchordVersionName"] = "0.1.54"
 extra["bitchordBetaSuffix"] = ""
 /*
  * Bump this by hand before cutting each sideloaded test build ("beta2",

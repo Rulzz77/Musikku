@@ -636,9 +636,9 @@
     <string name="import_backup_warning">Ini akan mengganti pengaturan dan riwayat mendengarkan perangkat ini dengan isi file tersebut. Ekspor data saat ini terlebih dahulu jika ingin menyimpannya.</string>
     <string name="youtube_music_account">Akun YouTube Music</string>
     <string name="tap_to_sign_in_google">Ketuk untuk masuk dengan Google</string>
-    <string name="export_succeeded">Berhasil mengekspor pengaturan dan %1$s</string>
+    <string name="export_succeeded">Berhasil mengekspor %1$d playlist (%2$d lagu), pengaturan, %3$s riwayat mendengarkan, dan %4$d aturan Smart Playlist kustom</string>
     <string name="export_failed">Ekspor gagal: %1$s</string>
-    <string name="import_succeeded">Berhasil mengimpor %1$s dari v%2$s</string>
+    <string name="import_succeeded">Memulihkan %1$d playlist (%2$d lagu), %3$s riwayat mendengarkan, %4$d pengaturan, dan %7$d aturan Smart Playlist kustom dari v%5$s (%6$s)</string>
     <string name="import_failed">Impor gagal: %1$s</string>
     <string name="unknown_error">kesalahan tidak diketahui</string>
     <string name="no_listening_history">tidak ada riwayat mendengarkan</string>
@@ -1483,6 +1483,7 @@
     <string name="playlist_folder_no_playlists">Belum ada playlist yang tersedia.</string>
     <string name="playlist_folder_delete_notice">Menghapus folder ini tidak akan menghapus playlist atau lagu.</string>
     <string name="playlist_folder_count">%1$d playlist</string>
+    <string name="backup_preview_smart_playlists">Aturan Smart Playlist kustom: %1$d</string>
     <string name="smart_playlists_title">Playlist pintar</string>
     <string name="smart_playlist_hint">Campuran otomatis yang mengikuti kebiasaan mendengarkanmu.</string>
     <string name="smart_playlist_create">Buat playlist pintar</string>

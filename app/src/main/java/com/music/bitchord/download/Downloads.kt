@@ -207,7 +207,12 @@ object Downloads {
             return
         }
         synchronized(recoveryLock) {
-            prefs.edit().putString(KEY_DOWNLOAD_RECOVERY, encoded).apply()
+            // These writes happen only at queue/state transitions, not on each
+            // byte-progress tick. Commit synchronously so a process killed
+            // immediately after a queue or completion transition still has
+            // the latest recoverable snapshot on disk.
+            val saved = prefs.edit().putString(KEY_DOWNLOAD_RECOVERY, encoded).commit()
+            if (!saved) Log.w(TAG, "could not commit download recovery state")
         }
     }
 

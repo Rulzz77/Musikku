@@ -143,7 +143,7 @@ object DownloadSession {
             restored.settledAt,
             items.maxOfOrNull { it.sequence } ?: 0L,
         )
-        clock.set(latest)
+        clock.updateAndGet { current -> maxOf(current, latest) }
     }
 
     /** Persist a sanitised snapshot after startup recovery has rewritten Running rows as Queued. */

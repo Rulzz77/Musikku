@@ -43,6 +43,9 @@ class BackupFormatTest {
             artists = listOf(Backup.BackupArtist("Artist", "artist-channel")),
             albumName = "Album",
             isExplicit = false,
+            sourceQuality = "LOSSLESS",
+            sourceHiRes = true,
+            isPodcastEpisode = true,
         )
         val local = Backup.BackupPlaylist(
             id = "spotify-local-1",
@@ -76,6 +79,9 @@ class BackupFormatTest {
         assertEquals(original.spotifyPlaylists, restored.spotifyPlaylists)
         assertEquals(original.remoteSpotifyImports, restored.remoteSpotifyImports)
         assertEquals(original.devicePlaylists, restored.devicePlaylists)
+        assertEquals("LOSSLESS", restored.spotifyPlaylists.single().songs.single().sourceQuality)
+        assertTrue(restored.spotifyPlaylists.single().songs.single().sourceHiRes)
+        assertTrue(restored.spotifyPlaylists.single().songs.single().isPodcastEpisode)
     }
 
     @Test

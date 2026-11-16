@@ -177,11 +177,13 @@ object Downloads {
             running.clear()
             fromCache.clear()
             restored.items
+                .filter { it.recoverable && it.fromCache }
+                .forEach { fromCache += it.videoId }
+            restored.items
                 .filter { it.recoverable && !it.progress.settled }
                 .sortedBy { it.sequence }
                 .forEach { item ->
                     pending[item.videoId] = item.song
-                    if (item.fromCache) fromCache += item.videoId
                 }
         }
         _active.value = buildMap {

@@ -1306,6 +1306,7 @@
     <string name="spotify_import_none">ไม่พบเพลงเหล่านั้นบน YouTube Music</string>
     <string name="spotify_import_title">นำเข้าเพลย์ลิสต์จาก Spotify</string>
     <string name="spotify_import_unmatched">ไม่พบเพลง %1$d เพลงบน YouTube Music</string>
+    <string name="spotify_import_lookup_failures">ไม่สามารถตรวจสอบเพลง %1$d เพลงได้เนื่องจากการค้นหา YouTube Music ล้มเหลว โปรดลองค้นหาเพลงเหล่านี้อีกครั้ง</string>
     <string name="spotify_library_subtitle">เพลย์ลิสต์ Spotify ของคุณ</string>
     <string name="spotify_sign_in">ลงชื่อเข้าใช้ด้วย Spotify</string>
     <string name="spotify_use_spdc_token">ใช้โทเค็น sp_dc</string>

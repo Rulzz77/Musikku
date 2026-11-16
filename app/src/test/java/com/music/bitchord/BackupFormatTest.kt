@@ -90,6 +90,16 @@ class BackupFormatTest {
         assertEquals(original.remoteSpotifyImports, restored.remoteSpotifyImports)
         assertEquals(original.devicePlaylists, restored.devicePlaylists)
         assertEquals(original.lastPlayedQueue, restored.lastPlayedQueue)
+        val queueSnapshot = restored.lastPlayedQueue?.toSnapshot()
+        assertEquals(0, queueSnapshot?.index)
+        assertEquals(42_000L, queueSnapshot?.positionMs)
+        assertEquals("youtube-video-id", queueSnapshot?.songs?.single()?.videoId)
+        assertEquals("USER_QUEUE", queueSnapshot?.songs?.single()?.queueTier?.name)
+        assertEquals("queue-entry-1", queueSnapshot?.songs?.single()?.queueEntryId)
+        assertEquals("Radio seed", queueSnapshot?.songs?.single()?.radioName)
+        assertEquals("Search", queueSnapshot?.songs?.single()?.playbackSource)
+        assertEquals("LOSSLESS", queueSnapshot?.songs?.single()?.sourceQuality)
+        assertEquals(true, queueSnapshot?.songs?.single()?.sourceHiRes)
     }
 
     @Test

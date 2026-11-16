@@ -62,13 +62,7 @@ object Backup {
                 remoteSpotifyImports = LocalPlaylistStore.remoteSpotifyImportsSnapshot()
                     .mapValues { (_, ids) -> ids.toList() },
                 devicePlaylists = devicePlaylists,
-                lastPlayedQueue = LastPlayed.backupSnapshot()?.let { snapshot ->
-                    BackupQueue(
-                        songs = snapshot.songs.map { it.toBackupSong() },
-                        index = snapshot.index,
-                        positionMs = snapshot.positionMs,
-                    )
-                },
+
             )
             val text = json.encodeToString(BackupFile.serializer(), file)
             context.contentResolver.openOutputStream(target, "wt")
@@ -116,8 +110,6 @@ object Backup {
             if (file.version >= 2) {
                 LocalPlaylistStore.restoreFromBackup(spotifyPlaylists, remoteImports, mergePlaylists)
                 OfflinePlaylists.restoreFromBackup(devicePlaylists, mergePlaylists)
-                check(LastPlayed.restoreBackupSnapshot(file.lastPlayedQueue?.toSnapshot())) {
-                    "Could not restore the saved playback queue"
                 }
             }
             // Search history lives in the same preference file as AppSettings.
@@ -172,7 +164,8 @@ object Backup {
         }
         val trackCount = file.spotifyPlaylists.sumOf { it.songs.size } +
             file.devicePlaylists.sumOf { it.songs.size }
-        require(trackCount <= MAX_TRACKS) { "Backup contains too many playlist tracks" }        require(file.remoteSpotifyImports.size <= MAX_PLAYLISTS) {
+        require(trackCount <= MAX_TRACKS) { "Backup contains too many playlist tracks" }
+        require(file.remoteSpotifyImports.size <= MAX_PLAYLISTS) {
             "Backup contains too many remote playlist mappings"
         }
         file.remoteSpotifyImports.forEach { (playlistId, ids) ->
@@ -220,8 +213,6 @@ object Backup {
         deviceTracks = devicePlaylists.sumOf { it.songs.size },
         remotePlaylistMappings = remoteSpotifyImports.size,
         schemaVersion = version,
-        queueIndex = lastPlayedQueue?.takeIf { it.songs.isNotEmpty() }
-            ?.let { (it.index + 1).coerceIn(1, it.songs.size) } ?: 0,
     )
 
     private fun Song.toBackupSong() = BackupSong(
@@ -342,7 +333,6 @@ object Backup {
     private const val MAX_SETTING_STRING_LENGTH = 16_384
     private const val MAX_PLAYLISTS = 10_000
     private const val MAX_TRACKS = 500_000
-    private const val MAX_QUEUE_TRACKS = 100
     private const val MAX_LISTENING_MONTHS = 120
 
     @Serializable

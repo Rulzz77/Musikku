@@ -48,6 +48,7 @@ class DownloadSessionTest {
      * is a test that breaks the next one.
      */
     private fun clearState() {
+        DownloadSession.installPersistence(null)
         DownloadSession.clear()
         Downloads.collections.value.keys.toList().forEach(Downloads::forgetCollection)
     }
@@ -138,6 +139,78 @@ class DownloadSessionTest {
         assertEquals(1, state.items.size)
         assertEquals(DownloadProgress.Queued, state.items.single().progress)
         assertEquals(0, state.failed)
+    }
+
+    @Test
+    fun `restoring a process-dead session requeues running work and keeps settled results`() {
+        DownloadSession.restore(
+            DownloadSession.State(
+                items = listOf(
+                    DownloadSession.Item(
+                        videoId = "queued",
+                        song = song("queued"),
+                        progress = DownloadProgress.Queued,
+                        sequence = 40L,
+                        fromCache = true,
+                    ),
+                    DownloadSession.Item(
+                        videoId = "running",
+                        song = song("running"),
+                        progress = DownloadProgress.Running(0.72f),
+                        sequence = 41L,
+                    ),
+                    DownloadSession.Item(
+                        videoId = "done",
+                        song = song("done"),
+                        progress = DownloadProgress.Done,
+                        sequence = 42L,
+                    ),
+                    DownloadSession.Item(
+                        videoId = "failed",
+                        song = song("failed"),
+                        progress = DownloadProgress.Failed("HTTP 503"),
+                        sequence = 43L,
+                    ),
+                    DownloadSession.Item(
+                        videoId = "worker-owned",
+                        song = song("worker-owned"),
+                        progress = DownloadProgress.Queued,
+                        sequence = 44L,
+                        recoverable = false,
+                    ),
+                ),
+                seenAt = 50L,
+                settledAt = 49L,
+            ),
+        )
+
+        val restored = DownloadSession.state.value
+        assertEquals(listOf("queued", "running", "done", "failed"), restored.items.map { it.videoId })
+        assertEquals(DownloadProgress.Queued, restored.items[0].progress)
+        assertTrue(restored.items[0].fromCache)
+        assertEquals(DownloadProgress.Queued, restored.items[1].progress)
+        assertEquals(DownloadProgress.Done, restored.items[2].progress)
+        assertEquals(DownloadProgress.Failed("HTTP 503"), restored.items[3].progress)
+
+        DownloadSession.queued(song("next"))
+        assertTrue(DownloadSession.state.value.items.last().sequence > 50L)
+    }
+
+    @Test
+    fun `durable snapshots are written for state changes but not every byte progress tick`() {
+        var writes = 0
+        DownloadSession.installPersistence { writes++ }
+
+        DownloadSession.queued(song("a"))
+        val afterQueue = writes
+        DownloadSession.running("a", 0.25f)
+        assertEquals(afterQueue, writes)
+
+        DownloadSession.done("a")
+        assertTrue(writes > afterQueue)
+        val afterDone = writes
+        DownloadSession.markSeen()
+        assertTrue(writes > afterDone)
     }
 
     // ---- How far through it is ---------------------------------------------

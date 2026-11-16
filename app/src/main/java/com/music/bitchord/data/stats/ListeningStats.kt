@@ -162,6 +162,9 @@ object ListeningStats {
                     sourceQuality = song.sourceQuality,
                     sourceHiRes = song.sourceHiRes,
                     isExplicit = song.isExplicit,
+                    downloadFormat = song.downloadFormat,
+                    trackNumber = song.trackNumber,
+                    isPodcastEpisode = song.isPodcastEpisode,
                 )
             }
             track.ms += playedMs
@@ -183,6 +186,9 @@ object ListeningStats {
             if (song.sourceQuality != null) track.sourceQuality = song.sourceQuality
             track.sourceHiRes = track.sourceHiRes || song.sourceHiRes
             if (song.isExplicit != null) track.isExplicit = song.isExplicit
+            if (song.downloadFormat != null) track.downloadFormat = song.downloadFormat
+            if (song.trackNumber != null) track.trackNumber = song.trackNumber
+            track.isPodcastEpisode = track.isPodcastEpisode || song.isPodcastEpisode
             if (countsAsPlay) track.plays++
 
             // Day-level sub-bucket for the track.
@@ -650,6 +656,9 @@ object ListeningStats {
                                 sourceQuality = entry.sourceQuality,
                                 sourceHiRes = entry.sourceHiRes,
                                 isExplicit = entry.isExplicit,
+                                downloadFormat = entry.downloadFormat,
+                                trackNumber = entry.trackNumber,
+                                isPodcastEpisode = entry.isPodcastEpisode,
                             ),
                             ms = ms,
                             plays = plays,
@@ -679,6 +688,9 @@ object ListeningStats {
                                 sourceQuality = it.sourceQuality,
                                 sourceHiRes = it.sourceHiRes,
                                 isExplicit = it.isExplicit,
+                                downloadFormat = it.downloadFormat,
+                                trackNumber = it.trackNumber,
+                                isPodcastEpisode = it.isPodcastEpisode,
                             ),
                             ms = it.ms,
                             plays = it.plays,
@@ -912,6 +924,9 @@ data class TrackEntry(
     var sourceQuality: String? = null,
     var sourceHiRes: Boolean = false,
     var isExplicit: Boolean? = null,
+    var downloadFormat: String? = null,
+    var trackNumber: Int? = null,
+    var isPodcastEpisode: Boolean = false,
     var ms: Long = 0L,
     var plays: Int = 0,
     var last: Long = 0L,
@@ -935,7 +950,10 @@ data class TrackEntry(
         isVideoOrigin = isVideoOrigin || other.isVideoOrigin
         if (sourceQuality == null) sourceQuality = other.sourceQuality
         sourceHiRes = sourceHiRes || other.sourceHiRes
-        if (isExplicit == null) isExplicit = other.isExplicit
+        if (other.isExplicit != null) isExplicit = other.isExplicit
+        if (other.downloadFormat != null) downloadFormat = other.downloadFormat
+        if (other.trackNumber != null) trackNumber = other.trackNumber
+        isPodcastEpisode = isPodcastEpisode || other.isPodcastEpisode
         // Merge per-day sub-buckets.
         if (other.days.isNotEmpty()) {
             other.days.forEach { (dateKey, stats) ->

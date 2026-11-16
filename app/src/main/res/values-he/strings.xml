@@ -1469,4 +1469,22 @@
     <string name="diwali_title">BitChord מאחלת לכם דיוואלי שמח</string>
     <string name="diwali_subtitle">מי ייתן וחג האורות ימלא את ביתכם בשמחה ואת ימיכם במוזיקה.</string>
     <string name="diwali_cta">בואו נחגוג</string>
+    <!-- Backup and restore -->
+    <string name="backup_inspecting">Checking backup…</string>
+    <string name="backup_restoring">Restoring backup…</string>
+    <string name="backup_preview_title">Backup contents</string>
+    <string name="backup_preview_version">Created with version %1$s</string>
+    <string name="backup_preview_history">Listening history: %1$s</string>
+    <string name="backup_preview_settings">Settings: %1$d</string>
+    <string name="backup_preview_spotify">Spotify-imported playlists: %1$d (%2$d tracks)</string>
+    <string name="backup_preview_device">Device playlists, including Liked: %1$d (%2$d tracks)</string>
+    <string name="backup_preview_remote">Remote playlist mappings: %1$d</string>
+    <string name="backup_preview_legacy_warning">Settings and listening history will be replaced. This older backup does not contain playlist data, so existing playlists will be left unchanged. Downloaded audio and login credentials are not included.</string>
+    <string name="restore_legacy_backup">Restore available data</string>
+    <string name="import_legacy_succeeded">Restored settings and %1$s of listening history from v%2$s. Existing playlists and the saved playback queue were left unchanged.</string>
+    <string name="backup_preview_warning">Settings and listening history will be replaced by the backup. Choose whether to merge or replace playlists. Downloaded audio and login credentials are not included. Local file references may need to be relinked on another device.</string>
+    <string name="merge_playlists">Merge playlists</string>
+    <string name="replace_playlists">Replace playlists</string>
+    <string name="backup_playlists_merged">merged</string>
+    <string name="backup_playlists_replaced">replaced</string>
 </resources>

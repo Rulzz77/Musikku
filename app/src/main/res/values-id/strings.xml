@@ -1441,4 +1441,22 @@
     <string name="diwali_title">BitChord mengucapkan Selamat Hari Diwali</string>
     <string name="diwali_subtitle">Semoga festival cahaya ini memenuhi rumah Anda dengan kebahagiaan dan hari-hari Anda dengan musik.</string>
     <string name="diwali_cta">Mari rayakan</string>
+    <!-- Backup and restore -->
+    <string name="backup_inspecting">Memeriksa cadangan…</string>
+    <string name="backup_restoring">Memulihkan cadangan…</string>
+    <string name="backup_preview_title">Isi cadangan</string>
+    <string name="backup_preview_version">Dibuat dengan versi %1$s</string>
+    <string name="backup_preview_history">Riwayat mendengarkan: %1$s</string>
+    <string name="backup_preview_settings">Pengaturan: %1$d</string>
+    <string name="backup_preview_spotify">Playlist impor Spotify: %1$d (%2$d lagu)</string>
+    <string name="backup_preview_device">Playlist perangkat, termasuk Lagu Disukai: %1$d (%2$d lagu)</string>
+    <string name="backup_preview_remote">Pemetaan playlist jarak jauh: %1$d</string>
+    <string name="backup_preview_legacy_warning">Pengaturan dan riwayat mendengarkan akan diganti. Cadangan lama ini tidak menyertakan data playlist, jadi playlist yang ada tidak akan diubah. File audio yang diunduh dan kredensial login tidak disertakan.</string>
+    <string name="restore_legacy_backup">Pulihkan data yang tersedia</string>
+    <string name="import_legacy_succeeded">Pengaturan dan %1$s riwayat mendengarkan dari v%2$s berhasil dipulihkan. Playlist yang ada dan antrean pemutaran tersimpan tidak diubah.</string>
+    <string name="backup_preview_warning">Pengaturan dan riwayat mendengarkan akan diganti dengan isi cadangan. Pilih apakah playlist akan digabung atau diganti. File audio yang diunduh dan kredensial login tidak disertakan. Referensi file lokal mungkin perlu ditautkan ulang di perangkat lain.</string>
+    <string name="merge_playlists">Gabungkan playlist</string>
+    <string name="replace_playlists">Ganti playlist</string>
+    <string name="backup_playlists_merged">digabung</string>
+    <string name="backup_playlists_replaced">diganti</string>
 </resources>

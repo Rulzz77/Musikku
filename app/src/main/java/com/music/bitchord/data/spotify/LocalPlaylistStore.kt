@@ -2,6 +2,7 @@ package com.music.bitchord.data.spotify
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.music.bitchord.data.model.ArtistRef
 import com.music.bitchord.data.model.Song
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -50,6 +51,23 @@ object LocalPlaylistStore {
                 val songs = mutableListOf<Song>()
                 for (j in 0 until songsArray.length()) {
                     val sObj = songsArray.getJSONObject(j)
+                    val artists = sObj.optJSONArray("artists")?.let { artistArray ->
+                        buildList {
+                            for (artistIndex in 0 until artistArray.length()) {
+                                val artist = artistArray.optJSONObject(artistIndex) ?: continue
+                                val name = artist.optString("name").takeIf(String::isNotBlank) ?: continue
+                                val browseId = artist.optString("browseId", null)
+                                    .takeIf { !it.isNullOrBlank() && it != "null" }
+                                add(ArtistRef(name, browseId))
+                            }
+                        }
+                    }.orEmpty()
+                    val isVideo = sObj.optBoolean("isVideo", false)
+                    val isExplicit = if (sObj.has("isExplicit") && !sObj.isNull("isExplicit")) {
+                        sObj.optBoolean("isExplicit")
+                    } else {
+                        null
+                    }
                     val song = Song(
                         videoId = sObj.optString("videoId", ""),
                         title = sObj.optString("title", ""),
@@ -57,9 +75,15 @@ object LocalPlaylistStore {
                         thumbnailUrl = sObj.optString("thumbnailUrl", null).takeIf { !it.isNullOrBlank() && it != "null" },
                         durationText = sObj.optString("durationText", null).takeIf { !it.isNullOrBlank() && it != "null" },
                         artistId = sObj.optString("artistId", null).takeIf { !it.isNullOrBlank() && it != "null" },
+                        artists = artists,
                         albumId = sObj.optString("albumId", null).takeIf { !it.isNullOrBlank() && it != "null" },
                         albumName = sObj.optString("albumName", null).takeIf { !it.isNullOrBlank() && it != "null" },
-                        isVideo = sObj.optBoolean("isVideo", false),
+                        isVideo = isVideo,
+                        isVideoOrigin = sObj.optBoolean("isVideoOrigin", isVideo),
+                        isExplicit = isExplicit,
+                        sourceQuality = sObj.optString("sourceQuality", null).takeIf { !it.isNullOrBlank() && it != "null" },
+                        sourceHiRes = sObj.optBoolean("sourceHiRes", false),
+                        isPodcastEpisode = sObj.optBoolean("isPodcastEpisode", false),
                     )
                     songs.add(song)
                 }
@@ -81,6 +105,97 @@ object LocalPlaylistStore {
                 (0 until ids.length()).mapNotNull { ids.optString(it).takeIf(String::isNotBlank) }.toSet()
             }
         }
+    }
+
+    /** A defensive copy for backup export; callers cannot mutate the live mapping. */
+    fun remoteSpotifyImportsSnapshot(): Map<String, Set<String>> =
+        remoteSpotifyImports.value.mapValues { (_, ids) -> ids.toSet() }
+
+    /**
+     * Restores device-local Spotify playlists and remote-playlist membership
+     * mappings. The write is committed before publishing the new state so a
+     * successful import cannot report success while only memory was updated.
+     */
+    fun restoreFromBackup(
+        incomingPlaylists: List<LocalPlaylist>,
+        incomingRemoteImports: Map<String, Set<String>>,
+        merge: Boolean,
+    ): Int {
+        check(this::prefs.isInitialized) { "Local playlist storage is not initialized" }
+
+        val normalized = normalizeImportedPlaylists(incomingPlaylists)
+        val nextPlaylists = if (merge) mergeImportedPlaylists(_playlists.value, normalized) else normalized
+        val nextRemoteImports = if (merge) {
+            val combined = remoteSpotifyImports.value.mapValuesTo(LinkedHashMap()) { it.value.toMutableSet() }
+            incomingRemoteImports.forEach { (id, videoIds) ->
+                val key = id.trim()
+                if (key.isNotEmpty()) combined.getOrPut(key) { LinkedHashSet() }.addAll(
+                    videoIds.mapNotNull { it.trim().takeIf(String::isNotEmpty) },
+                )
+            }
+            combined.mapValues { it.value.toSet() }
+        } else {
+            incomingRemoteImports.mapNotNull { (id, videoIds) ->
+                id.trim().takeIf(String::isNotEmpty)?.let { key ->
+                    key to videoIds.mapNotNull { it.trim().takeIf(String::isNotEmpty) }.toSet()
+                }
+            }.toMap()
+        }
+
+        val committed = prefs.edit()
+            .putString(KEY_PLAYLISTS, encodePlaylists(nextPlaylists))
+            .putString(KEY_REMOTE_SPOTIFY_IMPORTS, encodeRemoteSpotifyImports(nextRemoteImports))
+            .commit()
+        check(committed) { "Could not save restored Spotify playlists" }
+
+        _playlists.value = nextPlaylists
+        remoteSpotifyImports.value = nextRemoteImports
+        return nextPlaylists.size
+    }
+
+    private fun normalizeImportedPlaylists(playlists: List<LocalPlaylist>): List<LocalPlaylist> {
+        val unique = LinkedHashMap<String, LocalPlaylist>()
+        playlists.forEach { playlist ->
+            val id = playlist.id.trim()
+            val title = playlist.title.trim()
+            if (id.isEmpty() || title.isEmpty()) return@forEach
+            unique[id] = playlist.copy(
+                id = id,
+                title = title,
+                songs = dedupeSongs(playlist.songs),
+                coverUrl = playlist.coverUrl?.takeIf(String::isNotBlank),
+            )
+        }
+        return unique.values.toList()
+    }
+
+    private fun mergeImportedPlaylists(
+        current: List<LocalPlaylist>,
+        incoming: List<LocalPlaylist>,
+    ): List<LocalPlaylist> {
+        val merged = current.toMutableList()
+        val indexes = merged.mapIndexed { index, playlist -> playlist.id to index }.toMap().toMutableMap()
+        incoming.forEach { playlist ->
+            val index = indexes[playlist.id]
+            if (index == null) {
+                indexes[playlist.id] = merged.size
+                merged += playlist
+            } else {
+                val existing = merged[index]
+                merged[index] = existing.copy(
+                    title = existing.title.ifBlank { playlist.title },
+                    songs = appendUniqueImportedTracks(existing.songs, playlist.songs).first,
+                    coverUrl = existing.coverUrl ?: playlist.coverUrl,
+                )
+            }
+        }
+        return normalizeImportedPlaylists(merged)
+    }
+
+    private fun encodeRemoteSpotifyImports(value: Map<String, Set<String>>): String {
+        val root = JSONObject()
+        value.forEach { (id, videoIds) -> root.put(id, JSONArray(videoIds.toList())) }
+        return root.toString()
     }
 
     private fun persistRemoteSpotifyImports(value: Map<String, Set<String>>) {
@@ -233,33 +348,55 @@ object LocalPlaylistStore {
         return playlist.songs.any { existing -> isSamePlaylistTrack(existing, song) }
     }
 
+    private fun encodePlaylists(list: List<LocalPlaylist>): String {
+        val jsonArray = JSONArray()
+        for (playlist in list) {
+            val pObj = JSONObject()
+            pObj.put("id", playlist.id)
+            pObj.put("title", playlist.title)
+            pObj.putOpt("coverUrl", playlist.coverUrl)
+            val songsArray = JSONArray()
+            for (song in playlist.songs) {
+                val sObj = JSONObject()
+                sObj.put("videoId", song.videoId)
+                sObj.put("title", song.title)
+                sObj.put("artist", song.artist)
+                sObj.put("thumbnailUrl", song.thumbnailUrl)
+                sObj.put("durationText", song.durationText)
+                sObj.put("artistId", song.artistId)
+                sObj.put("albumId", song.albumId)
+                sObj.put("albumName", song.albumName)
+                sObj.put(
+                    "artists",
+                    JSONArray().apply {
+                        song.artists.forEach { artist ->
+                            put(
+                                JSONObject().apply {
+                                    put("name", artist.name)
+                                    put("browseId", artist.browseId ?: JSONObject.NULL)
+                                },
+                            )
+                        }
+                    },
+                )
+                sObj.put("isVideo", song.isVideo)
+                sObj.put("isVideoOrigin", song.isVideoOrigin)
+                sObj.put("isExplicit", song.isExplicit ?: JSONObject.NULL)
+                sObj.put("sourceQuality", song.sourceQuality)
+                sObj.put("sourceHiRes", song.sourceHiRes)
+                sObj.put("isPodcastEpisode", song.isPodcastEpisode)
+                songsArray.put(sObj)
+            }
+            pObj.put("songs", songsArray)
+            jsonArray.put(pObj)
+        }
+        return jsonArray.toString()
+    }
+
     private fun persist(list: List<LocalPlaylist>) {
         if (!this::prefs.isInitialized) return
         runCatching {
-            val jsonArray = JSONArray()
-            for (playlist in list) {
-                val pObj = JSONObject()
-                pObj.put("id", playlist.id)
-                pObj.put("title", playlist.title)
-                pObj.putOpt("coverUrl", playlist.coverUrl)
-                val songsArray = JSONArray()
-                for (song in playlist.songs) {
-                    val sObj = JSONObject()
-                    sObj.put("videoId", song.videoId)
-                    sObj.put("title", song.title)
-                    sObj.put("artist", song.artist)
-                    sObj.put("thumbnailUrl", song.thumbnailUrl)
-                    sObj.put("durationText", song.durationText)
-                    sObj.put("artistId", song.artistId)
-                    sObj.put("albumId", song.albumId)
-                    sObj.put("albumName", song.albumName)
-                    sObj.put("isVideo", song.isVideo)
-                    songsArray.put(sObj)
-                }
-                pObj.put("songs", songsArray)
-                jsonArray.put(pObj)
-            }
-            prefs.edit().putString(KEY_PLAYLISTS, jsonArray.toString()).apply()
+            prefs.edit().putString(KEY_PLAYLISTS, encodePlaylists(list)).apply()
         }
     }
 }

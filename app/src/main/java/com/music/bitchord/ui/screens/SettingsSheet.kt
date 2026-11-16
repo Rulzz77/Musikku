@@ -341,6 +341,8 @@ fun SettingsScreen(
     // result reports itself under the word "Export".
     var exportStatus by remember { mutableStateOf<String?>(null) }
     var importStatus by remember { mutableStateOf<String?>(null) }
+    var pendingBackupPreview by remember { mutableStateOf<Backup.Preview?>(null) }
+    var pendingBackupUri by remember { mutableStateOf<Uri?>(null) }
     var confirmImport by remember { mutableStateOf(false) }
     var confirmClearSongCache by remember { mutableStateOf(false) }
     var showPerformanceWarning by remember { mutableStateOf(false) }
@@ -378,8 +380,13 @@ fun SettingsScreen(
         if (target == null) return@rememberLauncherForActivityResult
         backupScope.launch {
             exportStatus = Backup.exportTo(context, target).fold(
-                onSuccess = { months ->
-                    context.getString(R.string.export_succeeded, context.countOfMonths(months))
+                onSuccess = { summary ->
+                    context.getString(
+                        R.string.export_succeeded,
+                        summary.playlistCount,
+                        summary.tracks,
+                        context.countOfMonths(summary.months),
+                    )
                 },
                 onFailure = {
                     context.getString(R.string.export_failed, it.message ?: context.getString(R.string.unknown_error))
@@ -392,9 +399,50 @@ fun SettingsScreen(
     ) { source ->
         if (source == null) return@rememberLauncherForActivityResult
         backupScope.launch {
-            importStatus = Backup.importFrom(context, source).fold(
-                onSuccess = {
-                    context.getString(R.string.import_succeeded, context.countOfMonths(it.months), it.from)
+            importStatus = context.getString(R.string.backup_inspecting)
+            Backup.previewFrom(context, source).fold(
+                onSuccess = { preview ->
+                    pendingBackupUri = source
+                    pendingBackupPreview = preview
+                    importStatus = null
+                },
+                onFailure = {
+                    importStatus = context.getString(
+                        R.string.import_failed,
+                        it.message ?: context.getString(R.string.unknown_error),
+                    )
+                },
+            )
+        }
+    }
+
+    fun restoreBackup(source: Uri, mergePlaylists: Boolean) {
+        pendingBackupPreview = null
+        pendingBackupUri = null
+        backupScope.launch {
+            importStatus = context.getString(R.string.backup_restoring)
+            importStatus = Backup.importFrom(context, source, mergePlaylists).fold(
+                onSuccess = { summary ->
+                    if (summary.schemaVersion < 2) {
+                        context.getString(
+                            R.string.import_legacy_succeeded,
+                            context.countOfMonths(summary.months),
+                            summary.from.ifBlank { "unknown" },
+                        )
+                    } else {
+                        context.getString(
+                            R.string.import_succeeded,
+                            summary.playlistCount,
+                            summary.tracks,
+                            context.countOfMonths(summary.months),
+                            summary.settings,
+                            summary.from.ifBlank { "unknown" },
+                            context.getString(
+                                if (summary.mergedPlaylists) R.string.backup_playlists_merged
+                                else R.string.backup_playlists_replaced,
+                            ),
+                        )
+                    }
                 },
                 onFailure = {
                     context.getString(R.string.import_failed, it.message ?: context.getString(R.string.unknown_error))
@@ -1867,6 +1915,69 @@ fun SettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { confirmImport = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
+
+    pendingBackupPreview?.let { preview ->
+        val source = pendingBackupUri
+        AlertDialog(
+            onDismissRequest = {
+                pendingBackupPreview = null
+                pendingBackupUri = null
+            },
+            title = { Text(stringResource(R.string.backup_preview_title)) },
+            text = {
+                Text(
+                    buildString {
+                        appendLine(context.getString(R.string.backup_preview_version, preview.versionName.ifBlank { "unknown" }))
+                        appendLine(context.getString(R.string.backup_preview_history, context.countOfMonths(preview.months)))
+                        appendLine(context.getString(R.string.backup_preview_settings, preview.settings))
+                        appendLine(context.getString(R.string.backup_preview_spotify, preview.spotifyPlaylists, preview.spotifyTracks))
+                        appendLine(context.getString(R.string.backup_preview_device, preview.devicePlaylists, preview.deviceTracks))
+                        appendLine(context.getString(R.string.backup_preview_remote, preview.remotePlaylistMappings))
+                        appendLine()
+                        append(
+                            context.getString(
+                                if (preview.schemaVersion < 2) R.string.backup_preview_legacy_warning
+                                else R.string.backup_preview_warning,
+                            ),
+                        )
+                    },
+                )
+            },
+            confirmButton = {
+                if (preview.schemaVersion < 2) {
+                    TextButton(
+                        enabled = source != null,
+                        onClick = { source?.let { restoreBackup(it, mergePlaylists = true) } },
+                    ) {
+                        Text(stringResource(R.string.restore_legacy_backup))
+                    }
+                } else {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(
+                            enabled = source != null,
+                            onClick = { source?.let { restoreBackup(it, mergePlaylists = true) } },
+                        ) {
+                            Text(stringResource(R.string.merge_playlists))
+                        }
+                        TextButton(
+                            enabled = source != null,
+                            onClick = { source?.let { restoreBackup(it, mergePlaylists = false) } },
+                        ) {
+                            Text(stringResource(R.string.replace_playlists))
+                        }
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    pendingBackupPreview = null
+                    pendingBackupUri = null
+                }) {
                     Text(stringResource(R.string.cancel))
                 }
             },

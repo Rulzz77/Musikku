@@ -424,20 +424,27 @@ fun SettingsScreen(
             importStatus = context.getString(R.string.backup_restoring)
             importStatus = Backup.importFrom(context, source, mergePlaylists).fold(
                 onSuccess = { summary ->
-                    context.getString(
-                        R.string.import_succeeded,
-                        summary.playlistCount,
-                        summary.tracks,
-                        context.countOfMonths(summary.months),
-                        summary.settings,
-                        summary.from.ifBlank { "unknown" },
+                    if (summary.schemaVersion < 2) {
                         context.getString(
-
-                            if (summary.mergedPlaylists) R.string.backup_playlists_merged
-                            else R.string.backup_playlists_replaced,
-                        ),
-                        summary.queueTracks,
-                    )
+                            R.string.import_legacy_succeeded,
+                            context.countOfMonths(summary.months),
+                            summary.from.ifBlank { "unknown" },
+                        )
+                    } else {
+                        context.getString(
+                            R.string.import_succeeded,
+                            summary.playlistCount,
+                            summary.tracks,
+                            context.countOfMonths(summary.months),
+                            summary.settings,
+                            summary.from.ifBlank { "unknown" },
+                            context.getString(
+                                if (summary.mergedPlaylists) R.string.backup_playlists_merged
+                                else R.string.backup_playlists_replaced,
+                            ),
+                            summary.queueTracks,
+                        )
+                    }
                 },
                 onFailure = {
                     context.getString(R.string.import_failed, it.message ?: context.getString(R.string.unknown_error))
@@ -1944,18 +1951,27 @@ fun SettingsScreen(
                 )
             },
             confirmButton = {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (preview.schemaVersion < 2) {
                     TextButton(
                         enabled = source != null,
                         onClick = { source?.let { restoreBackup(it, mergePlaylists = true) } },
                     ) {
-                        Text(stringResource(R.string.merge_playlists))
+                        Text(stringResource(R.string.restore_legacy_backup))
                     }
-                    TextButton(
-                        enabled = source != null,
-                        onClick = { source?.let { restoreBackup(it, mergePlaylists = false) } },
-                    ) {
-                        Text(stringResource(R.string.replace_playlists))
+                } else {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(
+                            enabled = source != null,
+                            onClick = { source?.let { restoreBackup(it, mergePlaylists = true) } },
+                        ) {
+                            Text(stringResource(R.string.merge_playlists))
+                        }
+                        TextButton(
+                            enabled = source != null,
+                            onClick = { source?.let { restoreBackup(it, mergePlaylists = false) } },
+                        ) {
+                            Text(stringResource(R.string.replace_playlists))
+                        }
                     }
                 }
             },

@@ -86,6 +86,51 @@ object SmartPlaylists {
         }
     }
 
+    /**
+     * Restores saved rules as part of Backup & Restore. Merge keeps rules already
+     * on this device when ids collide; replace uses the backup's complete set.
+     */
+    fun restoreFromBackup(incoming: List<SmartPlaylistRule>, merge: Boolean): Int {
+        check(this::prefs.isInitialized) { "Smart Playlist storage is not initialized" }
+        require(incoming.size <= MAX_RULES) { "Backup contains too many Smart Playlists" }
+
+        val imported = LinkedHashMap<String, SmartPlaylistRule>()
+        incoming.forEach { rule ->
+            val id = rule.id.trim()
+            val name = rule.name.trim()
+            require(id.isNotEmpty() && name.isNotEmpty()) { "Backup contains an invalid Smart Playlist rule" }
+            require(id.length <= 512 && name.length <= MAX_NAME_LENGTH) {
+                "Backup contains an oversized Smart Playlist rule"
+            }
+            require(rule.artistContains.length <= MAX_ARTIST_FILTER_LENGTH &&
+                rule.minimumPlays in 1..MAX_MINIMUM_PLAYS) {
+                "Backup contains invalid Smart Playlist filters"
+            }
+            require(imported.putIfAbsent(
+                id,
+                rule.copy(
+                    id = id,
+                    name = name,
+                    artistContains = rule.artistContains.trim(),
+                ),
+            ) == null) { "Backup contains duplicate Smart Playlist rules" }
+        }
+
+        val next = if (merge) {
+            val combined = LinkedHashMap<String, SmartPlaylistRule>()
+            _rules.value.forEach { combined[it.id] = it }
+            imported.forEach { (id, rule) -> combined.putIfAbsent(id, rule) }
+            require(combined.size <= MAX_RULES) {
+                "Merging this backup would exceed the 20 Smart Playlist limit"
+            }
+            combined.values.toList()
+        } else {
+            imported.values.toList()
+        }
+        synchronized(lock) { persist(next) }
+        return next.size
+    }
+
     private fun persist(value: List<SmartPlaylistRule>) {
         val json = JSONArray()
         value.forEach { rule ->

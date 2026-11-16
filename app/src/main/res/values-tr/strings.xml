@@ -1463,4 +1463,30 @@
     <string name="playlist_folder_no_playlists">Henüz kullanılabilir çalma listesi yok.</string>
     <string name="playlist_folder_delete_notice">Bu klasörü silmek çalma listelerini veya şarkıları silmez.</string>
     <string name="playlist_folder_count">%1$d çalma listesi</string>
+
+    <!-- Smart Playlists -->
+    <string name="backup_preview_folders">Çalma listesi klasörleri: %1$d</string>
+    <string name="backup_preview_smart_playlists">Özel akıllı çalma listesi kuralları: %1$d</string>
+    <string name="backup_preview_smart_rules_legacy">Bu yedek, akıllı çalma listesi kuralları desteklenmeden önce oluşturuldu. Bu cihazdaki mevcut özel kurallar korunacak.</string>
+    <string name="smart_playlists_title">Akıllı çalma listeleri</string>
+    <string name="smart_playlist_hint">Dinleme alışkanlıklarına göre değişen dinamik listeler.</string>
+    <string name="smart_playlist_create">Akıllı çalma listesi oluştur</string>
+    <string name="smart_playlist_edit">Akıllı çalma listesini düzenle</string>
+    <string name="smart_playlist_edit_action">Düzenle</string>
+    <string name="smart_playlist_most_played">En çok çalınan</string>
+    <string name="smart_playlist_recently_played">Son çalınan</string>
+    <string name="smart_playlist_most_listened">En çok dinlenen</string>
+    <string name="smart_playlist_forgotten">Unutulan parçalar</string>
+    <string name="smart_playlist_track_count">%1$d parça</string>
+    <string name="smart_playlist_empty">Akıllı çalma listelerini oluşturmak için birkaç şarkı çal. Kaydettiğin kurallar da burada görünür.</string>
+    <string name="smart_playlist_loading">Dinleme geçmişin yükleniyor…</string>
+    <string name="smart_playlist_name">Çalma listesi adı</string>
+    <string name="smart_playlist_artist_filter">Sanatçı adında geçen ifade (isteğe bağlı)</string>
+    <string name="smart_playlist_minimum_plays_value">En az %1$d kez çalınmış</string>
+    <string name="smart_playlist_sort">Parçaları şuna göre sırala</string>
+    <string name="smart_playlist_sort_played">Çalınma sayısı</string>
+    <string name="smart_playlist_sort_recent">Son çalınma</string>
+    <string name="smart_playlist_sort_listened">Dinleme süresi</string>
+    <string name="smart_playlist_editor_description">Bu listeler dinleme geçmişinden oluşturulur ve dinleme istatistikleri kaydedildiğinde yenilenir. Normal çalma listelerini değiştirmez.</string>
+    <string name="smart_playlist_max_reached">En fazla 20 özel akıllı çalma listesi oluşturabilirsin.</string>
 </resources>

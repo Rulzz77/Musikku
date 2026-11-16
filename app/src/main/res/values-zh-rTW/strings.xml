@@ -1483,4 +1483,30 @@
     <string name="playlist_folder_no_playlists">目前沒有可用的播放清單。</string>
     <string name="playlist_folder_delete_notice">刪除此資料夾不會刪除播放清單或歌曲。</string>
     <string name="playlist_folder_count">%1$d 個播放清單</string>
+
+    <!-- Smart Playlists -->
+    <string name="backup_preview_folders">播放清單資料夾：%1$d</string>
+    <string name="backup_preview_smart_playlists">自訂智慧播放清單規則：%1$d</string>
+    <string name="backup_preview_smart_rules_legacy">此備份建立於智慧播放清單規則功能推出之前。此裝置上既有的自訂規則將維持不變。</string>
+    <string name="smart_playlists_title">智慧播放清單</string>
+    <string name="smart_playlist_hint">根據你的聆聽習慣動態產生的混合清單。</string>
+    <string name="smart_playlist_create">建立智慧播放清單</string>
+    <string name="smart_playlist_edit">編輯智慧播放清單</string>
+    <string name="smart_playlist_edit_action">編輯</string>
+    <string name="smart_playlist_most_played">播放次數最多</string>
+    <string name="smart_playlist_recently_played">最近播放</string>
+    <string name="smart_playlist_most_listened">聆聽時間最長</string>
+    <string name="smart_playlist_forgotten">遺忘的曲目</string>
+    <string name="smart_playlist_track_count">%1$d 首歌曲</string>
+    <string name="smart_playlist_empty">播放幾首歌曲以建立智慧播放清單。你儲存的規則也會顯示在這裡。</string>
+    <string name="smart_playlist_loading">正在載入聆聽紀錄…</string>
+    <string name="smart_playlist_name">播放清單名稱</string>
+    <string name="smart_playlist_artist_filter">演出者名稱包含（選填）</string>
+    <string name="smart_playlist_minimum_plays_value">至少播放 %1$d 次</string>
+    <string name="smart_playlist_sort">曲目排序方式</string>
+    <string name="smart_playlist_sort_played">播放次數</string>
+    <string name="smart_playlist_sort_recent">最近播放時間</string>
+    <string name="smart_playlist_sort_listened">聆聽時間</string>
+    <string name="smart_playlist_editor_description">這些清單根據你的聆聽紀錄建立，並會在聆聽統計儲存時更新。它們不會更動一般播放清單。</string>
+    <string name="smart_playlist_max_reached">最多可建立 20 個自訂智慧播放清單。</string>
 </resources>

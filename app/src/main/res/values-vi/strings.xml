@@ -1423,4 +1423,30 @@
     <string name="playlist_folder_no_playlists">Chưa có danh sách phát nào.</string>
     <string name="playlist_folder_delete_notice">Xóa thư mục này sẽ không xóa danh sách phát hoặc bài hát.</string>
     <string name="playlist_folder_count">%1$d danh sách phát</string>
+
+    <!-- Smart Playlists -->
+    <string name="backup_preview_folders">Thư mục danh sách phát: %1$d</string>
+    <string name="backup_preview_smart_playlists">Quy tắc danh sách phát thông minh tùy chỉnh: %1$d</string>
+    <string name="backup_preview_smart_rules_legacy">Bản sao lưu này được tạo trước khi hỗ trợ quy tắc danh sách phát thông minh. Các quy tắc tùy chỉnh hiện có trên thiết bị này sẽ được giữ nguyên.</string>
+    <string name="smart_playlists_title">Danh sách phát thông minh</string>
+    <string name="smart_playlist_hint">Bản phối tự động thay đổi theo thói quen nghe của bạn.</string>
+    <string name="smart_playlist_create">Tạo danh sách phát thông minh</string>
+    <string name="smart_playlist_edit">Chỉnh sửa danh sách phát thông minh</string>
+    <string name="smart_playlist_edit_action">Chỉnh sửa</string>
+    <string name="smart_playlist_most_played">Phát nhiều nhất</string>
+    <string name="smart_playlist_recently_played">Phát gần đây</string>
+    <string name="smart_playlist_most_listened">Nghe nhiều nhất</string>
+    <string name="smart_playlist_forgotten">Bài hát đã bị lãng quên</string>
+    <string name="smart_playlist_track_count">%1$d bài hát</string>
+    <string name="smart_playlist_empty">Phát một vài bài hát để tạo danh sách phát thông minh. Các quy tắc đã lưu cũng sẽ xuất hiện ở đây.</string>
+    <string name="smart_playlist_loading">Đang tải lịch sử nghe nhạc…</string>
+    <string name="smart_playlist_name">Tên danh sách phát</string>
+    <string name="smart_playlist_artist_filter">Tên nghệ sĩ có chứa (không bắt buộc)</string>
+    <string name="smart_playlist_minimum_plays_value">Ít nhất %1$d lượt phát</string>
+    <string name="smart_playlist_sort">Sắp xếp bài hát theo</string>
+    <string name="smart_playlist_sort_played">Số lần phát</string>
+    <string name="smart_playlist_sort_recent">Lần phát gần đây</string>
+    <string name="smart_playlist_sort_listened">Thời gian nghe</string>
+    <string name="smart_playlist_editor_description">Các danh sách này được tạo từ lịch sử nghe nhạc và cập nhật khi thống kê nghe được lưu. Chúng không thay đổi danh sách phát thông thường.</string>
+    <string name="smart_playlist_max_reached">Bạn có thể tạo tối đa 20 danh sách phát thông minh tùy chỉnh.</string>
 </resources>

@@ -235,9 +235,11 @@ object OfflinePlaylists {
                 val existing = merged[index]
                 val known = existing.songs.mapTo(HashSet()) { it.playlistKey() }
                 val additions = playlist.songs.filter { known.add(it.playlistKey()) }
+                val orderedSongs = if (existing.isLiked) additions + existing.songs
+                    else existing.songs + additions
                 merged[index] = existing.copy(
                     title = existing.title.ifBlank { playlist.title },
-                    songs = (existing.songs + additions).map { it.stored() },
+                    songs = orderedSongs.map { it.stored() },
                     coverUrl = existing.coverUrl ?: playlist.coverUrl,
                 )
             }

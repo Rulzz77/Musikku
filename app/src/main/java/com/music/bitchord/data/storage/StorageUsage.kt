@@ -61,8 +61,7 @@ object StorageUsage {
     private fun savedUriBytes(context: Context, rawUri: String): Long {
         val uri = runCatching { Uri.parse(rawUri) }.getOrNull() ?: return 0L
         if (uri.scheme == "file") {
-            val path = uri.path ?: return 0L
-            return directoryBytes(File(path))
+            return fileUriBytes(uri.path)
         }
         if (uri.scheme != "content") return 0L
 
@@ -86,6 +85,18 @@ object StorageUsage {
         return runCatching {
             context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length }
         }.getOrNull()?.coerceAtLeast(0L) ?: 0L
+    }
+
+    /**
+     * Offline HLS/DASH downloads are directories whose public entry point is
+     * playlist.m3u8. Count every segment and sidecar in that package rather
+     * than reporting only the small manifest file.
+     */
+    internal fun fileUriBytes(path: String?): Long {
+        if (path.isNullOrBlank()) return 0L
+        val target = File(path)
+        val root = if (target.name == OFFLINE_PLAYLIST_FILE) target.parentFile ?: target else target
+        return directoryBytes(root)
     }
 
     internal fun directoryBytes(root: File): Long {
@@ -116,4 +127,5 @@ object StorageUsage {
 
     private const val DOWNLOAD_ARTWORK_DIRECTORY = "download-artwork"
     private const val IMAGE_CACHE_DIRECTORY = "image_cache"
+    private const val OFFLINE_PLAYLIST_FILE = "playlist.m3u8"
 }

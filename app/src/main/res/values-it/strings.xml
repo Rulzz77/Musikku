@@ -1463,7 +1463,7 @@
     <string name="smart_playlist_empty">Riproduci qualche brano per creare le tue Smart Playlist. Anche le regole salvate appariranno qui.</string>
     <string name="smart_playlist_loading">Caricamento della cronologia degli ascolti…</string>
     <string name="smart_playlist_name">Nome della playlist</string>
-    <string name="smart_playlist_artist_filter">Il nome dell'artista contiene (facoltativo)</string>
+    <string name="smart_playlist_artist_filter">Il nome dell\'artista contiene (facoltativo)</string>
     <string name="smart_playlist_minimum_plays_value">Almeno %1$d riproduzioni</string>
     <string name="smart_playlist_sort">Ordina i brani per</string>
     <string name="smart_playlist_sort_played">Numero di riproduzioni</string>

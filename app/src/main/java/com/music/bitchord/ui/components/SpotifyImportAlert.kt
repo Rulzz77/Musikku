@@ -94,6 +94,7 @@ fun SpotifyImportAlert(
     var status by remember { mutableStateOf<String?>(null) }
     var failed by remember { mutableStateOf(false) }
     var unmatched by remember { mutableStateOf<List<SpotifyImportTrack>?>(null) }
+    var lookupFailedTracks by remember { mutableStateOf<List<SpotifyImportTrack>>(emptyList()) }
     var importTitle by remember { mutableStateOf<String?>(null) }
     var resolvedSongs by remember { mutableStateOf<List<Song>>(emptyList()) }
     var submitted by remember { mutableStateOf(false) }
@@ -171,6 +172,7 @@ fun SpotifyImportAlert(
             resolvedSongs = resolvedSongs + song
         }
         unmatched = unmatched.orEmpty().filterNot { it == original }
+        lookupFailedTracks = lookupFailedTracks.filterNot { it == original }
         // A deliberate selection is a trusted positive mapping for the same
         // Spotify track in later imports, respecting the selected language.
         SpotifyImporter.rememberManualMatch(original, song, effectiveLanguage())
@@ -182,10 +184,15 @@ fun SpotifyImportAlert(
         if (missed.isEmpty() || working) return
         working = true
         failed = false
+        lookupFailedTracks = emptyList()
         status = context.getString(R.string.spotify_import_matching, 0, missed.size)
         scope.launch {
             try {
-                val (newSongs, stillMissing) = SpotifyImporter.resolveToSongs(missed, effectiveLanguage()) { done, total ->
+                val (newSongs, stillMissing) = SpotifyImporter.resolveToSongs(
+                    missed,
+                    effectiveLanguage(),
+                    onLookupFailures = { lookupFailedTracks = it },
+                ) { done, total ->
                     status = context.getString(R.string.spotify_import_matching, done, total)
                 }
                 val knownIds = resolvedSongs.mapNotNullTo(HashSet()) { it.videoId.takeIf(String::isNotBlank) }
@@ -215,11 +222,16 @@ fun SpotifyImportAlert(
         }
         working = true
         failed = false
+        lookupFailedTracks = emptyList()
         status = context.getString(R.string.spotify_import_fetching)
         scope.launch {
             try {
                 val (name, tracks) = SpotifyImporter.fetchPlaylistTracks(id)
-                val (songs, missed) = SpotifyImporter.resolveToSongs(tracks, effectiveLanguage()) { done, total ->
+                val (songs, missed) = SpotifyImporter.resolveToSongs(
+                    tracks,
+                    effectiveLanguage(),
+                    onLookupFailures = { lookupFailedTracks = it },
+                ) { done, total ->
                     status = context.getString(R.string.spotify_import_matching, done, total)
                 }
                 if (songs.isEmpty() && missed.isEmpty()) error(context.getString(R.string.spotify_import_none))
@@ -258,9 +270,16 @@ fun SpotifyImportAlert(
             )
             val missed = unmatched
             if (missed != null) {
+                val unmatchedSummary = buildString {
+                    append(stringResource(R.string.spotify_import_unmatched, missed.size))
+                    if (lookupFailedTracks.isNotEmpty()) {
+                        append("\n")
+                        append(stringResource(R.string.spotify_import_lookup_failures, lookupFailedTracks.size))
+                    }
+                }
                 Text(
                     text = if ((working || failed) && status != null) status.orEmpty()
-                    else stringResource(R.string.spotify_import_unmatched, missed.size),
+                    else unmatchedSummary,
                     modifier = Modifier.padding(top = 4.dp, bottom = 10.dp),
                     style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp, lineHeight = 17.sp),
                     color = MaterialTheme.colorScheme.onSurface,

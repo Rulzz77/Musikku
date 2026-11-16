@@ -1452,10 +1452,11 @@
     <string name="backup_preview_spotify">Playlist impor Spotify: %1$d (%2$d lagu)</string>
     <string name="backup_preview_device">Playlist perangkat, termasuk Lagu Disukai: %1$d (%2$d lagu)</string>
     <string name="backup_preview_remote">Pemetaan playlist jarak jauh: %1$d</string>
+    <string name="backup_preview_folders">Folder playlist: %1$d</string>
     <string name="backup_preview_legacy_warning">Pengaturan dan riwayat mendengarkan akan diganti. Cadangan lama ini tidak menyertakan data playlist, jadi playlist yang ada tidak akan diubah. File audio yang diunduh dan kredensial login tidak disertakan.</string>
     <string name="restore_legacy_backup">Pulihkan data yang tersedia</string>
     <string name="import_legacy_succeeded">Pengaturan dan %1$s riwayat mendengarkan dari v%2$s berhasil dipulihkan. Playlist yang ada dan antrean pemutaran tersimpan tidak diubah.</string>
-    <string name="backup_preview_warning">Pengaturan dan riwayat mendengarkan akan diganti dengan isi cadangan. Pilih apakah playlist akan digabung atau diganti. File audio yang diunduh dan kredensial login tidak disertakan. Referensi file lokal mungkin perlu ditautkan ulang di perangkat lain.</string>
+    <string name="backup_preview_warning">Pengaturan dan riwayat mendengarkan akan diganti dengan isi cadangan. Pilih apakah playlist dan aturan Smart Playlist kustom akan digabung atau diganti. File audio yang diunduh dan kredensial login tidak disertakan. Referensi file lokal mungkin perlu ditautkan ulang di perangkat lain.</string>
     <string name="merge_playlists">Gabungkan playlist</string>
     <string name="replace_playlists">Ganti playlist</string>
     <string name="backup_playlists_merged">digabung</string>
@@ -1484,6 +1485,7 @@
     <string name="playlist_folder_delete_notice">Menghapus folder ini tidak akan menghapus playlist atau lagu.</string>
     <string name="playlist_folder_count">%1$d playlist</string>
     <string name="backup_preview_smart_playlists">Aturan Smart Playlist kustom: %1$d</string>
+    <string name="backup_preview_smart_rules_legacy">Cadangan ini dibuat sebelum aturan Smart Playlist didukung. Aturan kustom yang sudah ada di perangkat ini akan tetap dipertahankan.</string>
     <string name="smart_playlists_title">Playlist pintar</string>
     <string name="smart_playlist_hint">Campuran otomatis yang mengikuti kebiasaan mendengarkanmu.</string>
     <string name="smart_playlist_create">Buat playlist pintar</string>

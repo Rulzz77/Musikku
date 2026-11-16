@@ -67,6 +67,11 @@ class BackupFormatTest {
             spotifyPlaylists = listOf(local),
             remoteSpotifyImports = mapOf("VLremote-playlist" to listOf("youtube-video-id")),
             devicePlaylists = listOf(device),
+            lastPlayedQueue = Backup.BackupQueue(
+                songs = listOf(song),
+                index = 0,
+                positionMs = 42_000L,
+            ),
         )
 
         val encoded = json.encodeToString(Backup.BackupFile.serializer(), original)
@@ -75,6 +80,7 @@ class BackupFormatTest {
         assertEquals(original.spotifyPlaylists, restored.spotifyPlaylists)
         assertEquals(original.remoteSpotifyImports, restored.remoteSpotifyImports)
         assertEquals(original.devicePlaylists, restored.devicePlaylists)
+        assertEquals(original.lastPlayedQueue, restored.lastPlayedQueue)
     }
 
     @Test

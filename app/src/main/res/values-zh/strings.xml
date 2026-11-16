@@ -1460,4 +1460,17 @@
     <string name="replace_playlists">Replace playlists</string>
     <string name="backup_playlists_merged">merged</string>
     <string name="backup_playlists_replaced">replaced</string>
+    <string name="storage_usage_title">MusikKu 使用的存储空间</string>
+    <string name="storage_usage_total">已管理的存储空间：%1$s</string>
+    <string name="storage_usage_available">设备剩余空间：%2$s 中剩余 %1$s</string>
+    <string name="storage_usage_loading">正在计算存储空间…</string>
+    <string name="storage_usage_refresh">刷新</string>
+    <string name="storage_downloaded_files">已下载的音乐和封面</string>
+    <string name="storage_audio_cache">音频缓存（可离线播放）</string>
+    <string name="storage_artwork_cache">封面图片缓存</string>
+    <string name="storage_canvas_cache">Canvas 视频缓存</string>
+    <string name="storage_usage_safety_note">下载内容会一直保留，直到你手动删除。清理缓存不会删除本地音乐、播放列表或备份。</string>
+    <string name="clear_canvas_cache">清理 Canvas 缓存</string>
+    <string name="clear_canvas_cache_subtitle">删除缓存的循环短片。需要时 MusikKu 会重新获取。</string>
+    <string name="canvas_cache_cleared">Canvas 缓存已清理</string>
 </resources>

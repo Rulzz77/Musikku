@@ -120,7 +120,7 @@ fun SmartPlaylistsSection(
         when {
             loading && summary == null -> {
                 Text(
-                    text = stringResource(R.string.loading),
+                    text = stringResource(R.string.smart_playlist_loading),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
@@ -375,7 +375,7 @@ private fun SmartPlaylistCard(
                     ) {
                         Icon(Icons.Rounded.Edit, contentDescription = null, modifier = Modifier.size(15.dp))
                         Spacer(Modifier.width(3.dp))
-                        Text(stringResource(R.string.edit))
+                        Text(stringResource(R.string.smart_playlist_edit_action))
                     }
                 }
             }

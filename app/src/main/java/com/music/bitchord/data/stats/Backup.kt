@@ -118,7 +118,9 @@ object Backup {
             if (file.version >= 2) {
                 LocalPlaylistStore.restoreFromBackup(spotifyPlaylists, remoteImports, mergePlaylists)
                 OfflinePlaylists.restoreFromBackup(devicePlaylists, mergePlaylists)
-                LastPlayed.restoreBackupSnapshot(file.lastPlayedQueue?.toSnapshot())
+                check(LastPlayed.restoreBackupSnapshot(file.lastPlayedQueue?.toSnapshot())) {
+                    "Could not restore the saved playback queue"
+                }
             }
             // Search history lives in the same preference file as AppSettings.
             SearchHistory.reload()
@@ -133,6 +135,7 @@ object Backup {
                 from = file.versionName,
                 at = file.exportedAt,
                 mergedPlaylists = mergePlaylists,
+                schemaVersion = file.version,
             )
         }
     }
@@ -366,6 +369,7 @@ object Backup {
         val from: String,
         val at: String,
         val mergedPlaylists: Boolean,
+        val schemaVersion: Int,
     ) {
         val playlistCount: Int get() = spotifyPlaylists + devicePlaylists
     }

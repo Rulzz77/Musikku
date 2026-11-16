@@ -19,6 +19,7 @@ import okhttp3.OkHttpClient
 import com.music.bitchord.auth.AuthStore
 import com.music.bitchord.data.DebugLog
 import com.music.bitchord.data.OfflinePlaylists
+import com.music.bitchord.data.PlaylistFolders
 import com.music.bitchord.data.lyrics.LyricsTranslation
 import androidx.appcompat.app.AppCompatDelegate
 import com.music.bitchord.ui.player.AndroidPlayerHost
@@ -159,6 +160,7 @@ class BitChordApplication : Application(), SingletonImageLoader.Factory, Configu
         // persisted and disappeared on the next launch.
         OfflinePlaylists.init(this, getString(R.string.auto_liked))
         LocalPlaylistStore.init(this)
+        PlaylistFolders.init(this)
         // Restores the addon token, so the first search after a process restart
         // doesn't have to attest the device again.
         com.music.bitchord.data.sources.addon.AddonAuth.init(this)

@@ -399,6 +399,7 @@ fun SettingsScreen(
                         summary.playlistCount,
                         summary.tracks,
                         context.countOfMonths(summary.months),
+                        summary.smartPlaylistRules,
                     )
                 },
                 onFailure = {
@@ -454,6 +455,7 @@ fun SettingsScreen(
                                 if (summary.mergedPlaylists) R.string.backup_playlists_merged
                                 else R.string.backup_playlists_replaced,
                             ),
+                            summary.smartPlaylistRules,
                         )
                     }
                 },
@@ -1980,6 +1982,8 @@ fun SettingsScreen(
                         appendLine(context.getString(R.string.backup_preview_spotify, preview.spotifyPlaylists, preview.spotifyTracks))
                         appendLine(context.getString(R.string.backup_preview_device, preview.devicePlaylists, preview.deviceTracks))
                         appendLine(context.getString(R.string.backup_preview_remote, preview.remotePlaylistMappings))
+                        appendLine(context.getString(R.string.backup_preview_folders, preview.playlistFolders))
+                        appendLine(context.getString(R.string.backup_preview_smart_playlists, preview.smartPlaylistRules))
                         appendLine()
                         append(
                             context.getString(

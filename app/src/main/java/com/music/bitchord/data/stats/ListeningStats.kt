@@ -653,7 +653,7 @@ object ListeningStats {
                             ),
                             ms = ms,
                             plays = plays,
-                        lastPlayedAt = entry.last,
+                            lastPlayedAt = entry.last,
                         )
                     }
             } else {
@@ -682,7 +682,7 @@ object ListeningStats {
                             ),
                             ms = it.ms,
                             plays = it.plays,
-                        lastPlayedAt = it.last,
+                            lastPlayedAt = it.last,
                         )
                     }
             }

@@ -256,6 +256,7 @@ object DownloadSession {
     /** The user has the manager open — see [State.visible]. */
     fun markSeen() {
         _state.update { it.copy(seenAt = tick()) }
+        persistence?.invoke(_state.value)
     }
 
     /** Empty the list outright, at the user's request. */

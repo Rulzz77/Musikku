@@ -153,6 +153,9 @@ object Downloads {
 
     fun init(context: Context) {
         prefs = context.getSharedPreferences("bitchord_settings", Context.MODE_PRIVATE)
+        // A new process means any still-pending MediaStore row belongs to an
+        // interrupted transfer. Clear those before a resumed worker can begin.
+        DownloadStore.cleanupInterruptedPendingRows(context)
         _saved.value = runCatching {
             json.decodeFromString(serializer, prefs.getString(KEY_SAVED, null) ?: "{}")
         }.getOrDefault(emptyMap())

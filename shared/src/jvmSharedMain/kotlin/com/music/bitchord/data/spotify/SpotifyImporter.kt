@@ -53,6 +53,11 @@ object SpotifyImporter {
 
     private val matchCache = SpotifyImportMatchCache(maxEntries = 512)
 
+    /** Installs device-owned persistence without coupling the shared importer to Android APIs. */
+    fun installMatchCachePersistence(persistence: SpotifyImportMatchCachePersistence) {
+        matchCache.attachPersistence(persistence)
+    }
+
     private const val USER_AGENT =
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
@@ -191,7 +196,10 @@ object SpotifyImporter {
         )
         matchCache.get(source.spotifyId)?.let { return it }
         val matched = LinerSpotifyMatcher.evaluate(source, searchCandidates(source)).track
-        if (matched != null) matchCache.put(source.spotifyId, matched)
+        if (matched != null) {
+            matchCache.put(source.spotifyId, matched)
+            matchCache.flush()
+        }
         return matched
     }
 
@@ -205,7 +213,12 @@ object SpotifyImporter {
 
     /** Remembers a deliberate user-selected replacement for future imports. */
     fun rememberManualMatch(track: SpotifyImportTrack, song: Song, language: String? = null) {
-        if (song.videoId.isNotBlank()) matchCache.put(track.spotifyId, song, language)
+        if (song.videoId.isNotBlank()) {
+            matchCache.put(track.spotifyId, song, language)
+            // A listener-selected replacement is deliberate user data: write it
+            // immediately rather than waiting for the next import checkpoint.
+            matchCache.flush()
+        }
     }
 
     /**
@@ -557,7 +570,12 @@ object SpotifyImporter {
             }
         }
 
-        val results = deferredResults.awaitAll()
+        val results = try {
+            deferredResults.awaitAll()
+        } finally {
+            // Keep completed matches even when the import is cancelled midway.
+            matchCache.flush()
+        }
         // Different Spotify entries may resolve to the same YouTube upload.
         val seenVideoIds = HashSet<String>()
         val songs = results.mapNotNull { it.first }

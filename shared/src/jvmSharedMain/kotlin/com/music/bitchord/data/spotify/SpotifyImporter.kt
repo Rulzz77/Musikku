@@ -386,7 +386,7 @@ object SpotifyImporter {
         if (decision?.matched != true) {
             val album = source.album
                 ?.trim()
-                ?.replace(Regex("""\\s+"""), " ")
+                ?.replace(Regex("""\s+"""), " ")
                 ?.take(100)
                 ?.takeIf { it.isNotBlank() && !query.contains(it, ignoreCase = true) }
             if (album != null) {

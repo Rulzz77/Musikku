@@ -1128,6 +1128,7 @@ private fun BitChordApp(
         ?.firstOrNull { it.title == YtMusicRepository.PLAYLISTS_SHELF }
         ?.items.orEmpty()
     val folderablePlaylistItems = (accountPlaylistItems + localPlaylistItems + offlinePlaylistItems)
+        .filter { it.browseId != null }
         .distinctBy { it.browseId }
     val homeLocalPlaylistShelves = remember(offlinePlaylistItems) {
         if (offlinePlaylistItems.isEmpty()) emptyList() else listOf(

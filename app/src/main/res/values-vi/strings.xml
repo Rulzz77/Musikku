@@ -1240,6 +1240,7 @@
     <string name="spotify_import_none">Không tìm thấy bài hát nào trong số đó trên YouTube Music.</string>
     <string name="spotify_import_title">Nhập danh sách phát Spotify</string>
     <string name="spotify_import_unmatched">%1$d bài hát không tìm thấy trên YouTube Music</string>
+    <string name="spotify_import_lookup_failures">Không thể kiểm tra %1$d bài hát vì tìm kiếm YouTube Music gặp lỗi. Hãy tìm kiếm lại những bài hát này.</string>
     <string name="spotify_library_subtitle">Danh sách phát Spotify của bạn</string>
     <string name="spotify_sign_in">Đăng nhập bằng Spotify</string>
     <string name="spotify_use_spdc_token">Dùng token sp_dc</string>

@@ -423,13 +423,13 @@ object SpotifyImporter {
             )
         }
 
-        if (candidates.isEmpty() && failures.isNotEmpty()) {
+        // A completed search with no usable candidates is a normal unmatched
+        // result, not a transport failure. Only surface an incomplete lookup
+        // when at least one request failed and no confident match was found.
+        if (decision?.matched != true && failures.isNotEmpty()) {
             throw IllegalStateException(
                 "Spotify lookup incomplete: ${failures.take(3).joinToString("; ")}",
             )
-        }
-        if (candidates.isEmpty() && query.isNotBlank()) {
-            throw IllegalStateException("Spotify lookup returned no usable YouTube Music response")
         }
         return candidates
     }
@@ -543,11 +543,31 @@ object SpotifyImporter {
         tracks: List<SpotifyImportTrack>,
         language: String? = null,
         onProgress: (completed: Int, total: Int) -> Unit,
+    ): Pair<List<Song>, List<SpotifyImportTrack>> =
+        resolveToSongsWithDiagnostics(tracks, language, onProgress = onProgress)
+
+    /**
+     * Resolves Spotify tracks while also reporting rows whose catalogue lookup
+     * was incomplete due to request failures. A successful empty search remains
+     * a normal unmatched result, not a temporary lookup error.
+     */
+    suspend fun resolveToSongsWithDiagnostics(
+        tracks: List<SpotifyImportTrack>,
+        language: String? = null,
+        searchRaw: suspend (
+            String,
+            YtMusicRepository.SpotifyImportSearchKind,
+        ) -> Result<List<Song>> = { query, kind ->
+            YtMusicRepository.searchSpotifyImportRaw(query, kind)
+        },
+        onLookupFailures: (List<SpotifyImportTrack>) -> Unit = {},
+        onProgress: (completed: Int, total: Int) -> Unit,
     ): Pair<List<Song>, List<SpotifyImportTrack>> = coroutineScope {
         // Spotify can repeat entries in its page payload; normalize before resolving.
         val uniqueTracks = distinctSpotifyImportTracks(tracks)
         val total = uniqueTracks.size
         val completedCount = AtomicInteger(0)
+        val lookupFailureTracks = java.util.Collections.synchronizedList(mutableListOf<SpotifyImportTrack>())
         val semaphore = Semaphore(4) // Match Liner Desktop's four concurrent track lookups.
 
         val cleanLang = language?.trim()?.takeIf {
@@ -564,7 +584,7 @@ object SpotifyImporter {
                         val candidates = try {
                             searchCandidates(track, cleanLang) { query, kind ->
                                 searchCache.search(query, kind) { cachedQuery, cachedKind ->
-                                    YtMusicRepository.searchSpotifyImportRaw(cachedQuery, cachedKind)
+                                    searchRaw(cachedQuery, cachedKind)
                                 }
                             }
                         } catch (cancelled: CancellationException) {
@@ -575,6 +595,9 @@ object SpotifyImporter {
                                 "Lookup failed for '${track.title}' by '${track.artist}': ${failure.message}",
                                 failure,
                             )
+                            // Keep transport/API failures distinct from a
+                            // completed search that simply found no safe match.
+                            lookupFailureTracks.add(track)
                             // One unavailable search must not abort the entire
                             // playlist import. This Spotify row stays retryable.
                             emptyList()
@@ -604,6 +627,7 @@ object SpotifyImporter {
             matchCache.flush()
         }
         // Different Spotify entries may resolve to the same YouTube upload.
+        onLookupFailures(distinctSpotifyImportTracks(lookupFailureTracks.toList()))
         val seenVideoIds = HashSet<String>()
         val songs = results.mapNotNull { it.first }
             .filter { it.videoId.isNotBlank() && seenVideoIds.add(it.videoId) }

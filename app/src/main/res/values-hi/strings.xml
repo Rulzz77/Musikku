@@ -1323,6 +1323,7 @@
     <string name="spotify_import_none">वे गाने YouTube Music पर नहीं मिले.</string>
     <string name="spotify_import_title">Spotify प्लेलिस्ट आयात करें</string>
     <string name="spotify_import_unmatched">%1$d गाने YouTube Music पर नहीं मिले</string>
+    <string name="spotify_import_lookup_failures">YouTube Music पर खोज विफल होने के कारण %1$d गानों की जाँच नहीं हो सकी। इन गानों को फिर से आज़माएँ।</string>
     <string name="spotify_library_subtitle">आपकी Spotify प्लेलिस्ट</string>
     <string name="spotify_sign_in">Spotify से साइन इन करें</string>
     <string name="spotify_use_spdc_token">sp_dc टोकन इस्तेमाल करें</string>

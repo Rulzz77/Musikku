@@ -1468,4 +1468,14 @@
     <string name="clear_canvas_cache">Limpiar caché de Canvas</string>
     <string name="clear_canvas_cache_subtitle">Eliminar clips en bucle almacenados en caché. MusikKu los volverá a obtener cuando los necesite.</string>
     <string name="canvas_cache_cleared">Caché de Canvas borrada</string>
+    <string name="playlist_folders_title">Carpetas de listas</string>
+    <string name="create_playlist_folder">Nueva carpeta</string>
+    <string name="edit_playlist_folder">Editar carpeta</string>
+    <string name="playlist_folder_name">Nombre de la carpeta</string>
+    <string name="playlist_folder_select_playlists">Seleccionar listas</string>
+    <string name="playlist_folder_move_notice">Las listas seleccionadas se mueven a esta carpeta; las originales siguen en tu biblioteca.</string>
+    <string name="playlist_folder_empty">Esta carpeta está vacía.</string>
+    <string name="playlist_folder_no_playlists">Todavía no hay listas disponibles.</string>
+    <string name="playlist_folder_delete_notice">Eliminar esta carpeta no eliminará las listas ni las canciones.</string>
+    <string name="playlist_folder_count">%1$d listas</string>
 </resources>

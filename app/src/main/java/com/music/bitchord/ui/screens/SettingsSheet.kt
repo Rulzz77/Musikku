@@ -386,6 +386,7 @@ fun SettingsScreen(
                         summary.playlistCount,
                         summary.tracks,
                         context.countOfMonths(summary.months),
+                        summary.queueTracks,
                     )
                 },
                 onFailure = {
@@ -431,9 +432,11 @@ fun SettingsScreen(
                         summary.settings,
                         summary.from.ifBlank { "unknown" },
                         context.getString(
+
                             if (summary.mergedPlaylists) R.string.backup_playlists_merged
                             else R.string.backup_playlists_replaced,
                         ),
+                        summary.queueTracks,
                     )
                 },
                 onFailure = {
@@ -1930,8 +1933,13 @@ fun SettingsScreen(
                         appendLine(context.getString(R.string.backup_preview_spotify, preview.spotifyPlaylists, preview.spotifyTracks))
                         appendLine(context.getString(R.string.backup_preview_device, preview.devicePlaylists, preview.deviceTracks))
                         appendLine(context.getString(R.string.backup_preview_remote, preview.remotePlaylistMappings))
+                        appendLine(context.getString(R.string.backup_preview_queue, preview.queueTracks, preview.queueIndex))
                         appendLine()
                         append(context.getString(R.string.backup_preview_warning))
+                        if (preview.schemaVersion < 2) {
+                            appendLine()
+                            append(context.getString(R.string.backup_preview_legacy_note))
+                        }
                     },
                 )
             },

@@ -128,7 +128,15 @@ object LastPlayed {
             positionMs = snapshot.positionMs,
         )
         val restored = load() ?: return false
-        return restored.songs == snapshot.songs &&
+        val sameQueue = restored.songs.size == snapshot.songs.size &&
+            restored.songs.indices.all { index ->
+                val saved = restored.songs[index]
+                val expected = snapshot.songs[index]
+                saved.videoId == expected.videoId &&
+                    saved.title == expected.title &&
+                    saved.artist == expected.artist
+            }
+        return sameQueue &&
             restored.index == snapshot.index.coerceIn(snapshot.songs.indices) &&
             restored.positionMs == snapshot.positionMs.coerceAtLeast(0L)
     }

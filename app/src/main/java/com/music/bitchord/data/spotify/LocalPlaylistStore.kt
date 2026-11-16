@@ -356,7 +356,8 @@ object LocalPlaylistStore {
         runCatching {
             prefs.edit().putString(KEY_PLAYLISTS, encodePlaylists(list)).apply()
         }
-    }}
+    }
+}
 
 
 /**

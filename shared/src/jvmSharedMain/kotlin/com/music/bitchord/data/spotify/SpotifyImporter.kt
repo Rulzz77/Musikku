@@ -534,12 +534,17 @@ object SpotifyImporter {
             it.isNotBlank()
         }
 
+        val searchCache = SpotifyImportSearchCache(maxEntries = 128)
         val deferredResults = uniqueTracks.map { track ->
             async(Dispatchers.IO) {
                 semaphore.withPermit {
                     val matchedSong = matchCache.get(track.spotifyId, cleanLang) ?: run {
                         val candidates = try {
-                            searchCandidates(track, cleanLang)
+                            searchCandidates(track, cleanLang) { query, kind ->
+                                searchCache.search(query, kind) { cachedQuery, cachedKind ->
+                                    YtMusicRepository.searchSpotifyImportRaw(cachedQuery, cachedKind)
+                                }
+                            }
                         } catch (cancelled: CancellationException) {
                             throw cancelled
                         } catch (failure: Exception) {

@@ -325,9 +325,15 @@ object OfflinePlaylists {
     }
 
     private fun persist(list: List<OfflinePlaylist>) {
-        runCatching {
-            prefs.edit().putString(KEY_PLAYLISTS, encodePlaylists(list)).apply()
-        }.onFailure { DebugLog.w("BitChord", "Offline playlists not saved: ${it.message}") }
+        synchronized(lock) {
+            // A newer StateFlow value may have arrived while this conflated
+            // collector was waiting for IO. Never let an older snapshot land
+            // after a restore or a more recent playlist edit.
+            if (list !== _playlists.value) return@synchronized
+            runCatching {
+                prefs.edit().putString(KEY_PLAYLISTS, encodePlaylists(list)).apply()
+            }.onFailure { DebugLog.w("BitChord", "Offline playlists not saved: ${it.message}") }
+        }
     }
 
     private fun Song.toJson(): JSONObject = JSONObject().apply {

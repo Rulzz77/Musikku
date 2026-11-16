@@ -514,6 +514,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStop() {
         TrackLog.i("PLAYBACK_LIFECYCLE", "MainActivity.onStop")
+        Downloads.flushRecoveryState()
         super.onStop()
     }
 

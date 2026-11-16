@@ -168,7 +168,6 @@ object Backup {
                 settings = file.settings.size,
                 spotifyPlaylists = restoredSpotifyPlaylists.size,
                 devicePlaylists = restoredDevicePlaylists.size,
-                playlistFolders = PlaylistFolders.folders.value.size,
                 tracks = restoredSpotifyPlaylists.sumOf { it.songs.size } +
                     restoredDevicePlaylists.sumOf { it.songs.size },
                 from = file.versionName,

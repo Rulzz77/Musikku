@@ -103,23 +103,62 @@ object Backup {
             val remoteImports = file.remoteSpotifyImports.mapValues { (_, ids) -> ids.toSet() }
 
             // All parsing and structural validation happens before the first
-            // write. Schema 1 predates playlist sections, so importing it must
-            // not erase data those older files never held.
+            // write. Commit both playlist stores before replacing settings or
+            // listening history, and roll the first store back if the second
+            // cannot be committed.
+            if (file.version >= 2) {
+                val previousSpotifyPlaylists = LocalPlaylistStore.playlists.value.toList()
+                val previousRemoteImports = LocalPlaylistStore.remoteSpotifyImportsSnapshot()
+                val previousDevicePlaylists = OfflinePlaylists.playlists.value.toList()
+                try {
+                    LocalPlaylistStore.restoreFromBackup(spotifyPlaylists, remoteImports, mergePlaylists)
+                    OfflinePlaylists.restoreFromBackup(devicePlaylists, mergePlaylists)
+                } catch (failure: Throwable) {
+                    val rollbackFailures = mutableListOf<Throwable>()
+                    runCatching {
+                        LocalPlaylistStore.restoreFromBackup(
+                            previousSpotifyPlaylists,
+                            previousRemoteImports,
+                            merge = false,
+                        )
+                    }.exceptionOrNull()?.let(rollbackFailures::add)
+                    runCatching {
+                        OfflinePlaylists.restoreFromBackup(previousDevicePlaylists, merge = false)
+                    }.exceptionOrNull()?.let(rollbackFailures::add)
+                    if (rollbackFailures.isNotEmpty()) {
+                        throw IllegalStateException(
+                            "Playlist restore failed and the previous collections could not be fully restored",
+                            failure,
+                        ).also { error -> rollbackFailures.forEach(error::addSuppressed) }
+                    }
+                    throw failure
+                }
+            }
+
+            // These existing APIs replace their own stores. Playlist commits
+            // above happen first so a failed playlist write cannot leave the
+            // app with new settings/history but old collections.
             ListeningStats.importAll(file.listening)
             AppSettings.importPrefs(settings)
-            if (file.version >= 2) {
-                LocalPlaylistStore.restoreFromBackup(spotifyPlaylists, remoteImports, mergePlaylists)
-                OfflinePlaylists.restoreFromBackup(devicePlaylists, mergePlaylists)
-            }
-            // Search history lives in the same preference file as AppSettings.
             SearchHistory.reload()
 
+            val restoredSpotifyPlaylists = if (file.version >= 2) {
+                LocalPlaylistStore.playlists.value
+            } else {
+                emptyList()
+            }
+            val restoredDevicePlaylists = if (file.version >= 2) {
+                OfflinePlaylists.playlists.value
+            } else {
+                emptyList()
+            }
             Summary(
                 months = file.listening.size,
                 settings = file.settings.size,
-                spotifyPlaylists = spotifyPlaylists.size,
-                devicePlaylists = devicePlaylists.size,
-                tracks = spotifyPlaylists.sumOf { it.songs.size } + devicePlaylists.sumOf { it.songs.size },
+                spotifyPlaylists = restoredSpotifyPlaylists.size,
+                devicePlaylists = restoredDevicePlaylists.size,
+                tracks = restoredSpotifyPlaylists.sumOf { it.songs.size } +
+                    restoredDevicePlaylists.sumOf { it.songs.size },
                 from = file.versionName,
                 at = file.exportedAt,
                 mergedPlaylists = mergePlaylists,
@@ -232,6 +271,9 @@ object Backup {
         localDateAddedSeconds = localDateAddedSeconds,
         localDateModifiedSeconds = localDateModifiedSeconds,
         trackNumber = trackNumber,
+        sourceQuality = sourceQuality,
+        sourceHiRes = sourceHiRes,
+        isPodcastEpisode = isPodcastEpisode,
     )
 
     private fun BackupSong.toSong() = Song(
@@ -252,6 +294,9 @@ object Backup {
         localDateAddedSeconds = localDateAddedSeconds,
         localDateModifiedSeconds = localDateModifiedSeconds,
         trackNumber = trackNumber,
+        sourceQuality = sourceQuality,
+        sourceHiRes = sourceHiRes,
+        isPodcastEpisode = isPodcastEpisode,
     )
 
     private fun LocalPlaylist.toBackupPlaylist() = BackupPlaylist(
@@ -369,6 +414,9 @@ object Backup {
         val isVideo: Boolean = false,
         val isVideoOrigin: Boolean = false,
         val isExplicit: Boolean? = null,
+        val sourceQuality: String? = null,
+        val sourceHiRes: Boolean = false,
+        val isPodcastEpisode: Boolean = false,
         val localUri: String? = null,
         val localPath: String? = null,
         val localDateAddedSeconds: Long? = null,
@@ -401,8 +449,8 @@ object Backup {
             INT -> value?.toIntOrNull() != null
             LONG -> value?.toLongOrNull() != null
             FLOAT -> value?.toFloatOrNull()?.isFinite() == true
-            STRING -> value != null
-            STRING_SET -> values.all { it.length <= MAX_SETTING_STRING_LENGTH }
+            STRING -> value != null && value.length <= MAX_SETTING_STRING_LENGTH
+            STRING_SET -> values.size <= MAX_SETTINGS && values.all { it.length <= MAX_SETTING_STRING_LENGTH }
             else -> false
         }
 
@@ -412,8 +460,11 @@ object Backup {
                 is Int -> PrefValue(INT, value.toString())
                 is Long -> PrefValue(LONG, value.toString())
                 is Float -> value.takeIf(Float::isFinite)?.let { PrefValue(FLOAT, it.toString()) }
-                is String -> PrefValue(STRING, value)
-                is Set<*> -> PrefValue(STRING_SET, values = value.filterIsInstance<String>())
+                is String -> value.takeIf { it.length <= MAX_SETTING_STRING_LENGTH }?.let { PrefValue(STRING, it) }
+                is Set<*> -> PrefValue(
+                    STRING_SET,
+                    values = value.filterIsInstance<String>().filter { it.length <= MAX_SETTING_STRING_LENGTH },
+                )
                 else -> null
             }
 

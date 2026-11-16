@@ -2,6 +2,7 @@ package com.music.bitchord.data.spotify
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.music.bitchord.data.model.ArtistRef
 import com.music.bitchord.data.model.Song
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -50,6 +51,23 @@ object LocalPlaylistStore {
                 val songs = mutableListOf<Song>()
                 for (j in 0 until songsArray.length()) {
                     val sObj = songsArray.getJSONObject(j)
+                    val artists = sObj.optJSONArray("artists")?.let { artistArray ->
+                        buildList {
+                            for (artistIndex in 0 until artistArray.length()) {
+                                val artist = artistArray.optJSONObject(artistIndex) ?: continue
+                                val name = artist.optString("name").takeIf(String::isNotBlank) ?: continue
+                                val browseId = artist.optString("browseId", null)
+                                    .takeIf { !it.isNullOrBlank() && it != "null" }
+                                add(ArtistRef(name, browseId))
+                            }
+                        }
+                    }.orEmpty()
+                    val isVideo = sObj.optBoolean("isVideo", false)
+                    val isExplicit = if (sObj.has("isExplicit") && !sObj.isNull("isExplicit")) {
+                        sObj.optBoolean("isExplicit")
+                    } else {
+                        null
+                    }
                     val song = Song(
                         videoId = sObj.optString("videoId", ""),
                         title = sObj.optString("title", ""),
@@ -57,9 +75,15 @@ object LocalPlaylistStore {
                         thumbnailUrl = sObj.optString("thumbnailUrl", null).takeIf { !it.isNullOrBlank() && it != "null" },
                         durationText = sObj.optString("durationText", null).takeIf { !it.isNullOrBlank() && it != "null" },
                         artistId = sObj.optString("artistId", null).takeIf { !it.isNullOrBlank() && it != "null" },
+                        artists = artists,
                         albumId = sObj.optString("albumId", null).takeIf { !it.isNullOrBlank() && it != "null" },
                         albumName = sObj.optString("albumName", null).takeIf { !it.isNullOrBlank() && it != "null" },
-                        isVideo = sObj.optBoolean("isVideo", false),
+                        isVideo = isVideo,
+                        isVideoOrigin = sObj.optBoolean("isVideoOrigin", isVideo),
+                        isExplicit = isExplicit,
+                        sourceQuality = sObj.optString("sourceQuality", null).takeIf { !it.isNullOrBlank() && it != "null" },
+                        sourceHiRes = sObj.optBoolean("sourceHiRes", false),
+                        isPodcastEpisode = sObj.optBoolean("isPodcastEpisode", false),
                     )
                     songs.add(song)
                 }
@@ -342,7 +366,25 @@ object LocalPlaylistStore {
                 sObj.put("artistId", song.artistId)
                 sObj.put("albumId", song.albumId)
                 sObj.put("albumName", song.albumName)
+                sObj.put(
+                    "artists",
+                    JSONArray().apply {
+                        song.artists.forEach { artist ->
+                            put(
+                                JSONObject().apply {
+                                    put("name", artist.name)
+                                    put("browseId", artist.browseId ?: JSONObject.NULL)
+                                },
+                            )
+                        }
+                    },
+                )
                 sObj.put("isVideo", song.isVideo)
+                sObj.put("isVideoOrigin", song.isVideoOrigin)
+                sObj.put("isExplicit", song.isExplicit ?: JSONObject.NULL)
+                sObj.put("sourceQuality", song.sourceQuality)
+                sObj.put("sourceHiRes", song.sourceHiRes)
+                sObj.put("isPodcastEpisode", song.isPodcastEpisode)
                 songsArray.put(sObj)
             }
             pObj.put("songs", songsArray)

@@ -197,6 +197,11 @@ object Backup {
         }
         validatePlaylists(file.spotifyPlaylists, "Spotify")
         validatePlaylists(file.devicePlaylists, "device")
+        if (file.version >= 2) {
+            require(file.devicePlaylists.any { it.id == OfflinePlaylists.LIKED_ID }) {
+                "Backup is missing the built-in Liked songs playlist"
+            }
+        }
         require(file.spotifyPlaylists.size + file.devicePlaylists.size <= MAX_PLAYLISTS) {
             "Backup contains too many playlists"
         }

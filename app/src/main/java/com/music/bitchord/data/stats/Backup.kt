@@ -313,7 +313,8 @@ object Backup {
         val playlistCount: Int get() = spotifyPlaylists + devicePlaylists
     }
 
-    private const val APP_TAG = "musikku"
+    // Kept stable so backups made by earlier BitChord-branded builds remain readable.
+    private const val APP_TAG = "bitchord"
     private const val MIN_SCHEMA_VERSION = 1
     private const val SCHEMA_VERSION = 2
     private const val MAX_BACKUP_BYTES = 64 * 1024 * 1024

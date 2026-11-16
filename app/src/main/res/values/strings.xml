@@ -1354,7 +1354,7 @@
     <string name="diwali_cta">Let\'s Celebrate</string>
     <string name="storage_usage_title">Storage used by MusikKu</string>
     <string name="storage_usage_total">Managed storage: %1$s</string>
-    <string name="storage_usage_available">Available on device: %1$s</string>
+    <string name="storage_usage_available">Device space: %1$s free of %2$s</string>
     <string name="storage_usage_loading">Calculating storage…</string>
     <string name="storage_usage_refresh">Refresh</string>
     <string name="storage_downloaded_files">Downloaded music and artwork</string>

@@ -1496,4 +1496,14 @@
     <string name="clear_canvas_cache">Canvas-Cache leeren</string>
     <string name="clear_canvas_cache_subtitle">Zwischengespeicherte Loop-Clips entfernen. MusikKu lädt sie bei Bedarf erneut.</string>
     <string name="canvas_cache_cleared">Canvas-Cache geleert</string>
+    <string name="playlist_folders_title">Playlist-Ordner</string>
+    <string name="create_playlist_folder">Neuer Ordner</string>
+    <string name="edit_playlist_folder">Ordner bearbeiten</string>
+    <string name="playlist_folder_name">Ordnername</string>
+    <string name="playlist_folder_select_playlists">Playlists auswählen</string>
+    <string name="playlist_folder_move_notice">Ausgewählte Playlists werden in diesen Ordner verschoben; die ursprünglichen Playlists bleiben in deiner Mediathek.</string>
+    <string name="playlist_folder_empty">Dieser Ordner ist leer.</string>
+    <string name="playlist_folder_no_playlists">Noch keine Playlists verfügbar.</string>
+    <string name="playlist_folder_delete_notice">Beim Löschen dieses Ordners werden keine Playlists oder Songs gelöscht.</string>
+    <string name="playlist_folder_count">%1$d Playlists</string>
 </resources>

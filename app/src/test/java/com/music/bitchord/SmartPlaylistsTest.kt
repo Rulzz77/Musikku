@@ -115,7 +115,7 @@ class SmartPlaylistsTest {
         val tracks = listOf(
             track("blue", artist = "Blue Band", plays = 2, ms = 100_000, lastPlayedAt = 900, releaseYear = 2010),
             track("jazz", artist = "Red Band", plays = 2, ms = 100_000, lastPlayedAt = 800, releaseYear = 2020),
-            track("other", artist = "Red Band", plays = 2, ms = 100_000, lastPlayedAt = 700, releaseYear = 2020),
+            track("other", artist = "Green Band", plays = 2, ms = 100_000, lastPlayedAt = 700, releaseYear = 2020),
         )
         val rule = SmartPlaylistRule(name = "Blue or jazz", artistContains = "blue", genreContains = "jazz", matchMode = SmartPlaylistMatchMode.ANY)
         val result = applySmartPlaylistRule(tracks, rule, nowMs = 1_000) { artist ->

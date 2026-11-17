@@ -319,7 +319,7 @@ internal fun parseSmartPlaylistDurationSeconds(value: String?): Int? {
         }
         return seconds.takeIf { it in 1..Int.MAX_VALUE.toLong() }?.toInt()
     }
-    val parts = Regex("""(\\d+)\\s*(hours?|hrs?|hr|h|minutes?|mins?|min|m|seconds?|secs?|sec|s)""", RegexOption.IGNORE_CASE)
+    val parts = Regex("""(\d+)\s*(hours?|hrs?|hr|h|minutes?|mins?|min|m|seconds?|secs?|sec|s)""", RegexOption.IGNORE_CASE)
         .findAll(raw).toList()
     if (parts.isEmpty()) return null
     var total = 0L

@@ -30,6 +30,7 @@ class ListeningStatsFormatTest {
         val restored = json.decodeFromString<TrackEntry>(legacy)
 
         assertEquals("legacy-video", restored.id)
+        assertNull(restored.releaseYear)
         assertNull(restored.downloadFormat)
         assertNull(restored.trackNumber)
         assertFalse(restored.isPodcastEpisode)
@@ -41,6 +42,7 @@ class ListeningStatsFormatTest {
             id = "local-podcast-episode",
             title = "Episode",
             artist = "Podcast",
+            releaseYear = 2021,
             localUri = "content://media/external/audio/media/88",
             localPath = "/storage/emulated/0/Podcasts/episode.m4a",
             sourceQuality = "LOSSLESS",
@@ -57,6 +59,7 @@ class ListeningStatsFormatTest {
         val encoded = json.encodeToString(TrackEntry.serializer(), original)
         val restored = json.decodeFromString<TrackEntry>(encoded)
 
+        assertEquals(original.releaseYear, restored.releaseYear)
         assertEquals(original.localUri, restored.localUri)
         assertEquals(original.localPath, restored.localPath)
         assertEquals(original.sourceQuality, restored.sourceQuality)

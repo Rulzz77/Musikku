@@ -140,6 +140,29 @@ class BackupFormatTest {
     }
 
     @Test
+    fun `schema five round trips advanced Smart Playlist criteria and release year`() {
+        val original = Backup.BackupFile(
+            version = 5,
+            smartPlaylistRules = listOf(Backup.BackupSmartPlaylistRule(
+                id = "rule-advanced", name = "Recent indie rock", artistContains = "Blue",
+                minimumPlays = 2, sort = "RECENTLY_PLAYED", genreContains = "rock",
+                releaseYearFrom = 2018, releaseYearTo = 2024, minimumDurationMinutes = 3, maximumDurationMinutes = 7,
+                lastPlayedWithinDays = 30, matchMode = "ANY",
+            )),
+            devicePlaylists = listOf(Backup.BackupPlaylist(
+                id = "liked", title = "Liked songs", songs = listOf(Backup.BackupSong(
+                    videoId = "year-song", title = "Year song", artist = "Artist", releaseYear = 2021,
+                )),
+            )),
+        )
+        val restored = json.decodeFromString(Backup.BackupFile.serializer(),
+            json.encodeToString(Backup.BackupFile.serializer(), original))
+        assertEquals(5, restored.version)
+        assertEquals(original.smartPlaylistRules, restored.smartPlaylistRules)
+        assertEquals(2021, restored.devicePlaylists.single().songs.single().releaseYear)
+    }
+
+    @Test
     fun `schema two backup without folder metadata remains readable`() {
         val schemaTwo = """
             {

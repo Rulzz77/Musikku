@@ -136,7 +136,7 @@ class SmartPlaylistsTest {
         assertEquals(272, parseSmartPlaylistDurationSeconds("4:32"))
         assertEquals(3_723, parseSmartPlaylistDurationSeconds("1:02:03"))
         assertEquals(3_723, parseSmartPlaylistDurationSeconds("1 hr 2 min 3 sec"))
-        assertEquals(null, parseSmartPlaylistDurationSeconds("unknown"))
+        assertTrue(parseSmartPlaylistDurationSeconds("unknown") == null)
     }
 
     @Test

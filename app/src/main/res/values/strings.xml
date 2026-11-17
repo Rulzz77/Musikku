@@ -1392,6 +1392,16 @@
     <string name="smart_playlist_loading">Loading your listening history…</string>
     <string name="smart_playlist_name">Playlist name</string>
     <string name="smart_playlist_artist_filter">Artist contains (optional)</string>
+    <string name="smart_playlist_genre_filter" translatable="false">Genre contains (optional)</string>
+    <string name="smart_playlist_year_from" translatable="false">Release year from</string>
+    <string name="smart_playlist_year_to" translatable="false">Release year to</string>
+    <string name="smart_playlist_min_duration" translatable="false">Minimum duration (minutes)</string>
+    <string name="smart_playlist_max_duration" translatable="false">Maximum duration (minutes)</string>
+    <string name="smart_playlist_last_played_days" translatable="false">Last played within (days)</string>
+    <string name="smart_playlist_match_mode" translatable="false">Combine optional filters</string>
+    <string name="smart_playlist_match_all" translatable="false">Match all (AND)</string>
+    <string name="smart_playlist_match_any" translatable="false">Match any (OR)</string>
+    <string name="smart_playlist_invalid_filter" translatable="false">Check the year, duration, and last-played ranges.</string>
     <string name="smart_playlist_minimum_plays_value">At least %1$d plays</string>
     <string name="smart_playlist_sort">Order tracks by</string>
     <string name="smart_playlist_sort_played">Play count</string>

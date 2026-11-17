@@ -50,9 +50,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.music.bitchord.R
 import com.music.bitchord.data.model.Song
+import com.music.bitchord.data.stats.ArtistFacts
 import com.music.bitchord.data.stats.ListeningStats
 import com.music.bitchord.data.stats.ReplayPeriod
 import com.music.bitchord.data.stats.SmartPlaylistItem
+import com.music.bitchord.data.stats.SmartPlaylistMatchMode
 import com.music.bitchord.data.stats.SmartPlaylistRule
 import com.music.bitchord.data.stats.SmartPlaylistSort
 import com.music.bitchord.data.stats.SmartPlaylists
@@ -69,6 +71,7 @@ fun SmartPlaylistsSection(
 ) {
     val rules by SmartPlaylists.rules.collectAsStateWithLifecycle()
     val revision by ListeningStats.revision.collectAsStateWithLifecycle()
+    val artistRevision by ArtistFacts.revision.collectAsStateWithLifecycle()
     var summary by remember { mutableStateOf<com.music.bitchord.data.stats.ReplaySummary?>(null) }
     var loading by remember { mutableStateOf(true) }
     var editorOpen by remember { mutableStateOf(false) }
@@ -80,7 +83,7 @@ fun SmartPlaylistsSection(
         loading = false
     }
 
-    val items = remember(summary, rules) {
+    val items = remember(summary, rules, artistRevision) {
         buildSmartPlaylistItems(
             tracks = summary?.songs.orEmpty(),
             rules = rules,
@@ -166,13 +169,20 @@ fun SmartPlaylistsSection(
         val current = editingRule
         var name by remember(editorOpen, current?.id) { mutableStateOf(current?.name.orEmpty()) }
         var artist by remember(editorOpen, current?.id) { mutableStateOf(current?.artistContains.orEmpty()) }
+        var genre by remember(editorOpen, current?.id) { mutableStateOf(current?.genreContains.orEmpty()) }
+        var yearFrom by remember(editorOpen, current?.id) { mutableStateOf(current?.releaseYearFrom?.toString().orEmpty()) }
+        var yearTo by remember(editorOpen, current?.id) { mutableStateOf(current?.releaseYearTo?.toString().orEmpty()) }
+        var minimumDuration by remember(editorOpen, current?.id) { mutableStateOf(current?.minimumDurationMinutes?.toString().orEmpty()) }
+        var maximumDuration by remember(editorOpen, current?.id) { mutableStateOf(current?.maximumDurationMinutes?.toString().orEmpty()) }
+        var lastPlayedDays by remember(editorOpen, current?.id) { mutableStateOf(current?.lastPlayedWithinDays?.toString().orEmpty()) }
+        var matchMode by remember(editorOpen, current?.id) { mutableStateOf(current?.matchMode ?: SmartPlaylistMatchMode.ALL) }
         var minimumPlays by remember(editorOpen, current?.id) {
             mutableStateOf(current?.minimumPlays?.coerceIn(1, 20) ?: 1)
         }
         var sort by remember(editorOpen, current?.id) {
             mutableStateOf(current?.sort ?: SmartPlaylistSort.MOST_PLAYED)
         }
-        var saveFailed by remember(editorOpen, current?.id) { mutableStateOf(false) }
+        var validationError by remember(editorOpen, current?.id) { mutableStateOf<Int?>(null) }
 
         AlertDialog(
             onDismissRequest = { editorOpen = false },
@@ -201,7 +211,7 @@ fun SmartPlaylistsSection(
                         value = name,
                         onValueChange = {
                             name = it.take(40)
-                            saveFailed = false
+                            validationError = null
                         },
                         label = { Text(stringResource(R.string.smart_playlist_name)) },
                         singleLine = true,
@@ -214,6 +224,34 @@ fun SmartPlaylistsSection(
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
+                    OutlinedTextField(value = genre, onValueChange = { genre = it.take(80) },
+                        label = { Text(stringResource(R.string.smart_playlist_genre_filter)) }, singleLine = true,
+                        modifier = Modifier.fillMaxWidth())
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        OutlinedTextField(value = yearFrom, onValueChange = { yearFrom = it.filter(Char::isDigit).take(4) },
+                            label = { Text(stringResource(R.string.smart_playlist_year_from)) }, singleLine = true, modifier = Modifier.weight(1f))
+                        OutlinedTextField(value = yearTo, onValueChange = { yearTo = it.filter(Char::isDigit).take(4) },
+                            label = { Text(stringResource(R.string.smart_playlist_year_to)) }, singleLine = true, modifier = Modifier.weight(1f))
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        OutlinedTextField(value = minimumDuration, onValueChange = { minimumDuration = it.filter(Char::isDigit).take(4) },
+                            label = { Text(stringResource(R.string.smart_playlist_min_duration)) }, singleLine = true, modifier = Modifier.weight(1f))
+                        OutlinedTextField(value = maximumDuration, onValueChange = { maximumDuration = it.filter(Char::isDigit).take(4) },
+                            label = { Text(stringResource(R.string.smart_playlist_max_duration)) }, singleLine = true, modifier = Modifier.weight(1f))
+                    }
+                    OutlinedTextField(value = lastPlayedDays, onValueChange = { lastPlayedDays = it.filter(Char::isDigit).take(4) },
+                        label = { Text(stringResource(R.string.smart_playlist_last_played_days)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    Text(stringResource(R.string.smart_playlist_match_mode), style = MaterialTheme.typography.titleSmall)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        TextButton(onClick = { matchMode = SmartPlaylistMatchMode.ALL }) {
+                            Text((if (matchMode == SmartPlaylistMatchMode.ALL) "✓ " else "") + stringResource(R.string.smart_playlist_match_all),
+                                color = if (matchMode == SmartPlaylistMatchMode.ALL) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+                        }
+                        TextButton(onClick = { matchMode = SmartPlaylistMatchMode.ANY }) {
+                            Text((if (matchMode == SmartPlaylistMatchMode.ANY) "✓ " else "") + stringResource(R.string.smart_playlist_match_any),
+                                color = if (matchMode == SmartPlaylistMatchMode.ANY) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+                        }
+                    }
                     Text(
                         text = stringResource(R.string.smart_playlist_minimum_plays_value, minimumPlays),
                         style = MaterialTheme.typography.titleSmall,
@@ -248,12 +286,9 @@ fun SmartPlaylistsSection(
                             }
                         }
                     }
-                    if (saveFailed) {
-                        Text(
-                            text = stringResource(R.string.smart_playlist_max_reached),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                        )
+                    validationError?.let { errorId ->
+                        Text(text = stringResource(errorId), style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error)
                     }
                 }
             },
@@ -261,21 +296,31 @@ fun SmartPlaylistsSection(
                 TextButton(
                     enabled = name.isNotBlank(),
                     onClick = {
-                        val saved = SmartPlaylists.save(
-                            SmartPlaylistRule(
-                                id = current?.id.orEmpty(),
-                                name = name,
-                                artistContains = artist,
-                                minimumPlays = minimumPlays,
-                                sort = sort,
-                            ),
-                        )
+                        val yearFromValue = yearFrom.toIntOrNull()
+                        val yearToValue = yearTo.toIntOrNull()
+                        val minimumDurationValue = minimumDuration.toIntOrNull()
+                        val maximumDurationValue = maximumDuration.toIntOrNull()
+                        val lastPlayedDaysValue = lastPlayedDays.toIntOrNull()
+                        val valid =
+                            (yearFrom.isBlank() || yearFromValue?.let { it in 1888..2100 } == true) &&
+                            (yearTo.isBlank() || yearToValue?.let { it in 1888..2100 } == true) &&
+                            (yearFromValue == null || yearToValue == null || yearFromValue <= yearToValue) &&
+                            (minimumDuration.isBlank() || minimumDurationValue?.let { it in 1..1440 } == true) &&
+                            (maximumDuration.isBlank() || maximumDurationValue?.let { it in 1..1440 } == true) &&
+                            (minimumDurationValue == null || maximumDurationValue == null || minimumDurationValue <= maximumDurationValue) &&
+                            (lastPlayedDays.isBlank() || lastPlayedDaysValue?.let { it in 1..3650 } == true)
+                        if (!valid) { validationError = R.string.smart_playlist_invalid_filter; return@TextButton }
+                        val saved = SmartPlaylists.save(SmartPlaylistRule(
+                            id = current?.id.orEmpty(), name = name, artistContains = artist,
+                            minimumPlays = minimumPlays, sort = sort, genreContains = genre,
+                            releaseYearFrom = yearFromValue, releaseYearTo = yearToValue,
+                            minimumDurationMinutes = minimumDurationValue, maximumDurationMinutes = maximumDurationValue,
+                            lastPlayedWithinDays = lastPlayedDaysValue, matchMode = matchMode,
+                        ))
                         if (saved != null) {
                             editingRule = saved
                             editorOpen = false
-                        } else {
-                            saveFailed = true
-                        }
+                        } else { validationError = R.string.smart_playlist_max_reached }
                     },
                 ) {
                     Text(stringResource(R.string.save))

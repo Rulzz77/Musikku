@@ -15,11 +15,13 @@ Each generated list is capped at 100 tracks. Lists without matching tracks are o
 
 A listener can create up to 20 named Smart Playlists. Each rule supports:
 
-- Optional case-insensitive artist-name substring.
-- Minimum completed play count (1–100).
+- Optional case-insensitive artist-name and genre substrings.
+- Minimum completed play count (1–100; the Library slider exposes 1–20).
+- Optional release-year range, minimum/maximum duration in minutes, and a last-played-within-days filter.
+- Combine optional criteria with **ALL (AND)** or **ANY (OR)**. Minimum plays remains a required baseline in either mode.
 - Sort by play count, recent playback, or total listening time.
 
-The Library editor currently exposes a practical minimum-play range of 1–20. Rules are saved as JSON in app-private SharedPreferences, included in Backup & Restore schema v4, and re-evaluated against the listening aggregates when the Library loads or the stats revision changes. Schema v1–v3 backups do not contain these rules, so importing one leaves the rules already on the device unchanged. Deleting a rule removes only that rule; it does not remove any track or playlist.
+Genre matches use the on-device ArtistFacts cache (Last.fm artist tags) and depend on genre lookup being enabled and an artist tag being available. Release year comes from YouTube Music release metadata where supplied. Duration comes from the track runtime. A track missing metadata required by an active criterion does not match that criterion; unknown values are never guessed. Rules are saved in app-private SharedPreferences and included in Backup & Restore schema v5. Existing schema v4 rules import with their new criteria empty, while schema v1–v3 backups do not contain Smart Playlist rules and leave the rules on the device unchanged. Deleting a rule removes only that rule; it does not remove any track or playlist.
 
 ## Data and compatibility
 
@@ -29,4 +31,4 @@ The listening-stat `TrackEntry` format now also preserves optional playback meta
 
 ## Current scope
 
-Artist filtering, minimum plays, and the three sort modes are supported now. Genre, release year, duration ranges, and complex AND/OR rule groups are not exposed in this first iteration because the current aggregate format does not consistently retain those fields for every source. Those can be added separately after the source metadata is normalized.
+Artist, cached genre, release-year, duration, and last-played filters are supported for metadata available to the listening aggregate. Year and duration are optional because remote and local sources do not all supply the same tags; a missing value simply fails an active filter. AND/OR applies to optional criteria, while minimum completed plays is always enforced.

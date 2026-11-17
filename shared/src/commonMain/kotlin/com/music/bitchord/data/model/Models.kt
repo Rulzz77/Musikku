@@ -143,6 +143,8 @@ data class Song(
     val feedbackToken: String? = null,
     /** True when the catalogue row is a podcast episode rather than music. */
     val isPodcastEpisode: Boolean = false,
+    /** Release year from the album/release metadata, when the source states one. */
+    val releaseYear: Int? = null,
 ) {
     /** Legacy derived property: true if and only if [queueTier] is [QueueTier.AUTOPLAY]. */
     val fromAutoplay: Boolean get() = queueTier == QueueTier.AUTOPLAY
@@ -174,6 +176,7 @@ data class Song(
         playbackSource: String? = null,
         playbackSourceType: PlaybackSourceType? = null,
         playbackSourceId: String? = null,
+        releaseYear: Int? = null,
     ) : this(
         videoId = videoId,
         title = title,
@@ -201,6 +204,7 @@ data class Song(
         playbackSource = playbackSource,
         playbackSourceType = playbackSourceType,
         playbackSourceId = playbackSourceId,
+        releaseYear = releaseYear,
     )
 }
 

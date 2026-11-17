@@ -92,7 +92,7 @@ object Backup {
 
     /**
      * Restores settings, listening totals, playlist collections, folders,
-     * and (for schema v4) custom Smart Playlist rules. Credentials and
+     * and (for schema v4+) custom Smart Playlist rules. Credentials and
      * device-specific download indexes are left untouched.
      */
     suspend fun importFrom(
@@ -306,8 +306,26 @@ object Backup {
             require(rule.name.isNotBlank() && rule.name.length <= MAX_SMART_PLAYLIST_NAME_LENGTH) {
                 "Backup contains an invalid Smart Playlist name"
             }
-            require(rule.artistContains.length <= MAX_SMART_PLAYLIST_ARTIST_LENGTH) {
-                "Backup contains an oversized Smart Playlist artist filter"
+            require(rule.artistContains.length <= MAX_SMART_PLAYLIST_ARTIST_LENGTH &&
+                rule.genreContains.length <= MAX_SMART_PLAYLIST_GENRE_LENGTH) {
+                "Backup contains an oversized Smart Playlist text filter"
+            }
+            require((rule.releaseYearFrom == null || rule.releaseYearFrom in MIN_RELEASE_YEAR..MAX_RELEASE_YEAR) &&
+                (rule.releaseYearTo == null || rule.releaseYearTo in MIN_RELEASE_YEAR..MAX_RELEASE_YEAR) &&
+                (rule.releaseYearFrom == null || rule.releaseYearTo == null || rule.releaseYearFrom <= rule.releaseYearTo)) {
+                "Backup contains an invalid Smart Playlist year range"
+            }
+            require((rule.minimumDurationMinutes == null || rule.minimumDurationMinutes in 1..MAX_DURATION_MINUTES) &&
+                (rule.maximumDurationMinutes == null || rule.maximumDurationMinutes in 1..MAX_DURATION_MINUTES) &&
+                (rule.minimumDurationMinutes == null || rule.maximumDurationMinutes == null ||
+                    rule.minimumDurationMinutes <= rule.maximumDurationMinutes)) {
+                "Backup contains an invalid Smart Playlist duration range"
+            }
+            require(rule.lastPlayedWithinDays == null || rule.lastPlayedWithinDays in 1..MAX_LAST_PLAYED_DAYS) {
+                "Backup contains an invalid Smart Playlist last-played filter"
+            }
+            require(rule.matchMode in setOf("ALL", "ANY")) {
+                "Backup contains an invalid Smart Playlist match mode"
             }
             require(rule.minimumPlays in 1..MAX_SMART_PLAYLIST_MINIMUM_PLAYS) {
                 "Backup contains an invalid Smart Playlist play-count filter"
@@ -354,6 +372,7 @@ object Backup {
         sourceQuality = sourceQuality,
         sourceHiRes = sourceHiRes,
         isPodcastEpisode = isPodcastEpisode,
+        releaseYear = releaseYear,
     )
 
     private fun BackupSong.toSong() = Song(
@@ -377,6 +396,7 @@ object Backup {
         sourceQuality = sourceQuality,
         sourceHiRes = sourceHiRes,
         isPodcastEpisode = isPodcastEpisode,
+        releaseYear = releaseYear,
     )
 
     private fun LocalPlaylist.toBackupPlaylist() = BackupPlaylist(
@@ -404,6 +424,13 @@ object Backup {
         artistContains = artistContains,
         minimumPlays = minimumPlays,
         sort = sort.name,
+        genreContains = genreContains,
+        releaseYearFrom = releaseYearFrom,
+        releaseYearTo = releaseYearTo,
+        minimumDurationMinutes = minimumDurationMinutes,
+        maximumDurationMinutes = maximumDurationMinutes,
+        lastPlayedWithinDays = lastPlayedWithinDays,
+        matchMode = matchMode.name,
     )
 
     private fun BackupSmartPlaylistRule.toSmartPlaylistRule() = SmartPlaylistRule(
@@ -412,6 +439,14 @@ object Backup {
         artistContains = artistContains,
         minimumPlays = minimumPlays,
         sort = SmartPlaylistSort.valueOf(sort),
+        genreContains = genreContains,
+        releaseYearFrom = releaseYearFrom,
+        releaseYearTo = releaseYearTo,
+        minimumDurationMinutes = minimumDurationMinutes,
+        maximumDurationMinutes = maximumDurationMinutes,
+        lastPlayedWithinDays = lastPlayedWithinDays,
+        matchMode = runCatching { SmartPlaylistMatchMode.valueOf(matchMode) }
+            .getOrDefault(SmartPlaylistMatchMode.ALL),
     )
 
     private fun OfflinePlaylist.toBackupPlaylist() = BackupPlaylist(
@@ -485,7 +520,7 @@ object Backup {
     // Kept stable so backups made by earlier BitChord-branded builds remain readable.
     private const val APP_TAG = "bitchord"
     private const val MIN_SCHEMA_VERSION = 1
-    private const val SCHEMA_VERSION = 4
+    private const val SCHEMA_VERSION = 5
     private const val MAX_BACKUP_BYTES = 64 * 1024 * 1024
     private const val MAX_SETTINGS = 20_000
     private const val MAX_SETTING_STRING_LENGTH = 16_384
@@ -495,6 +530,11 @@ object Backup {
     private const val MAX_SMART_PLAYLIST_RULES = 20
     private const val MAX_SMART_PLAYLIST_NAME_LENGTH = 40
     private const val MAX_SMART_PLAYLIST_ARTIST_LENGTH = 80
+    private const val MAX_SMART_PLAYLIST_GENRE_LENGTH = 80
+    private const val MIN_RELEASE_YEAR = 1888
+    private const val MAX_RELEASE_YEAR = 2100
+    private const val MAX_DURATION_MINUTES = 1_440
+    private const val MAX_LAST_PLAYED_DAYS = 3_650
     private const val MAX_SMART_PLAYLIST_MINIMUM_PLAYS = 100
     private const val MAX_TRACKS = 500_000
     private const val MAX_LISTENING_MONTHS = 120
@@ -521,6 +561,13 @@ object Backup {
         val artistContains: String = "",
         val minimumPlays: Int = 1,
         val sort: String = "MOST_PLAYED",
+        val genreContains: String = "",
+        val releaseYearFrom: Int? = null,
+        val releaseYearTo: Int? = null,
+        val minimumDurationMinutes: Int? = null,
+        val maximumDurationMinutes: Int? = null,
+        val lastPlayedWithinDays: Int? = null,
+        val matchMode: String = "ALL",
     )
 
     @Serializable
@@ -560,6 +607,7 @@ object Backup {
         val localDateAddedSeconds: Long? = null,
         val localDateModifiedSeconds: Long? = null,
         val trackNumber: Int? = null,
+        val releaseYear: Int? = null,
     )
 
     @Serializable

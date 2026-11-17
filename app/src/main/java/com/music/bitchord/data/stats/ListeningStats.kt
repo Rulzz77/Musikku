@@ -153,6 +153,7 @@ object ListeningStats {
                     artistId = song.artistId,
                     art = song.thumbnailUrl,
                     durationText = song.durationText,
+                    releaseYear = song.releaseYear,
                     localUri = song.localUri,
                     localPath = song.localPath,
                     localDateAddedSeconds = song.localDateAddedSeconds,
@@ -177,6 +178,7 @@ object ListeningStats {
             if (track.artistId == null) track.artistId = song.artistId
             if (track.art == null) track.art = song.thumbnailUrl
             if (song.durationText != null) track.durationText = song.durationText
+            if (song.releaseYear != null) track.releaseYear = song.releaseYear
             if (song.localUri != null) track.localUri = song.localUri
             if (song.localPath != null) track.localPath = song.localPath
             if (song.localDateAddedSeconds != null) track.localDateAddedSeconds = song.localDateAddedSeconds
@@ -644,6 +646,7 @@ object ListeningStats {
                                 artist = entry.artist,
                                 thumbnailUrl = entry.art,
                                 durationText = entry.durationText,
+                                releaseYear = entry.releaseYear,
                                 artistId = entry.artistId,
                                 albumId = entry.albumId,
                                 albumName = entry.album,
@@ -676,6 +679,7 @@ object ListeningStats {
                                 artist = it.artist,
                                 thumbnailUrl = it.art,
                                 durationText = it.durationText,
+                                releaseYear = it.releaseYear,
                                 artistId = it.artistId,
                                 albumId = it.albumId,
                                 albumName = it.album,
@@ -915,6 +919,7 @@ data class TrackEntry(
     var artistId: String? = null,
     var art: String? = null,
     var durationText: String? = null,
+    var releaseYear: Int? = null,
     var localUri: String? = null,
     var localPath: String? = null,
     var localDateAddedSeconds: Long? = null,
@@ -942,6 +947,7 @@ data class TrackEntry(
         if (artistId == null) artistId = other.artistId
         if (art == null) art = other.art
         if (durationText == null) durationText = other.durationText
+        if (releaseYear == null) releaseYear = other.releaseYear
         if (localUri == null) localUri = other.localUri
         if (localPath == null) localPath = other.localPath
         if (localDateAddedSeconds == null) localDateAddedSeconds = other.localDateAddedSeconds

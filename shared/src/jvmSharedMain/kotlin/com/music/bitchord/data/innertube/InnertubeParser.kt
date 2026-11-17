@@ -748,7 +748,7 @@ object InnertubeParser {
         // A track row on an album lists its play count where a search row
         // lists the artist, so a segment that reads as a tally is no credit.
         val artist = parts.firstOrNull {
-            !it.matches(DURATION) && it.lowercase(Locale.ROOT) !in TYPE_WORDS && !it.matches(TALLY)
+            !it.matches(DURATION) && !it.matches(YEAR) && it.lowercase(Locale.ROOT) !in TYPE_WORDS && !it.matches(TALLY)
         }
 
         // The artist/album names in the subtitle carry browse endpoints; pull
@@ -800,6 +800,7 @@ object InnertubeParser {
             isExplicit = renderer.hasExplicitBadge(),
             // Extract the "Remove from history" feedback token from the row's menu, if present.
             feedbackToken = extractFeedbackToken(renderer),
+            releaseYear = credits.releaseYear ?: parts.firstNotNullOfOrNull(::parseReleaseYear),
         )
     }
 
@@ -904,7 +905,7 @@ object InnertubeParser {
         val credits = creditsOf(subtitleRuns)
         val creditedArtists = artistNamesFromRuns(subtitleRuns)
         val artist = parts.firstOrNull {
-            !it.matches(DURATION) && it.lowercase(Locale.ROOT) !in TYPE_WORDS && !it.matches(TALLY)
+            !it.matches(DURATION) && !it.matches(YEAR) && it.lowercase(Locale.ROOT) !in TYPE_WORDS && !it.matches(TALLY)
         }
         val thumbnails = renderer.o("thumbnail").o("musicThumbnailRenderer")
             .o("thumbnail").a("thumbnails")
@@ -922,6 +923,7 @@ object InnertubeParser {
             artists = completeArtistCredits(artist.orEmpty(), credits.artists),
             albumId = credits.albumId,
             albumName = credits.albumName,
+            releaseYear = credits.releaseYear ?: parts.firstNotNullOfOrNull(::parseReleaseYear),
             // The dedicated Videos filter is authoritative even when the promoted
             // card uses square artwork and omits an explicit "Video" row label.
             isVideo = !episode && isVideoTrack(rowType, thumbnails.isNotSquare(), videoFallback),
@@ -1030,6 +1032,7 @@ object InnertubeParser {
     private data class Credits(
         val artistId: String? = null,
         val artistName: String? = null,
+        val releaseYear: Int? = null,
         /** Every credited artist, not just the lead — see [Song.artists]. */
         val artists: List<ArtistRef> = emptyList(),
         val albumId: String? = null,
@@ -1054,7 +1057,9 @@ object InnertubeParser {
      * for the rows that come back with one name linked and the next not.
      */
     private fun creditsOf(runs: List<JsonElement>): Credits {
-        var credits = Credits()
+        var credits = Credits(
+            releaseYear = runs.firstNotNullOfOrNull { parseReleaseYear(it.s("text")) },
+        )
         val artists = mutableListOf<ArtistRef>()
         runs.forEach { run ->
             val browse = run.o("navigationEndpoint").o("browseEndpoint")
@@ -1409,6 +1414,7 @@ object InnertubeParser {
             artists = completeArtistCredits(artist.orEmpty(), credits.artists),
             albumId = credits.albumId,
             albumName = credits.albumName,
+            releaseYear = credits.releaseYear,
             // A catalogue track is credited "Artist • Album • Year"; the
             // matching music video is "Artist • 417M views • 2.4M likes".
             isVideo = byline.any { it.contains("views", ignoreCase = true) },
@@ -1788,6 +1794,12 @@ object InnertubeParser {
     /** One unit of an episode's runtime — "2 hr", "43 min", "10 sec". */
     private val RUNTIME_PART = Regex("""(\d+)\s*(hours?|hr|min|sec)""", RegexOption.IGNORE_CASE)
     private val YEAR = Regex("""\d{4}""")
+
+    /** Parses a plausible release year without treating an artist name as metadata. */
+    private fun parseReleaseYear(value: String?): Int? {
+        val year = value?.trim()?.takeIf { it.matches(YEAR) }?.toIntOrNull() ?: return null
+        return year.takeIf { it in 1888..2100 }
+    }
     /**
      * A counted quantity rather than a name — "12.4M plays", "13 songs",
      * "1 hour, 4 minutes". Deliberately narrow: it has to leave "21 Savage"

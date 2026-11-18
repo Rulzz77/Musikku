@@ -139,7 +139,7 @@
     <string name="widget_previous">ก่อนหน้า</string>
     <string name="widget_artwork">ปกอัลบั้ม</string>
     <string name="widget_nothing_played">ยังไม่มีการเล่นเพลง</string>
-    <string name="widget_open_MusikKu">เปิด MusikKu</string>
+    <string name="widget_open_bitchord">เปิด MusikKu</string>
     <string name="widget_preview_title">ชื่อเพลง</string>
     <string name="widget_preview_artist">ศิลปิน</string>
     <string name="widget_pill_label">กำลังเล่น 4×1</string>
@@ -353,7 +353,7 @@
     <string name="starting">กำลังเริ่ม</string>
     <string name="start_radio">เริ่มวิทยุ</string>
     <string name="radio_started">เริ่มวิทยุ %1$s แล้ว</string>
-    <string name="saved_to_MusikKu_folder">บันทึกลง Music/MusikKu แล้ว</string>
+    <string name="saved_to_bitchord_folder">บันทึกลง Music/BitChord แล้ว</string>
     <string name="nothing_downloading">ไม่มีการดาวน์โหลด</string>
     <string name="nothing_to_explore">ยังไม่มีอะไรให้สำรวจตอนนี้</string>
     <string name="no_youtube_music_results">ไม่มีผลลัพธ์จาก YouTube Music</string>
@@ -676,7 +676,7 @@
     </plurals>
     <string name="no_local_albums">ยังไม่มีอะไรที่นี่เป็นของอัลบั้มหรือเพลย์ลิสต์ ดาวน์โหลดอัลบั้มหรือเพลย์ลิสต์ทั้งชุดแล้วจะปรากฏที่นี่</string>
     <string name="play_your_replay">เล่น Replay ของคุณ</string>
-    <string name="counted_on_device_with_MusikKu">นับบนอุปกรณ์นี้ด้วย MusikKu</string>
+    <string name="counted_on_device_with_bitchord">นับบนอุปกรณ์นี้ด้วย MusikKu</string>
     <string name="this_month">เดือนนี้</string>
     <string name="this_year">ปีนี้</string>
     <string name="all_time">ตลอดเวลา</string>

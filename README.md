@@ -176,7 +176,7 @@ chmod +x gradlew
 **Windows PowerShell**
 
 ```powershell
-.\\gradlew.bat :app:assembleProdDebug -Pbitchord.bundleWear=false
+.\gradlew.bat :app:assembleProdDebug -Pbitchord.bundleWear=false
 ```
 
 **Linux / macOS**

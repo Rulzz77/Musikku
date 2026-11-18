@@ -1,26 +1,24 @@
-# Code of Conduct
+# MusikKu Code of Conduct
 
-## Expected Behavior
-Contributors and maintainers participating in BitChord discussions, issues, and pull requests are expected to:
+## Expected behavior
+
+Everyone participating in MusikKu discussions, issues, and project spaces is expected to:
 - Communicate constructively and professionally.
-- Treat fellow contributors, maintainers, and users with respect.
+- Treat users and maintainers with respect.
 - Focus on technical merits and what is best for the project.
-- Gracefully accept constructive criticism.
+- Accept constructive criticism gracefully.
 
-## Unacceptable Behavior
-The following behaviors are unacceptable within the project:
+## Unacceptable behavior
+
 - Harassment, derogatory comments, or personal attacks.
-- Trolling, insulting, or disruptive behavior.
+- Trolling, insults, or deliberately disruptive behavior.
 - Publishing private information without explicit permission.
 - Unwelcome sexual attention, advances, or inappropriate language.
 
 ## Reporting
-If you experience or witness unacceptable behavior, report it privately to the project maintainer:
-- Email: `kushagrasinghx@gmail.com`
 
-Reports will be handled privately and with appropriate discretion.
+Do not report security vulnerabilities in public issues. Use GitHub's private vulnerability reporting for this repository when available; otherwise contact the repository owner through their GitHub profile.
 
 ## Enforcement
-The project maintainer reserves the right to:
-- Remove, edit, or reject comments, commits, code, issues, or pull requests that violate this code of conduct.
-- Temporarily or permanently restrict or block participation in project repositories for repeated or severe violations.
+
+Project maintainers may remove or restrict participation for behavior that violates this code of conduct.

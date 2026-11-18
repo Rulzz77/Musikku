@@ -96,10 +96,10 @@ jobs:
 
             if [[ -n "$PREV_TAG" ]]; then
               PREV_BUILD="$(git show "$PREV_TAG:build.gradle.kts" 2>/dev/null || true)"
-              PREV_CODE="$(printf '%s\\n' "$PREV_BUILD" | sed -n 's/.*extra\\["musikkuVersionCode"\\][[:space:]]*=[[:space:]]*\\([0-9][0-9]*\\).*/\\1/p' | head -n 1)"
+              PREV_CODE="$(printf '%s\n' "$PREV_BUILD" | sed -n 's/.*extra\["musikkuVersionCode"\][[:space:]]*=[[:space:]]*\([0-9][0-9]*\).*/\1/p' | head -n 1)"
               if [[ -z "$PREV_CODE" ]]; then
                 # Older release tags keep the pre-rebrand property key.
-                PREV_CODE="$(printf '%s\\n' "$PREV_BUILD" | sed -n 's/.*extra\\["bitchordVersionCode"\\][[:space:]]*=[[:space:]]*\\([0-9][0-9]*\\).*/\\1/p' | head -n 1)"
+                PREV_CODE="$(printf '%s\n' "$PREV_BUILD" | sed -n 's/.*extra\["bitchordVersionCode"\][[:space:]]*=[[:space:]]*\([0-9][0-9]*\).*/\1/p' | head -n 1)"
               fi
 
               if [[ -n "$PREV_CODE" && "$VERSION_CODE" -le "$PREV_CODE" ]]; then

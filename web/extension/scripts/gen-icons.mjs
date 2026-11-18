@@ -18,12 +18,6 @@ function render(size) {
   }).render().asPng();
 }
 
-function write(path, size) {
-  const bytes = render(size);
-  mkdirSync(fileURLToPath(new URL('.', `file://${path}`)), { recursive: true });
-  writeFileSync(path, bytes);
-}
-
 mkdirSync(extensionDir, { recursive: true });
 for (const size of [16, 32, 48, 96, 128]) {
   writeFileSync(`${extensionDir}${size}.png`, render(size));

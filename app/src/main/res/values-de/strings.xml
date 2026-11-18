@@ -136,7 +136,7 @@
     <string name="widget_previous">Zurück</string>
     <string name="widget_artwork">Albumcover</string>
     <string name="widget_nothing_played">Noch nichts wiedergegeben</string>
-    <string name="widget_open_MusikKu">MusikKu öffnen</string>
+    <string name="widget_open_bitchord">MusikKu öffnen</string>
     <string name="widget_preview_title">Songtitel</string>
     <string name="widget_preview_artist">Künstler</string>
     <string name="widget_pill_label">Wird wiedergegeben 4×1</string>
@@ -332,7 +332,7 @@
     <string name="downloads_finished">Downloads · fertig</string>
     <string name="downloading_progress">Wird heruntergeladen · %1$d%%</string>
     <string name="starting">Wird gestartet</string>
-    <string name="saved_to_MusikKu_folder">In Music/MusikKu gespeichert</string>
+    <string name="saved_to_bitchord_folder">In Music/BitChord gespeichert</string>
     <string name="nothing_downloading">Nichts wird heruntergeladen</string>
     <string name="nothing_to_explore">Gerade nichts zu entdecken</string>
     <string name="no_youtube_music_results">Keine Ergebnisse von YouTube Music</string>
@@ -667,7 +667,7 @@
     </plurals>
     <string name="no_local_albums">Hier gehört noch nichts zu einem Album oder einer Playlist. Lade ein vollständiges Album oder eine Playlist herunter, dann erscheint es hier.</string>
     <string name="play_your_replay">Dein Replay abspielen</string>
-    <string name="counted_on_device_with_MusikKu">Auf diesem Gerät mit MusikKu gezählt</string>
+    <string name="counted_on_device_with_bitchord">Auf diesem Gerät mit MusikKu gezählt</string>
     <string name="this_month">Dieser Monat</string>
     <string name="this_year">Dieses Jahr</string>
     <string name="all_time">Gesamt</string>

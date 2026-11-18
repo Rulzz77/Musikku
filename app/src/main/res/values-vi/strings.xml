@@ -373,7 +373,7 @@
     <string name="starting">Đang bắt đầu</string>
     <string name="start_radio">Phát radio</string>
     <string name="radio_started">Đã bắt đầu radio %1$s</string>
-    <string name="saved_to_bitchord_folder">Đã lưu vào Music/BitChord</string>
+    <string name="saved_to_bitchord_folder">Đã lưu vào thư mục Nhạc</string>
     <string name="nothing_downloading">Không có nội dung đang tải</string>
     <string name="nothing_to_explore">Hiện không có gì để khám phá</string>
     <string name="no_youtube_music_results">Không có kết quả nào từ YouTube Music</string>

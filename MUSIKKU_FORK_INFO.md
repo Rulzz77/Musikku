@@ -7,7 +7,7 @@
 - Production application ID: `id.musikku.player`
 - Development application ID: `id.musikku.dev`
 - Internal Android namespace: `com.music.bitchord` (retained intentionally for the first low-risk fork)
-- Fork version: `0.1.0`, versionCode `1`
+- Fork version: `0.1.57`, versionCode `58`
 
 ## Important upstream dependencies
 
@@ -22,7 +22,7 @@ The upstream source currently specifies Gradle wrapper 8.11.1, Kotlin plugins 2.
 Suggested first phone build:
 
 ```powershell
-.\gradlew.bat :app:assembleProdDebug -Pbitchord.bundleWear=false
+.\gradlew.bat :app:assembleProdDebug -Pmusikku.bundleWear=false
 ```
 
 ## GPL reminder

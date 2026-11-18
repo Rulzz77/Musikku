@@ -35,7 +35,7 @@ jobs:
       - name: Build MusikKu APK
         run: |
           chmod +x ./gradlew
-          ./gradlew :app:assembleProdDebug -Pbitchord.bundleWear=false --no-daemon --max-workers=2
+          ./gradlew :app:assembleProdDebug -Pmusikku.bundleWear=false --no-daemon --max-workers=2
 
       - name: Verify APK output
         run: test -n "$(find app/build/outputs/apk/prod/debug -maxdepth 1 -type f -name '*.apk' -print -quit)"

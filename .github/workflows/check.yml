@@ -16,6 +16,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Audit MusikKu branding and icons
+        run: bash .github/scripts/check-branding.sh
+
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
@@ -57,7 +60,7 @@ jobs:
       - name: Upload the dev APK
         uses: actions/upload-artifact@v4
         with:
-          name: bitchord-dev-debug
+          name: musikku-dev-debug
           path: app/build/outputs/apk/dev/debug/*.apk
 
       - name: Upload test reports

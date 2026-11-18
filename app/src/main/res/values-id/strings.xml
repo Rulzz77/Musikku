@@ -327,7 +327,7 @@
     <string name="downloads_finished">Unduhan · selesai</string>
     <string name="downloading_progress">Mengunduh · %1$d%%</string>
     <string name="starting">Memulai</string>
-    <string name="saved_to_bitchord_folder">Disimpan ke Music/BitChord</string>
+    <string name="saved_to_bitchord_folder">Disimpan ke folder Musik</string>
     <string name="nothing_downloading">Tidak ada yang sedang diunduh</string>
     <string name="nothing_to_explore">Belum ada yang bisa dijelajahi saat ini</string>
     <string name="no_youtube_music_results">Tidak ada hasil dari YouTube Music</string>

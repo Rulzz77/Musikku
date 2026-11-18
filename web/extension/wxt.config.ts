@@ -3,7 +3,7 @@ import { defineConfig } from 'wxt';
 import { LYRIC_ORIGINS, patternOf } from './lib/lyricHosts';
 import { matchPatternsFor, SITE_ORIGINS } from './site.config';
 
-/** BITCHORD_STORE_BUILD=1 for a Chrome Web Store upload. */
+/** BITCHORD_STORE_BUILD=1 remains the legacy CI switch for Chrome Web Store uploads. */
 const STORE_BUILD = process.env.BITCHORD_STORE_BUILD === '1';
 
 /**
@@ -26,8 +26,8 @@ export default defineConfig({
     },
   }),
   manifest: ({ browser }) => ({
-    name: 'BitChord',
-    description: 'Connects the BitChord web player to YouTube Music, Spotify and Discord.',
+    name: 'MusikKu',
+    description: 'Connects the MusikKu web player to YouTube Music, Spotify and Discord.',
     homepage_url: SITE_ORIGINS[0],
     // `cookies` reads the YouTube session for signed-in requests (phase 5);
     // the cookies themselves never leave the extension (lib/ytAuth.ts).

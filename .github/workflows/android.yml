@@ -46,9 +46,7 @@ jobs:
             printf 'LISTEN_TOGETHER_SERVER=%s\n' "$LISTEN_TOGETHER_SERVER"
           } > local.properties
 
-      # Use the same signing secrets as release-android.yml. Wear OS still
-      # reads the legacy bitchord-release.jks filename, so create both names
-      # from one decoded file and verify them before Gradle starts.
+      # Phone and Wear OS read the same keystore.properties signing config.
       - name: Restore and validate release keystore
         env:
           # Prefer the current MUSIKKU_* names, but keep compatibility with
@@ -95,10 +93,6 @@ jobs:
             exit 1
           fi
 
-          # Keep the legacy Wear OS filename byte-for-byte identical.
-          cp -f musikku-release.jks bitchord-release.jks
-          cmp -s musikku-release.jks bitchord-release.jks
-
           cat > keystore.properties <<EOF_PROPS
           storeFile=musikku-release.jks
           storePassword=${MUSIKKU_STORE_PASSWORD}
@@ -107,7 +101,7 @@ jobs:
           EOF_PROPS
 
           echo "Release keystore decoded and validated successfully."
-          sha256sum musikku-release.jks bitchord-release.jks
+          sha256sum musikku-release.jks
 
       - name: Grant execute permission for gradlew
         run: chmod +x ./gradlew
@@ -134,4 +128,4 @@ jobs:
       - name: Remove temporary signing files
         if: always()
         run: |
-          rm -f musikku-release.jks bitchord-release.jks keystore.properties local.properties
+          rm -f musikku-release.jks keystore.properties local.properties

@@ -3,15 +3,15 @@
   <head>
     <meta charset="UTF-8" />
     <script>
-      // The extension trusts https://bitchord.in only (web/extension/site.config.ts),
+      // The extension currently targets the legacy MusikKu web host https://bitchord.in (web/extension/site.config.ts),
       // so www goes there before anything loads, keeping its path and query.
       if (location.hostname === 'www.bitchord.in') location.replace('https://bitchord.in' + location.pathname + location.search + location.hash);
     </script>
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
-    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1f1f1f" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#09152f" />
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
-    <title>BitChord</title>
+    <title>MusikKu</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <!-- DM Sans is the app's typeface (web/docs/apple-music-dom.md, "Font"). -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />

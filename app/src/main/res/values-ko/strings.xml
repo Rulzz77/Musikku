@@ -524,7 +524,7 @@
     <string name="start_radio">라디오 시작</string>
     <string name="shared_link">공유 링크</string>
     <string name="radio_started">%1$s 라디오 시작함</string>
-    <string name="saved_to_bitchord_folder">Music/BitChord에 저장 완료</string>
+    <string name="saved_to_bitchord_folder">Music 폴더에 저장됨</string>
     <string name="nothing_downloading">다운로드 중인 항목 없음</string>
     <string name="nothing_to_explore">지금은 탐색할 항목 없음</string>
     <string name="no_youtube_music_results">YouTube Music 내 결과 없음</string>

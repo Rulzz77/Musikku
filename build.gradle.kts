@@ -41,9 +41,9 @@ buildscript {
  * No "v" in the name — the in-app updater reads it as a number; the "v" is the
  * release tag's alone.
  */
-extra["bitchordVersionCode"] = 58
-extra["bitchordVersionName"] = "0.1.57"
-extra["bitchordBetaSuffix"] = ""
+extra["musikkuVersionCode"] = 58
+extra["musikkuVersionName"] = "0.1.57"
+extra["musikkuBetaSuffix"] = ""
 /*
  * Bump this by hand before cutting each sideloaded test build ("beta2",
  * "beta3", ...) and blank it out before cutting the real release. Marks the
@@ -63,7 +63,7 @@ extra["bitchordBetaSuffix"] = ""
  * the phone compares the watch's installed APK with the one it carries, so a
  * beta watch app shows "Update available" as soon as the phone has the release.
  */
-extra["bitchordBetaSuffix"] = ""
+extra["musikkuBetaSuffix"] = ""
 plugins {
     id("com.android.application") version "8.10.1" apply false
     id("com.android.library") version "8.10.1" apply false

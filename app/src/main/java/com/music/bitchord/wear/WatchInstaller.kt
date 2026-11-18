@@ -43,7 +43,7 @@ import java.util.concurrent.TimeUnit
 import com.music.bitchord.wear.WearProtocol as P
 
 /**
- * Settings → "BitChord for Wear OS": which watches have BitChord, whether it is
+ * Settings → "MusikKu for Wear OS": which watches have MusikKu, whether it is
  * this phone's build, and putting it there without a computer.
  *
  * The phone APK carries the watch APK of the same flavor and signing key
@@ -61,9 +61,9 @@ import com.music.bitchord.wear.WearProtocol as P
  */
 object WatchInstaller {
 
-    private const val TAG = "BitChordWear"
-    private const val APK_ASSET = "wear/BitChordWear.apk"
-    private const val SHA_ASSET = "wear/BitChordWear.sha256"
+    private const val TAG = "MusikKuWear"
+    private const val APK_ASSET = "wear/MusikKuWear.apk"
+    private const val SHA_ASSET = "wear/MusikKuWear.sha256"
     private const val PAIRING_SERVICE = "_adb-tls-pairing._tcp"
     private const val CONNECT_SERVICE = "_adb-tls-connect._tcp"
 
@@ -80,7 +80,7 @@ object WatchInstaller {
     private val _pairing = MutableStateFlow<WatchPairingState>(WatchPairingState.Idle)
     val pairing: StateFlow<WatchPairingState> = _pairing.asStateFlow()
 
-    /** Whether this build carries a watch APK at all (a `-Pbitchord.bundleWear=false` build doesn't). */
+    /** Whether this build carries a watch APK at all (a `-Pmusikku.bundleWear=false` build doesn't). */
     fun available(context: Context): Boolean = bundledHash(context) != null
 
     private var cachedHash: String? = null
@@ -167,7 +167,7 @@ object WatchInstaller {
     private val installedAt = java.util.concurrent.ConcurrentHashMap<String, Long>()
     private const val SETTLE_MS = 60_000L
 
-    // ---- Updating a watch that has BitChord ----
+    // ---- Updating a watch that has MusikKu ----
 
     fun sendUpdate(context: Context, nodeId: String) {
         val app = context.applicationContext
@@ -211,7 +211,7 @@ object WatchInstaller {
     }
 
     /**
-     * Brings BitChord to the front on the watch, which is where Android's
+     * Brings MusikKu to the front on the watch, which is where Android's
      * install prompt can be shown: a background app may not open it itself,
      * and a Galaxy Watch gives the notification it falls back to no alert.
      */
@@ -225,9 +225,9 @@ object WatchInstaller {
 
     /** The bundled APK, as a file — sendFile and the ADB stream both want one. */
     private fun bundledApk(app: Context): File {
-        val target = File(app.cacheDir, "wear/BitChordWear.apk")
+        val target = File(app.cacheDir, "wear/MusikKuWear.apk")
         val hash = bundledHash(app)
-        val stamp = File(target.parentFile, "BitChordWear.sha256")
+        val stamp = File(target.parentFile, "MusikKuWear.sha256")
         if (target.exists() && stamp.exists() && stamp.readText() == hash) return target
         target.parentFile?.mkdirs()
         app.assets.open(APK_ASSET).use { input -> target.outputStream().use { input.copyTo(it) } }
@@ -396,7 +396,7 @@ object WatchInstaller {
                 cert = certFile.inputStream().use { CertificateFactory.getInstance("X.509").generateCertificate(it) }
             } else {
                 val pair = KeyPairGenerator.getInstance("RSA").apply { initialize(2048) }.generateKeyPair()
-                val name = X500Name("CN=BitChord")
+                val name = X500Name("CN=MusikKu")
                 val now = System.currentTimeMillis()
                 val holder = JcaX509v3CertificateBuilder(
                     name,
@@ -415,6 +415,6 @@ object WatchInstaller {
 
         override fun getPrivateKey(): PrivateKey = key
         override fun getCertificate(): Certificate = cert
-        override fun getDeviceName(): String = "BitChord"
+        override fun getDeviceName(): String = "MusikKu"
     }
 }

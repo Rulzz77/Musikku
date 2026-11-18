@@ -7,7 +7,7 @@ plugins {
 }
 
 /*
- * BitChord for Wear OS: a remote for the phone app, not a second player.
+ * MusikKu for Wear OS: a remote for the phone app, not a second player.
  *
  * It holds no library, streams nothing and runs no Palette or blur of its own —
  * the phone sends it what is playing, the cover as a 240px JPEG, and the mesh
@@ -28,7 +28,7 @@ val signing = Properties().apply {
     if (file.exists()) file.inputStream().use { load(it) }
 }
 
-val betaSuffix = rootProject.extra["bitchordBetaSuffix"] as String
+val betaSuffix = rootProject.extra["musikkuBetaSuffix"] as String
 
 android {
     namespace = "com.music.bitchord.wear"
@@ -40,8 +40,8 @@ android {
         minSdk = 30
         targetSdk = 36
         // The phone's version — see the root build.gradle.kts.
-        versionCode = rootProject.extra["bitchordVersionCode"] as Int
-        versionName = rootProject.extra["bitchordVersionName"] as String
+        versionCode = rootProject.extra["musikkuVersionCode"] as Int
+        versionName = rootProject.extra["musikkuVersionName"] as String
     }
 
     sourceSets {
@@ -54,11 +54,11 @@ android {
         create("dev") {
             dimension = "env"
             applicationId = "com.dev.bitchord"
-            resValue("string", "app_name", "BitChord Dev")
+            resValue("string", "app_name", "MusikKu Dev")
         }
         create("prod") {
             dimension = "env"
-            resValue("string", "app_name", "BitChord")
+            resValue("string", "app_name", "MusikKu")
         }
     }
 
@@ -81,11 +81,11 @@ android {
          * signs with the debug key — that is the part pairing depends on — but a
          * debuggable, un-R8'd Compose app is the slow kind, and on a watch CPU
          * that is the difference between a smooth crown and a stuttering one.
-         * Pass -Pbitchord.wearDebuggable=true to get a debugger back.
+         * Pass -Pmusikku.wearDebuggable=true to get a debugger back.
          */
         debug {
             if (betaSuffix.isNotEmpty()) versionNameSuffix = "-$betaSuffix"
-            val debuggable = providers.gradleProperty("bitchord.wearDebuggable").orNull == "true"
+            val debuggable = providers.gradleProperty("musikku.wearDebuggable").orNull == "true"
             isDebuggable = debuggable
             isMinifyEnabled = !debuggable
             isShrinkResources = !debuggable
@@ -136,10 +136,10 @@ kotlin {
     }
 }
 
-// Named after the phone APKs (BitChord-v1.8.apk) but with their own prefix, so
-// the phone's updater — which only takes assets starting "BitChord-" — can never
+// Named after the phone APKs (MusikKu-v1.8.apk) but with their own prefix, so
+// the phone's updater — which only takes assets starting "MusikKu-" — can never
 // pick a watch APK by mistake.
-base.archivesName.set("BitChordWear")
+base.archivesName.set("MusikKuWear")
 
 dependencies {
     implementation("androidx.wear.compose:compose-material3:1.6.2")

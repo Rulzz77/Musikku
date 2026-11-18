@@ -280,7 +280,7 @@
             android:enabled="true"
             android:exported="true"
             android:icon="@drawable/ic_musikku_launcher"
-            android:roundIcon="@mipmap/ic_launcher"
+            android:roundIcon="@drawable/ic_musikku_launcher_round"
             android:label="@string/app_name"
             android:targetActivity=".MainActivity">
             <intent-filter>

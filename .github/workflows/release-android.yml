@@ -95,7 +95,12 @@ jobs:
             PREV_TAG="$(git tag --list 'v*' --sort=-v:refname | head -n 1)"
 
             if [[ -n "$PREV_TAG" ]]; then
-              PREV_CODE="$(git show "$PREV_TAG:build.gradle.kts" 2>/dev/null | sed -n 's/.*extra\["musikkuVersionCode"][[:space:]]*=[[:space:]]*\([0-9][0-9]*\).*/\1/p' | head -n 1 || true)"
+              PREV_BUILD="$(git show "$PREV_TAG:build.gradle.kts" 2>/dev/null || true)"
+              PREV_CODE="$(printf '%s\\n' "$PREV_BUILD" | sed -n 's/.*extra\\["musikkuVersionCode"\\][[:space:]]*=[[:space:]]*\\([0-9][0-9]*\\).*/\\1/p' | head -n 1)"
+              if [[ -z "$PREV_CODE" ]]; then
+                # Older release tags keep the pre-rebrand property key.
+                PREV_CODE="$(printf '%s\\n' "$PREV_BUILD" | sed -n 's/.*extra\\["bitchordVersionCode"\\][[:space:]]*=[[:space:]]*\\([0-9][0-9]*\\).*/\\1/p' | head -n 1)"
+              fi
 
               if [[ -n "$PREV_CODE" && "$VERSION_CODE" -le "$PREV_CODE" ]]; then
                 echo "::error::musikkuVersionCode ($VERSION_CODE) must be higher than $PREV_TAG ($PREV_CODE). Bump it and push again."

@@ -239,7 +239,7 @@ class MusikKuApplication : Application(), SingletonImageLoader.Factory, Configur
                     chain.request().newBuilder()
                         .header(
                             "User-Agent",
-                            "BitChord/${BuildConfig.VERSION_NAME} (Android; +https://github.com/kushagrasinghx/BitChord)",
+                            "MusikKu/${BuildConfig.VERSION_NAME} (Android; +https://github.com/kushagrasinghx/MusikKu)",
                         )
                         .build(),
                 )

@@ -61,7 +61,7 @@
         android:maxSdkVersion="28" />
 
     <application
-        android:name=".BitChordApplication"
+        android:name=".MusikKuApplication"
         android:allowBackup="true"
         android:appCategory="audio"
         android:usesCleartextTraffic="false"

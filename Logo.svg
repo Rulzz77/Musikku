@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+<title id="title">MusikKu</title>
+<defs>
+  <linearGradient id="bg" x1="40" y1="20" x2="470" y2="500" gradientUnits="userSpaceOnUse"><stop stop-color="#171044"/><stop offset=".55" stop-color="#09152f"/><stop offset="1" stop-color="#031b32"/></linearGradient>
+  <linearGradient id="ring" x1="80" y1="110" x2="450" y2="420" gradientUnits="userSpaceOnUse"><stop stop-color="#e34cff"/><stop offset=".5" stop-color="#7358ff"/><stop offset="1" stop-color="#16e2ee"/></linearGradient>
+  <linearGradient id="note" x1="170" y1="120" x2="340" y2="390" gradientUnits="userSpaceOnUse"><stop stop-color="#fff"/><stop offset=".72" stop-color="#d9e8ff"/><stop offset="1" stop-color="#a8a0ff"/></linearGradient>
+  <filter id="glow" x="0" y="0" width="1" height="1"><feGaussianBlur stdDeviation="12" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+</defs>
+<rect width="512" height="512" rx="116" fill="url(#bg)"/>
+<circle cx="256" cy="256" r="184" fill="none" stroke="url(#ring)" stroke-width="13" opacity=".92"/>
+<circle cx="256" cy="256" r="154" fill="none" stroke="#4e5acb" stroke-width="3" opacity=".42"/>
+<path d="M180 120v218c-14-9-32-12-50-7-31 9-49 36-41 61s39 37 70 28c25-7 42-26 42-47V192l139-31v145c-14-9-32-12-50-7-31 9-49 36-41 61s39 37 70 28c25-7 42-26 42-47V93L180 120Z" fill="url(#note)" filter="url(#glow)"/>
+<path d="M359 342c18-12 31-30 37-51M380 372c25-18 43-43 53-73" fill="none" stroke="#19d9ee" stroke-width="10" stroke-linecap="round"/>
+</svg>

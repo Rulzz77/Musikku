@@ -55,7 +55,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlin.concurrent.thread
 
-class BitChordApplication : Application(), SingletonImageLoader.Factory, Configuration.Provider {
+class MusikKuApplication : Application(), SingletonImageLoader.Factory, Configuration.Provider {
 
     /** Asked for on first use rather than at launch; see [PlaylistSync.init]. */
     override val workManagerConfiguration: Configuration
@@ -239,7 +239,7 @@ class BitChordApplication : Application(), SingletonImageLoader.Factory, Configu
                     chain.request().newBuilder()
                         .header(
                             "User-Agent",
-                            "BitChord/${BuildConfig.VERSION_NAME} (Android; +https://github.com/kushagrasinghx/BitChord)",
+                            "MusikKu/${BuildConfig.VERSION_NAME} (Android; +https://github.com/kushagrasinghx/MusikKu)",
                         )
                         .build(),
                 )

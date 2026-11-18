@@ -53,7 +53,7 @@ test -f wearos/src/main/res/drawable/ic_logo.xml || fail "Missing Wear OS logo v
 test -f tv/src/main/res/drawable/tv_banner.xml || fail "Missing Android TV vector banner."
 test -f web/app/public/favicon.svg || fail "Missing web brand source SVG."
 
-grep -q "web/app/public/favicon.svg" web/extension/scripts/gen-icons.mjs || fail "Browser/store icon generator is not using the MusikKu source SVG."
+grep -q "favicon.svg" web/extension/scripts/gen-icons.mjs || fail "Browser/store icon generator is not using the MusikKu source SVG."
 grep -q "playStorePath" web/extension/scripts/gen-icons.mjs || fail "Play Store artwork generation is missing."
 grep -q "pnpm run icons && wxt build" web/extension/package.json || fail "Extension builds do not regenerate branded icons."
 

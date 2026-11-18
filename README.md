@@ -176,19 +176,19 @@ chmod +x gradlew
 **Windows PowerShell**
 
 ```powershell
-.\gradlew.bat :app:assembleProdDebug -Pbitchord.bundleWear=false
+.\gradlew.bat :app:assembleProdDebug -Pmusikku.bundleWear=false
 ```
 
 **Linux / macOS**
 
 ```bash
-./gradlew :app:assembleProdDebug -Pbitchord.bundleWear=false
+./gradlew :app:assembleProdDebug -Pmusikku.bundleWear=false
 ```
 
 To build the separate development application instead:
 
 ```bash
-./gradlew :app:assembleDevDebug -Pbitchord.bundleWear=false
+./gradlew :app:assembleDevDebug -Pmusikku.bundleWear=false
 ```
 
 The APK is normally written to:

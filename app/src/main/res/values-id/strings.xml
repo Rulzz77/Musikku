@@ -131,7 +131,7 @@
     <string name="widget_previous">Sebelumnya</string>
     <string name="widget_artwork">Sampul album</string>
     <string name="widget_nothing_played">Belum ada yang diputar</string>
-    <string name="widget_open_MusikKu">Buka MusikKu</string>
+    <string name="widget_open_bitchord">Buka MusikKu</string>
     <string name="widget_preview_title">Judul lagu</string>
     <string name="widget_preview_artist">Artis</string>
     <string name="widget_pill_label">Sedang diputar 4×1</string>
@@ -327,7 +327,7 @@
     <string name="downloads_finished">Unduhan · selesai</string>
     <string name="downloading_progress">Mengunduh · %1$d%%</string>
     <string name="starting">Memulai</string>
-    <string name="saved_to_MusikKu_folder">Disimpan ke Music/MusikKu</string>
+    <string name="saved_to_bitchord_folder">Disimpan ke Music/BitChord</string>
     <string name="nothing_downloading">Tidak ada yang sedang diunduh</string>
     <string name="nothing_to_explore">Belum ada yang bisa dijelajahi saat ini</string>
     <string name="no_youtube_music_results">Tidak ada hasil dari YouTube Music</string>
@@ -647,7 +647,7 @@
     </plurals>
     <string name="no_local_albums">Belum ada yang termasuk album atau playlist di sini. Unduh album atau playlist lengkap dan akan muncul di sini.</string>
     <string name="play_your_replay">Putar Replay Anda</string>
-    <string name="counted_on_device_with_MusikKu">Dihitung di perangkat ini dengan MusikKu</string>
+    <string name="counted_on_device_with_bitchord">Dihitung di perangkat ini dengan MusikKu</string>
     <string name="this_month">Bulan ini</string>
     <string name="this_year">Tahun ini</string>
     <string name="all_time">Sepanjang waktu</string>

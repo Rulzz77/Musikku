@@ -377,7 +377,7 @@
     <string name="starting">Avvio</string>
     <string name="start_radio">Avvia radio</string>
     <string name="radio_started">Radio %1$s avviata</string>
-    <string name="saved_to_bitchord_folder">Salvato in Musica/BitChord</string>
+    <string name="saved_to_bitchord_folder">Salvato nella cartella Musica</string>
     <string name="nothing_downloading">Nessun download in corso</string>
     <string name="nothing_to_explore">Niente da esplorare al momento</string>
     <string name="no_youtube_music_results">Nessun risultato da YouTube Music</string>

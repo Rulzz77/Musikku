@@ -581,7 +581,7 @@
     <string name="shared_link">Shared link</string>
     <string name="opened_file">Opened file</string>
     <string name="radio_started">%1$s radio started</string>
-    <string name="saved_to_bitchord_folder">Saved to Music/BitChord</string>
+    <string name="saved_to_bitchord_folder">Saved to your Music folder</string>
     <string name="nothing_downloading">Nothing downloading</string>
     <string name="nothing_to_explore">Nothing to explore right now</string>
     <string name="no_youtube_music_results">No results from YouTube Music</string>

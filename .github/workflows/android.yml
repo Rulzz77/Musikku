@@ -46,9 +46,7 @@ jobs:
             printf 'LISTEN_TOGETHER_SERVER=%s\n' "$LISTEN_TOGETHER_SERVER"
           } > local.properties
 
-      # Use the same signing secrets as release-android.yml. Wear OS still
-      # reads the legacy bitchord-release.jks filename, so create both names
-      # from one decoded file and verify them before Gradle starts.
+      # Phone and Wear OS read the same keystore.properties signing config.
       - name: Restore and validate release keystore
         env:
           # Prefer the current MUSIKKU_* names, but keep compatibility with

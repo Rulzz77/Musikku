@@ -5,7 +5,7 @@
 
 <div align="center">
 
-  <img src="Logo.png" alt="MusikKu logo" width="112" />
+  <img src="Logo.svg" alt="MusikKu logo" width="112" />
 
   <h1>MusikKu</h1>
   <p><strong>Your music library. Your listening style.</strong></p>
@@ -45,7 +45,7 @@
 
 ## About
 
-**MusikKu** is an independently developed Android music player based on the open-source [BitChord](https://github.com/kushagrasinghx/BitChord) codebase. It brings online music discovery and local audio playback together with tools for organising playlists, understanding listening habits, and managing an offline library.
+**MusikKu** is an independent Android music player that brings online music discovery and local audio playback together with tools for organising playlists, understanding listening habits, and managing an offline library.
 
 The Android application is built with **Kotlin and Jetpack Compose**. The repository also contains shared Kotlin modules, Android TV and Wear OS targets, a Go service for Listen Together, and a web player with a companion browser extension.
 
@@ -261,20 +261,9 @@ Use music sources and content only where you have the necessary rights and permi
 - [Listen Together backend](backend/README.md)
 - [Upstream project README](UPSTREAM_README.md)
 
-## Contributing and issues
+## License and third-party notices
 
-Bug reports, reproducible problems, and focused improvements are welcome. Before opening an issue, check whether it has already been reported. When submitting a pull request, describe the behaviour being changed and include the tests or manual checks performed.
-
-- [Open an issue](https://github.com/Rulzz77/Musikku/issues/new)
-- [Browse existing issues](https://github.com/Rulzz77/Musikku/issues)
-- [Contribution guidelines](CONTRIBUTING.md)
-- [Code of Conduct](CODE_OF_CONDUCT.md)
-
-## Credits and license
-
-MusikKu is derived from [BitChord](https://github.com/kushagrasinghx/BitChord). The upstream project and its contributors deserve credit for the codebase and ideas this project builds upon. Original notices and the upstream license are retained in this repository.
-
-This project is distributed under the **GNU General Public License v3.0 (GPL-3.0)**. See [LICENSE](LICENSE) for the full license text. If you redistribute a modified build, comply with the GPL, preserve required notices, and provide the corresponding source code.
+MusikKu is distributed under the **GNU General Public License v3.0 (GPL-3.0)**. See [LICENSE](LICENSE) and [third-party notices](THIRD_PARTY_NOTICES.md) for license terms, upstream attribution, and required notices. If you redistribute a modified build, comply with the GPL, preserve required notices, and provide the corresponding source code.
 
 <div align="center">
   <sub>Made for listeners who want more control over their music library.</sub>

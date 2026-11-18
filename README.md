@@ -1,62 +1,281 @@
-# MusikKu
+<!--
+  MusikKu project README
+  Keep release links and project details in sync with the latest tagged release.
+-->
 
-MusikKu is a personal Android music-player fork based on the open-source BitChord project.
+<div align="center">
 
-## Upstream and license
+  <img src="Logo.png" alt="MusikKu logo" width="112" />
 
-- Upstream: https://github.com/kushagrasinghx/BitChord
-- License: GNU General Public License v3.0 (GPL-3.0)
-- The original `LICENSE` file and upstream source notices are kept in this repository.
-- This fork must continue to comply with GPL-3.0 when redistributed. Provide the corresponding source and preserve required notices.
+  <h1>MusikKu</h1>
+  <p><strong>Your music library. Your listening style.</strong></p>
+  <p>An independent Android music player for online discovery, local playback, and a more personal music library.</p>
 
-## What this setup changes
+  <p>
+    <a href="https://github.com/Rulzz77/Musikku/releases/latest">
+      <img alt="Latest release" src="https://img.shields.io/github/v/release/Rulzz77/Musikku?display_name=tag&style=for-the-badge&color=7c5cff">
+    </a>
+    <a href="https://github.com/Rulzz77/Musikku/releases">
+      <img alt="Downloads" src="https://img.shields.io/github/downloads/Rulzz77/Musikku/total?style=for-the-badge&color=2ea043">
+    </a>
+    <a href="https://github.com/Rulzz77/Musikku/blob/main/LICENSE">
+      <img alt="GPL-3.0 license" src="https://img.shields.io/github/license/Rulzz77/Musikku?style=for-the-badge">
+    </a>
+  </p>
+  <p>
+    <a href="https://github.com/Rulzz77/Musikku/actions/workflows/check.yml">
+      <img alt="Android CI" src="https://github.com/Rulzz77/Musikku/actions/workflows/check.yml/badge.svg?branch=main">
+    </a>
+    <a href="https://github.com/Rulzz77/Musikku/actions/workflows/release-android.yml">
+      <img alt="Android release workflow" src="https://github.com/Rulzz77/Musikku/actions/workflows/release-android.yml/badge.svg?branch=main">
+    </a>
+  </p>
 
-- Android app display name: MusikKu
-- Production application ID: `id.musikku.player`
-- Development application ID: `id.musikku.dev`
-- Gradle root project name: `MusikKu`
-- Initial fork version: `0.1.0` (versionCode `1`)
-- Launcher icon: simple MusikKu mark
+  <p>
+    <a href="#download">Download</a> ·
+    <a href="#features">Features</a> ·
+    <a href="#build-from-source">Build from source</a> ·
+    <a href="#project-structure">Project structure</a> ·
+    <a href="#privacy-and-limitations">Privacy & limitations</a>
+  </p>
 
-The upstream Kotlin package namespace is intentionally retained to minimize risky mass refactoring. It is an internal code namespace, distinct from the installed Android application ID.
+</div>
 
-## Repository layout
+---
 
-- `app/`, `shared/`, and `sharedUi/`: the native Kotlin/Compose Android application and shared code.
-- `tv/` and `wearos/`: Android TV and Wear OS targets.
-- `backend/`: the Go service used by Listen Together.
-- `web/`: the independent web player and browser extension.
+## About
 
-The legacy Flutter application and its generated platform runners have been retired from this repository. The native Android project is built from the root Gradle project; it does not use a Flutter `lib/` directory or `pubspec.yaml`.
+**MusikKu** is an independently developed Android music player based on the open-source [BitChord](https://github.com/kushagrasinghx/BitChord) codebase. It brings online music discovery and local audio playback together with tools for organising playlists, understanding listening habits, and managing an offline library.
 
-## Open in Android Studio
+The Android application is built with **Kotlin and Jetpack Compose**. The repository also contains shared Kotlin modules, Android TV and Wear OS targets, a Go service for Listen Together, and a web player with a companion browser extension.
 
-1. Install Android Studio, JDK 17 or the JDK required by the current upstream Gradle/AGP combination, Android SDK 37, Android NDK, and CMake 3.22.1.
-2. Open this folder (`MusikKu`) in Android Studio.
-3. Let Gradle sync and install any missing SDK components.
-4. Connect an Android device with USB debugging enabled.
-5. Run the `app` configuration, or build from PowerShell:
+> MusikKu is an independent project. It is not an official YouTube Music, YouTube, Google, or Spotify application, and it is not affiliated with or endorsed by those services.
 
-```powershell
-.\gradlew.bat :app:assembleProdDebug -Pbitchord.bundleWear=false
+## Download
+
+The latest stable build is available from GitHub Releases. APK links below always point to the **latest published release**.
+
+<div align="center">
+
+  <a href="https://github.com/Rulzz77/Musikku/releases/latest">
+    <img alt="Get MusikKu from GitHub Releases" src="https://img.shields.io/badge/Download-Latest%20Release-7c5cff?style=for-the-badge&logo=github">
+  </a>
+
+</div>
+
+| APK | Recommended for |
+|---|---|
+| [**ARM64**](https://github.com/Rulzz77/Musikku/releases/latest/download/MusikKu-arm64-v8a.apk) | Most modern Android phones and tablets |
+| [**ARMv7**](https://github.com/Rulzz77/Musikku/releases/latest/download/MusikKu-armeabi-v7a.apk) | Older 32-bit ARM Android devices |
+| [**Universal**](https://github.com/Rulzz77/Musikku/releases/latest/download/MusikKu-universal.apk) | Devices where the correct CPU architecture is unknown; larger download |
+| [**x86_64**](https://github.com/Rulzz77/Musikku/releases/latest/download/MusikKu-x86_64.apk) | x86_64 Android devices and emulators |
+| [**Wear OS**](https://github.com/Rulzz77/Musikku/releases/latest/download/MusikKu-WearOS.apk) | Compatible Wear OS watches |
+
+**Installation:** download the APK for your device, allow your browser or file manager to install unknown apps when Android asks, then install the package. For the full changelog and all release assets, visit [Releases](https://github.com/Rulzz77/Musikku/releases).
+
+## Features
+
+### Discover and play music
+
+- Browse and search music available through the integrated YouTube Music catalogue.
+- Play audio files from your device's local music library.
+- Keep listening in the background with Android media-session, notification, and lock-screen controls.
+- Manage the playback queue, playback history, shuffle, repeat, and track navigation.
+- Use supported lyrics providers, adjust lyric synchronisation, and customise lyric text size.
+- Fine-tune playback with speed controls, silence skipping, a sleep timer, equalizer integration, and network-aware quality settings.
+- Use the optional USB audio path with compatible devices and supported source formats.
+
+Availability and playback behaviour depend on the selected source, account state, region, device, and third-party service.
+
+### Organise your library
+
+- Create and manage device playlists.
+- Import Spotify playlists into MusikKu and keep imported collections available locally.
+- Group YouTube Music, Spotify-imported, and device playlists with **Playlist Folders**.
+- Sort and organise playlists, manage tracks individually or in batches, and customise playlist artwork.
+- Keep local listening statistics and revisit recently played or favourite music.
+
+### Smart Playlists
+
+Smart Playlists turn listening statistics into dynamic collections. Built-in lists include:
+
+- **Most played**
+- **Recently played**
+- **Most listened**
+- **Forgotten tracks**
+
+Create up to 20 custom Smart Playlists with optional artist, cached genre, release-year, duration, and last-played filters. Combine optional criteria with **ALL (AND)** or **ANY (OR)**, then sort by play count, recent playback, or listening time.
+
+Genre, release-year, and duration filters depend on metadata being available. Missing metadata is not guessed; a track without the required value will not match that active filter.
+
+Read the [Smart Playlists guide](docs/SMART_PLAYLISTS.md).
+
+### Downloads, storage, and data safety
+
+- Manage downloaded music and inspect app-managed storage usage.
+- Recover queued and interrupted download tasks after the app is opened again.
+- Review downloaded files, audio cache, artwork cache, and Canvas cache separately.
+- Export and restore supported app data, including playlists, playlist folders, Spotify-imported collections, listening statistics, and Smart Playlist rules.
+- Choose playlist merge or replacement behaviour during restore.
+
+See the guides for [Backup & Restore](docs/BACKUP_RESTORE_2026-11-16.md), [Download Recovery](docs/DOWNLOAD_RECOVERY_2026-11-16.md), and [Storage Manager](docs/STORAGE_MANAGER_2026-11-16.md).
+
+### Personalisation and listening tools
+
+- **Music DNA** and **Memories** provide summaries based on local listening history.
+- **MusikKu Flow** creates mood-oriented mixes from available track metadata and listening history.
+- Save favourite artists, customise themes, and manage tracks hidden from Flow.
+- Keep a manual **Radio Diary**, use the **Focus Timer**, or switch to the in-app **Car Mode** layout.
+- Use **Listen Together** to synchronise playback and queues with other participants on a configured server.
+
+Flow recommendations depend on the metadata and history available on the device. Listen Together requires a reachable party server.
+
+### Companion projects
+
+The repository contains more than the Android phone app:
+
+| Module | Purpose |
+|---|---|
+| `tv/` | Android TV application |
+| `wearos/` | Wear OS companion application |
+| `backend/` | Go backend for Listen Together |
+| `web/` | Web player and companion browser extension |
+
+The companion projects have their own setup and build steps; see the documentation inside each module before using or deploying them.
+
+## Build from source
+
+### Requirements
+
+| Tool | Version / setting |
+|---|---|
+| JDK | 17 |
+| Android SDK | Platform 37 (compile SDK) |
+| Android NDK | Required for native audio components |
+| CMake | 3.22.1 |
+| Android minimum SDK | API 26 |
+| Android target SDK | API 36 |
+
+Android Studio is recommended for installing the Android SDK, NDK, and CMake components. The repository's Gradle wrapper selects the Gradle version used by the project.
+
+### Clone the repository
+
+```bash
+git clone https://github.com/Rulzz77/Musikku.git
+cd Musikku
 ```
 
-The APK is normally produced under `app\build\outputs\apk\prod\debug\`.
+On Linux or macOS, make the wrapper executable if necessary:
 
-For a separate development install:
-
-```powershell
-.\gradlew.bat :app:assembleDevDebug -Pbitchord.bundleWear=false
+```bash
+chmod +x gradlew
 ```
 
-## Before making a public release
+### Build the production-flavour debug APK
 
-- Review all upstream service dependencies and configure your own release/update repository.
-- Some upstream-hosted services (including addon authentication and the Listen Together default server) are controlled by the original project and may not be available or appropriate for a fork.
-- Re-check the original project's current README, docs, license, privacy behavior, and third-party service terms.
-- Do not claim affiliation with YouTube, Google, BitChord, or music rights holders.
-- Ensure every music source and artwork source is used with the necessary permissions.
+**Windows PowerShell**
 
-## Branding follow-up
+```powershell
+.\\gradlew.bat :app:assembleProdDebug -Pbitchord.bundleWear=false
+```
 
-This setup performs a conservative first-pass rebrand. It does not redesign all screens, remove every upstream product reference, or change the internal Kotlin package namespace. Search the project for `BitChord`, `bitchord`, and `kushagrasinghx` before a public release and review each remaining match rather than blindly replacing code identifiers.
+**Linux / macOS**
+
+```bash
+./gradlew :app:assembleProdDebug -Pbitchord.bundleWear=false
+```
+
+To build the separate development application instead:
+
+```bash
+./gradlew :app:assembleDevDebug -Pbitchord.bundleWear=false
+```
+
+The APK is normally written to:
+
+```text
+app/build/outputs/apk/prod/debug/
+```
+
+The production application ID is `id.musikku.player`; the development application ID is `id.musikku.dev`.
+
+### Run tests
+
+```bash
+./gradlew :shared:jvmTest testDevDebugUnitTest
+```
+
+Run Gradle commands from the repository root. Android builds and tests are also checked by the repository's GitHub Actions workflows.
+
+### Optional local configuration
+
+Some integrations use local credentials or service URLs. Put optional development values in the root `local.properties` file; do not commit real keys or secrets.
+
+```properties
+LASTFM_API_KEY=your_lastfm_api_key
+LASTFM_SECRET=your_lastfm_secret
+LISTEN_TOGETHER_SERVER=https://your-listen-together-server.example
+```
+
+Release signing is handled separately from ordinary debug builds. Never commit a keystore, signing password, API secret, or populated local configuration file.
+
+## Project structure
+
+```text
+Musikku/
+├── app/          # Native Android application (Kotlin + Jetpack Compose)
+├── shared/       # Shared Kotlin business logic and data models
+├── sharedUi/     # Shared UI components
+├── tv/           # Android TV target
+├── wearos/       # Wear OS companion
+├── backend/      # Listen Together Go service
+├── web/          # Web player and browser extension
+├── docs/         # Feature, design, and implementation notes
+├── LICENSE       # GPL-3.0 license
+└── README.md
+```
+
+## Privacy and limitations
+
+A few important boundaries are intentional:
+
+- **No music hosting:** MusikKu is a player and client. It does not operate a catalogue or host the music that users play.
+- **Third-party dependencies:** online catalogues, lyrics, scrobbling, and other integrations may depend on external services, their availability, account access, and their terms.
+- **No permanent ad-free or service-availability promise:** MusikKu does not guarantee that a third-party service will remain available, change its policies, or provide a particular playback experience.
+- **Smart Playlist metadata:** genre tags and release-year/runtime metadata may be missing for some tracks. Filters only use values actually supplied or cached.
+- **Backup scope:** backups do not bundle downloaded audio bytes, app caches, account credentials, or API secrets. Local-file references may need to be relinked when moving a backup to another device.
+- **Download recovery:** an interrupted item can be queued again when the app is reopened, but the current downloader does not promise byte-for-byte partial download resumption.
+
+Use music sources and content only where you have the necessary rights and permissions, and follow the applicable third-party service terms and local laws.
+
+## Documentation
+
+- [Smart Playlists](docs/SMART_PLAYLISTS.md)
+- [Playlist Folders](docs/PLAYLIST_FOLDERS.md)
+- [Backup & Restore](docs/BACKUP_RESTORE_2026-11-16.md)
+- [Download Recovery](docs/DOWNLOAD_RECOVERY_2026-11-16.md)
+- [Storage Manager](docs/STORAGE_MANAGER_2026-11-16.md)
+- [Lyrics Translation](docs/LYRICS_TRANSLATION.md)
+- [Remote Configuration](docs/REMOTE_CONFIG.md)
+- [Web player and extension](web/README.md)
+- [Listen Together backend](backend/README.md)
+- [Upstream project README](UPSTREAM_README.md)
+
+## Contributing and issues
+
+Bug reports, reproducible problems, and focused improvements are welcome. Before opening an issue, check whether it has already been reported. When submitting a pull request, describe the behaviour being changed and include the tests or manual checks performed.
+
+- [Open an issue](https://github.com/Rulzz77/Musikku/issues/new)
+- [Browse existing issues](https://github.com/Rulzz77/Musikku/issues)
+- [Contribution guidelines](CONTRIBUTING.md)
+- [Code of Conduct](CODE_OF_CONDUCT.md)
+
+## Credits and license
+
+MusikKu is derived from [BitChord](https://github.com/kushagrasinghx/BitChord). The upstream project and its contributors deserve credit for the codebase and ideas this project builds upon. Original notices and the upstream license are retained in this repository.
+
+This project is distributed under the **GNU General Public License v3.0 (GPL-3.0)**. See [LICENSE](LICENSE) for the full license text. If you redistribute a modified build, comply with the GPL, preserve required notices, and provide the corresponding source code.
+
+<div align="center">
+  <sub>Made for listeners who want more control over their music library.</sub>
+</div>

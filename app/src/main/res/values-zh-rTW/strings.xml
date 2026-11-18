@@ -327,7 +327,7 @@
     <string name="downloads_finished">下載 · 已完成</string>
     <string name="downloading_progress">正在下載 · %1$d%%</string>
     <string name="starting">正在開始</string>
-    <string name="saved_to_bitchord_folder">已儲存到 Music/BitChord</string>
+    <string name="saved_to_bitchord_folder">已儲存到音樂資料夾</string>
     <string name="nothing_downloading">當前沒有下載任務</string>
     <string name="nothing_to_explore">目前沒有可探索的內容</string>
     <string name="no_youtube_music_results">YouTube Music 沒有搜尋結果</string>

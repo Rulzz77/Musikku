@@ -333,7 +333,7 @@
     <string name="downloads_finished">הורדות · הסתיימו</string>
     <string name="downloading_progress">מוריד · %1$d%%</string>
     <string name="starting">מתחיל</string>
-    <string name="saved_to_bitchord_folder">נשמר ב-Music/BitChord</string>
+    <string name="saved_to_bitchord_folder">נשמר בתיקיית המוזיקה</string>
     <string name="nothing_downloading">שום דבר לא יורד</string>
     <string name="nothing_to_explore">אין מה לחקור כרגע</string>
     <string name="no_youtube_music_results">אין תוצאות מ-YouTube Music</string>

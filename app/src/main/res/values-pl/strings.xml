@@ -330,7 +330,7 @@
     <string name="downloads_finished">Pobieranie · zakończone</string>
     <string name="downloading_progress">Pobieranie · %1$d%%</string>
     <string name="starting">Rozpoczynanie</string>
-    <string name="saved_to_bitchord_folder">Zapisano w Music/BitChord</string>
+    <string name="saved_to_bitchord_folder">Zapisano w folderze Muzyka</string>
     <string name="nothing_downloading">Nic się nie pobiera</string>
     <string name="nothing_to_explore">Nie ma teraz nic do odkrycia</string>
     <string name="no_youtube_music_results">Brak wyników z YouTube Music</string>

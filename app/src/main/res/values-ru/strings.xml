@@ -342,7 +342,7 @@
     <string name="downloads_finished">Загрузки · завершено</string>
     <string name="downloading_progress">Загрузка · %1$d%%</string>
     <string name="starting">Начало</string>
-    <string name="saved_to_bitchord_folder">Сохранено в Музыка/BitChord</string>
+    <string name="saved_to_bitchord_folder">Сохранено в папку «Музыка»</string>
     <string name="nothing_downloading">Ничего не загружается</string>
     <string name="nothing_to_explore">Сейчас нечего смотреть в обзоре</string>
     <string name="no_youtube_music_results">Нет результатов из YouTube Music</string>

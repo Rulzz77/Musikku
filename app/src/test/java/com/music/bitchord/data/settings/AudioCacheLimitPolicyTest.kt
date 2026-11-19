@@ -7,11 +7,15 @@ import org.junit.Test
 class AudioCacheLimitPolicyTest {
 
     @Test
-    fun defaultBudgetIsSmallEnoughForLowStorageDevices() {
-        assertEquals(128L * 1024 * 1024, AudioCacheLimitPolicy.DEFAULT_LIMIT_BYTES)
+    fun currentDefaultIsPreservedAndSmallerFloorIsAvailable() {
+        assertEquals(512L * 1024 * 1024, AudioCacheLimitPolicy.DEFAULT_LIMIT_BYTES)
         assertEquals(
-            AudioCacheLimitPolicy.DEFAULT_LIMIT_BYTES,
+            AudioCacheLimitPolicy.MIN_LIMIT_BYTES,
             AudioCacheLimitPolicy.clamp(0L),
+        )
+        assertEquals(
+            128L * 1024 * 1024,
+            AudioCacheLimitPolicy.clamp(128L * 1024 * 1024),
         )
     }
 

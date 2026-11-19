@@ -78,8 +78,8 @@ object AudioCache {
     private const val TAG = "BitChord"
 
     /**
-     * The disk budget, straight from [AppSettings] — 128MB by default, adjustable
-     * up to 10GB or unlimited from Settings. Least-recently-used entries are
+     * The disk budget, straight from [AppSettings] — 512MB by default, adjustable
+     * down to 128MB, up to 10GB or unlimited from Settings. Least-recently-used entries are
      * dropped past it, so it's a ceiling rather than something the listener has
      * to manage day to day.
      */

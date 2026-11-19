@@ -11,7 +11,8 @@ import kotlin.math.roundToInt
  * still map to the same value after the control is upgraded.
  */
 internal object AudioCacheLimitPolicy {
-    const val DEFAULT_LIMIT_BYTES = 128L * 1024 * 1024
+    const val DEFAULT_LIMIT_BYTES = 512L * 1024 * 1024
+    const val MIN_LIMIT_BYTES = 128L * 1024 * 1024
     const val MAX_LIMIT_BYTES = 10L * 1024 * 1024 * 1024
     const val UNLIMITED_BYTES = Long.MAX_VALUE
     const val UNLIMITED_SLIDER_STOP_MB = 10 * 1024 + 512
@@ -26,7 +27,7 @@ internal object AudioCacheLimitPolicy {
 
     fun clamp(valueBytes: Long): Long =
         if (valueBytes > MAX_LIMIT_BYTES) UNLIMITED_BYTES
-        else valueBytes.coerceAtLeast(DEFAULT_LIMIT_BYTES)
+        else valueBytes.coerceAtLeast(MIN_LIMIT_BYTES)
 
     /** Maps a persisted byte limit to the nearest visible slider stop. */
     fun sliderIndex(valueBytes: Long): Float {

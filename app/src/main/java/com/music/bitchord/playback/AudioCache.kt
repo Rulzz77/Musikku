@@ -78,10 +78,10 @@ object AudioCache {
     private const val TAG = "BitChord"
 
     /**
-     * The disk budget, straight from [AppSettings] — 512MB by default, roughly
-     * 150 tracks at the highest bitrate offered, adjustable up to 10GB — or
-     * unlimited — from Settings. Least-recently-used entries are dropped past it, so it's a
-     * ceiling rather than something the listener has to manage day to day.
+     * The disk budget, straight from [AppSettings] — 512MB by default, adjustable
+     * down to 128MB, up to 10GB or unlimited from Settings. Least-recently-used entries are
+     * dropped past it, so it's a ceiling rather than something the listener has
+     * to manage day to day.
      */
     private val evictor = DynamicLruCacheEvictor(AppSettings.DEFAULT_CACHE_LIMIT_BYTES)
 

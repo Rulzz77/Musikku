@@ -137,9 +137,9 @@ fun LibraryScreen(
                 item {
                     Text(
                         text = stringResource(Res.string.library),
-                        style = MaterialTheme.typography.headlineLarge,
+                        style = MaterialTheme.typography.displayLarge,
                         color = MaterialTheme.colorScheme.onBackground,
-                        modifier = Modifier.padding(horizontal = PAGE_GUTTER, vertical = 6.dp),
+                        modifier = Modifier.padding(horizontal = PAGE_GUTTER, vertical = 8.dp),
                     )
                 }
             }

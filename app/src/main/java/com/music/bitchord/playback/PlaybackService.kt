@@ -9553,7 +9553,7 @@ class PlaybackService : MediaLibraryService() {
         const val STREAM_INFO_BYTES = 34
 
         const val CHANNEL_ID = "bitchord_playback"
-        const val SESSION_ID = "MusikKuPlayback"
+        const val SESSION_ID = "BitChordPlayback"
 
         /** How often played-seconds are sampled off the player. */
         const val PROGRESS_SAMPLE_MS = 5_000L

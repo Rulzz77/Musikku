@@ -517,7 +517,7 @@ object Backup {
         val playlistCount: Int get() = spotifyPlaylists + devicePlaylists
     }
 
-    // Kept stable so backups made by earlier BitChord-branded builds remain readable.
+    // Kept stable so backups made by earlier app releases remain readable; do not rename this value.
     private const val APP_TAG = "bitchord"
     private const val MIN_SCHEMA_VERSION = 1
     private const val SCHEMA_VERSION = 5

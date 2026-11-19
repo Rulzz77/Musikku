@@ -75,7 +75,7 @@ import kotlin.coroutines.coroutineContext
 @UnstableApi
 object AudioCache {
 
-    private const val TAG = "BitChord"
+    private const val TAG = "MusikKu"
 
     /**
      * The disk budget, straight from [AppSettings] — 512MB by default, adjustable
@@ -429,7 +429,7 @@ object AudioCache {
      * read-ahead builds the same URI, so both land on one cache entry.
      */
     /**
-     * Marks a read made for the BitChord watch app. Its streams are capped below
+     * Marks a read made for the MusikKu watch app. Its streams are capped below
      * lossless — see [AppSettings.streamCeilingOverride] — and so are kept apart
      * from this phone's own: a lossless file cached by the phone must never be
      * what the watch is handed, and the other way round.

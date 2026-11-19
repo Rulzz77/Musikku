@@ -160,6 +160,7 @@ import com.music.bitchord.data.NerdStats
 import com.music.bitchord.data.scrobbling.LastFM
 import com.music.bitchord.data.listentogether.ListenTogether
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.data.settings.AudioCacheLimitPolicy
 import com.music.bitchord.data.settings.OutputPcmMode
 import com.music.bitchord.data.settings.BitPerfectMode
 import com.music.bitchord.playback.AudioOutputStatus
@@ -1483,6 +1484,7 @@ fun SettingsScreen(
             StorageUsageOverview(
                 usage = storageUsage,
                 loading = storageUsageLoading,
+                cacheLimitBytes = cacheLimitBytes,
                 onRefresh = { storageRefreshSignal++ },
             )
         }
@@ -1490,7 +1492,11 @@ fun SettingsScreen(
         val cacheUnlimited = cacheLimitBytes == AppSettings.UNLIMITED_CACHE_LIMIT_BYTES
         // The slider's last stop, one step past the largest fixed size, is
         // "Unlimited" — see [AppSettings.setAudioCacheLimitBytes].
-        val cacheLimitMb = if (cacheUnlimited) CACHE_UNLIMITED_STOP_MB else (cacheLimitBytes / (1024 * 1024)).toInt()
+        val cacheLimitMb = if (cacheUnlimited) {
+            AudioCacheLimitPolicy.UNLIMITED_SLIDER_STOP_MB
+        } else {
+            (cacheLimitBytes / (1024 * 1024)).toInt()
+        }
         val unlimitedLabel = stringResource(R.string.song_cache_unlimited)
         val cacheLimitLabel = if (cacheUnlimited) unlimitedLabel else formatCacheSize(cacheLimitMb)
         if (shows(SettingsCategory.STORAGE)) SearchableSettingsGroup(search, header = stringResource(R.string.storage)) {
@@ -1521,13 +1527,12 @@ fun SettingsScreen(
                         else -> stringResource(R.string.song_cache_limit_subtitle)
                     },
                     value = cacheLimitLabel,
-                    sliderValue = cacheLimitMb.toFloat(),
+                    sliderValue = AudioCacheLimitPolicy.sliderIndex(cacheLimitBytes),
                     onSliderValue = {
-                        AppSettings.setAudioCacheLimitBytes(it.roundToInt().toLong() * 1024 * 1024)
+                        AppSettings.setAudioCacheLimitBytes(AudioCacheLimitPolicy.bytesAtSlider(it))
                     },
-                    valueRange = (AppSettings.DEFAULT_CACHE_LIMIT_BYTES / (1024 * 1024)).toFloat()..
-                        CACHE_UNLIMITED_STOP_MB.toFloat(),
-                    steps = 19,
+                    valueRange = 0f..AudioCacheLimitPolicy.sliderStopsMb.lastIndex.toFloat(),
+                    steps = AudioCacheLimitPolicy.sliderStopsMb.size - 2,
                 )
             }
             val clearSongCacheTitle = stringResource(R.string.clear_song_cache)
@@ -2293,12 +2298,6 @@ internal fun openEqualizer(context: Context, sessionId: Int) {
 
 /** Above this, the cache limit slider's subtitle warns rather than reassures. */
 private const val CACHE_WARNING_MB = 2048
-
-/**
- * Where the cache limit slider's "Unlimited" stop sits: one 512MB step past
- * [AppSettings.MAX_CACHE_LIMIT_BYTES], so the fixed sizes keep their positions.
- */
-private const val CACHE_UNLIMITED_STOP_MB = 10 * 1024 + 512
 
 /** "512 MB", "2 GB", "2.5 GB" — whichever reads more naturally at that size. */
 private fun formatCacheSize(mb: Int): String {
@@ -3224,6 +3223,7 @@ internal fun <T> ChoiceGroup(
 private fun StorageUsageOverview(
     usage: StorageUsage.Snapshot?,
     loading: Boolean,
+    cacheLimitBytes: Long,
     onRefresh: () -> Unit,
 ) {
     SettingsGroup(topSpacing = 0.dp) {
@@ -3233,6 +3233,7 @@ private fun StorageUsageOverview(
                     Text(
                         text = stringResource(R.string.storage_usage_title),
                         style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
                         fontWeight = FontWeight.SemiBold,
                     )
                     Text(
@@ -3261,6 +3262,26 @@ private fun StorageUsageOverview(
                 label = stringResource(R.string.storage_audio_cache),
                 bytes = usage?.audioCacheBytes,
             )
+            if (usage != null && cacheLimitBytes != AppSettings.UNLIMITED_CACHE_LIMIT_BYTES) {
+                val cacheProgress = (
+                    usage.audioCacheBytes.toDouble() / cacheLimitBytes.coerceAtLeast(1L)
+                ).toFloat().coerceIn(0f, 1f)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(6.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.outlineVariant),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(cacheProgress)
+                            .height(6.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary),
+                    )
+                }
+            }
             StorageUsageLine(
                 label = stringResource(R.string.storage_artwork_cache),
                 bytes = usage?.imageCacheBytes,
@@ -3303,6 +3324,7 @@ private fun StorageUsageLine(label: String, bytes: Long?) {
             text = label,
             modifier = Modifier.weight(1f),
             style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
         )
         Text(
             text = bytes?.let(StorageUsage::formatBytes) ?: "—",

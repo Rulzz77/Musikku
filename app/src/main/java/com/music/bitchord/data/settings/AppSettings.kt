@@ -1735,9 +1735,7 @@ object AppSettings {
         prefs.edit().putLong(KEY_CACHE_LIMIT, clamped).apply()
     }
 
-    private fun clampCacheLimit(value: Long): Long =
-        if (value > MAX_CACHE_LIMIT_BYTES) UNLIMITED_CACHE_LIMIT_BYTES
-        else value.coerceAtLeast(DEFAULT_CACHE_LIMIT_BYTES)
+    private fun clampCacheLimit(value: Long): Long = AudioCacheLimitPolicy.clamp(value)
 
     fun setShowCacheFolder(value: Boolean) {
         showCacheFolder.value = value
@@ -2229,11 +2227,11 @@ object AppSettings {
         KEY_ONBOARDING_COMPLETE,
     )
 
-    const val DEFAULT_CACHE_LIMIT_BYTES = 512L * 1024 * 1024
-    const val MAX_CACHE_LIMIT_BYTES = 10L * 1024 * 1024 * 1024
+    const val DEFAULT_CACHE_LIMIT_BYTES = AudioCacheLimitPolicy.DEFAULT_LIMIT_BYTES
+    const val MAX_CACHE_LIMIT_BYTES = AudioCacheLimitPolicy.MAX_LIMIT_BYTES
 
     /** The cache limit with no ceiling: only free storage bounds it. */
-    const val UNLIMITED_CACHE_LIMIT_BYTES = Long.MAX_VALUE
+    const val UNLIMITED_CACHE_LIMIT_BYTES = AudioCacheLimitPolicy.UNLIMITED_BYTES
 
     const val MIN_LYRICS_OFFSET_MS = -5_000
     const val MAX_LYRICS_OFFSET_MS = 5_000

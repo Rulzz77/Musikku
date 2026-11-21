@@ -66,9 +66,11 @@ class MusikKuApplication : Application(), SingletonImageLoader.Factory, Configur
     @kotlin.OptIn(ExperimentalComposeUiApi::class)
     override fun onCreate() {
         super.onCreate()
-        // Model weights are shipped in the APK and can be recreated; keep extracted copies
-        // in cacheDir rather than letting old versions' filesDir copies persist forever.
-        migrateLegacyAutomixModelCache(filesDir, cacheDir)
+        // Verify/move disposable model copies off the main thread; hashing the
+        // bundled 30 MiB of ONNX weights must not delay first frame or startup.
+        CoroutineScope(Dispatchers.IO).launch {
+            migrateLegacyAutomixModelCache(filesDir, cacheDir)
+        }
         // Read the last known feature flags immediately; refresh them from the
         // public config when the process enters the foreground.
         RemoteConfig.initialize(this)

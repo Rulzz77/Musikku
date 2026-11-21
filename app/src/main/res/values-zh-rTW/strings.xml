@@ -1407,9 +1407,9 @@
     <string name="font">字型</string>
     <string name="font_default">預設</string>
     <string name="font_legacy">舊版</string>
-    <string name="font_default_subtitle">SF Pro Display · Apple Music 字重</string>
-    <string name="font_legacy_subtitle">SF Pro Display · 原始粗字重</string>
-    <string name="font_footer">舊版會恢復應用程式在配合 Apple Music 之前使用的較粗、較緊湊的字型。</string>
+    <string name="font_default_subtitle">系統無襯線 · 均衡字重</string>
+    <string name="font_legacy_subtitle">系統無襯線 · 較粗字重</string>
+    <string name="font_footer">舊版保留應用程式原有較粗、較緊湊的文字配置。</string>
     <string name="bit_perfect_output">位元完美輸出</string>
     <string name="bit_perfect_bypassed_footer">位元完美輸出已就緒，因此變灰的設定會被略過，也不會要求 Dolby Atmos 版本。中斷 DAC 連線或關閉此模式後，它們會恢復運作。</string>
     <string name="bit_perfect_sheet_warning">將曲目原樣傳送到 DAC。均衡器、響度標準化、交叉淡入淡出、Automix、播放速度和 MusikKu 的音量都會被略過。</string>

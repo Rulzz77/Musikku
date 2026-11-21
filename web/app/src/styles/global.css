@@ -281,27 +281,9 @@
 }
 
 /*
- * The phone's lyric typeface (SF Pro Display, app/src/main/res/font), cut to
- * Latin, Greek and Cyrillic. Other scripts fall through to DM Sans and the
- * system fonts. Its own family name, so a copy installed on a Mac can't stand in.
+ * The site uses DM Sans from its Google Fonts stylesheet (index.html), then
+ * platform system fallbacks. No proprietary Apple font files are bundled.
  */
-@font-face {
-  font-family: 'BitChord SF Pro Display';
-  src: url('../assets/fonts/sf-pro-display-regular.woff2') format('woff2');
-  font-weight: 400;
-  font-display: block;
-  unicode-range: U+0000-024F, U+0259, U+02B0-036F, U+0370-03FF, U+0400-052F, U+1E00-1EFF, U+2000-206F, U+20A0-20CF,
-    U+2100-214F, U+2190-21FF, U+2212, U+FEFF, U+FFFD;
-}
-
-@font-face {
-  font-family: 'BitChord SF Pro Display';
-  src: url('../assets/fonts/sf-pro-display-bold.woff2') format('woff2');
-  font-weight: 700;
-  font-display: block;
-  unicode-range: U+0000-024F, U+0259, U+02B0-036F, U+0370-03FF, U+0400-052F, U+1E00-1EFF, U+2000-206F, U+20A0-20CF,
-    U+2100-214F, U+2190-21FF, U+2212, U+FEFF, U+FFFD;
-}
 
 @layer base {
   *,

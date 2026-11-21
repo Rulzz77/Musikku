@@ -12,11 +12,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
-import com.music.bitchord.R
 import com.music.bitchord.data.settings.AppFont
 
 // Apple Music's signature red. No longer the primary accent, but kept for the
@@ -80,39 +78,20 @@ private val LightColors = lightColorScheme(
 )
 
 /**
- * SF Pro Display, the face Apple Music itself is set in, drawn one weight
- * lighter than it is asked for.
+ * Use the Android system sans-serif family instead of bundling Apple's SF Pro.
  *
- * Measured against Apple Music's own screens, every weight here came out a
- * cut heavier than the same text there: its titles are Semibold where these
- * asked for Bold, its metadata Medium where these asked for Semibold. The
- * shift is made once, in the family, so it reaches the type scale and every
- * weight set in place alike and keeps the steps between them: Heavy draws
- * Bold, Bold draws Semibold, Semibold draws Medium, Medium draws Regular.
- * Regular stays Regular — no lighter cut is bundled, and Apple's body text is
- * Regular too. A FontWeight in this app therefore names the step it sits at in
- * the scale, not the cut it draws.
- *
- * Compose synthesises nothing, so a weight outside these falls back to the
- * nearest one listed.
+ * The typography scale below still controls size, weight, line height and
+ * letter spacing. Keeping the legacy alias lets saved font preferences survive
+ * upgrades without referencing removed font resources.
  */
-val SFProDisplay = FontFamily(
-    Font(R.font.sf_pro_display_regular, FontWeight.W400),
-    Font(R.font.sf_pro_display_regular, FontWeight.W500),
-    Font(R.font.sf_pro_display_medium, FontWeight.W600),
-    Font(R.font.sf_pro_display_semibold, FontWeight.W700),
-    Font(R.font.sf_pro_display_bold, FontWeight.W800),
-)
+val SFProDisplay = FontFamily.SansSerif
 
 /*
- * Letter spacing measured off Apple Music's own screens: the spacing the
- * bundled Display cut needs, at the weight it draws, to set a line to the
- * width Apple sets it. Apple sets text under 20pt in SF Pro Text, which is
- * spaced looser than Display, so the small sizes open up — about +0.25 to
- * +0.4 at 12 to 14 — and the spacing closes as the size grows, to just under
- * nothing for semibold titles at 18 to 24. The large titles had nothing to
- * measure against and follow the same trend.
+ * Legacy keeps its original type scale and spacing, but uses the system family.
  */
+val SFProDisplayLegacy = FontFamily.SansSerif
+
+// The default type scale, retained after replacing the bundled font with system sans-serif.
 private val BitChordTypography = Typography(
     displayLarge = TextStyle(fontWeight = FontWeight.W800, fontSize = 34.sp, letterSpacing = (-0.65).sp, lineHeight = 40.sp),
     displayMedium = TextStyle(fontWeight = FontWeight.W800, fontSize = 30.sp, letterSpacing = (-0.45).sp, lineHeight = 36.sp),
@@ -130,19 +109,6 @@ private val BitChordTypography = Typography(
     labelMedium = TextStyle(fontWeight = FontWeight.W600, fontSize = 12.sp, letterSpacing = 0.3.sp, lineHeight = 16.sp),
     labelSmall = TextStyle(fontWeight = FontWeight.W600, fontSize = 11.sp, letterSpacing = 0.35.sp, lineHeight = 14.sp),
 ).withFamily(SFProDisplay)
-
-/**
- * SF Pro Display as the app first shipped it, before [SFProDisplay] moved every
- * weight a cut lighter: each weight draws its own cut, Heavy included. Kept for
- * [AppFont.LEGACY].
- */
-val SFProDisplayLegacy = FontFamily(
-    Font(R.font.sf_pro_display_regular, FontWeight.W400),
-    Font(R.font.sf_pro_display_medium, FontWeight.W500),
-    Font(R.font.sf_pro_display_semibold, FontWeight.W600),
-    Font(R.font.sf_pro_display_bold, FontWeight.W700),
-    Font(R.font.sf_pro_display_heavy, FontWeight.W800),
-)
 
 // Heavy, tight typography — the original scale [AppFont.LEGACY] restores.
 private val LegacyTypography = Typography(

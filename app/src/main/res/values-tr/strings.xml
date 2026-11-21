@@ -1387,9 +1387,9 @@
     <string name="font">Yazı tipi</string>
     <string name="font_default">Varsayılan</string>
     <string name="font_legacy">Eski</string>
-    <string name="font_default_subtitle">SF Pro Display · Apple Music ağırlıkları</string>
-    <string name="font_legacy_subtitle">SF Pro Display · Orijinal kalın ağırlıklar</string>
-    <string name="font_footer">Eski, uygulamanın Apple Music\'e uyarlanmadan önce kullandığı daha kalın ve sıkı yazı tipini geri getirir.</string>
+    <string name="font_default_subtitle">Sistem sans-serif · Dengeli kalınlık</string>
+    <string name="font_legacy_subtitle">Sistem sans-serif · Daha kalın yazı</string>
+    <string name="font_footer">Eski seçenek, uygulamanın daha kalın ve sıkı metin düzenini korur.</string>
     <string name="bit_perfect_output">Bit-perfect çıkış</string>
     <string name="bit_perfect_bypassed_footer">Bit-perfect çıkış hazır, bu nedenle soluk ayarlar atlanır ve Dolby Atmos sürümleri istenmez. DAC çıkarıldığında veya mod kapatıldığında yeniden çalışırlar.</string>
     <string name="bit_perfect_sheet_warning">Parçayı DAC\'a değiştirmeden gönderir. Ekolayzır, ses yüksekliği normalleştirme, çapraz geçiş, Automix, çalma hızı ve MusikKu\'un ses düzeyi atlanır.</string>

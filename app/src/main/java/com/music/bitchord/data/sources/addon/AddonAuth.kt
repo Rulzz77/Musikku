@@ -18,6 +18,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import java.net.URI
 import java.security.KeyPairGenerator
 import java.security.KeyStore
 import java.security.MessageDigest
@@ -25,6 +26,7 @@ import java.security.PrivateKey
 import java.security.Signature
 import java.security.spec.ECGenParameterSpec
 import java.util.Base64
+import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
@@ -367,8 +369,20 @@ object AddonAuth {
         "$PROOF_CONTEXT\n$host\n$timestampMs\n$tokenHash"
 
     /** Blank means the fork has deliberately not configured a trusted attestation service. */
-    internal fun normalizeAuthServerUrl(raw: String): String? =
-        raw.trim().trimEnd('/').takeIf { it.isNotEmpty() }
+    internal fun normalizeAuthServerUrl(raw: String): String? {
+        val candidate = raw.trim().trimEnd('/')
+        if (candidate.isEmpty()) return null
+
+        val uri = runCatching { URI(candidate) }.getOrNull() ?: return null
+        if (!uri.scheme.equals("https", ignoreCase = true)) return null
+        if (uri.host.isNullOrBlank() || uri.userInfo != null) return null
+        if (uri.rawQuery != null || uri.rawFragment != null) return null
+        if (uri.port !in -1..65535) return null
+
+        val scheme = uri.scheme.lowercase(Locale.ROOT)
+        val authority = uri.rawAuthority?.lowercase(Locale.ROOT) ?: return null
+        return (scheme + "://" + authority + uri.rawPath.orEmpty()).trimEnd('/')
+    }
 
     /** Lowercase, no port, no trailing dot: the same normalisation the addon-side verifiers apply. */
     internal fun normalizeHost(host: String): String =

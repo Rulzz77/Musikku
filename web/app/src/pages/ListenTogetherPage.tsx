@@ -145,7 +145,7 @@ function StartOrJoin({ signedIn }: { signedIn: boolean }) {
           />
         </label>
       </section>
-      <p className={settingsUi.footer}>Leave the server empty to use BitChord’s. Anyone joining your party uses the server it’s on.</p>
+      <p className={settingsUi.footer}>Leave the server empty to use the party server configured for this MusikKu web deployment. Anyone joining your party uses the server it’s on.</p>
     </>
   );
 }

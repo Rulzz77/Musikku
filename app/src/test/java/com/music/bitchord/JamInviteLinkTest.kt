@@ -309,6 +309,23 @@ class JamInviteLinkTest {
     // -------------------------------------------------------------------------
 
     @Test
+    fun `production server URL validation requires HTTPS`() {
+        assertEquals(
+            ServerUrlValidationResult.Invalid(ServerUrlError.InvalidScheme),
+            ListenTogether.parseAndNormalizeServerUrl("http://party.example.test", allowCleartext = false),
+        )
+        assertEquals(
+            ServerUrlValidationResult.Valid("https://party.example.test"),
+            ListenTogether.parseAndNormalizeServerUrl("https://party.example.test", allowCleartext = false),
+        )
+        // The dev manifest intentionally permits HTTP for localhost/LAN testing.
+        assertEquals(
+            ServerUrlValidationResult.Valid("http://127.0.0.1:8080"),
+            ListenTogether.parseAndNormalizeServerUrl("http://127.0.0.1:8080", allowCleartext = true),
+        )
+    }
+
+    @Test
     fun `url validation matrix - valid inputs`() {
         fun assertValid(input: String, expected: String) {
             val result = ListenTogether.parseAndNormalizeServerUrl(input)

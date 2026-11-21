@@ -91,6 +91,25 @@ val SFProDisplay = FontFamily.SansSerif
  */
 val SFProDisplayLegacy = FontFamily.SansSerif
 
+// The default type scale, retained after replacing the bundled font with system sans-serif.
+private val BitChordTypography = Typography(
+    displayLarge = TextStyle(fontWeight = FontWeight.W800, fontSize = 34.sp, letterSpacing = (-0.65).sp, lineHeight = 40.sp),
+    displayMedium = TextStyle(fontWeight = FontWeight.W800, fontSize = 30.sp, letterSpacing = (-0.45).sp, lineHeight = 36.sp),
+    displaySmall = TextStyle(fontWeight = FontWeight.W700, fontSize = 26.sp, letterSpacing = (-0.3).sp, lineHeight = 32.sp),
+    headlineLarge = TextStyle(fontWeight = FontWeight.W800, fontSize = 28.sp, letterSpacing = (-0.45).sp, lineHeight = 34.sp),
+    headlineMedium = TextStyle(fontWeight = FontWeight.W700, fontSize = 22.sp, letterSpacing = (-0.2).sp, lineHeight = 28.sp),
+    headlineSmall = TextStyle(fontWeight = FontWeight.W700, fontSize = 20.sp, letterSpacing = (-0.15).sp, lineHeight = 26.sp),
+    titleLarge = TextStyle(fontWeight = FontWeight.W700, fontSize = 19.sp, letterSpacing = (-0.1).sp, lineHeight = 24.sp),
+    titleMedium = TextStyle(fontWeight = FontWeight.W600, fontSize = 16.sp, letterSpacing = 0.05.sp, lineHeight = 21.sp),
+    titleSmall = TextStyle(fontWeight = FontWeight.W600, fontSize = 14.sp, letterSpacing = 0.1.sp, lineHeight = 19.sp),
+    bodyLarge = TextStyle(fontWeight = FontWeight.W400, fontSize = 16.sp, letterSpacing = 0.1.sp, lineHeight = 23.sp),
+    bodyMedium = TextStyle(fontWeight = FontWeight.W400, fontSize = 14.sp, letterSpacing = 0.15.sp, lineHeight = 20.sp),
+    bodySmall = TextStyle(fontWeight = FontWeight.W400, fontSize = 12.sp, letterSpacing = 0.2.sp, lineHeight = 17.sp),
+    labelLarge = TextStyle(fontWeight = FontWeight.W600, fontSize = 14.sp, letterSpacing = 0.15.sp, lineHeight = 18.sp),
+    labelMedium = TextStyle(fontWeight = FontWeight.W600, fontSize = 12.sp, letterSpacing = 0.3.sp, lineHeight = 16.sp),
+    labelSmall = TextStyle(fontWeight = FontWeight.W600, fontSize = 11.sp, letterSpacing = 0.35.sp, lineHeight = 14.sp),
+).withFamily(SFProDisplay)
+
 // Heavy, tight typography — the original scale [AppFont.LEGACY] restores.
 private val LegacyTypography = Typography(
     displayLarge = TextStyle(fontWeight = FontWeight.W800, fontSize = 34.sp, letterSpacing = (-0.8).sp),

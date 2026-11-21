@@ -7,7 +7,7 @@
 - Production application ID: `id.musikku.player`
 - Development application ID: `id.musikku.dev`
 - Internal Android namespace: `com.music.bitchord` (retained intentionally for the first low-risk fork)
-- Fork version: `0.1.57`, versionCode `58`
+- Fork version: `0.1.59`, versionCode `60`
 
 ## Important upstream dependencies
 

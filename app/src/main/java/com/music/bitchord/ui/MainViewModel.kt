@@ -23,7 +23,6 @@ import com.music.bitchord.data.stats.ListeningStats
 import com.music.bitchord.data.stats.ReplayPeriod
 import android.util.Log
 import java.io.File
-import java.time.LocalDate
 import java.time.LocalDateTime
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.first
@@ -1959,7 +1958,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Log.w("BitChord", "topPicks failed: ${e.message}")
+            Log.w("MusikKu", "topPicks failed: ${e.message}")
             null
         }
     }
@@ -2137,7 +2136,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 onSuccess()
             }.onFailure {
                 // Keep the existing history list untouched — do NOT replace it with an error
-                Log.w("BitChord", "removeFromHistory failed: ${it.message}")
+                Log.w("MusikKu", "removeFromHistory failed: ${it.message}")
                 onFailure(it)
             }
         }

@@ -76,7 +76,7 @@ sealed interface DownloadState {
  */
 object Downloads {
 
-    private const val TAG = "BitChord"
+    private const val TAG = "MusikKu"
     private const val KEY_SAVED_METADATA = "downloaded_tracks_metadata"
     private const val KEY_SAVED_COLLECTIONS = "downloaded_collections"
     private const val KEY_DOWNLOAD_RECOVERY = "download_recovery_session_v1"
@@ -1383,7 +1383,7 @@ object Downloads {
         val mimeType: String,
         /** For the log line, so a download's provenance is on the record. */
         val describe: String,
-        /** Short premium-rendition badge shown only in BitChord's Downloads list. */
+        /** Short premium-rendition badge shown only in MusikKu's Downloads list. */
         val downloadFormat: String? = null,
         val taggable: Boolean = true,
         val offlineHls: Manifest? = null,
@@ -1828,7 +1828,7 @@ internal fun resolvedDownloadDates(
     return (persistedAddedSeconds ?: modifiedSeconds) to modifiedSeconds
 }
 
-/** Premium source labels used in BitChord's Downloads list. */
+/** Premium source labels used in MusikKu's Downloads list. */
 private fun StreamFormat.downloadBadge(): String? = when {
     isDolbyAtmos -> "DOLBY"
     codec.equals("flac", ignoreCase = true) || codec.equals("x-flac", ignoreCase = true) -> "FLAC"

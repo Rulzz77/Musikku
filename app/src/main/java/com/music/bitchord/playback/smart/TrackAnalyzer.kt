@@ -33,6 +33,41 @@ internal val AUTOMIX_MODEL_ASSET_NAMES = setOf(
     BeatTracker.RETIRED_MODEL_ASSET,
 )
 
+private val automixModelCacheLock = Any()
+
+/**
+ * Moves model copies left in filesDir by older builds into the disposable
+ * model cache. This uses a rename on the same app storage volume, so the
+ * upgrade can reclaim durable app data without copying another 30 MiB.
+ */
+internal fun migrateLegacyAutomixModelCache(filesDir: java.io.File, cacheDir: java.io.File) {
+    synchronized(automixModelCacheLock) {
+        val modelDirectory = java.io.File(cacheDir, AUTOMIX_MODEL_CACHE_DIRECTORY)
+        listOf(BeatTracker.MODEL_ASSET, VocalTracker.MODEL_ASSET).forEach { name ->
+            val legacy = java.io.File(filesDir, name)
+            if (!legacy.isFile || legacy.length() == 0L) return@forEach
+
+            val cached = java.io.File(modelDirectory, name)
+            if (cached.isFile && cached.length() > 0L) {
+                legacy.delete()
+                return@forEach
+            }
+            if (!modelDirectory.isDirectory && !modelDirectory.mkdirs()) return@forEach
+            if (cached.exists() && !cached.delete()) return@forEach
+
+            if (!legacy.renameTo(cached)) {
+                runCatching {
+                    legacy.copyTo(cached, overwrite = true)
+                    if (legacy.length() == cached.length()) legacy.delete() else cached.delete()
+                }.onFailure { cached.delete() }
+            }
+        }
+        // This model was retired before the current beat tracker and cannot be
+        // used by any current analysis session.
+        java.io.File(filesDir, BeatTracker.RETIRED_MODEL_ASSET).delete()
+    }
+}
+
 import android.content.Context
 import android.media.MediaDataSource
 import android.net.Uri
@@ -99,8 +134,6 @@ class TrackAnalyzer(private val context: Context, private val cache: AudioCache)
      * is not one. This used to live inside each tracker; it moved out when they
      * became shared with the desktop build, which unpacks from the jar instead.
      */
-    private val modelExtractionLock = Any()
-
     /**
      * Keep derived model copies in cacheDir rather than filesDir. They are
      * shipped in the APK, can always be unpacked again, and should not become
@@ -112,7 +145,8 @@ class TrackAnalyzer(private val context: Context, private val cache: AudioCache)
      * second full copy of the models. New extraction uses a temporary file and
      * rename so an interrupted copy is never mistaken for a complete model.
      */
-    private fun unpackedAsset(name: String): String = synchronized(modelExtractionLock) {
+    private fun unpackedAsset(name: String): String = synchronized(automixModelCacheLock) {
+        migrateLegacyAutomixModelCache(context.filesDir, context.cacheDir)
         val modelDirectory = java.io.File(context.cacheDir, AUTOMIX_MODEL_CACHE_DIRECTORY)
         if (!modelDirectory.isDirectory && !modelDirectory.mkdirs()) {
             throw java.io.IOException("Could not create Automix model cache")

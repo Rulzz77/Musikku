@@ -260,7 +260,7 @@ Use music sources and content only where you have the necessary rights and permi
 - [Remote Configuration](docs/REMOTE_CONFIG.md)
 - [Web player and extension](web/README.md)
 - [Listen Together backend](backend/README.md)
-- [Upstream project README](UPSTREAM_README.md)
+- [Fork information](MUSIKKU_FORK_INFO.md)
 
 ## License and third-party notices
 

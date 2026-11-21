@@ -3284,6 +3284,10 @@ private fun StorageUsageOverview(
                 label = stringResource(R.string.storage_canvas_cache),
                 bytes = usage?.canvasCacheBytes,
             )
+            StorageUsageLine(
+                label = stringResource(R.string.storage_automix_models),
+                bytes = usage?.automixModelBytes,
+            )
             Spacer(Modifier.height(8.dp))
             Text(
                 text = if (usage == null) {

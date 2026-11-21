@@ -13,7 +13,11 @@
 
 The upstream app README advertises YouTube Music search/playback, configurable module sources, local files, background media session, offline downloads, lyrics providers, and additional services. This fork retains those code paths as far as the upstream source allows; this branding script does not independently test or guarantee the availability of any source or hosted service.
 
-The upstream `app/build.gradle.kts` points addon authentication at a BitChord-operated service and notes that a fork cannot gain addon access merely by pointing to that server. The Listen Together default is also an upstream-hosted URL. Review these before enabling or shipping related features. The upstream update checker/release configuration also needs to be reviewed and moved to the fork owner's release repository before distributing updates.
+Addon authentication uses Android hardware-key attestation. MusikKu intentionally leaves `ADDON_AUTH_SERVER` blank by default: the upstream BitChord service checks the official BitChord package/signing identity, so pointing this fork at it does not grant addon access and would still send the device's attestation certificate chain (plus an optional tester code) to that upstream service. When no server is configured, ordinary addons continue to work; only addons that explicitly require BitChord authentication are unavailable, and no attestation request is sent. Configure `ADDON_AUTH_SERVER` in `local.properties`, the build environment, or the GitHub Actions secret only when a trusted service explicitly supports this app/signing identity and its key is trusted by the addon operators.
+
+The Listen Together default remains an upstream-hosted URL (`https://bitchord-listen-together.onrender.com`) unless `LISTEN_TOGETHER_SERVER` is configured. This is a separate runtime dependency for party coordination; use a trusted self-hosted endpoint before enabling it when independence from upstream is required.
+
+The update checker points to `Rulzz77/Musikku` GitHub Releases, and the release workflow publishes to the current repository.
 
 ## Build
 

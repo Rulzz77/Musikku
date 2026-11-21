@@ -126,7 +126,11 @@ class StorageUsageTest {
             )
             assertTrue(com.music.bitchord.playback.smart.isValidAutomixModelCopy(file, integrity))
 
+            val originalModifiedAt = file.lastModified()
             file.writeBytes(ByteArray(96) { 5 })
+            // Keep the same length but advance the timestamp deterministically,
+            // including on filesystems with coarse timestamp resolution.
+            assertTrue(file.setLastModified(originalModifiedAt + 2_000L))
             assertFalse(com.music.bitchord.playback.smart.isValidAutomixModelCopy(file, integrity))
         } finally {
             root.deleteRecursively()

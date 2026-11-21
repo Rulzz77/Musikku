@@ -26,6 +26,7 @@ import java.security.PrivateKey
 import java.security.Signature
 import java.security.spec.ECGenParameterSpec
 import java.util.Base64
+import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
@@ -378,7 +379,9 @@ object AddonAuth {
         if (uri.rawQuery != null || uri.rawFragment != null) return null
         if (uri.port !in -1..65535) return null
 
-        return uri.toASCIIString().trimEnd('/')
+        val scheme = uri.scheme.lowercase(Locale.ROOT)
+        val authority = uri.rawAuthority?.lowercase(Locale.ROOT) ?: return null
+        return (scheme + "://" + authority + uri.rawPath.orEmpty()).trimEnd('/')
     }
 
     /** Lowercase, no port, no trailing dot: the same normalisation the addon-side verifiers apply. */

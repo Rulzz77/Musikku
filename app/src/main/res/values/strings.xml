@@ -1364,6 +1364,7 @@
     <string name="storage_audio_cache">Audio cache (offline-ready)</string>
     <string name="storage_artwork_cache">Artwork image cache</string>
     <string name="storage_canvas_cache">Canvas video cache</string>
+    <string name="storage_automix_models">Automix AI models (recreated when needed)</string>
     <string name="storage_usage_safety_note">Downloads stay until you remove them. Clearing caches does not delete local music, playlists, or backups.</string>
     <string name="clear_canvas_cache">Clear Canvas cache</string>
     <string name="clear_canvas_cache_subtitle">Remove cached looping clips. MusikKu fetches them again when needed.</string>

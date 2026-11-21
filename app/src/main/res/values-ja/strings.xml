@@ -1408,9 +1408,9 @@
     <string name="font">フォント</string>
     <string name="font_default">デフォルト</string>
     <string name="font_legacy">従来</string>
-    <string name="font_default_subtitle">SF Pro Display · Apple Music のウェイト</string>
-    <string name="font_legacy_subtitle">SF Pro Display · 元の太いウェイト</string>
-    <string name="font_footer">「従来」では、Apple Music に合わせる前にアプリで使われていた、太めで詰まった書体に戻します。</string>
+    <string name="font_default_subtitle">システム Sans-serif · バランスの取れた太さ</string>
+    <string name="font_legacy_subtitle">システム Sans-serif · 太めの文字</string>
+    <string name="font_footer">従来の設定では、アプリの太めで詰まった文字レイアウトを維持します。</string>
     <string name="bit_perfect_output">ビットパーフェクト出力</string>
     <string name="bit_perfect_bypassed_footer">ビットパーフェクト出力の準備ができているため、淡色表示の設定はバイパスされ、Dolby Atmos 版はリクエストされません。DAC を取り外すかモードをオフにすると、再び機能します。</string>
     <string name="bit_perfect_sheet_warning">トラックを変更せずに DAC に送ります。イコライザー、音量の正規化、クロスフェード、オートミックス、再生速度、MusikKu の音量はバイパスされます。</string>

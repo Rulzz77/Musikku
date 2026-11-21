@@ -1515,4 +1515,5 @@
     <string name="smart_playlist_sort_listened">ระยะเวลาการฟัง</string>
     <string name="smart_playlist_editor_description">รายการเหล่านี้สร้างจากประวัติการฟังและจะอัปเดตเมื่อบันทึกสถิติการฟัง โดยไม่เปลี่ยนแปลงเพลย์ลิสต์ปกติของคุณ</string>
     <string name="smart_playlist_max_reached">คุณสร้างเพลย์ลิสต์อัจฉริยะที่กำหนดเองได้สูงสุด 20 รายการ</string>
+    <string name="storage_automix_models">โมเดล AI ของ Automix (สร้างใหม่เมื่อจำเป็น)</string>
 </resources>

@@ -511,6 +511,15 @@ func TestInviteLanding(t *testing.T) {
 	if !strings.Contains(content, code) {
 		t.Errorf("Expected HTML content to contain party code %s", code)
 	}
+	if !strings.Contains(content, "Join Party in MusikKu") {
+		t.Error("Expected the invite page to use MusikKu branding")
+	}
+	if !strings.Contains(content, "https://github.com/Rulzz77/Musikku/releases/latest") {
+		t.Error("Expected the invite page to link to MusikKu releases")
+	}
+	if strings.Contains(content, "github.com/kushagrasinghx/BitChord/releases") {
+		t.Error("Invite page must not link to the upstream BitChord release")
+	}
 }
 
 // A browser offers the token as a subprotocol (it cannot set Authorization on

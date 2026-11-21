@@ -30,6 +30,10 @@ class StorageUsageTest {
             val beat = File(filesDir, "beat_this_final0_q8.onnx").apply { writeBytes(ByteArray(64)) }
             val vocals = File(filesDir, "vocals_umxhq_int8.onnx").apply { writeBytes(ByteArray(32)) }
             val retired = File(filesDir, "beat_this_int8.onnx").apply { writeBytes(ByteArray(16)) }
+            val interruptedCopy = File(cacheDir, "automix_models/.vocals_umxhq_int8.onnx.tmp").apply {
+                parentFile?.mkdirs()
+                writeBytes(ByteArray(12))
+            }
             val unrelated = File(filesDir, "user-data.bin").apply { writeBytes(ByteArray(8)) }
 
             com.music.bitchord.playback.smart.migrateLegacyAutomixModelCache(filesDir, cacheDir)
@@ -40,6 +44,7 @@ class StorageUsageTest {
             assertEquals(false, beat.exists())
             assertEquals(false, vocals.exists())
             assertEquals(false, retired.exists())
+            assertEquals(false, interruptedCopy.exists())
             assertEquals(true, unrelated.exists())
         } finally {
             filesDir.deleteRecursively()

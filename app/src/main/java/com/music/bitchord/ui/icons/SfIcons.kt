@@ -127,14 +127,7 @@ object SfIcons {
 
     internal const val BOLD_STROKE = 0.9f
 
-    /**
-     * The port cuts every symbol to its own bounds, so drawn as it comes each one
-     * is stretched to fill whatever box it is given: a square gear fills it, a wide
-     * two-person glyph shrinks to fit its width, and a row of them reads as a jumble
-     * of sizes. Apple sets them all at one point size instead. So does this: every
-     * symbol goes onto one square canvas of [CANVAS] units, at the units it was
-     * drawn in, centred — only one too large for the canvas is scaled to fit.
-     */
+    /** Shared square canvas for any custom vector paths drawn by this wrapper. */
     internal const val CANVAS = 31f
 
     /** A [width]×[height] drawing, in symbol units, centred on the shared canvas. */
@@ -165,26 +158,7 @@ object SfIcons {
         }.build()
     }
 
-    /** Grown by half the stroke on every side, which the added line reaches into. */
-    private fun bold(regular: ImageVector): ImageVector {
-        val pad = BOLD_STROKE / 2f
-        return canvas(
-            name = regular.name + ".bold",
-            width = regular.viewportWidth + pad * 2f,
-            height = regular.viewportHeight + pad * 2f,
-            autoMirror = regular.autoMirror,
-        ) {
-            addGroup(translationX = pad, translationY = pad)
-            copyInto(this, regular.root)
-            clearGroup()
-        }
-    }
-
-    /**
-     * Adds every node of [group] to [builder], each fully opaque and traced with
-     * [extraStroke] more line — Bold's by default. Give it Apple's own Regular
-     * vectors: a symbol already made bold here would be thickened twice.
-     */
+    /** Copies a vector tree while preserving its transforms and path styling. */
     internal fun copyInto(builder: ImageVector.Builder, group: VectorGroup, extraStroke: Float = BOLD_STROKE) {
         for (node in group) {
             when (node) {

@@ -54,44 +54,30 @@ class AppIconVariantsTest {
             val drawable = File(resources, "drawable/ic_variant_$id.xml")
             val adaptiveIcon = File(resources, "mipmap-anydpi/ic_$id.xml")
 
-            assertTrue(drawable.isFile, "Missing artwork for $id")
-            assertTrue(adaptiveIcon.isFile, "Missing adaptive icon for $id")
+            assertTrue("Missing artwork for $id", drawable.isFile)
+            assertTrue("Missing adaptive icon for $id", adaptiveIcon.isFile)
 
             val artwork = drawable.readText()
             val adaptiveXml = adaptiveIcon.readText()
             val expectedForeground = "@drawable/ic_variant_$id"
-            assertTrue(
-                adaptiveXml.contains(expectedForeground),
-                "$id does not reference its own foreground artwork",
-            )
+            assertTrue("$id does not reference its own foreground artwork", adaptiveXml.contains(expectedForeground))
             artworkContents += artwork
-            assertTrue(
-                appIconSource.contains("R.drawable.ic_variant_$id"),
-                "$id preview does not use its own artwork",
-            )
+            assertTrue("$id preview does not use its own artwork", appIconSource.contains("R.drawable.ic_variant_$id"))
             expectedForeground
         }
 
-        assertEquals(
-            variantIds.size,
-            foregroundResources.toSet().size,
-            "Launcher variants must not share the same foreground resource",
-        )
-        assertEquals(
-            variantIds.size,
-            artworkContents.toSet().size,
-            "Launcher variants must not reuse identical artwork files",
-        )
+        assertEquals("Launcher variants must not share the same foreground resource", variantIds.size, foregroundResources.toSet().size)
+        assertEquals("Launcher variants must not reuse identical artwork files", variantIds.size, artworkContents.toSet().size)
     }
 
     @Test
     fun defaultLauncherUsesAndroidAdaptiveIconResources() {
         val manifest = File(appRoot, "src/main/AndroidManifest.xml").readText()
 
-        assertTrue(manifest.contains("android:icon=\"@mipmap/ic_launcher\""))
-        assertTrue(manifest.contains("android:roundIcon=\"@mipmap/ic_launcher_round\""))
-        assertTrue(File(resourcesDir(), "mipmap-anydpi-v26/ic_launcher.xml").isFile)
-        assertTrue(File(resourcesDir(), "mipmap-anydpi-v26/ic_launcher_round.xml").isFile)
+        assertTrue("Default launcher must use the adaptive icon", manifest.contains("android:icon=\"@mipmap/ic_launcher\""))
+        assertTrue("Round launcher must use the adaptive icon", manifest.contains("android:roundIcon=\"@mipmap/ic_launcher_round\""))
+        assertTrue("Missing adaptive launcher resource", File(resourcesDir(), "mipmap-anydpi-v26/ic_launcher.xml").isFile)
+        assertTrue("Missing round adaptive launcher resource", File(resourcesDir(), "mipmap-anydpi-v26/ic_launcher_round.xml").isFile)
     }
 
     private fun resourcesDir() = File(appRoot, "src/main/res")

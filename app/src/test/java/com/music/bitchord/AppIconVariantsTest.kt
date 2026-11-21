@@ -56,6 +56,7 @@ class AppIconVariantsTest {
             assertTrue(drawable.isFile, "Missing artwork for $id")
             assertTrue(adaptiveIcon.isFile, "Missing adaptive icon for $id")
 
+            val artwork = drawable.readText()
             val adaptiveXml = adaptiveIcon.readText()
             assertTrue(
                 adaptiveXml.contains("@drawable/ic_variant_$id"),
@@ -65,13 +66,18 @@ class AppIconVariantsTest {
                 appIconSource.contains("R.drawable.ic_variant_$id"),
                 "$id preview does not use its own artwork",
             )
-            "@drawable/ic_variant_$id"
+            artwork
         }
 
         assertEquals(
             variantIds.size,
             foregroundResources.toSet().size,
             "Launcher variants must not share the same foreground resource",
+        )
+        assertEquals(
+            variantIds.size,
+            foregroundResources.toSet().size,
+            "Launcher variants must not reuse identical artwork files",
         )
     }
 

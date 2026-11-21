@@ -159,39 +159,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       # ==========================================
-      # 5. SYNC APP_VERSION DARI GRADLE
-      # ==========================================
-      - name: Sync APP_VERSION with Gradle version
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          import os
-          import pathlib
-          import re
-
-          version = os.environ["RELEASE_VERSION"]
-
-          path = pathlib.Path(
-              "app/src/main/java/com/music/bitchord/data/AppUpdateChecker.kt"
-          )
-          text = path.read_text(encoding="utf-8")
-
-          new_text, count = re.subn(
-              r'(APP_VERSION\s*=\s*")[^"]+(")',
-              lambda m: m.group(1) + version + m.group(2),
-              text,
-              count=1,
-          )
-
-          if count == 0:
-              print("APP_VERSION is not a string literal; nothing to sync.")
-          else:
-              path.write_text(new_text, encoding="utf-8")
-              print("APP_VERSION set to", version)
-          PY
-
-      # ==========================================
-      # 5b. LOCAL.PROPERTIES (API key dari secrets)
+      # 5. LOCAL.PROPERTIES (API key dari secrets)
       # ==========================================
       - name: Write local.properties
         env:

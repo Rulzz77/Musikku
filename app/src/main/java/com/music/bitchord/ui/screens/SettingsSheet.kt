@@ -17,6 +17,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -3220,31 +3221,49 @@ private fun StorageUsageOverview(
     cacheLimitBytes: Long,
     onRefresh: () -> Unit,
 ) {
-    SettingsGroup(topSpacing = 0.dp) {
+    SettingsGroup(topSpacing = 26.dp) {
         Column(Modifier.fillMaxWidth().padding(horizontal = ROW_INSET, vertical = 16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        text = stringResource(R.string.storage_usage_title),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Text(
-                        text = if (usage == null) {
-                            stringResource(R.string.storage_usage_loading)
-                        } else {
-                            stringResource(
-                                R.string.storage_usage_total,
-                                StorageUsage.formatBytes(usage.managedBytes),
-                            )
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                val titleAndTotal: @Composable () -> Unit = {
+                    Column {
+                        Text(
+                            text = stringResource(R.string.storage_usage_title),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            text = if (usage == null) {
+                                stringResource(R.string.storage_usage_loading)
+                            } else {
+                                stringResource(
+                                    R.string.storage_usage_total,
+                                    StorageUsage.formatBytes(usage.managedBytes),
+                                )
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
-                TextButton(onClick = onRefresh, enabled = !loading) {
-                    Text(stringResource(R.string.storage_usage_refresh))
+                if (maxWidth < 340.dp) {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        titleAndTotal()
+                        TextButton(
+                            onClick = onRefresh,
+                            enabled = !loading,
+                            modifier = Modifier.align(Alignment.End),
+                        ) {
+                            Text(stringResource(R.string.storage_usage_refresh))
+                        }
+                    }
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.weight(1f)) { titleAndTotal() }
+                        TextButton(onClick = onRefresh, enabled = !loading) {
+                            Text(stringResource(R.string.storage_usage_refresh))
+                        }
+                    }
                 }
             }
             Spacer(Modifier.height(12.dp))
@@ -3314,21 +3333,47 @@ private fun StorageUsageOverview(
 
 @Composable
 private fun StorageUsageLine(label: String, bytes: Long?) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = label,
-            modifier = Modifier.weight(1f),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-        Text(
-            text = bytes?.let(StorageUsage::formatBytes) ?: "—",
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val value = bytes?.let(StorageUsage::formatBytes) ?: "—"
+        if (maxWidth < 330.dp) {
+            // Indonesian labels are longer than their English counterparts.
+            // Stack the value on narrow cards instead of squeezing it beside a
+            // wrapping label, which made the inventory look crowded on phones.
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text = value,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = label,
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Spacer(Modifier.width(12.dp))
+                Text(
+                    text = value,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
     }
 }

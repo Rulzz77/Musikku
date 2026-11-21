@@ -56,7 +56,7 @@ object AddonAuth {
     const val PROOF_HEADER = "X-BitChord-Proof"
     private const val PROOF_CONTEXT = "bitchord-addon-proof/v1"
 
-    private const val TAG = "BitChord"
+    private const val TAG = "MusikKu"
     private const val KEYSTORE = "AndroidKeyStore"
     private const val ALIAS_PREFIX = "bitchord_addon_auth_"
 
@@ -199,8 +199,8 @@ object AddonAuth {
     /** What to tell the listener when an addon refused credentials that were sent. */
     fun rejectionMessage(code: String?): String = when (code) {
         "stale_proof" -> "This addon rejected the request because this phone's clock is wrong"
-        "unavailable" -> "This addon couldn't check BitChord's verification right now"
-        else -> "This addon didn't accept BitChord's verification" + (code?.let { " ($it)" } ?: "")
+        "unavailable" -> "This addon couldn't check MusikKu's verification right now"
+        else -> "This addon didn't accept MusikKu's verification" + (code?.let { " ($it)" } ?: "")
     }
 
     // ── Session ───────────────────────────────────────────────────────────
@@ -222,7 +222,7 @@ object AddonAuth {
                 Refusal(e.message ?: "Verification refused", System.currentTimeMillis() + e.backoffMs, transient = false)
                     .also { refusal = it }.raise()
             } catch (e: Exception) {
-                val message = "Couldn't reach BitChord's addon verification service"
+                val message = "Couldn't reach MusikKu's configured addon verification service"
                 TrackLog.w(TAG, "addon auth: $message", e)
                 Refusal(message, System.currentTimeMillis() + TRANSIENT_BACKOFF_MS, transient = true)
                     .also { refusal = it }.raise()
@@ -269,7 +269,8 @@ object AddonAuth {
     @Serializable private data class ServiceError(val error: String = "", val message: String = "")
 
     private suspend fun attest(): Session = withContext(Dispatchers.IO) {
-        val base = BuildConfig.ADDON_AUTH_URL
+        val base = normalizeAuthServerUrl(BuildConfig.ADDON_AUTH_URL)
+            ?: throw AttestRefused("Addon verification is not configured for this MusikKu build")
         val started = System.currentTimeMillis()
         val challenge = json.decodeFromString<ChallengeResponse>(call(Request.Builder().url("$base/v1/challenge").build()))
         // NTP-style midpoint: the proof's timestamp is checked against the addon's
@@ -281,7 +282,7 @@ object AddonAuth {
             generateAttestedKey(alias, Base64.getUrlDecoder().decode(challenge.challenge))
         } catch (e: Exception) {
             deleteKey(alias)
-            throw AttestRefused("This device can't prove it is running the official BitChord app (no hardware key attestation)")
+            throw AttestRefused("This device cannot provide a hardware-backed attestation key")
         }
         try {
             val body = json.encodeToString(
@@ -364,6 +365,10 @@ object AddonAuth {
 
     internal fun proofMessage(host: String, timestampMs: Long, tokenHash: String) =
         "$PROOF_CONTEXT\n$host\n$timestampMs\n$tokenHash"
+
+    /** Blank means the fork has deliberately not configured a trusted attestation service. */
+    internal fun normalizeAuthServerUrl(raw: String): String? =
+        raw.trim().trimEnd('/').takeIf { it.isNotEmpty() }
 
     /** Lowercase, no port, no trailing dot: the same normalisation the addon-side verifiers apply. */
     internal fun normalizeHost(host: String): String =

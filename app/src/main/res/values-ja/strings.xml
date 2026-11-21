@@ -1510,4 +1510,5 @@
     <string name="smart_playlist_sort_listened">再生時間</string>
     <string name="smart_playlist_editor_description">これらのリストは再生履歴から作成され、再生統計の保存時に更新されます。通常のプレイリストは変更されません。</string>
     <string name="smart_playlist_max_reached">カスタムスマートプレイリストは最大20件作成できます。</string>
+    <string name="storage_automix_models">Automix AIモデル（必要に応じて再作成）</string>
 </resources>

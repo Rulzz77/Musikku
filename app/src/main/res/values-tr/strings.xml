@@ -1489,4 +1489,5 @@
     <string name="smart_playlist_sort_listened">Dinleme süresi</string>
     <string name="smart_playlist_editor_description">Bu listeler dinleme geçmişinden oluşturulur ve dinleme istatistikleri kaydedildiğinde yenilenir. Normal çalma listelerini değiştirmez.</string>
     <string name="smart_playlist_max_reached">En fazla 20 özel akıllı çalma listesi oluşturabilirsin.</string>
+    <string name="storage_automix_models">Automix yapay zekâ modelleri (gerektiğinde yeniden oluşturulur)</string>
 </resources>

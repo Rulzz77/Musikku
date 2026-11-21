@@ -101,6 +101,12 @@ internal fun migrateLegacyAutomixModelCache(filesDir: java.io.File, cacheDir: ja
                 }.onFailure { temporary.delete() }
             }
         }
+        // Remove leftover partial files from a process that was stopped during extraction.
+        if (modelDirectory.isDirectory) {
+            modelDirectory.listFiles()
+                ?.filter { it.isFile && it.name.endsWith(".tmp") }
+                ?.forEach { it.delete() }
+        }
         // This model was retired before the current beat tracker and cannot be
         // used by any current analysis session.
         java.io.File(filesDir, BeatTracker.RETIRED_MODEL_ASSET).delete()

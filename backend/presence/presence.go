@@ -21,7 +21,7 @@ const (
 	Browser
 )
 
-// ParsePlatform accepts only the platforms BitChord ships on.
+// ParsePlatform accepts only the platforms MusikKu ships on.
 func ParsePlatform(s string) (Platform, bool) {
 	switch s {
 	case "android":

@@ -1,4 +1,4 @@
-# BitChord — Listen Together
+# MusikKu — Listen Together
 
 The party server behind **Listen together**: create a six-character code, share
 it, and up to five signed-in devices listen to the same thing at the same time.
@@ -70,16 +70,9 @@ towards a straggler on a bad connection.
 
 ## Identity, and what it is worth
 
-Creating or joining requires `userId`, `deviceId` and `displayName`, which the
-app takes from the signed-in Google/YouTube profile. That is what puts real
-names and avatars in the member list on every device.
+Creating or joining sends `userId`, `deviceId`, `displayName` and an optional `avatarUrl`. The current Android client does **not** send a Google/YouTube account ID or profile avatar: it creates a random UUID per app installation, sends that UUID as `deviceId`, derives `userId` as the first 32 characters of `SHA-256("anonymous:" + deviceId)`, uses the locally chosen party nickname (or `Listener`), and sends `avatarUrl: null`.
 
-**The server cannot verify that claim**, and is written on the assumption it
-never will: it holds no Google credential, and an Innertube round trip per join
-would be both slow and another way to get rate-limited. What *is* server-held is
-the **token** minted on join — unguessable, returned exactly once, and required
-on every call afterwards. So a member can lie about who they are; they cannot
-act as a member they are not, or join a party whose code they were not given.
+The server cannot independently verify a participant's identity. It keeps the unguessable membership **token** minted on join and requires it for subsequent party actions. The token is returned only to that client and is not the same as the device ID or the hashed user ID. The server implementation in this repository keeps active party state in process memory rather than a persistent database; that does not prevent the server operator or hosting provider from observing requests and the metadata sent to it.
 
 If that trade ever stops being acceptable, the place to change it is
 `Party.Join`: have the client send a short-lived proof from the account layer and
@@ -244,9 +237,9 @@ To keep memory, bandwidth, and latency strictly bounded:
   entirely such tracks succeeds without changing the queue. Hand-queued tracks
   are never filtered.
 
-## Deploying to Oracle Cloud (Always Free)
+## Deploying to an Oracle Cloud VM (optional)
 
-This is what runs `https://api.bitchord.kushagrasingh.in`: one Always Free
+This optional self-managed deployment runs the MusikKu Listen Together service on a VM and a public domain that you control. Do not point this deployment at an upstream BitChord host. The example below uses a placeholder domain. It can use one Always Free
 `VM.Standard.E2.1.Micro` (1 OCPU, 1 GB) on Ubuntu 24.04 in ap-mumbai-1, with
 Caddy in front for HTTPS and WebSockets. Files are in `deploy/`.
 
@@ -261,8 +254,18 @@ Caddy in front for HTTPS and WebSockets. Files are in `deploy/`.
 4. **Install** (from a copy of `backend/` on the VM):
 
    ```sh
-   sudo DOMAIN=api.bitchord.kushagrasingh.in bash deploy/setup.sh
+   sudo DOMAIN=jam.example.com bash deploy/setup.sh
    ```
+
+   **One-time migration for an existing VM:** older installs may have a restricted deploy hook that still pulls `kushagrasinghx/BitChord`. Before enabling automatic deployment, check out this MusikKu repository on the VM and rerun the setup script from its `backend/` directory. This replaces the installed forced-command hook with the MusikKu version while keeping the existing SSH key and domain:
+
+   ```sh
+   git clone https://github.com/Rulzz77/Musikku.git
+   cd Musikku/backend
+   sudo bash -c 'DOMAIN="$(cat /etc/bitchord-domain)" bash deploy/setup.sh'
+   ```
+
+   Only after that migration, set the repository Actions variable `MUSIKKU_ORACLE_DEPLOY_ENABLED` to `true`. Until then the workflow runs Go tests and shell syntax checks but skips the VM deploy. The deploy hook now fetches `Rulzz77/Musikku` and verifies `/healthz` on that same VM; it no longer checks the upstream BitChord domain.
 
    It installs Go, builds the server into `/opt/bitchord-jam`, runs it as the
    `bitchord-jam` systemd service on `:8000`, installs Caddy for the domain, and

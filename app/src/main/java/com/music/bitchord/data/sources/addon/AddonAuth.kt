@@ -30,8 +30,8 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
 /**
- * Proof, for the addons that ask for it, that a request comes from the genuine
- * BitChord app and not a fork, another app or a script.
+ * Proof, for addons that ask for it, that a request comes from an app installation
+ * accepted by the configured verification service rather than an untrusted client.
  *
  * The client name and User-Agent cannot do this: this app is open source, so
  * anything it sends can be copied. The one thing a copy cannot have is the
@@ -39,7 +39,7 @@ import java.util.concurrent.TimeUnit
  * in the device's secure hardware comes with a certificate chain, rooted at
  * Google, in which Android states the package name and signing certificate of
  * the app that asked for the key, and whether the OS was booted verified. The
- * BitChord auth service checks that chain once and returns a short-lived token
+ * The configured auth service checks that chain once and returns a short-lived token
  * bound to the key. Each addon request then carries the token and a signature
  * made with the hardware key, which never leaves the device. A token copied off
  * a phone is therefore useless anywhere else.
@@ -145,7 +145,7 @@ object AddonAuth {
                 drop(current)
             }
         }
-        throw AddonException("BitChord couldn't use this device's secure key store")
+        throw AddonException("MusikKu couldn't use this device's secure key store")
     }
 
     /**
@@ -317,7 +317,7 @@ object AddonAuth {
                     // Fixable by updating rather than waiting: check again soon after.
                     val backoff = if (error?.error == "outdated_app") TRANSIENT_BACKOFF_MS else REFUSED_BACKOFF_MS
                     throw AttestRefused(
-                        "BitChord couldn't verify this device: " + (error?.message?.ifBlank { null } ?: "HTTP ${response.code}"),
+                        "MusikKu's configured verification service rejected this device: " + (error?.message?.ifBlank { null } ?: "HTTP ${response.code}"),
                         backoff,
                     )
                 }

@@ -82,7 +82,30 @@ internal val AUTOMIX_MODEL_INTEGRITY = mapOf(
 internal val AUTOMIX_MODEL_ASSET_NAMES = AUTOMIX_MODEL_INTEGRITY.keys + BeatTracker.RETIRED_MODEL_ASSET
 
 private val automixModelCacheLock = Any()
-private val verifiedAutomixModelFiles = ConcurrentHashMap.newKeySet<String>()
+private data class VerifiedAutomixModelFile(
+    val lengthBytes: Long,
+    val lastModifiedMillis: Long,
+)
+
+private val verifiedAutomixModelFiles = ConcurrentHashMap<String, VerifiedAutomixModelFile>()
+
+/**
+ * The digest is expensive on every Automix access, so keep a successful check
+ * only while the private cache file's identity metadata remains unchanged.
+ * Length alone is not enough: an ONNX file can be overwritten with different
+ * bytes without changing its size.
+ */
+private fun automixModelFileStamp(file: java.io.File): VerifiedAutomixModelFile? {
+    if (!file.isFile) return null
+    return VerifiedAutomixModelFile(
+        lengthBytes = file.length(),
+        lastModifiedMillis = file.lastModified(),
+    )
+}
+
+private fun rememberVerifiedAutomixModelFile(file: java.io.File) {
+    automixModelFileStamp(file)?.let { verifiedAutomixModelFiles[file.absolutePath] = it }
+}
 
 /** Compute Git's canonical blob SHA-1 without loading the model into memory. */
 internal fun automixModelGitBlobSha1(file: java.io.File): String {
@@ -105,14 +128,26 @@ internal fun isValidAutomixModelCopy(
     integrity: AutomixModelIntegrity,
 ): Boolean {
     val path = file.absolutePath
-    if (!file.isFile || file.length() != integrity.lengthBytes) {
+    val before = automixModelFileStamp(file)
+    if (before == null || before.lengthBytes != integrity.lengthBytes) {
         verifiedAutomixModelFiles.remove(path)
         return false
     }
-    if (path in verifiedAutomixModelFiles) return true
 
-    val valid = runCatching { automixModelGitBlobSha1(file) == integrity.gitBlobSha1 }.getOrDefault(false)
-    if (valid) verifiedAutomixModelFiles.add(path) else verifiedAutomixModelFiles.remove(path)
+    if (verifiedAutomixModelFiles[path] == before) return true
+
+    // Compare file metadata again after hashing. A file replaced or rewritten
+    // while it is being checked must never enter the verified cache.
+    val digestMatches = runCatching {
+        automixModelGitBlobSha1(file) == integrity.gitBlobSha1
+    }.getOrDefault(false)
+    val after = automixModelFileStamp(file)
+    val valid = digestMatches && after == before
+    if (valid) {
+        verifiedAutomixModelFiles[path] = before
+    } else {
+        verifiedAutomixModelFiles.remove(path)
+    }
     return valid
 }
 
@@ -149,7 +184,7 @@ internal fun migrateLegacyAutomixModelCache(
             if (!modelDirectory.isDirectory && !modelDirectory.mkdirs()) return@forEach
             if (legacy.renameTo(cached)) {
                 verifiedAutomixModelFiles.remove(legacy.absolutePath)
-                verifiedAutomixModelFiles.add(cached.absolutePath)
+                rememberVerifiedAutomixModelFile(cached)
             } else {
                 val temporary = java.io.File(modelDirectory, ".$name.migrate.tmp")
                 if (temporary.exists() && !temporary.delete()) return@forEach
@@ -157,7 +192,7 @@ internal fun migrateLegacyAutomixModelCache(
                     legacy.copyTo(temporary, overwrite = true)
                     if (isValidAutomixModelCopy(temporary, integrity) && temporary.renameTo(cached)) {
                         verifiedAutomixModelFiles.remove(temporary.absolutePath)
-                        verifiedAutomixModelFiles.add(cached.absolutePath)
+                        rememberVerifiedAutomixModelFile(cached)
                         legacy.delete()
                     } else {
                         temporary.delete()
@@ -242,7 +277,7 @@ class TrackAnalyzer(private val context: Context, private val cache: AudioCache)
                 // rename/copy attempt could not create the cache directory.
                 if (legacyFile.renameTo(file)) {
                     verifiedAutomixModelFiles.remove(legacyFile.absolutePath)
-                    verifiedAutomixModelFiles.add(file.absolutePath)
+                    rememberVerifiedAutomixModelFile(file)
                 } else {
                     val temporary = java.io.File(modelDirectory, ".$name.migrate.tmp")
                     try {
@@ -254,7 +289,7 @@ class TrackAnalyzer(private val context: Context, private val cache: AudioCache)
                             throw java.io.IOException("Could not validate migrated Automix model: $name")
                         }
                         verifiedAutomixModelFiles.remove(temporary.absolutePath)
-                        verifiedAutomixModelFiles.add(file.absolutePath)
+                        rememberVerifiedAutomixModelFile(file)
                         legacyFile.delete()
                     } catch (error: Throwable) {
                         temporary.delete()
@@ -281,7 +316,7 @@ class TrackAnalyzer(private val context: Context, private val cache: AudioCache)
                         throw java.io.IOException("Could not finalize Automix model copy")
                     }
                     verifiedAutomixModelFiles.remove(temporary.absolutePath)
-                    verifiedAutomixModelFiles.add(file.absolutePath)
+                    rememberVerifiedAutomixModelFile(file)
                 } catch (error: Throwable) {
                     temporary.delete()
                     throw error

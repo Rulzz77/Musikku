@@ -49,6 +49,7 @@ class AppIconVariantsTest {
             "src/main/java/com/music/bitchord/AppIcon.kt",
         ).readText()
 
+        val artworkContents = mutableListOf<String>()
         val foregroundResources = variantIds.map { id ->
             val drawable = File(resources, "drawable/ic_variant_$id.xml")
             val adaptiveIcon = File(resources, "mipmap-anydpi/ic_$id.xml")
@@ -58,10 +59,12 @@ class AppIconVariantsTest {
 
             val artwork = drawable.readText()
             val adaptiveXml = adaptiveIcon.readText()
+            val expectedForeground = "@drawable/ic_variant_$id"
             assertTrue(
-                adaptiveXml.contains("@drawable/ic_variant_$id"),
+                adaptiveXml.contains(expectedForeground),
                 "$id does not reference its own foreground artwork",
             )
+            artworkContents += artwork
             assertTrue(
                 appIconSource.contains("R.drawable.ic_variant_$id"),
                 "$id preview does not use its own artwork",
@@ -76,7 +79,7 @@ class AppIconVariantsTest {
         )
         assertEquals(
             variantIds.size,
-            foregroundResources.toSet().size,
+            artworkContents.toSet().size,
             "Launcher variants must not reuse identical artwork files",
         )
     }

@@ -7,6 +7,7 @@ import android.os.Build
 import android.provider.Settings
 import androidx.core.content.FileProvider
 import androidx.core.net.toUri
+import com.music.bitchord.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -26,8 +27,8 @@ object AppUpdateChecker {
     private const val LATEST_RELEASE_URL =
         "https://api.github.com/repos/Rulzz77/Musikku/releases/latest"
 
-    // Samakan dengan musikkuVersionName di build.gradle.kts.
-    private const val APP_VERSION = "0.1.3"
+    // Use the active Android variant's version for both local installs and CI releases.
+    private val APP_VERSION = BuildConfig.VERSION_NAME
 
     // Harus sesuai dengan nama APK pada GitHub Releases.
     private const val APK_PREFIX = "MusikKu-"

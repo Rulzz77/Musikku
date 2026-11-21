@@ -263,7 +263,10 @@ object ListenTogether {
      * not in a log. See [redact]. So this is the only server address the app
      * will ever show back, because it is the only one the user typed.
      */
-    fun parseAndNormalizeServerUrl(raw: String): ServerUrlValidationResult {
+    fun parseAndNormalizeServerUrl(
+        raw: String,
+        allowCleartext: Boolean = BuildConfig.APPLICATION_ID == "id.musikku.dev",
+    ): ServerUrlValidationResult {
         val trimmed = raw.trim()
         if (trimmed.isEmpty()) return ServerUrlValidationResult.Valid("")
         if (trimmed.any { it.isWhitespace() }) return ServerUrlValidationResult.Invalid(ServerUrlError.Whitespace)
@@ -288,7 +291,10 @@ object ListenTogether {
         }
 
         val scheme = uri.scheme?.lowercase() ?: return ServerUrlValidationResult.Invalid(ServerUrlError.InvalidScheme)
-        if (scheme != "http" && scheme != "https") {
+        // Only the dev manifest permits cleartext traffic for local testing.
+        // Production builds set usesCleartextTraffic=false, so accepting HTTP there
+        // would save a URL that Android's network stack is guaranteed to reject.
+        if (scheme != "https" && !(allowCleartext && scheme == "http")) {
             return ServerUrlValidationResult.Invalid(ServerUrlError.InvalidScheme)
         }
 

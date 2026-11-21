@@ -1509,4 +1509,5 @@
     <string name="smart_playlist_sort_listened">聆聽時間</string>
     <string name="smart_playlist_editor_description">這些清單根據你的聆聽紀錄建立，並會在聆聽統計儲存時更新。它們不會更動一般播放清單。</string>
     <string name="smart_playlist_max_reached">最多可建立 20 個自訂智慧播放清單。</string>
+    <string name="storage_automix_models">Automix AI 模型（需要時重新產生）</string>
 </resources>

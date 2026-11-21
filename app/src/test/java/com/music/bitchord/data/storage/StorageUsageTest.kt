@@ -1,6 +1,8 @@
 package com.music.bitchord.data.storage
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 import java.nio.file.Files
@@ -23,32 +25,96 @@ class StorageUsageTest {
     }
 
     @Test
-    fun migrateLegacyAutomixModelsMovesOnlyCurrentModelAssetsToCache() {
+    fun migrateLegacyAutomixModelsMovesOnlyVerifiedAssetsToCache() {
         val filesDir = Files.createTempDirectory("musikku-files-").toFile()
         val cacheDir = Files.createTempDirectory("musikku-cache-").toFile()
         try {
-            val beat = File(filesDir, "beat_this_final0_q8.onnx").apply { writeBytes(ByteArray(64)) }
-            val vocals = File(filesDir, "vocals_umxhq_int8.onnx").apply { writeBytes(ByteArray(32)) }
+            val beat = File(filesDir, "beat_this_final0_q8.onnx").apply { writeBytes(ByteArray(64) { 1 }) }
+            val vocals = File(filesDir, "vocals_umxhq_int8.onnx").apply { writeBytes(ByteArray(32) { 2 }) }
             val retired = File(filesDir, "beat_this_int8.onnx").apply { writeBytes(ByteArray(16)) }
             val interruptedCopy = File(cacheDir, "automix_models/.vocals_umxhq_int8.onnx.tmp").apply {
                 parentFile?.mkdirs()
                 writeBytes(ByteArray(12))
             }
             val unrelated = File(filesDir, "user-data.bin").apply { writeBytes(ByteArray(8)) }
+            val expected = mapOf(
+                beat.name to com.music.bitchord.playback.smart.AutomixModelIntegrity(
+                    beat.length(),
+                    com.music.bitchord.playback.smart.automixModelGitBlobSha1(beat),
+                ),
+                vocals.name to com.music.bitchord.playback.smart.AutomixModelIntegrity(
+                    vocals.length(),
+                    com.music.bitchord.playback.smart.automixModelGitBlobSha1(vocals),
+                ),
+            )
 
-            com.music.bitchord.playback.smart.migrateLegacyAutomixModelCache(filesDir, cacheDir)
+            com.music.bitchord.playback.smart.migrateLegacyAutomixModelCache(filesDir, cacheDir, expected)
 
             val modelCache = File(cacheDir, "automix_models")
-            assertEquals(64L, File(modelCache, beat.name).length())
-            assertEquals(32L, File(modelCache, vocals.name).length())
-            assertEquals(false, beat.exists())
-            assertEquals(false, vocals.exists())
-            assertEquals(false, retired.exists())
-            assertEquals(false, interruptedCopy.exists())
-            assertEquals(true, unrelated.exists())
+            assertTrue(com.music.bitchord.playback.smart.isValidAutomixModelCopy(File(modelCache, beat.name), expected.getValue(beat.name)))
+            assertTrue(com.music.bitchord.playback.smart.isValidAutomixModelCopy(File(modelCache, vocals.name), expected.getValue(vocals.name)))
+            assertFalse(beat.exists())
+            assertFalse(vocals.exists())
+            assertFalse(retired.exists())
+            assertFalse(interruptedCopy.exists())
+            assertTrue(unrelated.exists())
         } finally {
             filesDir.deleteRecursively()
             cacheDir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun migrateLegacyAutomixModelsReplacesSameLengthCorruptCacheAndDiscardsTruncatedLegacy() {
+        val filesDir = Files.createTempDirectory("musikku-files-").toFile()
+        val cacheDir = Files.createTempDirectory("musikku-cache-").toFile()
+        try {
+            val beat = File(filesDir, "beat_this_final0_q8.onnx").apply { writeBytes(ByteArray(64) { 7 }) }
+            val corruptedBeatCache = File(cacheDir, "automix_models/beat_this_final0_q8.onnx").apply {
+                parentFile?.mkdirs()
+                writeBytes(ByteArray(64) { 9 })
+            }
+            val truncatedVocal = File(filesDir, "vocals_umxhq_int8.onnx").apply { writeBytes(ByteArray(9)) }
+            val expected = mapOf(
+                beat.name to com.music.bitchord.playback.smart.AutomixModelIntegrity(
+                    beat.length(),
+                    com.music.bitchord.playback.smart.automixModelGitBlobSha1(beat),
+                ),
+                truncatedVocal.name to com.music.bitchord.playback.smart.AutomixModelIntegrity(
+                    32L,
+                    "0000000000000000000000000000000000000000",
+                ),
+            )
+
+            assertFalse(com.music.bitchord.playback.smart.isValidAutomixModelCopy(corruptedBeatCache, expected.getValue(beat.name)))
+            com.music.bitchord.playback.smart.migrateLegacyAutomixModelCache(filesDir, cacheDir, expected)
+
+            val recoveredBeat = File(cacheDir, "automix_models/" + beat.name)
+            assertTrue(com.music.bitchord.playback.smart.isValidAutomixModelCopy(recoveredBeat, expected.getValue(beat.name)))
+            assertFalse(beat.exists())
+            assertFalse(truncatedVocal.exists())
+            assertFalse(File(cacheDir, "automix_models/" + truncatedVocal.name).exists())
+        } finally {
+            filesDir.deleteRecursively()
+            cacheDir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun automixModelIntegrityRejectsFilesWithMatchingLengthButDifferentContent() {
+        val root = Files.createTempDirectory("musikku-model-integrity-").toFile()
+        try {
+            val file = File(root, "model.onnx").apply { writeBytes(ByteArray(96) { 4 }) }
+            val integrity = com.music.bitchord.playback.smart.AutomixModelIntegrity(
+                file.length(),
+                com.music.bitchord.playback.smart.automixModelGitBlobSha1(file),
+            )
+            assertTrue(com.music.bitchord.playback.smart.isValidAutomixModelCopy(file, integrity))
+
+            file.writeBytes(ByteArray(96) { 5 })
+            assertFalse(com.music.bitchord.playback.smart.isValidAutomixModelCopy(file, integrity))
+        } finally {
+            root.deleteRecursively()
         }
     }
 

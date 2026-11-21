@@ -25,6 +25,21 @@ class StorageUsageTest {
     }
 
     @Test
+    fun bundledAutomixModelsMatchPinnedGitBlobDigests() {
+        val moduleAssets = File("src/main/assets")
+        val projectAssets = File("app/src/main/assets")
+        val assets = if (moduleAssets.isDirectory) moduleAssets else projectAssets
+        assertTrue("Bundled app/src/main/assets directory must exist", assets.isDirectory)
+
+        com.music.bitchord.playback.smart.AUTOMIX_MODEL_INTEGRITY.forEach { (name, integrity) ->
+            assertTrue(
+                "Bundled model must match its pinned size and Git blob digest: $name",
+                com.music.bitchord.playback.smart.isValidAutomixModelCopy(File(assets, name), integrity),
+            )
+        }
+    }
+
+    @Test
     fun migrateLegacyAutomixModelsMovesOnlyVerifiedAssetsToCache() {
         val filesDir = Files.createTempDirectory("musikku-files-").toFile()
         val cacheDir = Files.createTempDirectory("musikku-cache-").toFile()

@@ -77,7 +77,7 @@ func main() {
 	handler := corsMiddleware(mux)
 
 	addr := fmt.Sprintf("0.0.0.0:%d", config.Port)
-	log.Printf("BitChord Listen Together (Go) starting on %s...", addr)
+	log.Printf("MusikKu Listen Together (Go) starting on %s...", addr)
 	server := &http.Server{
 		Addr:              addr,
 		Handler:           handler,

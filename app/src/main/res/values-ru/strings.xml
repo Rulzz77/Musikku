@@ -1462,9 +1462,9 @@
     <string name="font">Шрифт</string>
     <string name="font_default">По умолчанию</string>
     <string name="font_legacy">Прежний</string>
-    <string name="font_default_subtitle">SF Pro Display · Начертания Apple Music</string>
-    <string name="font_legacy_subtitle">SF Pro Display · Исходные жирные начертания</string>
-    <string name="font_footer">«Прежний» возвращает более жирный и плотный шрифт, который приложение использовало до того, как его привели в соответствие с Apple Music.</string>
+    <string name="font_default_subtitle">Системный гротеск · Сбалансированное начертание</string>
+    <string name="font_legacy_subtitle">Системный гротеск · Более жирное начертание</string>
+    <string name="font_footer">Прежний вариант сохраняет более жирный и плотный текст приложения.</string>
     <string name="bit_perfect_output">Вывод bit-perfect</string>
     <string name="bit_perfect_bypassed_footer">Вывод bit-perfect готов, поэтому затенённые настройки не применяются, а версии Dolby Atmos не запрашиваются. Они снова заработают, когда ЦАП будет отключён или режим выключен.</string>
     <string name="bit_perfect_sheet_warning">Отправляет трек на ЦАП без изменений. Эквалайзер, нормализация громкости, кроссфейд, автомикс, скорость воспроизведения и громкость MusikKu не применяются.</string>

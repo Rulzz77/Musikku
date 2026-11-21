@@ -1347,9 +1347,9 @@
     <string name="font">Phông chữ</string>
     <string name="font_default">Mặc định</string>
     <string name="font_legacy">Cổ điển</string>
-    <string name="font_default_subtitle">SF Pro Display · Độ đậm của Apple Music</string>
-    <string name="font_legacy_subtitle">SF Pro Display · Độ đậm dày ban đầu</string>
-    <string name="font_footer">Cổ điển mang lại kiểu chữ dày và khít hơn mà ứng dụng từng dùng trước khi được đồng bộ với Apple Music.</string>
+    <string name="font_default_subtitle">Sans-serif hệ thống · Độ đậm cân đối</string>
+    <string name="font_legacy_subtitle">Sans-serif hệ thống · Độ đậm dày hơn</string>
+    <string name="font_footer">Kiểu cổ điển giữ bố cục chữ dày và khít hơn của ứng dụng.</string>
     <string name="bit_perfect_output">Đầu ra bit-perfect</string>
     <string name="bit_perfect_bypassed_footer">Đầu ra bit-perfect đã sẵn sàng nên các cài đặt bị làm mờ sẽ được bỏ qua và các phiên bản Dolby Atmos không được yêu cầu. Chúng hoạt động lại khi ngắt kết nối DAC hoặc tắt chế độ này.</string>
     <string name="bit_perfect_sheet_warning">Gửi bản nhạc đến DAC mà không thay đổi. Bộ chỉnh âm, chuẩn hóa âm lượng, chuyển bài mượt, Automix, tốc độ phát và âm lượng của MusikKu được bỏ qua.</string>

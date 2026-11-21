@@ -1537,4 +1537,5 @@
     <string name="smart_playlist_sort_listened">Tempo de reprodução</string>
     <string name="smart_playlist_editor_description">Estas listas são geradas a partir do seu histórico de reprodução e atualizadas quando as estatísticas são salvas. Elas não alteram suas playlists normais.</string>
     <string name="smart_playlist_max_reached">Você pode criar até 20 playlists inteligentes personalizadas.</string>
+    <string name="storage_automix_models">Modelos de IA do Automix (recriados quando necessário)</string>
 </resources>

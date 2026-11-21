@@ -69,7 +69,7 @@ class AppIconVariantsTest {
                 appIconSource.contains("R.drawable.ic_variant_$id"),
                 "$id preview does not use its own artwork",
             )
-            artwork
+            expectedForeground
         }
 
         assertEquals(

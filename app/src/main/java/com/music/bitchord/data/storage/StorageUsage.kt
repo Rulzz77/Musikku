@@ -18,7 +18,8 @@ import java.util.Locale
  *
  * Downloaded files and their sidecar artwork are durable user data. Audio
  * cache is kept separately because complete entries can be played offline;
- * image and Canvas caches are disposable and can be fetched again.
+ * image, Canvas, and extracted Automix model caches are disposable and can be
+ * recreated or fetched again.
  *
  * Local music selected through the document picker, playlists, backups and
  * other app databases are deliberately outside this report and are never

@@ -151,8 +151,20 @@ class AddonAuthTest {
     }
 
     @Test
-    fun `configured auth service URL is trimmed and normalized`() {
+    fun `configured HTTPS auth service URL is trimmed and normalized`() {
         assertEquals("https://auth.example.test/addons", AddonAuth.normalizeAuthServerUrl(" https://auth.example.test/addons/// "))
+        assertEquals("https://auth.example.test", AddonAuth.normalizeAuthServerUrl("HTTPS://AUTH.EXAMPLE.TEST/"))
+    }
+
+    @Test
+    fun `auth service rejects cleartext and ambiguous URLs`() {
+        assertNull(AddonAuth.normalizeAuthServerUrl("http://auth.example.test"))
+        assertNull(AddonAuth.normalizeAuthServerUrl("ftp://auth.example.test"))
+        assertNull(AddonAuth.normalizeAuthServerUrl("https://user:pass@auth.example.test"))
+        assertNull(AddonAuth.normalizeAuthServerUrl("https://auth.example.test/path?next=/other"))
+        assertNull(AddonAuth.normalizeAuthServerUrl("https://auth.example.test/path#fragment"))
+        assertNull(AddonAuth.normalizeAuthServerUrl("https://auth.example.test:99999"))
+        assertNull(AddonAuth.normalizeAuthServerUrl("not a URL"))
     }
 
     @Test

@@ -1532,4 +1532,5 @@
     <string name="smart_playlist_sort_listened">Hörzeit</string>
     <string name="smart_playlist_editor_description">Diese Listen werden aus deinem Hörverlauf erstellt und aktualisiert, sobald Hörstatistiken gespeichert werden. Deine normalen Playlists bleiben unverändert.</string>
     <string name="smart_playlist_max_reached">Du kannst bis zu 20 benutzerdefinierte Smart-Playlists erstellen.</string>
+    <string name="storage_automix_models">Automix-KI-Modelle (bei Bedarf neu erstellt)</string>
 </resources>

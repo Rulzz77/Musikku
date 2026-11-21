@@ -26,14 +26,14 @@ declare const __DISCORD_PRESENCE__: boolean;
  *   timer in Chrome and Firefox; Chrome 116+ also counts socket traffic).
  */
 
-/** BitChord's own Discord application (DiscordApplication.kt). */
+/** Existing Discord application registration ID; replace only after MusikKu has its own registered Discord application. */
 export const APPLICATION_ID = '1543679166967193620';
 const GATEWAY = 'wss://gateway.discord.gg/?v=9&encoding=json';
 const API = 'https://discord.com/api/v9';
-const PROJECT_URL = 'https://github.com/kushagrasinghx/BitChord';
+const PROJECT_URL = 'https://github.com/Rulzz77/Musikku';
 const DEFAULT_BUTTON_1 = 'Listen on YouTube Music';
-const DEFAULT_BUTTON_2 = 'Visit BitChord';
-const APP_NAME = 'BitChord';
+const DEFAULT_BUTTON_2 = 'Visit MusikKu';
+const APP_NAME = 'MusikKu';
 
 const INITIAL_RECONNECT_MS = 1_000;
 const MAX_RECONNECT_MS = 60_000;
@@ -201,7 +201,7 @@ export class Gateway {
       try {
         this.onMessage(JSON.parse(String(event.data)) as Payload);
       } catch (error) {
-        console.warn('BitChord: Discord gateway payload', error);
+        console.warn('MusikKu: Discord gateway payload', error);
       }
     };
     socket.onclose = (event) => {
@@ -246,7 +246,7 @@ export class Gateway {
   }
 
   private drop(why: string): void {
-    console.info(`BitChord: Discord gateway dropped (${why})`);
+    console.info(`MusikKu: Discord gateway dropped (${why})`);
     this.ready = false;
     this.socket?.close();
   }
@@ -508,7 +508,7 @@ export async function setPresence(track: DiscordNowPlaying | null, options: Disc
   await ensureGateway(held.token).sendActivity(presence);
 }
 
-/** Every BitChord page has gone: nobody is playing, so the card comes down with the socket. */
+/** Every MusikKu page has gone: nobody is playing, so the card comes down with the socket. */
 export function allPagesClosed(): void {
   gateway?.clearActivity();
   idleTimer = setTimeout(closeGateway, 2_000);

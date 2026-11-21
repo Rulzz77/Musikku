@@ -87,7 +87,7 @@ suspend fun renderReplayPoster(
             ?: songs.firstOrNull()?.artworkUrl
         val bitmap = Bitmap.createBitmap(POSTER_W, POSTER_H, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
-        val type = Fonts()
+        val type = Fonts(context)
 
         // The same cover and the same turn of the colour wheel the card on
         // screen was drawn with, so the picture is recognisably that card.
@@ -727,7 +727,7 @@ internal fun ellipsised(text: String, paint: Paint, width: Float): String {
  * missing font resource a slightly plainer picture rather than a crash on the
  * share button.
  */
-internal class Fonts {
+internal class Fonts(@Suppress("UNUSED_PARAMETER") context: Context) {
     // Android's bundled sans-serif faces keep shared Replay artwork independent
     // of optional font assets and preserve the intended weight hierarchy.
     private val heavy = Typeface.create("sans-serif", Typeface.BOLD)

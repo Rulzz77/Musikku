@@ -23,6 +23,36 @@
 
 package com.music.bitchord.playback.smart
 
+import android.content.Context
+import android.media.MediaDataSource
+import android.net.Uri
+import android.os.Build
+import android.os.PowerManager
+import android.os.Process
+import android.os.SystemClock
+import android.util.Log
+import androidx.media3.common.util.UnstableApi
+import com.music.bitchord.data.YtMusicRepository
+import com.music.bitchord.data.listentogether.ListenTogether
+import com.music.bitchord.data.model.SearchFilter
+import com.music.bitchord.data.model.SearchResult
+import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.data.settings.AutomixPerformanceMode
+import com.music.bitchord.data.sources.SourceResolver
+import com.music.bitchord.data.sources.TrackMatcher
+import com.music.bitchord.playback.AudioCache
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
+import kotlin.math.abs
+import kotlin.math.ceil
+import kotlin.math.max
+import java.util.Locale
+
 /** Re-creatable model copies live in cache so Android may reclaim them under storage pressure. */
 internal const val AUTOMIX_MODEL_CACHE_DIRECTORY = "automix_models"
 
@@ -67,36 +97,6 @@ internal fun migrateLegacyAutomixModelCache(filesDir: java.io.File, cacheDir: ja
         java.io.File(filesDir, BeatTracker.RETIRED_MODEL_ASSET).delete()
     }
 }
-
-import android.content.Context
-import android.media.MediaDataSource
-import android.net.Uri
-import android.os.Build
-import android.os.PowerManager
-import android.os.Process
-import android.os.SystemClock
-import android.util.Log
-import androidx.media3.common.util.UnstableApi
-import com.music.bitchord.data.YtMusicRepository
-import com.music.bitchord.data.listentogether.ListenTogether
-import com.music.bitchord.data.model.SearchFilter
-import com.music.bitchord.data.model.SearchResult
-import com.music.bitchord.data.settings.AppSettings
-import com.music.bitchord.data.settings.AutomixPerformanceMode
-import com.music.bitchord.data.sources.SourceResolver
-import com.music.bitchord.data.sources.TrackMatcher
-import com.music.bitchord.playback.AudioCache
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.launch
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.Executors
-import kotlin.math.abs
-import kotlin.math.ceil
-import kotlin.math.max
-import java.util.Locale
 
 /**
  * Produces [TrackAnalysis] for tracks that are about to be mixed, and hands it

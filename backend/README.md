@@ -1,4 +1,4 @@
-# BitChord — Listen Together
+# MusikKu — Listen Together
 
 The party server behind **Listen together**: create a six-character code, share
 it, and up to five signed-in devices listen to the same thing at the same time.
@@ -244,9 +244,9 @@ To keep memory, bandwidth, and latency strictly bounded:
   entirely such tracks succeeds without changing the queue. Hand-queued tracks
   are never filtered.
 
-## Deploying to Oracle Cloud (Always Free)
+## Deploying to an Oracle Cloud VM (optional)
 
-This is what runs `https://api.bitchord.kushagrasingh.in`: one Always Free
+This optional self-managed deployment runs the MusikKu Listen Together service on a VM and a public domain that you control. Do not point this deployment at an upstream BitChord host. The example below uses a placeholder domain. It can use one Always Free
 `VM.Standard.E2.1.Micro` (1 OCPU, 1 GB) on Ubuntu 24.04 in ap-mumbai-1, with
 Caddy in front for HTTPS and WebSockets. Files are in `deploy/`.
 
@@ -261,8 +261,18 @@ Caddy in front for HTTPS and WebSockets. Files are in `deploy/`.
 4. **Install** (from a copy of `backend/` on the VM):
 
    ```sh
-   sudo DOMAIN=api.bitchord.kushagrasingh.in bash deploy/setup.sh
+   sudo DOMAIN=jam.example.com bash deploy/setup.sh
    ```
+
+   **One-time migration for an existing VM:** older installs may have a restricted deploy hook that still pulls `kushagrasinghx/BitChord`. Before enabling automatic deployment, check out this MusikKu repository on the VM and rerun the setup script from its `backend/` directory. This replaces the installed forced-command hook with the MusikKu version while keeping the existing SSH key and domain:
+
+   ```sh
+   git clone https://github.com/Rulzz77/Musikku.git
+   cd Musikku/backend
+   sudo bash -c 'DOMAIN="$(cat /etc/bitchord-domain)" bash deploy/setup.sh'
+   ```
+
+   Only after that migration, set the repository Actions variable `MUSIKKU_ORACLE_DEPLOY_ENABLED` to `true`. Until then the workflow runs Go tests and shell syntax checks but skips the VM deploy. The deploy hook now fetches `Rulzz77/Musikku` and verifies `/healthz` on that same VM; it no longer checks the upstream BitChord domain.
 
    It installs Go, builds the server into `/opt/bitchord-jam`, runs it as the
    `bitchord-jam` systemd service on `:8000`, installs Caddy for the domain, and

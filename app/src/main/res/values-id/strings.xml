@@ -1470,6 +1470,7 @@
     <string name="storage_audio_cache">Cache audio (siap diputar offline)</string>
     <string name="storage_artwork_cache">Cache gambar artwork</string>
     <string name="storage_canvas_cache">Cache video Canvas</string>
+    <string name="storage_automix_models">Model AI Automix (dibuat ulang saat diperlukan)</string>
     <string name="storage_usage_safety_note">Unduhan tetap tersimpan sampai kamu menghapusnya. Membersihkan cache tidak menghapus musik lokal, playlist, atau cadangan.</string>
     <string name="clear_canvas_cache">Bersihkan cache Canvas</string>
     <string name="clear_canvas_cache_subtitle">Hapus klip berulang yang tersimpan di cache. MusikKu akan mengunduhnya lagi saat diperlukan.</string>

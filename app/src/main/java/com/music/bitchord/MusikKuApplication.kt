@@ -34,6 +34,7 @@ import com.music.bitchord.data.spotify.SpotifyImporter
 import com.music.bitchord.data.spotify.AndroidSpotifyImportMatchCachePersistence
 import com.music.bitchord.data.spotify.LocalPlaylistStore
 import com.music.bitchord.playback.AudioCache
+import com.music.bitchord.playback.smart.migrateLegacyAutomixModelCache
 import com.music.bitchord.playback.LastPlayed
 import com.music.bitchord.playback.BoundedContextPersistence
 import com.music.bitchord.playback.OriginalVersion
@@ -65,6 +66,9 @@ class MusikKuApplication : Application(), SingletonImageLoader.Factory, Configur
     @kotlin.OptIn(ExperimentalComposeUiApi::class)
     override fun onCreate() {
         super.onCreate()
+        // Model weights are shipped in the APK and can be recreated; keep extracted copies
+        // in cacheDir rather than letting old versions' filesDir copies persist forever.
+        migrateLegacyAutomixModelCache(filesDir, cacheDir)
         // Read the last known feature flags immediately; refresh them from the
         // public config when the process enters the foreground.
         RemoteConfig.initialize(this)

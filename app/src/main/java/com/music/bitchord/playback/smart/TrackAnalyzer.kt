@@ -86,10 +86,19 @@ internal fun migrateLegacyAutomixModelCache(filesDir: java.io.File, cacheDir: ja
             if (cached.exists() && !cached.delete()) return@forEach
 
             if (!legacy.renameTo(cached)) {
+                val temporary = java.io.File(modelDirectory, ".$name.migrate.tmp")
+                if (temporary.exists() && !temporary.delete()) return@forEach
                 runCatching {
-                    legacy.copyTo(cached, overwrite = true)
-                    if (legacy.length() == cached.length()) legacy.delete() else cached.delete()
-                }.onFailure { cached.delete() }
+                    legacy.copyTo(temporary, overwrite = true)
+                    if (temporary.length() == legacy.length() &&
+                        temporary.length() > 0L &&
+                        temporary.renameTo(cached)
+                    ) {
+                        legacy.delete()
+                    } else {
+                        temporary.delete()
+                    }
+                }.onFailure { temporary.delete() }
             }
         }
         // This model was retired before the current beat tracker and cannot be
@@ -153,18 +162,10 @@ class TrackAnalyzer(private val context: Context, private val cache: AudioCache)
         val file = java.io.File(modelDirectory, name)
         val legacyFile = java.io.File(context.filesDir, name)
         if (!file.isFile || file.length() == 0L) {
+            // A failed cross-directory migration should not break playback:
+            // keep using the complete legacy file and retry migration next launch.
             if (legacyFile.isFile && legacyFile.length() > 0L) {
-                if (file.exists() && !file.delete()) {
-                    throw java.io.IOException("Could not replace incomplete Automix model")
-                }
-                if (!legacyFile.renameTo(file)) {
-                    legacyFile.copyTo(file, overwrite = true)
-                    if (file.length() != legacyFile.length()) {
-                        file.delete()
-                        throw java.io.IOException("Could not migrate Automix model")
-                    }
-                    legacyFile.delete()
-                }
+                return@synchronized legacyFile.absolutePath
             } else {
                 val temporary = java.io.File(modelDirectory, ".$name.tmp")
                 if (temporary.exists() && !temporary.delete()) {
@@ -181,8 +182,7 @@ class TrackAnalyzer(private val context: Context, private val cache: AudioCache)
                         throw java.io.IOException("Could not replace incomplete Automix model")
                     }
                     if (!temporary.renameTo(file)) {
-                        temporary.copyTo(file, overwrite = true)
-                        temporary.delete()
+                        throw java.io.IOException("Could not finalize Automix model copy")
                     }
                 } catch (error: Throwable) {
                     temporary.delete()

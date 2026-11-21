@@ -263,10 +263,14 @@ object ListenTogether {
      * not in a log. See [redact]. So this is the only server address the app
      * will ever show back, because it is the only one the user typed.
      */
-    fun parseAndNormalizeServerUrl(
-        raw: String,
-        allowCleartext: Boolean = BuildConfig.APPLICATION_ID == "id.musikku.dev",
-    ): ServerUrlValidationResult {
+    fun parseAndNormalizeServerUrl(raw: String): ServerUrlValidationResult =
+        parseAndNormalizeServerUrl(
+            raw,
+            allowCleartext = BuildConfig.APPLICATION_ID == "id.musikku.dev",
+        )
+
+    /** Testable policy seam; production callers use the manifest-matched overload above. */
+    internal fun parseAndNormalizeServerUrl(raw: String, allowCleartext: Boolean): ServerUrlValidationResult {
         val trimmed = raw.trim()
         if (trimmed.isEmpty()) return ServerUrlValidationResult.Valid("")
         if (trimmed.any { it.isWhitespace() }) return ServerUrlValidationResult.Invalid(ServerUrlError.Whitespace)

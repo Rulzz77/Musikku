@@ -1430,9 +1430,9 @@
     <string name="font">Schriftart</string>
     <string name="font_default">Standard</string>
     <string name="font_legacy">Klassisch</string>
-    <string name="font_default_subtitle">SF Pro Display · Schriftschnitte wie bei Apple Music</string>
-    <string name="font_legacy_subtitle">SF Pro Display · Ursprüngliche kräftige Schriftschnitte</string>
-    <string name="font_footer">„Klassisch“ bringt die kräftigere, engere Schrift zurück, die die App verwendete, bevor sie an Apple Music angepasst wurde.</string>
+    <string name="font_default_subtitle">System-Sans-Serif · Ausgewogene Schriftschnitte</string>
+    <string name="font_legacy_subtitle">System-Sans-Serif · Kräftigere Schriftschnitte</string>
+    <string name="font_footer">Klassisch behält den kräftigeren und engeren Schriftsatz der App bei.</string>
     <string name="bit_perfect_output">Bit-perfekte Ausgabe</string>
     <string name="bit_perfect_bypassed_footer">Die bit-perfekte Ausgabe ist bereit, daher werden die ausgegrauten Einstellungen umgangen und keine Dolby-Atmos-Versionen angefordert. Sie funktionieren wieder, wenn der DAC getrennt oder der Modus ausgeschaltet wird.</string>
     <string name="bit_perfect_sheet_warning">Sendet den Titel unverändert an den DAC. Equalizer, Lautstärkenormalisierung, Überblendung, Automix, Wiedergabegeschwindigkeit und die Lautstärke von MusikKu werden umgangen.</string>

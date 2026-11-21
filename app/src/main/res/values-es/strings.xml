@@ -1402,9 +1402,9 @@
     <string name="font">Fuente</string>
     <string name="font_default">Predeterminada</string>
     <string name="font_legacy">Clásica</string>
-    <string name="font_default_subtitle">SF Pro Display · Pesos de Apple Music</string>
-    <string name="font_legacy_subtitle">SF Pro Display · Pesos gruesos originales</string>
-    <string name="font_footer">Clásica recupera la tipografía más gruesa y compacta que usaba la app antes de adaptarla a Apple Music.</string>
+    <string name="font_default_subtitle">Sans serif del sistema · Pesos equilibrados</string>
+    <string name="font_legacy_subtitle">Sans serif del sistema · Pesos más gruesos</string>
+    <string name="font_footer">Clásica mantiene el texto más grueso y compacto de la aplicación.</string>
     <string name="bit_perfect_output">Salida bit-perfect</string>
     <string name="bit_perfect_bypassed_footer">La salida bit-perfect está lista, por lo que se omiten los ajustes atenuados y no se solicitan versiones Dolby Atmos. Vuelven a funcionar al desconectar el DAC o desactivar el modo.</string>
     <string name="bit_perfect_sheet_warning">Envía la pista al DAC sin cambios. Se omiten el ecualizador, la normalización de volumen, el fundido cruzado, la mezcla automática, la velocidad de reproducción y el volumen de MusikKu.</string>

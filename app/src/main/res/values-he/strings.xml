@@ -1435,9 +1435,9 @@
     <string name="font">גופן</string>
     <string name="font_default">ברירת מחדל</string>
     <string name="font_legacy">קלאסי</string>
-    <string name="font_default_subtitle">SF Pro Display · משקלי Apple Music</string>
-    <string name="font_legacy_subtitle">SF Pro Display · המשקלים העבים המקוריים</string>
-    <string name="font_footer">האפשרות קלאסי מחזירה את הגופן העבה והצפוף יותר שהאפליקציה השתמשה בו לפני שהותאמה ל-Apple Music.</string>
+    <string name="font_default_subtitle">Sans-serif של המערכת · משקלים מאוזנים</string>
+    <string name="font_legacy_subtitle">Sans-serif של המערכת · משקלים עבים יותר</string>
+    <string name="font_footer">האפשרות הקלאסית שומרת על סגנון הטקסט העבה והצפוף יותר של האפליקציה.</string>
     <string name="bit_perfect_output">פלט Bit-perfect</string>
     <string name="bit_perfect_bypassed_footer">פלט Bit-perfect מוכן, ולכן ההגדרות המעומעמות אינן פעילות ולא מתבקשות גרסאות Dolby Atmos. הן יפעלו שוב כשה-DAC ינותק או כשהמצב ייכבה.</string>
     <string name="bit_perfect_sheet_warning">שולח את הרצועה ל-DAC ללא שינוי. האקולייזר, נרמול העוצמה, ה-Crossfade, ה-Automix, מהירות ההשמעה ועוצמת הקול של MusikKu אינם פעילים.</string>

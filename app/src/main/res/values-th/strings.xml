@@ -1413,9 +1413,9 @@
     <string name="font">ฟอนต์</string>
     <string name="font_default">ค่าเริ่มต้น</string>
     <string name="font_legacy">แบบเดิม</string>
-    <string name="font_default_subtitle">SF Pro Display · น้ำหนักแบบ Apple Music</string>
-    <string name="font_legacy_subtitle">SF Pro Display · น้ำหนักหนาแบบดั้งเดิม</string>
-    <string name="font_footer">แบบเดิมจะนำตัวอักษรที่หนาและชิดกว่าซึ่งแอปเคยใช้ก่อนปรับให้เข้ากับ Apple Music กลับมา</string>
+    <string name="font_default_subtitle">Sans-serif ของระบบ · ความหนาสมดุล</string>
+    <string name="font_legacy_subtitle">Sans-serif ของระบบ · ตัวอักษรหนาขึ้น</string>
+    <string name="font_footer">แบบเดิมคงรูปแบบตัวอักษรที่หนาและแน่นกว่าของแอปไว้</string>
     <string name="bit_perfect_output">เอาต์พุต Bit-perfect</string>
     <string name="bit_perfect_bypassed_footer">เอาต์พุต Bit-perfect พร้อมแล้ว การตั้งค่าที่จางจึงถูกข้ามและจะไม่ขอเวอร์ชัน Dolby Atmos การตั้งค่าเหล่านี้จะกลับมาทำงานเมื่อถอด DAC หรือปิดโหมดนี้</string>
     <string name="bit_perfect_sheet_warning">ส่งแทร็กไปยัง DAC โดยไม่เปลี่ยนแปลง อีควอไลเซอร์ การปรับระดับความดัง ครอสเฟด Automix ความเร็วในการเล่น และระดับเสียงของ MusikKu จะถูกข้าม</string>

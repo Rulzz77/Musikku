@@ -1470,9 +1470,9 @@
     <string name="font">Czcionka</string>
     <string name="font_default">Domyślna</string>
     <string name="font_legacy">Klasyczna</string>
-    <string name="font_default_subtitle">SF Pro Display · Grubości z Apple Music</string>
-    <string name="font_legacy_subtitle">SF Pro Display · Oryginalne grube odmiany</string>
-    <string name="font_footer">Klasyczna przywraca grubszą i ciaśniejszą czcionkę, której aplikacja używała przed dopasowaniem do Apple Music.</string>
+    <string name="font_default_subtitle">Bezszeryfowa systemowa · Zrównoważona grubość</string>
+    <string name="font_legacy_subtitle">Bezszeryfowa systemowa · Grubsza odmiana</string>
+    <string name="font_footer">Klasyczna zachowuje grubszy i bardziej zwarty układ tekstu aplikacji.</string>
     <string name="bit_perfect_output">Wyjście bit-perfect</string>
     <string name="bit_perfect_bypassed_footer">Wyjście bit-perfect jest gotowe, więc wyszarzone ustawienia są pomijane, a wersje Dolby Atmos nie są pobierane. Zadziałają ponownie po odłączeniu DAC lub wyłączeniu trybu.</string>
     <string name="bit_perfect_sheet_warning">Wysyła utwór do DAC bez zmian. Equalizer, normalizacja głośności, crossfade, Automix, szybkość odtwarzania i głośność MusikKu są pomijane.</string>

@@ -329,13 +329,8 @@ object TvThemeColors {
 // Font family
 // ─────────────────────────────────────────────────────────────────────────────
 
-val TvSFProDisplay = FontFamily(
-    Font(R.font.sf_pro_display_regular, FontWeight.W400),
-    Font(R.font.sf_pro_display_medium, FontWeight.W500),
-    Font(R.font.sf_pro_display_semibold, FontWeight.W600),
-    Font(R.font.sf_pro_display_bold, FontWeight.W700),
-    Font(R.font.sf_pro_display_heavy, FontWeight.W800),
-)
+// Preserve the existing theme API while using the platform sans-serif family.
+val TvSFProDisplay = FontFamily.SansSerif
 
 val TvGoogleSans = FontFamily(
     Font(R.font.google_sans_regular, FontWeight.W400),

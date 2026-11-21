@@ -127,14 +127,12 @@ class TrackAnalyzer(private val context: Context, private val cache: AudioCache)
     }
 
     /**
-     * A model's weights on disk, unpacked from assets the first time they are
-     * asked for.
+     * A model's weights, unpacked lazily from APK assets into cacheDir.
      *
      * ONNX Runtime wants a file it can memory-map, and an asset inside the APK
-     * is not one. This used to live inside each tracker; it moved out when they
-     * became shared with the desktop build, which unpacks from the jar instead.
-     */
-    /**
+     * is not one. The unpacked copy is disposable because the original ships
+     * with the app and can always be recreated.
+     *
      * Keep derived model copies in cacheDir rather than filesDir. They are
      * shipped in the APK, can always be unpacked again, and should not become
      * durable app data. This also lets Android reclaim the 30+ MiB when the

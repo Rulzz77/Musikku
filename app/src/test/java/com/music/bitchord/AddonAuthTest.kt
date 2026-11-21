@@ -117,7 +117,7 @@ class AddonAuthTest {
     fun `a final refusal says why instead of looping`() = runBlocking {
         search = { challenge("invalid_proof") }
         val failure = client().search("song", AddonClient.TIER_LOSSLESS).exceptionOrNull()
-        assertEquals("This addon didn't accept BitChord's verification (invalid_proof)", failure?.message)
+        assertEquals("This addon didn't accept MusikKu's verification (invalid_proof)", failure?.message)
         assertEquals(2, searches().size)
     }
 
@@ -142,6 +142,17 @@ class AddonAuthTest {
             }
             assertTrue("round $i", verified)
         }
+    }
+
+    @Test
+    fun `blank auth service configuration disables attestation`() {
+        assertNull(AddonAuth.normalizeAuthServerUrl(""))
+        assertNull(AddonAuth.normalizeAuthServerUrl("   "))
+    }
+
+    @Test
+    fun `configured auth service URL is trimmed and normalized`() {
+        assertEquals("https://auth.example.test/addons", AddonAuth.normalizeAuthServerUrl(" https://auth.example.test/addons/// "))
     }
 
     @Test

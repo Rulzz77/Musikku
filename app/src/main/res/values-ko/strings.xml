@@ -1280,9 +1280,9 @@
     <string name="font">글꼴</string>
     <string name="font_default">기본</string>
     <string name="font_legacy">이전</string>
-    <string name="font_default_subtitle">SF Pro Display · Apple Music 굵기</string>
-    <string name="font_legacy_subtitle">SF Pro Display · 기존의 굵은 굵기</string>
-    <string name="font_footer">이전 글꼴은 앱이 Apple Music에 맞춰지기 전에 쓰던 더 굵고 촘촘한 글꼴을 되돌립니다.</string>
+    <string name="font_default_subtitle">시스템 산세리프 · 균형 잡힌 굵기</string>
+    <string name="font_legacy_subtitle">시스템 산세리프 · 더 굵은 글꼴</string>
+    <string name="font_footer">기존 설정은 앱의 더 굵고 촘촘한 텍스트 레이아웃을 유지합니다.</string>
     <string name="bit_perfect_output">비트 퍼펙트 출력</string>
     <string name="bit_perfect_bypassed_footer">비트 퍼펙트 출력이 준비되어 흐리게 표시된 설정은 우회되고 Dolby Atmos 버전은 요청되지 않습니다. DAC를 분리하거나 모드를 끄면 다시 작동합니다.</string>
     <string name="bit_perfect_sheet_warning">트랙을 변경 없이 DAC로 보냅니다. 이퀄라이저, 체감 음량 평준화, 크로스페이드, 자동 믹스, 재생 속도, MusikKu 음량은 우회됩니다.</string>

@@ -166,6 +166,7 @@ jobs:
           LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
           LASTFM_SECRET: ${{ secrets.LASTFM_SECRET }}
           LISTEN_TOGETHER_SERVER: ${{ secrets.LISTEN_TOGETHER_SERVER }}
+          ADDON_AUTH_SERVER: ${{ secrets.ADDON_AUTH_SERVER }}
         shell: bash
         run: |
           set -euo pipefail
@@ -173,6 +174,7 @@ jobs:
             printf 'LASTFM_API_KEY=%s\n' "$LASTFM_API_KEY"
             printf 'LASTFM_SECRET=%s\n' "$LASTFM_SECRET"
             printf 'LISTEN_TOGETHER_SERVER=%s\n' "$LISTEN_TOGETHER_SERVER"
+            printf 'ADDON_AUTH_SERVER=%s\n' "$ADDON_AUTH_SERVER"
           } > local.properties
 
       # ==========================================

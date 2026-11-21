@@ -57,15 +57,17 @@ val listenTogetherServer: String = (
     ).trim().trimEnd('/')
 
 /*
- * The service that checks this app's hardware key attestation and issues addon
- * tokens. See AddonAuth. Overridable for a staging deployment. A fork that
- * points this at its own server gains nothing: addons only trust tokens signed
- * by the official service's key.
+ * Optional service that verifies the device's hardware-key attestation and
+ * issues addon tokens. Intentionally blank for a fork: the upstream service
+ * only authorizes the official BitChord package/signing certificate, so
+ * pointing MusikKu at it would send device attestation data that it cannot use.
+ * Set ADDON_AUTH_SERVER only when a trusted service explicitly supports this
+ * build and its signing identity.
  */
 val addonAuthServer: String = (
-    localProps.getProperty("ADDON_AUTH_SERVER")
-        ?: System.getenv("ADDON_AUTH_SERVER")
-        ?: "https://bitchord-auth.kushagrasingh.in"
+    localProps.getProperty("ADDON_AUTH_SERVER")?.takeIf { it.isNotBlank() }
+        ?: System.getenv("ADDON_AUTH_SERVER")?.takeIf { it.isNotBlank() }
+        ?: ""
     ).trim().trimEnd('/')
 
 // See the root build.gradle.kts: one version for the phone and its watch app.

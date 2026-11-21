@@ -176,7 +176,7 @@ class AddonSource(
                 // fails, and the reason is only in the log. One that doesn't ask
                 // is out of date, which the row flags on its own line, but works.
                 if (manifest.requiresBitChordAuth) client.checkAuth().exceptionOrNull()?.let { failure ->
-                    val reason = failure.message ?: "BitChord couldn't verify this device"
+                    val reason = failure.message ?: "MusikKu couldn't verify this device"
                     return@fold if (failure is AddonUnavailable) {
                         SourceHealth.Unreachable(reason)
                     } else {
@@ -397,7 +397,7 @@ class AddonSource(
         if (answer.isEncrypted) {
             TrackLog.w(
                 TAG,
-                "${config.displayName}: $trackId came back encrypted, which BitChord never asked for — passing",
+                "${config.displayName}: $trackId came back encrypted, which MusikKu never asked for — passing",
             )
             return null
         }
@@ -493,7 +493,7 @@ class AddonSource(
     }
 
     private companion object {
-        const val TAG = "BitChord"
+        const val TAG = "MusikKu"
 
         /** What a gated addon's health says, for the editor's Test line. The sources list draws its own. */
         const val NEEDS_LOSSLESS_OUTPUT =

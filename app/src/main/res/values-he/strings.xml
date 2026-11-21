@@ -1537,4 +1537,5 @@
     <string name="smart_playlist_sort_listened">משך ההאזנה</string>
     <string name="smart_playlist_editor_description">הרשימות האלה נוצרות מהיסטוריית ההאזנה שלך ומתעדכנות כשסטטיסטיקת ההאזנה נשמרת. הן לא משנות את הפלייליסטים הרגילים שלך.</string>
     <string name="smart_playlist_max_reached">אפשר ליצור עד 20 פלייליסטים חכמים מותאמים אישית.</string>
+    <string name="storage_automix_models">מודלי AI של Automix (נוצרים מחדש בעת הצורך)</string>
 </resources>

@@ -6,6 +6,8 @@ import android.provider.OpenableColumns
 import com.music.bitchord.data.canvas.CanvasCache
 import com.music.bitchord.download.Downloads
 import com.music.bitchord.playback.AudioCache
+import com.music.bitchord.playback.smart.AUTOMIX_MODEL_ASSET_NAMES
+import com.music.bitchord.playback.smart.AUTOMIX_MODEL_CACHE_DIRECTORY
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -16,7 +18,8 @@ import java.util.Locale
  *
  * Downloaded files and their sidecar artwork are durable user data. Audio
  * cache is kept separately because complete entries can be played offline;
- * image and Canvas caches are disposable and can be fetched again.
+ * image, Canvas, and extracted Automix model caches are disposable and can be
+ * recreated or fetched again.
  *
  * Local music selected through the document picker, playlists, backups and
  * other app databases are deliberately outside this report and are never
@@ -29,11 +32,12 @@ object StorageUsage {
         val audioCacheBytes: Long,
         val imageCacheBytes: Long,
         val canvasCacheBytes: Long,
+        val automixModelBytes: Long,
         val availableBytes: Long,
         val totalDeviceBytes: Long,
     ) {
         val managedBytes: Long
-            get() = downloadedBytes + audioCacheBytes + imageCacheBytes + canvasCacheBytes
+            get() = downloadedBytes + audioCacheBytes + imageCacheBytes + canvasCacheBytes + automixModelBytes
     }
 
     suspend fun inspect(context: Context): Snapshot = withContext(Dispatchers.IO) {
@@ -61,6 +65,7 @@ object StorageUsage {
             audioCacheBytes = directoryBytes(AudioCache.storageDirectory(app)),
             imageCacheBytes = directoryBytes(File(app.cacheDir, IMAGE_CACHE_DIRECTORY)),
             canvasCacheBytes = directoryBytes(CanvasCache.storageDirectory(app)),
+            automixModelBytes = automixModelBytes(app.cacheDir, app.filesDir),
             availableBytes = app.filesDir.usableSpace.coerceAtLeast(0L),
             totalDeviceBytes = app.filesDir.totalSpace.coerceAtLeast(0L),
         )
@@ -118,6 +123,18 @@ object StorageUsage {
         val target = File(path)
         val root = if (target.name == OFFLINE_PLAYLIST_FILE) target.parentFile ?: target else target
         return directoryBytes(root)
+    }
+
+    /**
+     * Counts the disposable model copies used by Automix, including files left
+     * in filesDir by versions before they were moved to cacheDir.
+     */
+    internal fun automixModelBytes(cacheDir: File, filesDir: File): Long {
+        val cached = directoryBytes(File(cacheDir, AUTOMIX_MODEL_CACHE_DIRECTORY))
+        val legacy = AUTOMIX_MODEL_ASSET_NAMES.sumOf { name ->
+            File(filesDir, name).takeIf(File::isFile)?.length()?.coerceAtLeast(0L) ?: 0L
+        }
+        return if (Long.MAX_VALUE - cached < legacy) Long.MAX_VALUE else cached + legacy
     }
 
     internal fun directoryBytes(root: File): Long {

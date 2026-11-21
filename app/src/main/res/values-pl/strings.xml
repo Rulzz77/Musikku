@@ -1572,4 +1572,5 @@
     <string name="smart_playlist_sort_listened">Czas słuchania</string>
     <string name="smart_playlist_editor_description">Te listy są tworzone na podstawie historii słuchania i odświeżane po zapisaniu statystyk. Nie zmieniają zwykłych playlist.</string>
     <string name="smart_playlist_max_reached">Możesz utworzyć maksymalnie 20 własnych inteligentnych playlist.</string>
+    <string name="storage_automix_models">Modele AI Automix (odtwarzane w razie potrzeby)</string>
 </resources>

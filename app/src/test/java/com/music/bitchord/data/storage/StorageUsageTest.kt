@@ -23,6 +23,65 @@ class StorageUsageTest {
     }
 
     @Test
+    fun migrateLegacyAutomixModelsMovesOnlyCurrentModelAssetsToCache() {
+        val filesDir = Files.createTempDirectory("musikku-files-").toFile()
+        val cacheDir = Files.createTempDirectory("musikku-cache-").toFile()
+        try {
+            val beat = File(filesDir, "beat_this_final0_q8.onnx").apply { writeBytes(ByteArray(64)) }
+            val vocals = File(filesDir, "vocals_umxhq_int8.onnx").apply { writeBytes(ByteArray(32)) }
+            val retired = File(filesDir, "beat_this_int8.onnx").apply { writeBytes(ByteArray(16)) }
+            val interruptedCopy = File(cacheDir, "automix_models/.vocals_umxhq_int8.onnx.tmp").apply {
+                parentFile?.mkdirs()
+                writeBytes(ByteArray(12))
+            }
+            val unrelated = File(filesDir, "user-data.bin").apply { writeBytes(ByteArray(8)) }
+
+            com.music.bitchord.playback.smart.migrateLegacyAutomixModelCache(filesDir, cacheDir)
+
+            val modelCache = File(cacheDir, "automix_models")
+            assertEquals(64L, File(modelCache, beat.name).length())
+            assertEquals(32L, File(modelCache, vocals.name).length())
+            assertEquals(false, beat.exists())
+            assertEquals(false, vocals.exists())
+            assertEquals(false, retired.exists())
+            assertEquals(false, interruptedCopy.exists())
+            assertEquals(true, unrelated.exists())
+        } finally {
+            filesDir.deleteRecursively()
+            cacheDir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun automixModelBytesCountsCacheAndLegacyCopies() {
+        val cacheDir = Files.createTempDirectory("musikku-model-cache-").toFile()
+        val filesDir = Files.createTempDirectory("musikku-files-").toFile()
+        try {
+            val modelCache = File(cacheDir, "automix_models").apply { mkdirs() }
+            File(modelCache, "beat_this_final0_q8.onnx").writeBytes(ByteArray(64))
+            File(filesDir, "vocals_umxhq_int8.onnx").writeBytes(ByteArray(32))
+            File(filesDir, "beat_this_int8.onnx").writeBytes(ByteArray(16))
+
+            assertEquals(112L, StorageUsage.automixModelBytes(cacheDir, filesDir))
+        } finally {
+            cacheDir.deleteRecursively()
+            filesDir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun automixModelBytesReturnsZeroWhenNoModelsWereExtracted() {
+        val cacheDir = Files.createTempDirectory("musikku-model-cache-").toFile()
+        val filesDir = Files.createTempDirectory("musikku-files-").toFile()
+        try {
+            assertEquals(0L, StorageUsage.automixModelBytes(cacheDir, filesDir))
+        } finally {
+            cacheDir.deleteRecursively()
+            filesDir.deleteRecursively()
+        }
+    }
+
+    @Test
     fun fileUriBytesCountsWholeOfflinePackageForPlaylistEntry() {
         val packageDir = Files.createTempDirectory("musikku-offline-").toFile()
         try {

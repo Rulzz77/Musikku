@@ -1509,4 +1509,5 @@
     <string name="smart_playlist_sort_listened">聆听时长</string>
     <string name="smart_playlist_editor_description">这些列表根据你的聆听历史生成，并会在聆听统计保存后更新。它们不会更改普通播放列表。</string>
     <string name="smart_playlist_max_reached">最多可创建 20 个自定义智能播放列表。</string>
+    <string name="storage_automix_models">Automix AI 模型（需要时重新生成）</string>
 </resources>

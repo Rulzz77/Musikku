@@ -1533,4 +1533,5 @@
     <string name="smart_playlist_sort_listened">Durée d\'écoute</string>
     <string name="smart_playlist_editor_description">Ces listes sont générées à partir de votre historique d\'écoute et actualisées lorsque les statistiques sont enregistrées. Elles ne modifient pas vos playlists habituelles.</string>
     <string name="smart_playlist_max_reached">Vous pouvez créer jusqu\'à 20 playlists intelligentes personnalisées.</string>
+    <string name="storage_automix_models">Modèles IA Automix (recréés selon les besoins)</string>
 </resources>

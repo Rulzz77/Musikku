@@ -1471,4 +1471,5 @@
     <string name="smart_playlist_sort_listened">Tempo di ascolto</string>
     <string name="smart_playlist_editor_description">Queste liste vengono create dalla cronologia degli ascolti e si aggiornano quando vengono salvate le statistiche. Non modificano le playlist normali.</string>
     <string name="smart_playlist_max_reached">Puoi creare fino a 20 Smart Playlist personalizzate.</string>
+    <string name="storage_automix_models">Modelli IA di Automix (ricreati quando necessario)</string>
 </resources>

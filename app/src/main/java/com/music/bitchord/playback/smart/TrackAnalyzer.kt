@@ -53,6 +53,66 @@ import kotlin.math.ceil
 import kotlin.math.max
 import java.util.Locale
 
+/** Re-creatable model copies live in cache so Android may reclaim them under storage pressure. */
+internal const val AUTOMIX_MODEL_CACHE_DIRECTORY = "automix_models"
+
+/** Current and retired model names used to account for leftovers from older app versions. */
+internal val AUTOMIX_MODEL_ASSET_NAMES = setOf(
+    BeatTracker.MODEL_ASSET,
+    VocalTracker.MODEL_ASSET,
+    BeatTracker.RETIRED_MODEL_ASSET,
+)
+
+private val automixModelCacheLock = Any()
+
+/**
+ * Moves model copies left in filesDir by older builds into the disposable
+ * model cache. This uses a rename on the same app storage volume, so the
+ * upgrade can reclaim durable app data without copying another 30 MiB.
+ */
+internal fun migrateLegacyAutomixModelCache(filesDir: java.io.File, cacheDir: java.io.File) {
+    synchronized(automixModelCacheLock) {
+        val modelDirectory = java.io.File(cacheDir, AUTOMIX_MODEL_CACHE_DIRECTORY)
+        listOf(BeatTracker.MODEL_ASSET, VocalTracker.MODEL_ASSET).forEach { name ->
+            val legacy = java.io.File(filesDir, name)
+            if (!legacy.isFile || legacy.length() == 0L) return@forEach
+
+            val cached = java.io.File(modelDirectory, name)
+            if (cached.isFile && cached.length() > 0L) {
+                legacy.delete()
+                return@forEach
+            }
+            if (!modelDirectory.isDirectory && !modelDirectory.mkdirs()) return@forEach
+            if (cached.exists() && !cached.delete()) return@forEach
+
+            if (!legacy.renameTo(cached)) {
+                val temporary = java.io.File(modelDirectory, ".$name.migrate.tmp")
+                if (temporary.exists() && !temporary.delete()) return@forEach
+                runCatching {
+                    legacy.copyTo(temporary, overwrite = true)
+                    if (temporary.length() == legacy.length() &&
+                        temporary.length() > 0L &&
+                        temporary.renameTo(cached)
+                    ) {
+                        legacy.delete()
+                    } else {
+                        temporary.delete()
+                    }
+                }.onFailure { temporary.delete() }
+            }
+        }
+        // Remove leftover partial files from a process that was stopped during extraction.
+        if (modelDirectory.isDirectory) {
+            modelDirectory.listFiles()
+                ?.filter { it.isFile && it.name.endsWith(".tmp") }
+                ?.forEach { it.delete() }
+        }
+        // This model was retired before the current beat tracker and cannot be
+        // used by any current analysis session.
+        java.io.File(filesDir, BeatTracker.RETIRED_MODEL_ASSET).delete()
+    }
+}
+
 /**
  * Produces [TrackAnalysis] for tracks that are about to be mixed, and hands it
  * to [TransitionPlanner].
@@ -66,10 +126,7 @@ import java.util.Locale
 class TrackAnalyzer(private val context: Context, private val cache: AudioCache) {
 
     private val tracker = BeatTracker(
-        modelPath = {
-            java.io.File(context.filesDir, BeatTracker.RETIRED_MODEL_ASSET).delete()
-            unpackedAsset(BeatTracker.MODEL_ASSET)
-        },
+        modelPath = { unpackedAsset(BeatTracker.MODEL_ASSET) },
         inferenceThreads = { AppSettings.automixPerformanceMode.value.inferenceThreads },
     )
     private val vocals = VocalTracker(
@@ -85,21 +142,69 @@ class TrackAnalyzer(private val context: Context, private val cache: AudioCache)
     }
 
     /**
-     * A model's weights on disk, unpacked from assets the first time they are
-     * asked for.
+     * A model's weights, unpacked lazily from APK assets into cacheDir.
      *
      * ONNX Runtime wants a file it can memory-map, and an asset inside the APK
-     * is not one. This used to live inside each tracker; it moved out when they
-     * became shared with the desktop build, which unpacks from the jar instead.
+     * is not one. The unpacked copy is disposable because the original ships
+     * with the app and can always be recreated.
+     *
+     * Keep derived model copies in cacheDir rather than filesDir. They are
+     * shipped in the APK, can always be unpacked again, and should not become
+     * durable app data. This also lets Android reclaim the 30+ MiB when the
+     * device is under storage pressure.
+     *
+     * Existing installs may still have the previous filesDir copies. Move those
+     * into the cache directory when possible, so the migration does not need a
+     * second full copy of the models. New extraction uses a temporary file and
+     * rename so an interrupted copy is never mistaken for a complete model.
      */
-    private fun unpackedAsset(name: String): String {
-        val file = java.io.File(context.filesDir, name)
-        if (!file.exists() || file.length() == 0L) {
-            context.assets.open(name).use { input ->
-                file.outputStream().use { output -> input.copyTo(output) }
+    private fun unpackedAsset(name: String): String = synchronized(automixModelCacheLock) {
+        migrateLegacyAutomixModelCache(context.filesDir, context.cacheDir)
+        val modelDirectory = java.io.File(context.cacheDir, AUTOMIX_MODEL_CACHE_DIRECTORY)
+        if (!modelDirectory.isDirectory && !modelDirectory.mkdirs()) {
+            throw java.io.IOException("Could not create Automix model cache")
+        }
+
+        val file = java.io.File(modelDirectory, name)
+        val legacyFile = java.io.File(context.filesDir, name)
+        if (!file.isFile || file.length() == 0L) {
+            // A failed cross-directory migration should not break playback:
+            // keep using the complete legacy file and retry migration next launch.
+            if (legacyFile.isFile && legacyFile.length() > 0L) {
+                return@synchronized legacyFile.absolutePath
+            } else {
+                val temporary = java.io.File(modelDirectory, ".$name.tmp")
+                if (temporary.exists() && !temporary.delete()) {
+                    throw java.io.IOException("Could not remove incomplete Automix model copy")
+                }
+                try {
+                    context.assets.open(name).use { input ->
+                        temporary.outputStream().buffered().use { output -> input.copyTo(output) }
+                    }
+                    if (!temporary.isFile || temporary.length() == 0L) {
+                        throw java.io.IOException("Automix model asset is empty")
+                    }
+                    if (file.exists() && !file.delete()) {
+                        throw java.io.IOException("Could not replace incomplete Automix model")
+                    }
+                    if (!temporary.renameTo(file)) {
+                        throw java.io.IOException("Could not finalize Automix model copy")
+                    }
+                } catch (error: Throwable) {
+                    temporary.delete()
+                    throw error
+                }
             }
         }
-        return file.absolutePath
+
+        if (!file.isFile || file.length() == 0L) {
+            throw java.io.IOException("Automix model is unavailable: $name")
+        }
+        // The old beat model is no longer used. Delete it on the same migration
+        // path rather than waiting for a separate tracker callback.
+        legacyFile.delete()
+        java.io.File(context.filesDir, BeatTracker.RETIRED_MODEL_ASSET).delete()
+        file.absolutePath
     }
 
     /**

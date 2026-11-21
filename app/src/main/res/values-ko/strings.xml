@@ -1382,4 +1382,5 @@
     <string name="smart_playlist_sort_listened">청취 시간</string>
     <string name="smart_playlist_editor_description">이 목록은 청취 기록을 바탕으로 생성되며 청취 통계가 저장될 때 업데이트됩니다. 일반 플레이리스트는 변경하지 않습니다.</string>
     <string name="smart_playlist_max_reached">사용자 지정 스마트 플레이리스트는 최대 20개까지 만들 수 있습니다.</string>
+    <string name="storage_automix_models">Automix AI 모델(필요할 때 다시 생성됨)</string>
 </resources>

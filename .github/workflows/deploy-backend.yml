@@ -30,7 +30,7 @@ jobs:
   deploy:
     needs: test
     # Enable only after the VM's forced-command hook has been migrated from the upstream BitChord checkout.
-    if: github.event_name != 'pull_request' && vars.MUSIKKU_ORACLE_DEPLOY_ENABLED == 'true'
+    if: github.event_name != 'pull_request' && vars.MUSIKKU_ORACLE_HOOK_MIGRATED == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Deploy to the Oracle VM

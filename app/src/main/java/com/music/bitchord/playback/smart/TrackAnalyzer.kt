@@ -86,7 +86,8 @@ private val automixModelCacheLock = Any()
 /** Compute Git's canonical blob SHA-1 without loading the model into memory. */
 internal fun automixModelGitBlobSha1(file: java.io.File): String {
     val digest = java.security.MessageDigest.getInstance("SHA-1")
-    digest.update("blob ${file.length()}\\u0000".toByteArray(Charsets.UTF_8))
+    digest.update("blob ${file.length()}".toByteArray(Charsets.UTF_8))
+    digest.update(0.toByte())
     file.inputStream().buffered().use { input ->
         val buffer = ByteArray(64 * 1024)
         while (true) {

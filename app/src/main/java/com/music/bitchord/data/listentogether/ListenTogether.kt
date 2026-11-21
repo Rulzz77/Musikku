@@ -266,7 +266,8 @@ object ListenTogether {
     fun parseAndNormalizeServerUrl(raw: String): ServerUrlValidationResult =
         parseAndNormalizeServerUrl(
             raw,
-            allowCleartext = BuildConfig.APPLICATION_ID == "id.musikku.dev",
+            allowCleartext = BuildConfig.APPLICATION_ID == "id.musikku.dev" ||
+                BuildConfig.APPLICATION_ID == "com.dev.bitchord.tv",
         )
 
     /** Testable policy seam; production callers use the manifest-matched overload above. */

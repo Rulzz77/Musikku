@@ -22,7 +22,14 @@ class LocalizationTest {
 
     @Test
     fun indonesianSharedComposeResourcesContainsEveryBaseKey() {
-        val projectRoot = File(".").canonicalFile
+        val workingDirectory = File(".").canonicalFile
+        // Gradle may run this test with either the repository root or app/ as
+        // its working directory; sharedUi is a sibling of app, never below it.
+        val projectRoot = if (File(workingDirectory, "sharedUi").isDirectory) {
+            workingDirectory
+        } else {
+            workingDirectory.parentFile ?: workingDirectory
+        }
         val resourceRoot = File(projectRoot, "sharedUi/src/commonMain/composeResources")
         val baseFile = File(resourceRoot, "values/strings.xml")
         val indonesianFile = File(resourceRoot, "values-id/strings.xml")

@@ -1476,4 +1476,8 @@
     <string name="show_total_duration_subtitle">Mostra la durata completa del brano invece del tempo rimanente</string>
     <string name="hide_lyrics_preview">Nascondi anteprima dei testi</string>
     <string name="hide_lyrics_preview_subtitle">Nasconde la riga del testo che scorre nel lettore; il pannello completo dei testi resta disponibile</string>
+    <string name="sleep_timer_fade_out">Abbassa il volume prima di fermare</string>
+    <string name="sleep_timer_fade_out_subtitle">Abbassa gradualmente il volume negli ultimi 30 secondi del timer di spegnimento</string>
+    <string name="download_liked_songs">Scarica i brani che ti piacciono</string>
+    <string name="download_liked_songs_subtitle">Scarica la tua musica preferita e ogni brano che aggiungerai ai preferiti da ora in poi</string>
 </resources>

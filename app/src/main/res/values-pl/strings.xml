@@ -1590,4 +1590,10 @@
     <string name="queue_playlist_added">Dodano %1$d z %2$d utworów</string>
     <string name="queue_playlist_partial">%1$s (%2$d niezgodnych, %3$d już obecnych, %4$d nieudanych)</string>
     <string name="queue_like_sign_in">Zaloguj się, aby polubić utwory online</string>
+
+    <!-- AutoMix artwork transitions -->
+    <string name="automix_art_transition">Przejście okładek</string>
+    <string name="automix_art_transition_subtitle">Płynnie łączy okładki kolejnych utworów podczas AutoMix.</string>
+    <string name="automix_mini_art_transition">Przejście okładek w miniodtwarzaczu</string>
+    <string name="automix_mini_art_transition_subtitle">Pokazuje przejścia okładek w miniodtwarzaczu podczas AutoMix.</string>
 </resources>

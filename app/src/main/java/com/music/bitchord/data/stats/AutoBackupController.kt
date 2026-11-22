@@ -107,7 +107,7 @@ object AutoBackupController {
             schedule(context, runImmediately = true)
         } else {
             val manager = WorkManager.getInstance(context)
-            manager.cancelUniquePeriodicWork(PERIODIC_WORK)
+            manager.cancelUniqueWork(PERIODIC_WORK)
             manager.cancelUniqueWork(ONE_TIME_WORK)
         }
     }

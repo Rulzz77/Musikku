@@ -28,6 +28,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import coil3.compose.LocalPlatformContext
+import coil3.PlatformContext
 import com.music.bitchord.ui.graphics.FADE_CURVE_STOPS
 import com.music.bitchord.ui.graphics.forPixelAccess
 import com.music.bitchord.ui.graphics.paletteSwatches
@@ -317,6 +318,29 @@ fun rememberArtworkColors(imageUrl: String?, canvasFrame: ImageBitmap? = null): 
         val colors = withContext(Dispatchers.Default) { paletteOf(frame) }
         palette = MeshPalette(colors)
     }
+    return palette
+}
+
+// A small bounded cache keeps the AutoMix preparation pass from quantising
+// the same artwork again when its prepared cover is handed to the player.
+private val artworkPaletteCache = object : LinkedHashMap<String, MeshPalette>(0, 0.75f, true) {
+    override fun removeEldestEntry(eldest: Map.Entry<String, MeshPalette>) = size > 8
+}
+
+internal fun cachedArtworkPalette(imageUrl: String?): MeshPalette? =
+    imageUrl?.let(artworkPaletteCache::get)
+
+internal suspend fun prefetchArtworkPalette(context: PlatformContext, imageUrl: String): MeshPalette? {
+    cachedArtworkPalette(imageUrl)?.let { return it }
+    val request = ImageRequest.Builder(context)
+        .data(imageUrl)
+        .size(128)
+        .forPixelAccess()
+        .build()
+    val result = SingletonImageLoader.get(context).execute(request)
+    val bitmap = (result as? SuccessResult)?.image?.toImageBitmap() ?: return null
+    val palette = withContext(Dispatchers.Default) { MeshPalette(paletteOf(bitmap)) }
+    artworkPaletteCache[imageUrl] = palette
     return palette
 }
 

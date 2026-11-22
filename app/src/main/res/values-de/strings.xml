@@ -1537,4 +1537,8 @@
     <string name="show_total_duration_subtitle">Zeigt die gesamte Länge des Songs statt der verbleibenden Zeit</string>
     <string name="hide_lyrics_preview">Textvorschau ausblenden</string>
     <string name="hide_lyrics_preview_subtitle">Blendet die laufende Liedtextzeile im Player aus; die vollständige Liedtextansicht bleibt verfügbar</string>
+    <string name="sleep_timer_fade_out">Vor dem Stoppen leiser werden</string>
+    <string name="sleep_timer_fade_out_subtitle">Verringert die Lautstärke während der letzten 30 Sekunden des Sleep-Timers schrittweise</string>
+    <string name="download_liked_songs">Gelikte Songs herunterladen</string>
+    <string name="download_liked_songs_subtitle">Lädt deine Lieblingsmusik und alle Songs herunter, die du ab jetzt likest</string>
 </resources>

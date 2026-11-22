@@ -1542,4 +1542,8 @@
     <string name="show_total_duration_subtitle">מציג את אורך השיר המלא במקום את הזמן שנותר</string>
     <string name="hide_lyrics_preview">הסתרת תצוגה מקדימה של מילים</string>
     <string name="hide_lyrics_preview_subtitle">מסתיר את שורת המילים הנגללת בנגן; חלונית המילים המלאה נשארת זמינה</string>
+    <string name="sleep_timer_fade_out">הנמכת עוצמת הקול לפני העצירה</string>
+    <string name="sleep_timer_fade_out_subtitle">מנמיך בהדרגה את עוצמת הקול ב־30 השניות האחרונות של טיימר השינה</string>
+    <string name="download_liked_songs">הורדת שירים שאהבת</string>
+    <string name="download_liked_songs_subtitle">מוריד את המוזיקה שאהבת וכל שיר שתאהב מעכשיו והלאה</string>
 </resources>

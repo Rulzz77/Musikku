@@ -1528,4 +1528,10 @@
     <string name="queue_playlist_added">%2$d 曲中 %1$d 曲を追加しました</string>
     <string name="queue_playlist_partial">%1$s（互換性なし %2$d、登録済み %3$d、失敗 %4$d）</string>
     <string name="queue_like_sign_in">オンラインの曲に高評価するにはログインしてください</string>
+
+    <!-- AutoMix artwork transitions -->
+    <string name="automix_art_transition">アートワークの切り替え</string>
+    <string name="automix_art_transition_subtitle">AutoMix中にトラック間のカバーアートを滑らかに切り替えます。</string>
+    <string name="automix_mini_art_transition">ミニプレーヤーのアートワーク切り替え</string>
+    <string name="automix_mini_art_transition_subtitle">AutoMix中にミニプレーヤーでアートワークの切り替えを表示します。</string>
 </resources>

@@ -1555,4 +1555,10 @@
     <string name="queue_playlist_added">נוספו %1$d מתוך %2$d שירים</string>
     <string name="queue_playlist_partial">%1$s (%2$d לא תואמים, %3$d כבר קיימים, %4$d נכשלו)</string>
     <string name="queue_like_sign_in">יש להתחבר כדי לסמן לייק לשירים מקוונים</string>
+
+    <!-- AutoMix artwork transitions -->
+    <string name="automix_art_transition">מעבר בין עטיפות</string>
+    <string name="automix_art_transition_subtitle">ממזג בצורה חלקה את עטיפות האלבומים במעבר בין שירים במהלך AutoMix.</string>
+    <string name="automix_mini_art_transition">מעבר עטיפות בנגן הממוזער</string>
+    <string name="automix_mini_art_transition_subtitle">מציג מעברי עטיפות בנגן הממוזער במהלך AutoMix.</string>
 </resources>

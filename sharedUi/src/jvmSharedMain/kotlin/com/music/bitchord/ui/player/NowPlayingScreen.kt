@@ -37,6 +37,7 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.awaitVerticalTouchSlopOrCancellation
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.verticalDrag
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
@@ -65,6 +66,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Undo
 import androidx.compose.material.icons.rounded.FastForward
 import androidx.compose.material.icons.rounded.FastRewind
+import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.IosShare
 import androidx.compose.material.icons.rounded.MoreHoriz
@@ -1173,6 +1176,23 @@ fun NowPlayingScreen(
     // way back to the original YouTube rendition. The control keeps its usual
     // action — opening the menu — so the cue teaches rather than surprises.
     var showRevertCue by remember(song.videoId) { mutableStateOf(false) }
+    // A double tap on the cover uses the same like callback as the star beside
+    // the credits. The short heart burst makes the gesture visible without
+    // changing the artwork itself or competing with the player's swipe gestures.
+    var coverLikeBurstToken by remember(song.videoId) { mutableIntStateOf(0) }
+    var showCoverLikeBurst by remember(song.videoId) { mutableStateOf(false) }
+    var coverLikeBurstFilled by remember(song.videoId) { mutableStateOf(true) }
+    val coverLikeBurstProgress = remember(song.videoId) { Animatable(1f) }
+    LaunchedEffect(coverLikeBurstToken) {
+        if (coverLikeBurstToken == 0) return@LaunchedEffect
+        showCoverLikeBurst = true
+        coverLikeBurstProgress.snapTo(0f)
+        coverLikeBurstProgress.animateTo(
+            1f,
+            tween(durationMillis = 620, easing = FastOutSlowInEasing),
+        )
+        showCoverLikeBurst = false
+    }
     LaunchedEffect(song.videoId, qualityUpgraded) {
         if (!qualityUpgraded) {
             showRevertCue = false
@@ -3284,6 +3304,41 @@ fun NowPlayingScreen(
                                 // banner included — a source on the surrounding layout
                                 // only captured its mesh backdrop.
                                 .hazeSource(playerHaze)
+                                // The artwork slot is the intentional tap
+                                // target: a double tap likes/unlikes the
+                                // current song, while single taps remain free
+                                // for the player's existing gestures.
+                                .then(
+                                    if (!queueOpen && !lyricsOpen &&
+                                        (signedIn || song.localUri != null)
+                                    ) {
+                                        Modifier.pointerInput(
+                                            song.videoId,
+                                            controlsLocked,
+                                            likeStatus,
+                                            queueOpen,
+                                            lyricsOpen,
+                                        ) {
+                                            detectTapGestures(
+                                                onDoubleTap = {
+                                                    if (controlsLocked) {
+                                                        onBlockedControl()
+                                                    } else {
+                                                        coverLikeBurstFilled = likeStatus != LikeStatus.LIKE
+                                                        onToggleLike()
+                                                        coverLikeBurstToken++
+                                                        haptics.play(
+                                                            if (coverLikeBurstFilled) Haptic.ToggleOn
+                                                            else Haptic.ToggleOff,
+                                                        )
+                                                    }
+                                                },
+                                            )
+                                        }
+                                    } else {
+                                        Modifier
+                                    },
+                                )
                                 .graphicsLayer {
                                     // Hands its opacity to a full-bleed clip as the clip
                                     // takes over, and takes it straight back if there
@@ -3411,9 +3466,9 @@ fun NowPlayingScreen(
                             ) {
                                 if (!art.loaded && !canvasRendered) {
                                     Icon(
-                                        imageVector = BitChordIcons.MusicNote,
+                                        imageVector = Icons.Rounded.FavoriteBorder,
                                         contentDescription = null,
-                                        tint = Color.White.copy(alpha = 0.35f),
+                                        tint = Color(0xFFFF6B91).copy(alpha = 0.58f),
                                         modifier = Modifier
                                             .size(40.dp)
                                             .graphicsLayer {
@@ -3570,6 +3625,32 @@ fun NowPlayingScreen(
                                 ),
                             contentAlignment = Alignment.Center,
                         ) {
+                            // A brief heart confirms the double-tap like action. It
+                            // sits in the real card slot (not the zero-height banner
+                            // layout), so it stays centred on both phone and tablet.
+                            WhileShown({
+                                showCoverLikeBurst && !collapsePastHalf && !queueOpen && !lyricsOpen
+                            }) {
+                                Icon(
+                                    imageVector = if (coverLikeBurstFilled) {
+                                        Icons.Rounded.Favorite
+                                    } else {
+                                        Icons.Rounded.FavoriteBorder
+                                    },
+                                    contentDescription = null,
+                                    tint = Color(0xFFFF4F83),
+                                    modifier = Modifier
+                                        .align(Alignment.Center)
+                                        .size(88.dp)
+                                        .graphicsLayer {
+                                            val progress = coverLikeBurstProgress.value
+                                            val scale = 0.55f + 0.9f * progress
+                                            scaleX = scale
+                                            scaleY = scale
+                                            alpha = 1f - progress
+                                        },
+                                )
+                            }
                             // Measured stats stay on the sleeve's bottom centre. They
                             // fade away with Spotify's lower control deck rather than
                             // following the compact credits to the bottom edge.

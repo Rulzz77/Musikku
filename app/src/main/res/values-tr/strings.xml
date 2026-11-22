@@ -1494,4 +1494,8 @@
     <string name="show_total_duration_subtitle">Kalan süre yerine şarkının tam uzunluğunu gösterir</string>
     <string name="hide_lyrics_preview">Şarkı sözü önizlemesini gizle</string>
     <string name="hide_lyrics_preview_subtitle">Oynatıcıdaki kayan şarkı sözü satırını gizler; tam şarkı sözü paneli kullanılabilir</string>
+    <string name="sleep_timer_fade_out">Durdurmadan önce sesi kıs</string>
+    <string name="sleep_timer_fade_out_subtitle">Uyku zamanlayıcısının son 30 saniyesinde ses düzeyini kademeli olarak azaltır</string>
+    <string name="download_liked_songs">Beğenilen şarkıları indir</string>
+    <string name="download_liked_songs_subtitle">Beğendiğin müzikleri ve bundan sonra beğeneceğin tüm şarkıları indirir</string>
 </resources>

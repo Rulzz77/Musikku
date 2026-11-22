@@ -128,7 +128,9 @@ class AndroidPlayerHost(context: Context) : PlayerHost {
     override suspend fun canvasFor(song: Song): CanvasArtwork? = CanvasRepository.canvasFor(song)
 
     override suspend fun bestPartMs(song: Song): Long? =
-        com.music.bitchord.ui.replay.year.BestParts.startFor(app, song).startMs
+        com.music.bitchord.ui.replay.year.BestParts.startFor(app, song)
+            .takeIf { it.source != com.music.bitchord.ui.replay.year.BestPartStart.Source.FALLBACK }
+            ?.startMs
 
     @Composable
     override fun CanvasVideo(spec: CanvasVideoSpec, modifier: Modifier) = AndroidCanvasVideo(spec, modifier)

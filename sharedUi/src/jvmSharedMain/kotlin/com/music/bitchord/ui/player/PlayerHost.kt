@@ -58,6 +58,9 @@ interface PlayerHost {
     /** Looks a Canvas up for [song]; null is the normal answer. */
     suspend fun canvasFor(song: Song): CanvasArtwork?
 
+    /** A known high-interest section, when a source can identify one. */
+    suspend fun bestPartMs(song: Song): Long? = null
+
     /** The looping clip over the cover, decoded however this platform decodes video. */
     @Composable
     fun CanvasVideo(spec: CanvasVideoSpec, modifier: Modifier)

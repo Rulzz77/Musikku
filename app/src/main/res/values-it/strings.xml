@@ -1472,4 +1472,8 @@
     <string name="smart_playlist_editor_description">Queste liste vengono create dalla cronologia degli ascolti e si aggiornano quando vengono salvate le statistiche. Non modificano le playlist normali.</string>
     <string name="smart_playlist_max_reached">Puoi creare fino a 20 Smart Playlist personalizzate.</string>
     <string name="storage_automix_models">Modelli IA di Automix (ricreati quando necessario)</string>
+    <string name="show_total_duration">Mostra durata totale</string>
+    <string name="show_total_duration_subtitle">Mostra la durata completa del brano invece del tempo rimanente</string>
+    <string name="hide_lyrics_preview">Nascondi anteprima dei testi</string>
+    <string name="hide_lyrics_preview_subtitle">Nasconde la riga del testo che scorre nel lettore; il pannello completo dei testi resta disponibile</string>
 </resources>

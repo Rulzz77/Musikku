@@ -729,6 +729,8 @@
     <string name="signed_in_as">Signed in as %1$s</string>
     <string name="signing_in">Signing in…</string>
     <string name="sleep_timer">Sleep timer</string>
+    <string name="sleep_timer_fade_out">Fade out before stopping</string>
+    <string name="sleep_timer_fade_out_subtitle">Gradually lower the volume during the final 30 seconds of the sleep timer</string>
     <string name="sleep_timer_custom">Custom</string>
     <string name="start_sleep_timer">Start timer</string>
     <string name="sources_no_lossless">No enabled source can provide lossless audio. Add an addon to play lossless files without transcoding.</string>

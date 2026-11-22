@@ -1383,4 +1383,8 @@
     <string name="smart_playlist_editor_description">이 목록은 청취 기록을 바탕으로 생성되며 청취 통계가 저장될 때 업데이트됩니다. 일반 플레이리스트는 변경하지 않습니다.</string>
     <string name="smart_playlist_max_reached">사용자 지정 스마트 플레이리스트는 최대 20개까지 만들 수 있습니다.</string>
     <string name="storage_automix_models">Automix AI 모델(필요할 때 다시 생성됨)</string>
+    <string name="show_total_duration">전체 재생 시간 표시</string>
+    <string name="show_total_duration_subtitle">남은 시간 대신 곡의 전체 길이를 표시합니다</string>
+    <string name="hide_lyrics_preview">가사 미리 보기 숨기기</string>
+    <string name="hide_lyrics_preview_subtitle">플레이어에서 스크롤되는 가사 줄을 숨기며 전체 가사 패널은 계속 사용할 수 있습니다</string>
 </resources>

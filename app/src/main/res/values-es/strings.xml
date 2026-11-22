@@ -1522,4 +1522,10 @@
     <string name="queue_playlist_added">Se añadieron %1$d de %2$d canciones</string>
     <string name="queue_playlist_partial">%1$s (%2$d incompatibles, %3$d ya presentes, %4$d fallidas)</string>
     <string name="queue_like_sign_in">Inicia sesión para indicar que te gustan las canciones en línea</string>
+
+    <!-- AutoMix artwork transitions -->
+    <string name="automix_art_transition">Transición de portadas</string>
+    <string name="automix_art_transition_subtitle">Mezcla suavemente las portadas entre canciones durante AutoMix.</string>
+    <string name="automix_mini_art_transition">Transición de portada del minirreproductor</string>
+    <string name="automix_mini_art_transition_subtitle">Muestra las transiciones de portada en el minirreproductor durante AutoMix.</string>
 </resources>

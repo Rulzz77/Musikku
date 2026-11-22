@@ -1454,4 +1454,8 @@
     <string name="show_total_duration_subtitle">Hiển thị độ dài đầy đủ của bài hát thay vì thời gian còn lại</string>
     <string name="hide_lyrics_preview">Ẩn bản xem trước lời bài hát</string>
     <string name="hide_lyrics_preview_subtitle">Ẩn dòng lời bài hát đang chạy trong trình phát; bảng lời bài hát đầy đủ vẫn khả dụng</string>
+    <string name="sleep_timer_fade_out">Giảm âm lượng trước khi dừng</string>
+    <string name="sleep_timer_fade_out_subtitle">Giảm âm lượng từ từ trong 30 giây cuối của hẹn giờ ngủ</string>
+    <string name="download_liked_songs">Tải bài hát đã thích</string>
+    <string name="download_liked_songs_subtitle">Tải nhạc bạn đã thích và mọi bài hát bạn thích từ bây giờ</string>
 </resources>

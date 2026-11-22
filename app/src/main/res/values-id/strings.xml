@@ -1525,4 +1525,10 @@
     <string name="queue_playlist_added">%1$d dari %2$d lagu ditambahkan</string>
     <string name="queue_playlist_partial">%1$s (%2$d tidak kompatibel, %3$d sudah ada, %4$d gagal)</string>
     <string name="queue_like_sign_in">Masuk untuk menyukai lagu online</string>
+
+    <!-- AutoMix artwork transitions -->
+    <string name="automix_art_transition">Transisi sampul</string>
+    <string name="automix_art_transition_subtitle">Memadukan sampul secara halus saat berpindah lagu selama AutoMix.</string>
+    <string name="automix_mini_art_transition">Transisi sampul pemutar mini</string>
+    <string name="automix_mini_art_transition_subtitle">Menampilkan transisi sampul di pemutar mini selama AutoMix.</string>
 </resources>

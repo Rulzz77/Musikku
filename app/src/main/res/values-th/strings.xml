@@ -1533,4 +1533,10 @@
     <string name="queue_playlist_added">เพิ่มแล้ว %1$d จาก %2$d เพลง</string>
     <string name="queue_playlist_partial">%1$s (ไม่รองรับ %2$d, มีอยู่แล้ว %3$d, ล้มเหลว %4$d)</string>
     <string name="queue_like_sign_in">ลงชื่อเข้าใช้เพื่อกดถูกใจเพลงออนไลน์</string>
+
+    <!-- AutoMix artwork transitions -->
+    <string name="automix_art_transition">การเปลี่ยนภาพปก</string>
+    <string name="automix_art_transition_subtitle">ผสมภาพปกระหว่างเพลงอย่างนุ่มนวลระหว่างใช้ AutoMix</string>
+    <string name="automix_mini_art_transition">การเปลี่ยนภาพปกในมินิเพลเยอร์</string>
+    <string name="automix_mini_art_transition_subtitle">แสดงการเปลี่ยนภาพปกในมินิเพลเยอร์ระหว่างใช้ AutoMix</string>
 </resources>

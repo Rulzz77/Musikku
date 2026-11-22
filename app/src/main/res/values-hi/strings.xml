@@ -1533,4 +1533,27 @@
     <string name="smart_playlist_editor_description">ये सूचियाँ आपके सुनने के इतिहास से बनती हैं और सुनने के आँकड़े सहेजे जाने पर अपडेट होती हैं। ये आपकी सामान्य प्लेलिस्ट में बदलाव नहीं करतीं।</string>
     <string name="smart_playlist_max_reached">आप अधिकतम 20 कस्टम स्मार्ट प्लेलिस्ट बना सकते हैं।</string>
     <string name="storage_automix_models">ऑटोमिक्स AI मॉडल (ज़रूरत पड़ने पर फिर से बनाए जाते हैं)</string>
+    <string name="show_total_duration">कुल अवधि दिखाएँ</string>
+    <string name="show_total_duration_subtitle">बचे हुए समय के बजाय गाने की पूरी अवधि दिखाता है</string>
+    <string name="hide_lyrics_preview">गीत के पूर्वावलोकन को छिपाएँ</string>
+    <string name="hide_lyrics_preview_subtitle">प्लेयर में चलती हुई गीत-पंक्ति छिपाता है; पूरा गीत-पैनल उपलब्ध रहता है</string>
+    <string name="sleep_timer_fade_out">रोकने से पहले आवाज़ धीमी करें</string>
+    <string name="sleep_timer_fade_out_subtitle">स्लीप टाइमर के आख़िरी 30 सेकंड में आवाज़ धीरे-धीरे कम करता है</string>
+    <string name="download_liked_songs">पसंद किए गए गाने डाउनलोड करें</string>
+    <string name="download_liked_songs_subtitle">आपके पसंदीदा संगीत और अब से आपके पसंद किए जाने वाले हर गाने को डाउनलोड करता है</string>
+    <plurals name="queue_removed_count"><item quantity="one">%1$d गाना हटाया गया</item><item quantity="other">%1$d गाने हटाए गए</item></plurals>
+    <string name="queue_removed_song">%1$s हटाया गया</string>
+    <string name="queue_undo_action">पहले जैसा करें</string>
+    <string name="queue_cleared_section">%1$s खाली किया गया</string>
+    <string name="next_in_queue">कतार में आगे</string>
+    <string name="queue_selected_count">%1$d चुने गए</string>
+    <string name="queue_playlist_added">%2$d में से %1$d गाने जोड़े गए</string>
+    <string name="queue_playlist_partial">%1$s (%2$d असंगत, %3$d पहले से मौजूद, %4$d विफल)</string>
+    <string name="queue_like_sign_in">ऑनलाइन गाने पसंद करने के लिए साइन इन करें</string>
+
+    <!-- AutoMix artwork transitions -->
+    <string name="automix_art_transition">कवर ट्रांज़िशन</string>
+    <string name="automix_art_transition_subtitle">AutoMix के दौरान ट्रैक बदलने पर कवर आर्ट को सहजता से मिलाता है।</string>
+    <string name="automix_mini_art_transition">मिनी प्लेयर कवर ट्रांज़िशन</string>
+    <string name="automix_mini_art_transition_subtitle">AutoMix के दौरान मिनी प्लेयर में कवर आर्ट ट्रांज़िशन दिखाता है।</string>
 </resources>

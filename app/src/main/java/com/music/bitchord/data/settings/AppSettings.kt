@@ -13,9 +13,12 @@ import com.music.bitchord.auth.AuthStore
 import com.music.bitchord.data.canvas.SpotifyToken
 import com.music.bitchord.data.lyrics.LyricsSource
 import com.music.bitchord.data.sources.SourceKind
+import com.music.bitchord.playback.AutoMixVisualFeed
+import com.music.bitchord.ui.player.AutoMixArtworkPreferences
 import com.music.bitchord.playback.EqLayout
 import com.music.bitchord.playback.EqualizerPreset
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 
 /**
@@ -250,6 +253,14 @@ object AppSettings {
      */
     val syncDownloadedPlaylists = MutableStateFlow(false)
 
+    /**
+     * Keep every liked song downloaded: the account's Liked Music is fetched
+     * whole once, then each new like follows it. Off by default for the same
+     * reason as [syncDownloadedPlaylists], which does the work for it — see
+     * [com.music.bitchord.download.PlaylistSync].
+     */
+    val downloadLikedSongs = MutableStateFlow(false)
+
     /** Whether the active network charges for data. `null` while offline. */
     val meteredConnection = MutableStateFlow<Boolean?>(null)
 
@@ -262,6 +273,9 @@ object AppSettings {
 
     val crossfadeSeconds = MutableStateFlow(0)
 
+    /** Gradually lower the volume during the final 30 seconds of a sleep timer. */
+    val sleepTimerFadeOut = MutableStateFlow(true)
+
     /**
      * Lets Automix's analyzer decide the transition's timing and length
      * from each track's tempo, energy and structure, replacing the fixed
@@ -273,6 +287,8 @@ object AppSettings {
      * See [com.music.bitchord.playback.smart.TransitionPlanner].
      */
     val smartFadeEnabled = MutableStateFlow(false)
+    private val _autoMixArtwork = MutableStateFlow(AutoMixArtworkPreferences())
+    val autoMixArtwork = _autoMixArtwork.asStateFlow()
 
     /** The CPU budget used by Beat This! and vocal analysis for Automix. */
     val automixPerformanceMode = MutableStateFlow(AutomixPerformanceMode.BALANCED)
@@ -457,6 +473,9 @@ object AppSettings {
     /** Hides the "Playing from" / "Played by" caption at the top of the main player. */
     val hideSongStatus = MutableStateFlow(false)
 
+    /** Hides the lyrics preview strip without disabling the full lyrics panel. */
+    val hideLyricsPreview = MutableStateFlow(false)
+
     val showQueueHistory = MutableStateFlow(false)
 
     /** Swiping a song row plays it next instead of adding it to the end of the queue. */
@@ -591,6 +610,9 @@ object AppSettings {
      * default, the framed sleeve being the page's own look.
      */
     val fullBleedDetailArtwork = MutableStateFlow(false)
+
+    /** Shows the track's total duration at the end of the player scrubber. */
+    val showTotalDuration = MutableStateFlow(false)
 
     /**
      * What the main player stands on below the artwork.
@@ -971,8 +993,14 @@ object AppSettings {
         wifiOnlyDownloads.value = prefs.getBoolean(KEY_WIFI_ONLY_DOWNLOADS, true)
         exportDownloads.value = prefs.getBoolean(KEY_EXPORT_DOWNLOADS, false)
         syncDownloadedPlaylists.value = prefs.getBoolean(KEY_SYNC_DOWNLOADED_PLAYLISTS, false)
+        downloadLikedSongs.value = prefs.getBoolean(KEY_DOWNLOAD_LIKED_SONGS, false)
         crossfadeSeconds.value = prefs.getInt(KEY_CROSSFADE, 0)
         smartFadeEnabled.value = prefs.getBoolean(KEY_SMART_FADE, false)
+        _autoMixArtwork.value = AutoMixArtworkPreferences(
+            artTransition = prefs.getBoolean(KEY_AUTOMIX_ART_TRANSITION, false),
+            miniPlayerTransition = prefs.getBoolean(KEY_AUTOMIX_MINI_ART_TRANSITION, false),
+        )
+        sleepTimerFadeOut.value = prefs.getBoolean(KEY_SLEEP_TIMER_FADE_OUT, true)
         automixPerformanceMode.value = runCatching {
             AutomixPerformanceMode.valueOf(
                 prefs.getString(KEY_AUTOMIX_PERFORMANCE_MODE, null) ?: AutomixPerformanceMode.BALANCED.name,
@@ -1032,6 +1060,7 @@ object AppSettings {
         hideVolumeBar.value = prefs.getBoolean(KEY_HIDE_VOLUME_BAR, false)
         hideStatusBarInPlayer.value = prefs.getBoolean(KEY_HIDE_STATUS_BAR_IN_PLAYER, false)
         hideSongStatus.value = prefs.getBoolean(KEY_HIDE_SONG_STATUS, false)
+        hideLyricsPreview.value = prefs.getBoolean(KEY_HIDE_LYRICS_PREVIEW, false)
         showQueueHistory.value = prefs.getBoolean(KEY_SHOW_QUEUE_HISTORY, false)
         swipeToPlayNext.value = prefs.getBoolean(KEY_SWIPE_TO_PLAY_NEXT, false)
         dontRepeatSuggestions.value = prefs.getBoolean(KEY_DONT_REPEAT_SUGGESTIONS, false)
@@ -1064,6 +1093,7 @@ object AppSettings {
         signatureApiUrl.value = normalizeSignatureApiUrl(prefs.getString(KEY_SIGNATURE_API_URL, "").orEmpty())
         fullBleedArtwork.value = prefs.getBoolean(KEY_FULL_BLEED_ARTWORK, true)
         fullBleedDetailArtwork.value = prefs.getBoolean(KEY_FULL_BLEED_DETAIL_ARTWORK, false)
+        showTotalDuration.value = prefs.getBoolean(KEY_SHOW_TOTAL_DURATION, false)
         // The old legacy mesh switch answers until a theme has been picked.
         playerTheme.value = runCatching {
             PlayerTheme.valueOf(prefs.getString(KEY_PLAYER_THEME, null).orEmpty())
@@ -1295,8 +1325,45 @@ object AppSettings {
     }
 
     fun setSmartFadeEnabled(value: Boolean) {
+        if (smartFadeEnabled.value != value) {
+            val previous = _autoMixArtwork.value
+            _autoMixArtwork.value = previous.copy(
+                skipArtworkThrough = artworkCutoff(previous.skipArtworkThrough),
+                skipMiniThrough = artworkCutoff(previous.skipMiniThrough),
+            )
+        }
         smartFadeEnabled.value = value
         prefs.edit().putBoolean(KEY_SMART_FADE, value).apply()
+    }
+
+    fun setAutoMixArtTransition(value: Boolean) {
+        val previous = _autoMixArtwork.value
+        if (previous.artTransition == value) return
+        _autoMixArtwork.value = previous.copy(
+            artTransition = value,
+            skipArtworkThrough = artworkCutoff(previous.skipArtworkThrough),
+        )
+        prefs.edit().putBoolean(KEY_AUTOMIX_ART_TRANSITION, value).apply()
+    }
+
+    fun setAutoMixMiniPlayerTransition(value: Boolean) {
+        val previous = _autoMixArtwork.value
+        if (previous.miniPlayerTransition == value) return
+        _autoMixArtwork.value = previous.copy(
+            miniPlayerTransition = value,
+            skipMiniThrough = artworkCutoff(previous.skipMiniThrough),
+        )
+        prefs.edit().putBoolean(KEY_AUTOMIX_MINI_ART_TRANSITION, value).apply()
+    }
+
+    // At either edge, skip the generation already in flight. Even a rapid
+    // off/on round trip cannot revive artwork on a renderer just mounting.
+    private fun artworkCutoff(previous: Long): Long =
+        maxOf(previous, AutoMixVisualFeed.state.value?.generation ?: 0L)
+
+    fun setSleepTimerFadeOut(value: Boolean) {
+        sleepTimerFadeOut.value = value
+        prefs.edit().putBoolean(KEY_SLEEP_TIMER_FADE_OUT, value).apply()
     }
 
     fun setAutomixPerformanceMode(value: AutomixPerformanceMode) {
@@ -1449,6 +1516,11 @@ object AppSettings {
     fun setHideSongStatus(value: Boolean) {
         hideSongStatus.value = value
         prefs.edit().putBoolean(KEY_HIDE_SONG_STATUS, value).apply()
+    }
+
+    fun setHideLyricsPreview(value: Boolean) {
+        hideLyricsPreview.value = value
+        prefs.edit().putBoolean(KEY_HIDE_LYRICS_PREVIEW, value).apply()
     }
 
     fun setShowQueueHistory(value: Boolean) {
@@ -1713,6 +1785,11 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_FULL_BLEED_DETAIL_ARTWORK, value).apply()
     }
 
+    fun setShowTotalDuration(value: Boolean) {
+        showTotalDuration.value = value
+        prefs.edit().putBoolean(KEY_SHOW_TOTAL_DURATION, value).apply()
+    }
+
     fun setPlayerTheme(value: PlayerTheme) {
         playerTheme.value = value
         prefs.edit().putString(KEY_PLAYER_THEME, value.name).apply()
@@ -1835,6 +1912,11 @@ object AppSettings {
     fun setSyncDownloadedPlaylists(value: Boolean) {
         syncDownloadedPlaylists.value = value
         prefs.edit().putBoolean(KEY_SYNC_DOWNLOADED_PLAYLISTS, value).apply()
+    }
+
+    fun setDownloadLikedSongs(value: Boolean) {
+        downloadLikedSongs.value = value
+        prefs.edit().putBoolean(KEY_DOWNLOAD_LIKED_SONGS, value).apply()
     }
 
     fun setLastfmPrimaryArtistOnly(value: Boolean) {
@@ -2255,8 +2337,12 @@ object AppSettings {
     private const val KEY_WIFI_ONLY_DOWNLOADS = "wifi_only_downloads"
     private const val KEY_EXPORT_DOWNLOADS = "export_downloads"
     private const val KEY_SYNC_DOWNLOADED_PLAYLISTS = "sync_downloaded_playlists"
+    private const val KEY_DOWNLOAD_LIKED_SONGS = "download_liked_songs"
     private const val KEY_CROSSFADE = "crossfade_seconds"
     private const val KEY_SMART_FADE = "smart_fade_enabled"
+    private const val KEY_AUTOMIX_ART_TRANSITION = "automix_art_transition"
+    private const val KEY_AUTOMIX_MINI_ART_TRANSITION = "automix_mini_art_transition"
+    private const val KEY_SLEEP_TIMER_FADE_OUT = "sleep_timer_fade_out"
     private const val KEY_AUTOMIX_PERFORMANCE_MODE = "automix_performance_mode"
     private const val KEY_SKIP_SILENCE = "skip_silence"
     private const val KEY_OUTPUT_PCM_MODE = "output_pcm_mode"
@@ -2294,6 +2380,7 @@ object AppSettings {
     private const val KEY_HIDE_VOLUME_BAR = "hide_volume_bar"
     private const val KEY_HIDE_STATUS_BAR_IN_PLAYER = "hide_status_bar_in_player"
     private const val KEY_HIDE_SONG_STATUS = "hide_song_status"
+    private const val KEY_HIDE_LYRICS_PREVIEW = "hide_lyrics_preview"
     private const val KEY_SHOW_QUEUE_HISTORY = "show_queue_history"
     private const val KEY_SWIPE_TO_PLAY_NEXT = "swipe_to_play_next"
     private const val KEY_DONT_REPEAT_SUGGESTIONS = "dont_repeat_suggestions"
@@ -2320,6 +2407,7 @@ object AppSettings {
     private const val KEY_SIGNATURE_API_URL = "signature_api_url"
     private const val KEY_FULL_BLEED_ARTWORK = "full_bleed_artwork"
     private const val KEY_FULL_BLEED_DETAIL_ARTWORK = "full_bleed_detail_artwork"
+    private const val KEY_SHOW_TOTAL_DURATION = "show_total_duration"
     private const val KEY_PLAYER_THEME = "player_theme"
     private const val KEY_LEGACY_MESH_GRADIENT = "legacy_mesh_gradient"
     private const val KEY_LAST_PLAYER_SCREEN = "last_player_screen"

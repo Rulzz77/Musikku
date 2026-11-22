@@ -1472,4 +1472,27 @@
     <string name="smart_playlist_editor_description">Queste liste vengono create dalla cronologia degli ascolti e si aggiornano quando vengono salvate le statistiche. Non modificano le playlist normali.</string>
     <string name="smart_playlist_max_reached">Puoi creare fino a 20 Smart Playlist personalizzate.</string>
     <string name="storage_automix_models">Modelli IA di Automix (ricreati quando necessario)</string>
+    <string name="show_total_duration">Mostra durata totale</string>
+    <string name="show_total_duration_subtitle">Mostra la durata completa del brano invece del tempo rimanente</string>
+    <string name="hide_lyrics_preview">Nascondi anteprima dei testi</string>
+    <string name="hide_lyrics_preview_subtitle">Nasconde la riga del testo che scorre nel lettore; il pannello completo dei testi resta disponibile</string>
+    <string name="sleep_timer_fade_out">Abbassa il volume prima di fermare</string>
+    <string name="sleep_timer_fade_out_subtitle">Abbassa gradualmente il volume negli ultimi 30 secondi del timer di spegnimento</string>
+    <string name="download_liked_songs">Scarica i brani che ti piacciono</string>
+    <string name="download_liked_songs_subtitle">Scarica la tua musica preferita e ogni brano che aggiungerai ai preferiti da ora in poi</string>
+    <plurals name="queue_removed_count"><item quantity="one">Rimosso %1$d brano</item><item quantity="other">Rimossi %1$d brani</item></plurals>
+    <string name="queue_removed_song">Rimosso %1$s</string>
+    <string name="queue_undo_action">Annulla</string>
+    <string name="queue_cleared_section">%1$s svuotata</string>
+    <string name="next_in_queue">In coda</string>
+    <string name="queue_selected_count">%1$d selezionati</string>
+    <string name="queue_playlist_added">Aggiunti %1$d brani su %2$d</string>
+    <string name="queue_playlist_partial">%1$s (%2$d incompatibili, %3$d già presenti, %4$d non riusciti)</string>
+    <string name="queue_like_sign_in">Accedi per aggiungere Mi piace ai brani online</string>
+
+    <!-- AutoMix artwork transitions -->
+    <string name="automix_art_transition">Transizione delle copertine</string>
+    <string name="automix_art_transition_subtitle">Sfuma senza interruzioni le copertine tra i brani durante AutoMix.</string>
+    <string name="automix_mini_art_transition">Transizione copertina nel mini-player</string>
+    <string name="automix_mini_art_transition_subtitle">Mostra le transizioni delle copertine nel mini-player durante AutoMix.</string>
 </resources>

@@ -3,14 +3,12 @@
 <defs>
   <linearGradient id="bg" x1="40" y1="20" x2="470" y2="500" gradientUnits="userSpaceOnUse"><stop stop-color="#171044"/><stop offset=".55" stop-color="#09152f"/><stop offset="1" stop-color="#031b32"/></linearGradient>
   <linearGradient id="ring" x1="80" y1="110" x2="450" y2="420" gradientUnits="userSpaceOnUse"><stop stop-color="#e34cff"/><stop offset=".5" stop-color="#7358ff"/><stop offset="1" stop-color="#16e2ee"/></linearGradient>
-  <linearGradient id="mark" x1="145" y1="170" x2="367" y2="354" gradientUnits="userSpaceOnUse"><stop stop-color="#18dceb"/><stop offset=".52" stop-color="#9b67ff"/><stop offset="1" stop-color="#f05be8"/></linearGradient>
+  <linearGradient id="mark" x1="120" y1="220" x2="392" y2="220" gradientUnits="userSpaceOnUse"><stop stop-color="#18dceb"/><stop offset=".52" stop-color="#9b67ff"/><stop offset="1" stop-color="#f05be8"/></linearGradient>
   <filter id="glow" x="-.25" y="-.25" width="1.5" height="1.5"><feGaussianBlur stdDeviation="10" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
 </defs>
 <rect width="512" height="512" rx="116" fill="url(#bg)"/>
 <circle cx="256" cy="256" r="190" fill="#101a3a" fill-opacity=".94" stroke="url(#ring)" stroke-width="12"/>
 <circle cx="256" cy="256" r="162" fill="none" stroke="#7880d5" stroke-width="3" opacity=".28"/>
-<path d="M145 354V174C145 149 172 138 190 156L256 222L322 156C340 138 367 149 367 174V354" fill="none" stroke="url(#mark)" stroke-width="42" stroke-linecap="round" stroke-linejoin="round" filter="url(#glow)"/>
-<path d="M232 267V322L286 294.5Z" fill="#f7fbff"/>
-<path d="M115 220C96 239 96 273 115 292" fill="none" stroke="#8b61ff" stroke-width="11" stroke-linecap="round"/>
-<path d="M397 220C416 239 416 273 397 292" fill="none" stroke="#16dceb" stroke-width="11" stroke-linecap="round"/>
+<path d="M120 369V166C120 109 185 85 218 132L256 176L294 132C327 85 392 109 392 166V369H326V199L256 275L186 199V369Z" fill="url(#mark)" filter="url(#glow)"/>
+<path d="M222 292V370L294 331Z" fill="#f7fbff"/>
 </svg>

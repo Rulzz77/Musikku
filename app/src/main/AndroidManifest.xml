@@ -722,6 +722,18 @@
             android:name=".widget.MediaWidgetActions"
             android:exported="false" />
 
+        <!-- Quick Settings tile: play or pause the last queue. -->
+        <service
+            android:name=".widget.PlaybackTile"
+            android:exported="true"
+            android:icon="@drawable/ic_notification_logo"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
         <!--
           Hands the Replay poster to whichever app the user picks to send it
           with. The authority is derived from the applicationId rather than

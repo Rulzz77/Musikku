@@ -1383,4 +1383,27 @@
     <string name="smart_playlist_editor_description">이 목록은 청취 기록을 바탕으로 생성되며 청취 통계가 저장될 때 업데이트됩니다. 일반 플레이리스트는 변경하지 않습니다.</string>
     <string name="smart_playlist_max_reached">사용자 지정 스마트 플레이리스트는 최대 20개까지 만들 수 있습니다.</string>
     <string name="storage_automix_models">Automix AI 모델(필요할 때 다시 생성됨)</string>
+    <string name="show_total_duration">전체 재생 시간 표시</string>
+    <string name="show_total_duration_subtitle">남은 시간 대신 곡의 전체 길이를 표시합니다</string>
+    <string name="hide_lyrics_preview">가사 미리 보기 숨기기</string>
+    <string name="hide_lyrics_preview_subtitle">플레이어에서 스크롤되는 가사 줄을 숨기며 전체 가사 패널은 계속 사용할 수 있습니다</string>
+    <string name="sleep_timer_fade_out">정지하기 전에 음량 낮추기</string>
+    <string name="sleep_timer_fade_out_subtitle">취침 타이머 종료 전 마지막 30초 동안 음량을 서서히 낮춥니다</string>
+    <string name="download_liked_songs">좋아요한 노래 다운로드</string>
+    <string name="download_liked_songs_subtitle">좋아요한 음악과 앞으로 좋아요를 누르는 모든 노래를 다운로드합니다</string>
+    <plurals name="queue_removed_count"><item quantity="one">노래 %1$d개 삭제됨</item><item quantity="other">노래 %1$d개 삭제됨</item></plurals>
+    <string name="queue_removed_song">%1$s 삭제됨</string>
+    <string name="queue_undo_action">실행 취소</string>
+    <string name="queue_cleared_section">%1$s 비움</string>
+    <string name="next_in_queue">다음 재생</string>
+    <string name="queue_selected_count">%1$d개 선택됨</string>
+    <string name="queue_playlist_added">%2$d곡 중 %1$d곡 추가됨</string>
+    <string name="queue_playlist_partial">%1$s (호환되지 않음 %2$d개, 이미 있음 %3$d개, 실패 %4$d개)</string>
+    <string name="queue_like_sign_in">온라인 곡에 좋아요를 누르려면 로그인하세요</string>
+
+    <!-- AutoMix artwork transitions -->
+    <string name="automix_art_transition">커버 아트 전환</string>
+    <string name="automix_art_transition_subtitle">AutoMix 중 트랙 사이의 커버 아트를 부드럽게 전환합니다.</string>
+    <string name="automix_mini_art_transition">미니 플레이어 커버 아트 전환</string>
+    <string name="automix_mini_art_transition_subtitle">AutoMix 중 미니 플레이어에서 커버 아트 전환 효과를 표시합니다.</string>
 </resources>

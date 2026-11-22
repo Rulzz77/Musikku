@@ -14,6 +14,12 @@ if grep -RInE '>([^<]*)(BitChord|flutter_application_5)' \
   fail "Legacy product branding remains in Android/Wear OS/TV string values."
 fi
 
+# Compose owns a separate, localized string catalog used by the shared player UI.
+if grep -RInE '>([^<]*)(BitChord|flutter_application_5)' \
+  sharedUi/src/commonMain/composeResources/values* 2>/dev/null; then
+  fail "Legacy product branding remains in shared Compose string values."
+fi
+
 if grep -nE '<title>BitChord|flutter_application_5|A new Flutter project' \
   web/app/index.html web/index.html web/manifest.json 2>/dev/null; then
   fail "Legacy product branding remains in web/PWA metadata."

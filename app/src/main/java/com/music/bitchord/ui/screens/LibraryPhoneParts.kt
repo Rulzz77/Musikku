@@ -3,11 +3,11 @@ package com.music.bitchord.ui.screens
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Cloud
-import androidx.compose.material.icons.rounded.Download
-import androidx.compose.material.icons.rounded.Folder
-import androidx.compose.material.icons.rounded.Lan
-import androidx.compose.material.icons.rounded.Storage
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Lan
+import androidx.compose.material.icons.filled.Storage
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -43,7 +43,7 @@ fun libraryLinks(): List<LibraryLink> {
     val smbShare by AppSettings.smbShare.collectAsStateWithLifecycle()
     val showCacheFolder by AppSettings.showCacheFolder.collectAsStateWithLifecycle()
     val spotifyConnected by AppSettings.spotifySpdcToken.collectAsStateWithLifecycle()
-    fun link(title: String, subtitle: String, browseId: String, icon: ImageVector = deviceFolderIcon(browseId) ?: Icons.Rounded.Cloud) = LibraryLink(
+    fun link(title: String, subtitle: String, browseId: String, icon: ImageVector = deviceFolderIcon(browseId) ?: Icons.Filled.Cloud) = LibraryLink(
         item = ShelfItem(
             title = title,
             subtitle = subtitle,
@@ -124,11 +124,11 @@ fun libraryDeviceItems(downloadedReleases: List<SavedCollection>): List<ShelfIte
  * one of the folders.
  */
 fun deviceFolderIcon(browseId: String): ImageVector? = when (browseId) {
-    "local:downloads" -> Icons.Rounded.Download
-    "local:all" -> Icons.Rounded.Folder
-    CACHE_FOLDER_BROWSE_ID -> Icons.Rounded.Storage
-    com.music.bitchord.data.webdav.WebDavConfig.BROWSE_ID -> Icons.Rounded.Cloud
-    com.music.bitchord.data.smb.SmbConfig.BROWSE_ID -> Icons.Rounded.Lan
+    "local:downloads" -> Icons.Filled.Download
+    "local:all" -> Icons.Filled.Folder
+    CACHE_FOLDER_BROWSE_ID -> Icons.Filled.Storage
+    com.music.bitchord.data.webdav.WebDavConfig.BROWSE_ID -> Icons.Filled.Cloud
+    com.music.bitchord.data.smb.SmbConfig.BROWSE_ID -> Icons.Filled.Lan
     else -> null
 }
 

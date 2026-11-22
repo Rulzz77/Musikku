@@ -214,6 +214,8 @@
     <string name="animated_cover_art">Sampul animasi</string>
     <string name="synced_lyrics">Lirik tersinkron</string>
     <string name="synced_lyrics_subtitle">Menyorot kata-kata di pemutar saat dinyanyikan</string>
+    <string name="hide_lyrics_preview">Sembunyikan pratinjau lirik</string>
+    <string name="hide_lyrics_preview_subtitle">Sembunyikan baris lirik berjalan di pemutar; panel lirik lengkap tetap tersedia</string>
     <string name="lyrics_sources">Sumber lirik</string>
     <string name="song_cache_limit">Batas cache lagu</string>
     <string name="clear_song_cache">Bersihkan cache lagu</string>
@@ -242,6 +244,8 @@
     <string name="full_screen_cover_art_subtitle">Membuat sampul memenuhi tepi pemutar alih-alih berbentuk persegi</string>
     <string name="full_screen_detail_cover">Sampul album/playlist layar penuh</string>
     <string name="full_screen_detail_cover_subtitle">Membuat sampul album dan playlist memenuhi tepi halaman alih-alih berbingkai</string>
+    <string name="show_total_duration">Tampilkan durasi total</string>
+    <string name="show_total_duration_subtitle">Menampilkan durasi penuh lagu, bukan sisa waktu pemutaran</string>
     <string name="animated_cover_art_subtitle">Memutar video berulang yang disertakan beberapa rilisan alih-alih sampul diam</string>
     <string name="dont_repeat_songs_subtitle">Putar Otomatis tidak akan menyarankan lagu yang sudah diputar atau disarankan dalam sesi ini</string>
     <string name="download_quality_subtitle">%1$s per trek, apa pun koneksinya</string>
@@ -443,6 +447,8 @@
     <string name="signed_in_as">Masuk sebagai %1$s</string>
     <string name="signing_in">Sedang masuk…</string>
     <string name="sleep_timer">Timer tidur</string>
+    <string name="sleep_timer_fade_out">Turunkan volume sebelum berhenti</string>
+    <string name="sleep_timer_fade_out_subtitle">Volume dipelankan bertahap selama 30 detik terakhir timer tidur</string>
     <string name="sleep_timer_custom">Kustom</string>
     <string name="start_sleep_timer">Mulai timer</string>
     <string name="sources_no_lossless">Tidak ada sumber aktif yang dapat menyediakan audio lossless. Tambahkan modul kustom untuk memutar file lossless yang tersedia tanpa transcoding.</string>
@@ -835,6 +841,8 @@
     <string name="export_compatible_downloads">Ekspor unduhan yang kompatibel</string>
     <string name="sync_downloaded_playlists">Selalu perbarui playlist</string>
     <string name="sync_downloaded_playlists_subtitle">Memeriksa dua kali sehari dan mengunduh lagu baru di playlist yang telah diunduh</string>
+    <string name="download_liked_songs">Unduh lagu yang disukai</string>
+    <string name="download_liked_songs_subtitle">Mengunduh Musik yang Disukai dan setiap lagu yang kamu sukai mulai sekarang</string>
     <string name="playlist_sync_ask_title">Lagu baru di %1$s: %2$d</string>
     <string name="playlist_sync_ask_text">Ketuk untuk mengunduh</string>
     <string name="playlist_sync_done_title">Ditambahkan ke %1$s: %2$d</string>
@@ -1508,4 +1516,28 @@
     <string name="smart_playlist_sort_listened">Durasi mendengarkan</string>
     <string name="smart_playlist_editor_description">Daftar ini dibuat dari riwayat mendengarkan dan diperbarui saat statistik disimpan. Playlist biasa tidak akan diubah.</string>
     <string name="smart_playlist_max_reached">Maksimal 20 playlist pintar kustom yang bisa dibuat.</string>
+    <plurals name="queue_removed_count"><item quantity="one">%1$d lagu dihapus</item><item quantity="other">%1$d lagu dihapus</item></plurals>
+    <string name="queue_removed_song">%1$s dihapus dari antrean</string>
+    <string name="queue_undo_action">Urungkan</string>
+    <string name="queue_cleared_section">%1$s dikosongkan</string>
+    <string name="next_in_queue">Berikutnya di antrean</string>
+    <string name="queue_selected_count">%1$d dipilih</string>
+    <string name="queue_playlist_added">%1$d dari %2$d lagu ditambahkan</string>
+    <string name="queue_playlist_partial">%1$s (%2$d tidak kompatibel, %3$d sudah ada, %4$d gagal)</string>
+    <string name="queue_like_sign_in">Masuk untuk menyukai lagu online</string>
+
+    <!-- AutoMix artwork transitions -->
+    <string name="automix_art_transition">Transisi sampul</string>
+    <string name="automix_art_transition_subtitle">Memadukan sampul secara halus saat berpindah lagu selama AutoMix.</string>
+    <string name="automix_mini_art_transition">Transisi sampul pemutar mini</string>
+    <string name="automix_mini_art_transition_subtitle">Menampilkan transisi sampul di pemutar mini selama AutoMix.</string>
+    <string name="auto_backup_title" translatable="false">Cadangan otomatis Google Drive</string>
+    <string name="auto_backup_setup_subtitle" translatable="false">Pilih folder Google Drive untuk menyimpan cadangan baru setiap hari</string>
+    <string name="auto_backup_enabled_subtitle" translatable="false">Cadangan otomatis aktif. Ketuk untuk mengganti folder</string>
+    <string name="auto_backup_disabled_subtitle" translatable="false">Cadangan otomatis nonaktif. Aktifkan untuk memilih folder Drive</string>
+    <string name="auto_backup_now" translatable="false">Cadangkan sekarang</string>
+    <string name="auto_backup_now_subtitle" translatable="false">Buat cadangan baru di folder Google Drive yang dipilih</string>
+    <string name="auto_backup_no_folder" translatable="false">Pilih folder Google Drive terlebih dahulu</string>
+    <string name="auto_backup_failed" translatable="false">Cadangan terakhir gagal. Periksa akses Drive dan koneksi internet</string>
+    <string name="auto_backup_last_success" translatable="false">Cadangan terakhir: %1$s</string>
 </resources>

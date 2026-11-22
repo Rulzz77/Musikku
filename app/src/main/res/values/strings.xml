@@ -290,6 +290,10 @@
     <string name="crossfade">Crossfade</string>
     <string name="crossfade_subtitle">Blends one track into the next</string>
     <string name="automix">Automix [BETA]</string>
+    <string name="automix_art_transition">Art transition</string>
+    <string name="automix_art_transition_subtitle">Smoothly blends cover art between tracks during AutoMix.</string>
+    <string name="automix_mini_art_transition">Mini-player art transition</string>
+    <string name="automix_mini_art_transition_subtitle">Shows artwork transitions in the mini-player during AutoMix.</string>
     <string name="automix_performance">Automix performance</string>
     <string name="automix_performance_subtitle">Sets how much CPU background analysis may use</string>
     <string name="automix_performance_warning">Higher performance analyses tracks faster, but can use more battery and make the phone warmer.</string>
@@ -420,6 +424,8 @@
     <string name="artist_signatures_test_failed">Could not reach the API at that URL</string>
     <string name="synced_lyrics">Synced lyrics</string>
     <string name="synced_lyrics_subtitle">Lights up the words on the player as they’re sung</string>
+    <string name="hide_lyrics_preview">Hide lyrics preview</string>
+    <string name="hide_lyrics_preview_subtitle">Hides the scrolling lyric line on the player; the full lyrics panel stays available</string>
     <string name="lyrics_sources">Lyrics sources</string>
     <string name="song_cache_limit">Song cache limit</string>
     <string name="clear_song_cache">Clear song cache</string>
@@ -450,6 +456,8 @@
     <string name="full_screen_cover_art_subtitle">Runs the cover to the edges of the player instead of a square sleeve</string>
     <string name="full_screen_detail_cover">Full-screen album/playlist cover</string>
     <string name="full_screen_detail_cover_subtitle">Runs album and playlist covers to the edges of the page instead of a framed sleeve</string>
+    <string name="show_total_duration">Show total duration</string>
+    <string name="show_total_duration_subtitle">Shows the song\'s full length instead of the time remaining</string>
     <string name="animated_cover_art_subtitle">Plays the looping video some releases ship instead of a still sleeve</string>
     <string name="dont_repeat_songs_subtitle">AutoPlay won’t suggest a song already played or suggested this session</string>
     <string name="download_quality_subtitle">%1$s per track, whatever the connection</string>
@@ -729,6 +737,8 @@
     <string name="signed_in_as">Signed in as %1$s</string>
     <string name="signing_in">Signing in…</string>
     <string name="sleep_timer">Sleep timer</string>
+    <string name="sleep_timer_fade_out">Fade out before stopping</string>
+    <string name="sleep_timer_fade_out_subtitle">Gradually lower the volume during the final 30 seconds of the sleep timer</string>
     <string name="sleep_timer_custom">Custom</string>
     <string name="start_sleep_timer">Start timer</string>
     <string name="sources_no_lossless">No enabled source can provide lossless audio. Add an addon to play lossless files without transcoding.</string>
@@ -1085,6 +1095,8 @@
     <string name="export_compatible_downloads">Export compatible downloads</string>
     <string name="sync_downloaded_playlists">Keep playlists updated</string>
     <string name="sync_downloaded_playlists_subtitle">Checks twice a day and downloads songs newly added to your downloaded playlists</string>
+    <string name="download_liked_songs">Download liked songs</string>
+    <string name="download_liked_songs_subtitle">Downloads your Liked Music and every song you like from now on</string>
     <string name="playlist_sync_ask_title">New songs in %1$s: %2$d</string>
     <string name="playlist_sync_ask_text">Tap to download</string>
     <string name="playlist_sync_done_title">Added to %1$s: %2$d</string>
@@ -1410,4 +1422,22 @@
     <string name="smart_playlist_sort_listened">Listening time</string>
     <string name="smart_playlist_editor_description">These lists are generated from your listening history and refresh when listening stats are saved. They never change your regular playlists.</string>
     <string name="smart_playlist_max_reached">You can create up to 20 custom Smart Playlists.</string>
+    <plurals name="queue_removed_count"><item quantity="one">Removed %1$d song</item><item quantity="other">Removed %1$d songs</item></plurals>
+    <string name="queue_removed_song">Removed %1$s</string>
+    <string name="queue_undo_action">Undo</string>
+    <string name="queue_cleared_section">Cleared %1$s</string>
+    <string name="next_in_queue">Next in queue</string>
+    <string name="queue_selected_count">%1$d selected</string>
+    <string name="queue_playlist_added">Added %1$d of %2$d songs</string>
+    <string name="queue_playlist_partial">%1$s (%2$d incompatible, %3$d already present, %4$d failed)</string>
+    <string name="queue_like_sign_in">Sign in to like online songs</string>
+    <string name="auto_backup_title" translatable="false">Automatic Google Drive backup</string>
+    <string name="auto_backup_setup_subtitle" translatable="false">Choose a Google Drive folder to save a new backup each day</string>
+    <string name="auto_backup_enabled_subtitle" translatable="false">Automatic backups are on. Tap to change the folder</string>
+    <string name="auto_backup_disabled_subtitle" translatable="false">Automatic backups are off. Turn on to choose a Drive folder</string>
+    <string name="auto_backup_now" translatable="false">Back up now</string>
+    <string name="auto_backup_now_subtitle" translatable="false">Create a new backup in the selected Google Drive folder</string>
+    <string name="auto_backup_no_folder" translatable="false">Choose a Google Drive folder first</string>
+    <string name="auto_backup_failed" translatable="false">The last backup failed. Check Drive access and your internet connection</string>
+    <string name="auto_backup_last_success" translatable="false">Last backup: %1$s</string>
 </resources>

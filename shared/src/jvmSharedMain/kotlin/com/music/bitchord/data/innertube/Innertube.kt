@@ -97,6 +97,12 @@ object Innertube {
      */
     private const val WEB_REMIX_VERSION = "1.20250101.01.00"
     private const val WEB_REMIX_CLIENT_ID = "67"
+    private const val WEB_CLIENT_VERSION = "2.20260708.00.00"
+    private const val WEB_CLIENT_ID = "1"
+
+    /** Android Music client used to retrieve timed lyrics. */
+    private const val ANDROID_MUSIC_CLIENT_ID = "21"
+    private const val ANDROID_MUSIC_VERSION = "7.21.50"
 
     private const val TAG = "BitChord"
 
@@ -532,6 +538,18 @@ object Innertube {
             params?.let { put("params", it) }
         }
 
+    /** Android Music variant of browse; the Lyrics tab exposes timings to this client. */
+    suspend fun browseMobile(browseId: String, params: String? = null): JsonObject =
+        postMusicAnonymous(
+            endpoint = "browse",
+            clientId = ANDROID_MUSIC_CLIENT_ID,
+            clientName = "ANDROID_MUSIC",
+            clientVersion = ANDROID_MUSIC_VERSION,
+        ) {
+            put("browseId", browseId)
+            params?.let { put("params", it) }
+        }
+
     /**
      * The next page of a paged browse response — playlists and library feeds
      * come back roughly 100 rows at a time. YouTube Music takes the token as
@@ -604,6 +622,36 @@ object Innertube {
         put("videoId", videoId)
         put("playlistId", "RDAMVM$videoId")
         put("isAudioOnly", true)
+    }
+
+    /**
+     * Anonymous YouTube WEB next request. The standard watch-page response
+     * carries the Most Replayed heat markers; the Music endpoint does not.
+     */
+    suspend fun webNext(videoId: String): JsonObject = withRetry(attempts = 2) {
+        client.post("$YOUTUBE_ORIGIN/youtubei/v1/next") {
+            contentType(ContentType.Application.Json)
+            parameter("prettyPrint", "false")
+            header("User-Agent", WEB_USER_AGENT)
+            header("Origin", YOUTUBE_ORIGIN)
+            header("Referer", "$YOUTUBE_ORIGIN/")
+            header("X-YouTube-Client-Name", WEB_CLIENT_ID)
+            header("X-YouTube-Client-Version", WEB_CLIENT_VERSION)
+            header("Accept-Language", acceptLanguageHeader)
+            setBody(
+                buildJsonObject {
+                    putJsonObject("context") {
+                        putJsonObject("client") {
+                            put("clientName", "WEB")
+                            put("clientVersion", WEB_CLIENT_VERSION)
+                            put("hl", currentLanguage)
+                            put("gl", currentRegion)
+                        }
+                    }
+                    put("videoId", videoId)
+                },
+            )
+        }.body<JsonObject>()
     }
 
     /**
@@ -1196,9 +1244,12 @@ object Innertube {
         endpoint: String,
         /** The context's `gl`; null sends none. */
         region: String? = currentRegion,
+        clientId: String = WEB_REMIX_CLIENT_ID,
+        clientName: String = "WEB_REMIX",
+        clientVersion: String? = null,
         bodyExtras: JsonObjectBuilder.() -> Unit,
     ): JsonObject {
-        val clientVersion = webRemixVersion
+        val version = clientVersion ?: webRemixVersion
         return withRetry {
             client.post("$MUSIC_BASE/$endpoint") {
                 contentType(ContentType.Application.Json)
@@ -1206,8 +1257,8 @@ object Innertube {
                 header("X-Origin", MUSIC_ORIGIN)
                 header("Origin", MUSIC_ORIGIN)
                 header("Referer", "$MUSIC_ORIGIN/")
-                header("X-YouTube-Client-Name", WEB_REMIX_CLIENT_ID)
-                header("X-YouTube-Client-Version", clientVersion)
+                header("X-YouTube-Client-Name", clientId)
+                header("X-YouTube-Client-Version", version)
                 header("Accept-Language", acceptLanguageHeader)
                 parameter("hl", currentLanguage)
                 visitorData?.let { header("X-Goog-Visitor-Id", it) }
@@ -1216,8 +1267,8 @@ object Innertube {
                     buildJsonObject {
                         putJsonObject("context") {
                             putJsonObject("client") {
-                                put("clientName", "WEB_REMIX")
-                                put("clientVersion", clientVersion)
+                                put("clientName", clientName)
+                                put("clientVersion", version)
                                 put("hl", currentLanguage)
                                 region?.let { put("gl", it) }
                                 visitorData?.let { put("visitorData", it) }

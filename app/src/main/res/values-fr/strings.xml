@@ -1534,4 +1534,27 @@
     <string name="smart_playlist_editor_description">Ces listes sont générées à partir de votre historique d\'écoute et actualisées lorsque les statistiques sont enregistrées. Elles ne modifient pas vos playlists habituelles.</string>
     <string name="smart_playlist_max_reached">Vous pouvez créer jusqu\'à 20 playlists intelligentes personnalisées.</string>
     <string name="storage_automix_models">Modèles IA Automix (recréés selon les besoins)</string>
+    <string name="show_total_duration">Afficher la durée totale</string>
+    <string name="show_total_duration_subtitle">Affiche la durée complète du morceau au lieu du temps restant</string>
+    <string name="hide_lyrics_preview">Masquer l’aperçu des paroles</string>
+    <string name="hide_lyrics_preview_subtitle">Masque la ligne de paroles défilante du lecteur ; le panneau complet des paroles reste disponible</string>
+    <string name="sleep_timer_fade_out">Baisser le volume avant l’arrêt</string>
+    <string name="sleep_timer_fade_out_subtitle">Baisse progressivement le volume pendant les 30 dernières secondes du minuteur de sommeil</string>
+    <string name="download_liked_songs">Télécharger les titres aimés</string>
+    <string name="download_liked_songs_subtitle">Télécharge vos titres aimés et chaque morceau que vous aimerez à partir de maintenant</string>
+    <plurals name="queue_removed_count"><item quantity="one">%1$d morceau supprimé</item><item quantity="other">%1$d morceaux supprimés</item></plurals>
+    <string name="queue_removed_song">%1$s supprimé</string>
+    <string name="queue_undo_action">Annuler</string>
+    <string name="queue_cleared_section">%1$s vidé</string>
+    <string name="next_in_queue">À suivre</string>
+    <string name="queue_selected_count">%1$d sélectionné(s)</string>
+    <string name="queue_playlist_added">%1$d morceau(x) ajouté(s) sur %2$d</string>
+    <string name="queue_playlist_partial">%1$s (%2$d incompatibles, %3$d déjà présents, %4$d échecs)</string>
+    <string name="queue_like_sign_in">Connectez-vous pour aimer les titres en ligne</string>
+
+    <!-- AutoMix artwork transitions -->
+    <string name="automix_art_transition">Transition des pochettes</string>
+    <string name="automix_art_transition_subtitle">Mélange en douceur les pochettes entre les morceaux pendant AutoMix.</string>
+    <string name="automix_mini_art_transition">Transition des pochettes du mini-lecteur</string>
+    <string name="automix_mini_art_transition_subtitle">Affiche les transitions de pochettes dans le mini-lecteur pendant AutoMix.</string>
 </resources>

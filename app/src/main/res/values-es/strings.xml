@@ -1505,4 +1505,27 @@
     <string name="smart_playlist_editor_description">Estas listas se generan a partir de tu historial de escucha y se actualizan cuando se guardan las estadísticas. No modifican tus listas habituales.</string>
     <string name="smart_playlist_max_reached">Puedes crear hasta 20 listas inteligentes personalizadas.</string>
     <string name="storage_automix_models">Modelos de IA de Automix (se recrean cuando se necesitan)</string>
+    <string name="show_total_duration">Mostrar duración total</string>
+    <string name="show_total_duration_subtitle">Muestra la duración completa de la canción en lugar del tiempo restante</string>
+    <string name="hide_lyrics_preview">Ocultar vista previa de letras</string>
+    <string name="hide_lyrics_preview_subtitle">Oculta la línea de letra que se desplaza en el reproductor; el panel de letras completo sigue disponible</string>
+    <string name="sleep_timer_fade_out">Atenuar el volumen antes de detener</string>
+    <string name="sleep_timer_fade_out_subtitle">Reduce gradualmente el volumen durante los últimos 30 segundos del temporizador de sueño</string>
+    <string name="download_liked_songs">Descargar canciones que te gustan</string>
+    <string name="download_liked_songs_subtitle">Descarga tu Música que te gusta y todas las canciones que marques como favoritas a partir de ahora</string>
+    <plurals name="queue_removed_count"><item quantity="one">Se eliminó %1$d canción</item><item quantity="other">Se eliminaron %1$d canciones</item></plurals>
+    <string name="queue_removed_song">Se eliminó %1$s</string>
+    <string name="queue_undo_action">Deshacer</string>
+    <string name="queue_cleared_section">Se vació %1$s</string>
+    <string name="next_in_queue">A continuación</string>
+    <string name="queue_selected_count">%1$d seleccionadas</string>
+    <string name="queue_playlist_added">Se añadieron %1$d de %2$d canciones</string>
+    <string name="queue_playlist_partial">%1$s (%2$d incompatibles, %3$d ya presentes, %4$d fallidas)</string>
+    <string name="queue_like_sign_in">Inicia sesión para indicar que te gustan las canciones en línea</string>
+
+    <!-- AutoMix artwork transitions -->
+    <string name="automix_art_transition">Transición de portadas</string>
+    <string name="automix_art_transition_subtitle">Mezcla suavemente las portadas entre canciones durante AutoMix.</string>
+    <string name="automix_mini_art_transition">Transición de portada del minirreproductor</string>
+    <string name="automix_mini_art_transition_subtitle">Muestra las transiciones de portada en el minirreproductor durante AutoMix.</string>
 </resources>

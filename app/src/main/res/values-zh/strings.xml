@@ -1510,4 +1510,27 @@
     <string name="smart_playlist_editor_description">这些列表根据你的聆听历史生成，并会在聆听统计保存后更新。它们不会更改普通播放列表。</string>
     <string name="smart_playlist_max_reached">最多可创建 20 个自定义智能播放列表。</string>
     <string name="storage_automix_models">Automix AI 模型（需要时重新生成）</string>
+    <string name="show_total_duration">显示总时长</string>
+    <string name="show_total_duration_subtitle">显示歌曲完整时长，而不是剩余时间</string>
+    <string name="hide_lyrics_preview">隐藏歌词预览</string>
+    <string name="hide_lyrics_preview_subtitle">隐藏播放器中滚动显示的歌词行；完整歌词面板仍可使用</string>
+    <string name="sleep_timer_fade_out">停止前逐渐降低音量</string>
+    <string name="sleep_timer_fade_out_subtitle">在睡眠定时器结束前的最后30秒逐渐降低音量</string>
+    <string name="download_liked_songs">下载喜欢的歌曲</string>
+    <string name="download_liked_songs_subtitle">下载你喜欢的音乐，以及今后每一首你点过喜欢的歌曲</string>
+    <plurals name="queue_removed_count"><item quantity="one">已移除 %1$d 首歌曲</item><item quantity="other">已移除 %1$d 首歌曲</item></plurals>
+    <string name="queue_removed_song">已移除 %1$s</string>
+    <string name="queue_undo_action">撤销</string>
+    <string name="queue_cleared_section">已清空 %1$s</string>
+    <string name="next_in_queue">接下来播放</string>
+    <string name="queue_selected_count">已选择 %1$d 首</string>
+    <string name="queue_playlist_added">已添加 %1$d/%2$d 首歌曲</string>
+    <string name="queue_playlist_partial">%1$s（%2$d 首不兼容，%3$d 首已存在，%4$d 首失败）</string>
+    <string name="queue_like_sign_in">登录后即可喜欢在线歌曲</string>
+
+    <!-- AutoMix artwork transitions -->
+    <string name="automix_art_transition">封面过渡</string>
+    <string name="automix_art_transition_subtitle">在 AutoMix 期间平滑衔接不同曲目的封面。</string>
+    <string name="automix_mini_art_transition">迷你播放器封面过渡</string>
+    <string name="automix_mini_art_transition_subtitle">在 AutoMix 期间于迷你播放器中显示封面过渡效果。</string>
 </resources>

@@ -1565,4 +1565,27 @@
     <string name="smart_playlist_editor_description">Эти списки создаются на основе истории прослушивания и обновляются при сохранении статистики. Обычные плейлисты остаются без изменений.</string>
     <string name="smart_playlist_max_reached">Можно создать до 20 пользовательских умных плейлистов.</string>
     <string name="storage_automix_models">ИИ-модели Automix (создаются заново при необходимости)</string>
+    <string name="show_total_duration">Показывать полную длительность</string>
+    <string name="show_total_duration_subtitle">Показывает полную длительность композиции вместо оставшегося времени</string>
+    <string name="hide_lyrics_preview">Скрыть предпросмотр текста</string>
+    <string name="hide_lyrics_preview_subtitle">Скрывает бегущую строку текста в плеере; полная панель текста остаётся доступной</string>
+    <string name="sleep_timer_fade_out">Плавно снизить громкость перед остановкой</string>
+    <string name="sleep_timer_fade_out_subtitle">Постепенно снижает громкость в последние 30 секунд таймера сна</string>
+    <string name="download_liked_songs">Скачивать понравившиеся песни</string>
+    <string name="download_liked_songs_subtitle">Скачивает понравившуюся музыку и все песни, которые вы будете отмечать позже</string>
+    <plurals name="queue_removed_count"><item quantity="one">Удалена %1$d песня</item><item quantity="other">Удалено песен: %1$d</item></plurals>
+    <string name="queue_removed_song">Удалено: %1$s</string>
+    <string name="queue_undo_action">Отменить</string>
+    <string name="queue_cleared_section">Очищено: %1$s</string>
+    <string name="next_in_queue">Далее в очереди</string>
+    <string name="queue_selected_count">Выбрано: %1$d</string>
+    <string name="queue_playlist_added">Добавлено %1$d из %2$d песен</string>
+    <string name="queue_playlist_partial">%1$s (несовместимых: %2$d, уже есть: %3$d, ошибок: %4$d)</string>
+    <string name="queue_like_sign_in">Войдите, чтобы отмечать онлайн-песни</string>
+
+    <!-- AutoMix artwork transitions -->
+    <string name="automix_art_transition">Переход обложек</string>
+    <string name="automix_art_transition_subtitle">Плавно смешивает обложки при переходе между треками во время AutoMix.</string>
+    <string name="automix_mini_art_transition">Переход обложек в мини-плеере</string>
+    <string name="automix_mini_art_transition_subtitle">Показывает переходы обложек в мини-плеере во время AutoMix.</string>
 </resources>

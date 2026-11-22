@@ -1516,4 +1516,27 @@
     <string name="smart_playlist_editor_description">รายการเหล่านี้สร้างจากประวัติการฟังและจะอัปเดตเมื่อบันทึกสถิติการฟัง โดยไม่เปลี่ยนแปลงเพลย์ลิสต์ปกติของคุณ</string>
     <string name="smart_playlist_max_reached">คุณสร้างเพลย์ลิสต์อัจฉริยะที่กำหนดเองได้สูงสุด 20 รายการ</string>
     <string name="storage_automix_models">โมเดล AI ของ Automix (สร้างใหม่เมื่อจำเป็น)</string>
+    <string name="show_total_duration">แสดงระยะเวลาทั้งหมด</string>
+    <string name="show_total_duration_subtitle">แสดงความยาวเต็มของเพลงแทนเวลาที่เหลือ</string>
+    <string name="hide_lyrics_preview">ซ่อนตัวอย่างเนื้อเพลง</string>
+    <string name="hide_lyrics_preview_subtitle">ซ่อนบรรทัดเนื้อเพลงที่เลื่อนในเครื่องเล่น แต่ยังเปิดแผงเนื้อเพลงฉบับเต็มได้</string>
+    <string name="sleep_timer_fade_out">ค่อย ๆ ลดเสียงก่อนหยุดเล่น</string>
+    <string name="sleep_timer_fade_out_subtitle">ค่อย ๆ ลดระดับเสียงในช่วง 30 วินาทีสุดท้ายของตัวตั้งเวลาปิดเพลง</string>
+    <string name="download_liked_songs">ดาวน์โหลดเพลงที่ถูกใจ</string>
+    <string name="download_liked_songs_subtitle">ดาวน์โหลดเพลงที่คุณถูกใจและทุกเพลงที่คุณกดถูกใจนับจากนี้</string>
+    <plurals name="queue_removed_count"><item quantity="one">นำเพลงออก %1$d เพลง</item><item quantity="other">นำเพลงออก %1$d เพลง</item></plurals>
+    <string name="queue_removed_song">นำ %1$s ออกแล้ว</string>
+    <string name="queue_undo_action">เลิกทำ</string>
+    <string name="queue_cleared_section">ล้าง %1$s แล้ว</string>
+    <string name="next_in_queue">เพลงถัดไปในคิว</string>
+    <string name="queue_selected_count">เลือกแล้ว %1$d รายการ</string>
+    <string name="queue_playlist_added">เพิ่มแล้ว %1$d จาก %2$d เพลง</string>
+    <string name="queue_playlist_partial">%1$s (ไม่รองรับ %2$d, มีอยู่แล้ว %3$d, ล้มเหลว %4$d)</string>
+    <string name="queue_like_sign_in">ลงชื่อเข้าใช้เพื่อกดถูกใจเพลงออนไลน์</string>
+
+    <!-- AutoMix artwork transitions -->
+    <string name="automix_art_transition">การเปลี่ยนภาพปก</string>
+    <string name="automix_art_transition_subtitle">ผสมภาพปกระหว่างเพลงอย่างนุ่มนวลระหว่างใช้ AutoMix</string>
+    <string name="automix_mini_art_transition">การเปลี่ยนภาพปกในมินิเพลเยอร์</string>
+    <string name="automix_mini_art_transition_subtitle">แสดงการเปลี่ยนภาพปกในมินิเพลเยอร์ระหว่างใช้ AutoMix</string>
 </resources>

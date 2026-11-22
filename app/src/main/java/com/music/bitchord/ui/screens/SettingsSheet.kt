@@ -12,11 +12,13 @@ import android.os.Build
 import android.provider.Settings
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -33,9 +35,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.ScrollState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.automirrored.rounded.Notes
 import androidx.compose.material.icons.rounded.Animation
-import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.BarChart
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.BlurOff
@@ -91,7 +93,9 @@ import com.music.bitchord.ui.components.IosSwitch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -112,7 +116,6 @@ import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.input.pointer.positionChanged
 import kotlin.math.abs
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -168,6 +171,7 @@ import com.music.bitchord.data.settings.ThemeMode
 import com.music.bitchord.data.settings.AppFont
 import com.music.bitchord.data.settings.PlayerTheme
 import com.music.bitchord.data.stats.Backup
+import com.music.bitchord.data.stats.AutoBackupController
 import com.music.bitchord.playback.AudioCache
 import com.music.bitchord.ui.player.fullBleedArtworkAvailable
 import kotlinx.coroutines.launch
@@ -227,6 +231,7 @@ fun SettingsScreen(
     val metered by AppSettings.meteredConnection.collectAsStateWithLifecycle()
     val crossfade by AppSettings.crossfadeSeconds.collectAsStateWithLifecycle()
     val smartFade by AppSettings.smartFadeEnabled.collectAsStateWithLifecycle()
+    val sleepTimerFadeOut by AppSettings.sleepTimerFadeOut.collectAsStateWithLifecycle()
     val automixPerformance by AppSettings.automixPerformanceMode.collectAsStateWithLifecycle()
     val skipSilence by AppSettings.skipSilence.collectAsStateWithLifecycle()
     val dolbyAtmos by AppSettings.dolbyAtmos.collectAsStateWithLifecycle()
@@ -252,8 +257,10 @@ fun SettingsScreen(
     val signatureApiUrl by AppSettings.signatureApiUrl.collectAsStateWithLifecycle()
     val fullBleedArtwork by AppSettings.fullBleedArtwork.collectAsStateWithLifecycle()
     val fullBleedDetailArtwork by AppSettings.fullBleedDetailArtwork.collectAsStateWithLifecycle()
+    val showTotalDuration by AppSettings.showTotalDuration.collectAsStateWithLifecycle()
     val playerTheme by AppSettings.playerTheme.collectAsStateWithLifecycle()
     val syncedLyrics by AppSettings.syncedLyrics.collectAsStateWithLifecycle()
+    val hideLyricsPreview by AppSettings.hideLyricsPreview.collectAsStateWithLifecycle()
     val lyricsSources by AppSettings.lyricsSources.collectAsStateWithLifecycle()
     val translationLanguage by AppSettings.translationLanguage.collectAsStateWithLifecycle()
     val theme by AppSettings.themeMode.collectAsStateWithLifecycle()
@@ -278,6 +285,7 @@ fun SettingsScreen(
     val wifiOnlyDownloads by AppSettings.wifiOnlyDownloads.collectAsStateWithLifecycle()
     val exportDownloads by AppSettings.exportDownloads.collectAsStateWithLifecycle()
     val syncDownloadedPlaylists by AppSettings.syncDownloadedPlaylists.collectAsStateWithLifecycle()
+    val downloadLikedSongs by AppSettings.downloadLikedSongs.collectAsStateWithLifecycle()
     val stopOnTaskRemoved by AppSettings.stopOnTaskRemoved.collectAsStateWithLifecycle()
     val hideVolumeBar by AppSettings.hideVolumeBar.collectAsStateWithLifecycle()
     val hideStatusBarInPlayer by AppSettings.hideStatusBarInPlayer.collectAsStateWithLifecycle()
@@ -323,6 +331,11 @@ fun SettingsScreen(
     val listenBrainzToken by AppSettings.listenBrainzToken.collectAsStateWithLifecycle()
 
     val replayGenres by AppSettings.replayGenres.collectAsStateWithLifecycle()
+
+    val autoBackupStatusFlow = remember(context) { AutoBackupController.observe(context) }
+    val autoBackupStatus by autoBackupStatusFlow.collectAsStateWithLifecycle(
+        initialValue = AutoBackupController.status(context),
+    )
 
     // Read here so the row can say "In a party · ABC123" rather than making
     // somebody open the screen to find out whether they are still in one.
@@ -373,6 +386,16 @@ fun SettingsScreen(
             )
         }
         AppSettings.setLocalMusicFolderUri(folder.toString())
+    }
+
+    var cloudBackupMessage by remember { mutableStateOf<String?>(null) }
+    val autoBackupFolderPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree(),
+    ) { folder ->
+        if (folder == null) return@rememberLauncherForActivityResult
+        runCatching { AutoBackupController.setFolder(context, folder) }
+            .onSuccess { cloudBackupMessage = null }
+            .onFailure { cloudBackupMessage = context.getString(R.string.auto_backup_failed) }
     }
 
     /**
@@ -615,7 +638,7 @@ fun SettingsScreen(
                 //
                 // Greyed rather than hidden where the device can't decode E-AC-3.
                 // A missing row reads as a feature the app doesn't have; a disabled
-                // one with a reason under it is the difference between "BitChord
+                // one with a reason under it is the difference between "MusikKu
                 // has no Atmos" and "this phone has no Dolby decoder", and only the
                 // second is true. The stored preference is left untouched either
                 // way — see [AppSettings.dolbyAtmos].
@@ -702,6 +725,15 @@ fun SettingsScreen(
                     checked = syncDownloadedPlaylists,
                     onCheckedChange = AppSettings::setSyncDownloadedPlaylists,
                     subtitle = stringResource(R.string.sync_downloaded_playlists_subtitle),
+                )
+            }
+            val downloadLikedTitle = stringResource(R.string.download_liked_songs)
+            row(downloadLikedTitle, "liked", "favorites", "offline", "automatic") {
+                SettingsSubRow(
+                    title = downloadLikedTitle,
+                    checked = downloadLikedSongs,
+                    onCheckedChange = AppSettings::setDownloadLikedSongs,
+                    subtitle = stringResource(R.string.download_liked_songs_subtitle),
                 )
             }
         }
@@ -919,6 +951,21 @@ fun SettingsScreen(
                     )
                 }
             }
+            val sleepTimerFadeOutTitle = stringResource(R.string.sleep_timer_fade_out)
+            row(sleepTimerFadeOutTitle, "sleep", "timer", "fade") {
+                SettingsRow(
+                    icon = SfIcons.SleepTimer,
+                    title = sleepTimerFadeOutTitle,
+                    subtitle = stringResource(R.string.sleep_timer_fade_out_subtitle),
+                    trailing = {
+                        IosSwitch(
+                            checked = sleepTimerFadeOut,
+                            onCheckedChange = AppSettings::setSleepTimerFadeOut,
+                        )
+                    },
+                    onClick = { AppSettings.setSleepTimerFadeOut(!sleepTimerFadeOut) },
+                )
+            }
             val spatialAudioTitle = stringResource(R.string.spatial_audio)
             row(spatialAudioTitle, "surround", "3d") {
                 BypassedByBitPerfect(bitPerfectReady) {
@@ -949,7 +996,7 @@ fun SettingsScreen(
                 }
             }
             // The system panel is not listed here as well. A device with a
-            // Dolby or Dirac panel has something BitChord cannot reproduce and
+            // Dolby or Dirac panel has something MusikKu cannot reproduce and
             // keeps its row — but one level in, at the foot of the equaliser
             // screen, rather than as a second equaliser entry alongside ours.
             val equalizerTitle = stringResource(R.string.equalizer)
@@ -1205,6 +1252,21 @@ fun SettingsScreen(
                     onClick = { AppSettings.setFullBleedDetailArtwork(!fullBleedDetailArtwork) },
                 )
             }
+            val showTotalDurationTitle = stringResource(R.string.show_total_duration)
+            row(showTotalDurationTitle, "seek bar", "remaining time", "duration", "song length") {
+                SettingsRow(
+                    icon = SfIcons.Clock,
+                    title = showTotalDurationTitle,
+                    subtitle = stringResource(R.string.show_total_duration_subtitle),
+                    trailing = {
+                        IosSwitch(
+                            checked = showTotalDuration,
+                            onCheckedChange = AppSettings::setShowTotalDuration,
+                        )
+                    },
+                    onClick = { AppSettings.setShowTotalDuration(!showTotalDuration) },
+                )
+            }
             val playerThemeTitle = stringResource(R.string.player_theme)
             row(playerThemeTitle, "background", "player", "mesh", "gradient", "legacy", "simple", "blur") {
                 SettingsRow(
@@ -1326,6 +1388,21 @@ fun SettingsScreen(
                         )
                     },
                     onClick = { AppSettings.setSyncedLyrics(!syncedLyrics) },
+                )
+            }
+            val hideLyricsTitle = stringResource(R.string.hide_lyrics_preview)
+            row(hideLyricsTitle, "lyrics", "hide", "preview") {
+                SettingsRow(
+                    icon = SfIcons.VisibilityOff,
+                    title = hideLyricsTitle,
+                    subtitle = stringResource(R.string.hide_lyrics_preview_subtitle),
+                    trailing = {
+                        IosSwitch(
+                            checked = hideLyricsPreview,
+                            onCheckedChange = AppSettings::setHideLyricsPreview,
+                        )
+                    },
+                    onClick = { AppSettings.setHideLyricsPreview(!hideLyricsPreview) },
                 )
             }
             // Nothing to choose between while the feature is off, and the
@@ -1614,6 +1691,68 @@ fun SettingsScreen(
                     onClick = { AppSettings.setReplayGenres(!replayGenres) },
                 )
             }
+            val autoBackupTitle = stringResource(R.string.auto_backup_title)
+            row(autoBackupTitle, "backup", "cloud", "drive") {
+                SettingsRow(
+                    icon = SfIcons.FileUpload,
+                    title = autoBackupTitle,
+                    subtitle = cloudBackupMessage ?: stringResource(
+                        when {
+                            !autoBackupStatus.configured -> R.string.auto_backup_setup_subtitle
+                            autoBackupStatus.enabled -> R.string.auto_backup_enabled_subtitle
+                            else -> R.string.auto_backup_disabled_subtitle
+                        },
+                    ),
+                    trailing = {
+                        IosSwitch(
+                            checked = autoBackupStatus.enabled,
+                            onCheckedChange = { enabled ->
+                                if (enabled) {
+                                    if (autoBackupStatus.configured) {
+                                        AutoBackupController.setEnabled(context, true)
+                                    } else {
+                                        autoBackupFolderPicker.launch(null)
+                                    }
+                                } else {
+                                    AutoBackupController.setEnabled(context, false)
+                                }
+                            },
+                        )
+                    },
+                    onClick = {
+                        autoBackupFolderPicker.launch(
+                            autoBackupStatus.folderUri?.let { Uri.parse(it) },
+                        )
+                    },
+                )
+            }
+            val autoBackupNowTitle = stringResource(R.string.auto_backup_now)
+            row(autoBackupNowTitle, "backup", "cloud", "drive") {
+                val statusText = when {
+                    !autoBackupStatus.configured -> stringResource(R.string.auto_backup_no_folder)
+                    autoBackupStatus.lastRunFailed -> stringResource(R.string.auto_backup_failed)
+                    autoBackupStatus.lastSuccessAtMillis > 0L -> stringResource(
+                        R.string.auto_backup_last_success,
+                        java.text.DateFormat.getDateTimeInstance().format(
+                            java.util.Date(autoBackupStatus.lastSuccessAtMillis),
+                        ),
+                    )
+                    else -> stringResource(R.string.auto_backup_now_subtitle)
+                }
+                SettingsRow(
+                    icon = SfIcons.FileUpload,
+                    title = autoBackupNowTitle,
+                    subtitle = cloudBackupMessage ?: statusText,
+                    onClick = {
+                        cloudBackupMessage = null
+                        if (autoBackupStatus.configured) {
+                            AutoBackupController.backupNow(context)
+                        } else {
+                            autoBackupFolderPicker.launch(null)
+                        }
+                    },
+                )
+            }
             val exportDataTitle = stringResource(R.string.export_data)
             row(exportDataTitle, "backup") {
                 SettingsRow(
@@ -1794,59 +1933,77 @@ fun SettingsScreen(
             val appIconTitle = stringResource(R.string.app_icon)
             row(appIconTitle, "icon", "launcher", "logo") {
                 var selectedIcon by remember { mutableStateOf(AppIcon.current(context)) }
-                SettingsRow(icon = SfIcons.Apps, title = appIconTitle)
+                SettingsRow(icon = Icons.Filled.Apps, title = appIconTitle)
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .horizontalScroll(rememberScrollState())
-                        .padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        .padding(start = ROW_INSET, end = ROW_INSET, bottom = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     AppIcon.entries.forEach { option ->
                         val selected = option == selectedIcon
+                        val tileShape = RoundedCornerShape(18.dp)
                         Column(
                             modifier = Modifier
-                                .width(84.dp)
-                                .clip(RoundedCornerShape(16.dp))
+                                .width(96.dp)
+                                .clip(tileShape)
+                                .background(
+                                    if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.36f),
+                                )
+                                .border(
+                                    width = 1.dp,
+                                    color = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.72f)
+                                    else MaterialTheme.colorScheme.outline.copy(alpha = 0.24f),
+                                    shape = tileShape,
+                                )
                                 .clickable {
                                     selectedIcon = option
                                     AppIcon.apply(context, option)
                                 }
-                                .padding(vertical = 6.dp),
+                                .padding(horizontal = 4.dp, vertical = 8.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
-                            // A glass foreground holds the finished icon in its own shape on the
-                            // central 72 of 108 dp: scaled 1.5× it fills the tile as designed.
-                            // Only the default goes through an adaptive mask.
-                            val preview = option.previewRes
-                            if (preview == null) {
-                                AndroidView(
-                                    factory = { ctx ->
-                                        android.widget.ImageView(ctx).apply { setImageResource(option.iconRes) }
-                                    },
-                                    modifier = Modifier
-                                        .size(68.dp)
-                                        .clip(RoundedCornerShape(22.dp)),
-                                )
-                            } else {
-                                Image(
-                                    painter = painterResource(preview),
-                                    contentDescription = null,
-                                    contentScale = ContentScale.Fit,
-                                    modifier = Modifier
-                                        .size(68.dp)
-                                        .scale(1.5f),
-                                )
+                            // Reserve the full preview slot in measurement: the previous 1.5x
+                            // draw scale enlarged pixels without enlarging the layout, so the
+                            // image painted over its own label on narrow screens.
+                            Box(
+                                modifier = Modifier.size(84.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                val preview = option.previewRes
+                                if (preview == null) {
+                                    AndroidView(
+                                        factory = { ctx ->
+                                            android.widget.ImageView(ctx).apply {
+                                                scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+                                                setImageResource(option.iconRes)
+                                            }
+                                        },
+                                        update = { view -> view.setImageResource(option.iconRes) },
+                                        modifier = Modifier.size(80.dp),
+                                    )
+                                } else {
+                                    Image(
+                                        painter = painterResource(preview),
+                                        contentDescription = null,
+                                        contentScale = ContentScale.Fit,
+                                        modifier = Modifier.size(84.dp),
+                                    )
+                                }
                             }
                             Text(
                                 text = stringResource(option.labelRes),
                                 textAlign = TextAlign.Center,
+                                minLines = 2,
                                 maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
                                 style = MaterialTheme.typography.labelMedium,
                                 color = if (selected) MaterialTheme.colorScheme.primary
                                 else MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                                modifier = Modifier.padding(top = 6.dp),
+                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                modifier = Modifier.padding(top = 7.dp),
                             )
                         }
                     }
@@ -1879,14 +2036,14 @@ fun SettingsScreen(
         if (section == null && searchQuery.isBlank()) {
         Text(
             text = buildAnnotatedString {
-                append("bitchord $version  ")
+                append("MusikKu $version  ")
                 val linkStyles = TextLinkStyles(
                     style = SpanStyle(
                         color = MaterialTheme.colorScheme.primary,
                         textDecoration = TextDecoration.Underline,
                     ),
                 )
-                withLink(LinkAnnotation.Url("https://github.com/kushagrasinghx/BitChord", linkStyles)) {
+                withLink(LinkAnnotation.Url("https://github.com/Rulzz77/Musikku", linkStyles)) {
                     append("GitHub")
                 }
                 append("  ")
@@ -1898,7 +2055,7 @@ fun SettingsScreen(
                     append("Discord")
                 }
                 append("  ")
-                withLink(LinkAnnotation.Url("https://bitchord.kushagrasingh.in/", linkStyles)) {
+                withLink(LinkAnnotation.Url("https://bitchord.in/", linkStyles)) {
                     append("Website")
                 }
                 append("\n~YouTube Music & Listen Together Backend")
@@ -2606,7 +2763,9 @@ private inline fun SearchableSettingsGroup(
                 // has nothing to sit under, so it is given that room back.
                 index == 0 && !entry.divided -> Spacer(Modifier.height(10.dp))
             }
-            entry.content()
+            CompositionLocalProvider(LocalSubRowStandalone provides entry.divided) {
+                entry.content()
+            }
         }
     }
 }
@@ -2781,9 +2940,19 @@ internal fun SettingsRow(
 }
 
 /**
+ * Whether the [SettingsSubRow] being drawn is a row of its own, under a
+ * divider or at the top of its card, rather than hanging off the row above.
+ * Set per row by [SearchableSettingsGroup], which knows which rows are divided.
+ */
+private val LocalSubRowStandalone = staticCompositionLocalOf { false }
+
+/**
  * A toggle that reads as part of the option above it rather than a setting
  * of its own: no icon, no divider, and pulled up close against its parent
  * instead of getting the same breathing room a full [SettingsRow] gets.
+ *
+ * Also drawn as a plain toggle row of its own, under a divider. There it gets
+ * the same gap above its title as below it, or the title sits on the line.
  */
 @Composable
 internal fun SettingsSubRow(
@@ -2799,7 +2968,12 @@ internal fun SettingsSubRow(
             .fillMaxWidth()
             .clickable(enabled = enabled) { onCheckedChange(!checked) }
             .alpha(if (enabled) 1f else 0.45f)
-            .padding(start = ROW_INSET, end = ROW_INSET, top = 0.dp, bottom = 10.dp),
+            .padding(
+                start = ROW_INSET,
+                end = ROW_INSET,
+                top = if (LocalSubRowStandalone.current) 10.dp else 0.dp,
+                bottom = 10.dp,
+            ),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
@@ -3220,31 +3394,49 @@ private fun StorageUsageOverview(
     cacheLimitBytes: Long,
     onRefresh: () -> Unit,
 ) {
-    SettingsGroup(topSpacing = 0.dp) {
+    SettingsGroup(topSpacing = 26.dp) {
         Column(Modifier.fillMaxWidth().padding(horizontal = ROW_INSET, vertical = 16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        text = stringResource(R.string.storage_usage_title),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Text(
-                        text = if (usage == null) {
-                            stringResource(R.string.storage_usage_loading)
-                        } else {
-                            stringResource(
-                                R.string.storage_usage_total,
-                                StorageUsage.formatBytes(usage.managedBytes),
-                            )
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                val titleAndTotal: @Composable () -> Unit = {
+                    Column {
+                        Text(
+                            text = stringResource(R.string.storage_usage_title),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            text = if (usage == null) {
+                                stringResource(R.string.storage_usage_loading)
+                            } else {
+                                stringResource(
+                                    R.string.storage_usage_total,
+                                    StorageUsage.formatBytes(usage.managedBytes),
+                                )
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
-                TextButton(onClick = onRefresh, enabled = !loading) {
-                    Text(stringResource(R.string.storage_usage_refresh))
+                if (maxWidth < 340.dp) {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        titleAndTotal()
+                        TextButton(
+                            onClick = onRefresh,
+                            enabled = !loading,
+                            modifier = Modifier.align(Alignment.End),
+                        ) {
+                            Text(stringResource(R.string.storage_usage_refresh))
+                        }
+                    }
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.weight(1f)) { titleAndTotal() }
+                        TextButton(onClick = onRefresh, enabled = !loading) {
+                            Text(stringResource(R.string.storage_usage_refresh))
+                        }
+                    }
                 }
             }
             Spacer(Modifier.height(12.dp))
@@ -3310,25 +3502,51 @@ private fun StorageUsageOverview(
             )
         }
     }
+    // Keep the next Storage setting outside the inventory card's visual edge.
+    Spacer(Modifier.height(20.dp))
 }
 
 @Composable
 private fun StorageUsageLine(label: String, bytes: Long?) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = label,
-            modifier = Modifier.weight(1f),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-        Text(
-            text = bytes?.let(StorageUsage::formatBytes) ?: "—",
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val value = bytes?.let(StorageUsage::formatBytes) ?: "—"
+        if (maxWidth < 360.dp) {
+            // Longer translations and model names get their own line on phones.
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text = value,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = label,
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Spacer(Modifier.width(12.dp))
+                Text(
+                    text = value,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
     }
 }

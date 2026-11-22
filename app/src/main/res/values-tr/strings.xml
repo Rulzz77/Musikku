@@ -1490,4 +1490,27 @@
     <string name="smart_playlist_editor_description">Bu listeler dinleme geçmişinden oluşturulur ve dinleme istatistikleri kaydedildiğinde yenilenir. Normal çalma listelerini değiştirmez.</string>
     <string name="smart_playlist_max_reached">En fazla 20 özel akıllı çalma listesi oluşturabilirsin.</string>
     <string name="storage_automix_models">Automix yapay zekâ modelleri (gerektiğinde yeniden oluşturulur)</string>
+    <string name="show_total_duration">Toplam süreyi göster</string>
+    <string name="show_total_duration_subtitle">Kalan süre yerine şarkının tam uzunluğunu gösterir</string>
+    <string name="hide_lyrics_preview">Şarkı sözü önizlemesini gizle</string>
+    <string name="hide_lyrics_preview_subtitle">Oynatıcıdaki kayan şarkı sözü satırını gizler; tam şarkı sözü paneli kullanılabilir</string>
+    <string name="sleep_timer_fade_out">Durdurmadan önce sesi kıs</string>
+    <string name="sleep_timer_fade_out_subtitle">Uyku zamanlayıcısının son 30 saniyesinde ses düzeyini kademeli olarak azaltır</string>
+    <string name="download_liked_songs">Beğenilen şarkıları indir</string>
+    <string name="download_liked_songs_subtitle">Beğendiğin müzikleri ve bundan sonra beğeneceğin tüm şarkıları indirir</string>
+    <plurals name="queue_removed_count"><item quantity="one">%1$d şarkı kaldırıldı</item><item quantity="other">%1$d şarkı kaldırıldı</item></plurals>
+    <string name="queue_removed_song">%1$s kaldırıldı</string>
+    <string name="queue_undo_action">Geri al</string>
+    <string name="queue_cleared_section">%1$s temizlendi</string>
+    <string name="next_in_queue">Sıradakiler</string>
+    <string name="queue_selected_count">%1$d seçildi</string>
+    <string name="queue_playlist_added">%2$d şarkıdan %1$d tanesi eklendi</string>
+    <string name="queue_playlist_partial">%1$s (%2$d uyumsuz, %3$d zaten var, %4$d başarısız)</string>
+    <string name="queue_like_sign_in">Çevrimiçi şarkıları beğenmek için oturum aç</string>
+
+    <!-- AutoMix artwork transitions -->
+    <string name="automix_art_transition">Kapak geçişi</string>
+    <string name="automix_art_transition_subtitle">AutoMix sırasında parçalar arasında kapak görsellerini yumuşak biçimde harmanlar.</string>
+    <string name="automix_mini_art_transition">Mini oynatıcı kapak geçişi</string>
+    <string name="automix_mini_art_transition_subtitle">AutoMix sırasında mini oynatıcıda kapak geçişlerini gösterir.</string>
 </resources>

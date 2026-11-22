@@ -191,11 +191,19 @@
     <string name="subscriptions">מנויים</string>
     <string name="your_replay">ה-Replay שלך</string>
     <string name="your_listening_experience">חווית ההאזנה שלך</string>
-    <string name="default_replay_holder">מאזין BitChord</string>
+    <string name="default_replay_holder">מאזין MusikKu</string>
     <string name="member_since">חבר מאז</string>
     <string name="import_spotify">ייבוא מ-Spotify</string>
     <string name="import_spotify_subtitle">מקישור לפלייליסט</string>
     <string name="search_library_empty">מחפש את השירים בתיקיית המוזיקה המקומית שלכם.</string>
     <string name="search_library_hint">שירים, אמנים ואלבומים</string>
     <string name="search_library_no_results">אין דבר במוזיקה המקומית שתואם ל-„%1$s”.</string>
+    <string name="queue_selected_count">%1$d נבחרו</string>
+    <string name="queue_select_all">בחירת הכול</string>
+    <string name="queue_select">בחירה</string>
+    <string name="queue_close_selection">סגירת מצב הבחירה</string>
+    <string name="queue_add_to_playlist">הוספה לפלייליסט</string>
+    <string name="queue_download">הורדה</string>
+    <string name="queue_selection_remove">הסר</string>
+    <string name="queue_add_all_to_playlist">הוספת הכול לפלייליסט</string>
 </resources>

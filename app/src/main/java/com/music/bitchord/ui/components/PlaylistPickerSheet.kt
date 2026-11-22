@@ -116,6 +116,8 @@ fun PlaylistPickerSheet(
     isSongInPlaylist: (UserPlaylist) -> Boolean = { false },
     /** Removes the current song from playlists whose existing ticks are cleared. */
     onRemove: (List<UserPlaylist>) -> Unit = {},
+    /** Frozen bulk selection; its handling is supplied by the queue picker host. */
+    songs: List<Song> = emptyList(),
 ) {
     var creating by remember { mutableStateOf(startCreating) }
     // By id rather than by value: the list is re-fetched under an open sheet,
@@ -197,7 +199,7 @@ fun PlaylistPickerSheet(
                     HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outline)
                 }
                 SheetHeading(
-                    stringResource(if (song != null) R.string.add_to_playlist else R.string.your_playlists)
+                    stringResource(if (song != null || songs.isNotEmpty()) R.string.add_to_playlist else R.string.your_playlists)
                         .uppercase(Locale.getDefault()),
                 )
 

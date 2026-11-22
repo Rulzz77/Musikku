@@ -1511,4 +1511,8 @@
     <string name="smart_playlist_editor_description">これらのリストは再生履歴から作成され、再生統計の保存時に更新されます。通常のプレイリストは変更されません。</string>
     <string name="smart_playlist_max_reached">カスタムスマートプレイリストは最大20件作成できます。</string>
     <string name="storage_automix_models">Automix AIモデル（必要に応じて再作成）</string>
+    <string name="show_total_duration">合計時間を表示</string>
+    <string name="show_total_duration_subtitle">残り時間の代わりに曲の全体の長さを表示します</string>
+    <string name="hide_lyrics_preview">歌詞プレビューを非表示</string>
+    <string name="hide_lyrics_preview_subtitle">プレーヤー上のスクロールする歌詞行を非表示にします。歌詞全文のパネルは引き続き利用できます</string>
 </resources>

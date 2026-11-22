@@ -130,6 +130,7 @@ import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Album
 import com.music.bitchord.data.LocalGroups
 import com.music.bitchord.data.OfflinePlaylists
+import com.music.bitchord.data.YtMusicRepository
 import com.music.bitchord.data.matchesSearch
 import com.music.bitchord.data.sortedForLibrary
 import com.music.bitchord.data.useTrackTags
@@ -310,6 +311,8 @@ fun DetailScreen(
     onAddSuggested: (Song) -> Unit,
     /** Removes one entry from a playlist this listener owns or keeps on this device. */
     onRemoveSongFromPlaylist: ((Song) -> Unit)? = null,
+    /** Toggles Like for artwork double-taps inside the Liked Music playlist. */
+    onToggleSongLike: ((Song) -> Unit)? = null,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
     listState: LazyListState = rememberLazyListState(),
@@ -386,6 +389,8 @@ fun DetailScreen(
         rawSongs.withIndex().associate { (i, s) -> s.videoId to ((if (byTag) s.trackNumber else null) ?: (i + 1)) }
     }
     val isArtist = page.type == BrowseType.ARTIST
+    val isLikedMusicPage = page.browseId == YtMusicRepository.LIKED_MUSIC ||
+        OfflinePlaylists.isLikedPage(page.browseId)
     // Whether the top release card's album is already saved isn't on the shelf
     // item; it is read off the album once, as soon as the card is known.
     val topReleaseId = if (isArtist) page.sections.topRelease()?.browseId else null
@@ -792,6 +797,9 @@ fun DetailScreen(
                             },
                             onLongPress = { onSongLongPress(song) },
                             onSwipeToQueue = { onSongSwipe(song) },
+                            onArtworkDoubleTap = if (isLikedMusicPage) {
+                                onToggleSongLike?.let { toggle -> { toggle(song) } }
+                            } else null,
                             rowBackground = Color.Transparent,
                             // The track's place on the release, not its place in
                             // what the filter — or a sort — left standing.
@@ -2490,7 +2498,7 @@ private fun DetailPage.headerLines(trackCount: Int, playtime: String? = null): P
 /** The glyph on a release page's placeholder sleeve: what kind of thing has no cover. */
 private fun DetailPage.placeholderIcon(): ImageVector = deviceFolderIcon(browseId) ?: when {
     LocalGroups.isArtist(browseId) -> Icons.Rounded.Person
-    OfflinePlaylists.isLikedPage(browseId) -> Icons.Rounded.Favorite
+    browseId == YtMusicRepository.LIKED_MUSIC || OfflinePlaylists.isLikedPage(browseId) -> Icons.Rounded.Favorite
     LocalGroups.isDirectory(browseId) -> Icons.Rounded.Folder
     type == BrowseType.ALBUM -> Icons.Rounded.Album
     type == BrowseType.PLAYLIST -> Icons.AutoMirrored.Rounded.QueueMusic

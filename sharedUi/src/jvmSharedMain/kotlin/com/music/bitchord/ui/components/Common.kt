@@ -21,6 +21,7 @@ import com.music.bitchord.ui.player.MeshGradientBackground
 import com.music.bitchord.ui.player.WelcomeMeshPalettes
 import com.music.bitchord.ui.player.cyclingMeshPalette
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.compositionLocalOf
@@ -281,6 +282,8 @@ fun SongRow(
      */
     onMore: (() -> Unit)? = null,
     onSwipeToQueue: (() -> Unit)? = null,
+    /** A double tap on the artwork, distinct from the row's single-tap play action. */
+    onArtworkDoubleTap: (() -> Unit)? = null,
     /**
      * What the row paints over the swipe reveal as it slides back.
      *
@@ -346,6 +349,7 @@ fun SongRow(
             onClick = onClick,
             onLongPress = onLongPress,
             onMore = onMore ?: onLongPress,
+            onArtworkDoubleTap = onArtworkDoubleTap,
             modifier = if (onSwipeToQueue != null) Modifier.background(rowBackground) else modifier,
             trackNumber = trackNumber,
             subtitleColor = subtitleColor,
@@ -488,6 +492,7 @@ private fun SongRowContent(
     onClick: () -> Unit,
     onLongPress: (() -> Unit)?,
     onMore: (() -> Unit)?,
+    onArtworkDoubleTap: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     trackNumber: Int? = null,
     subtitleColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -564,7 +569,18 @@ private fun SongRowContent(
                         .matchParentSize()
                         .clip(RoundedCornerShape(11.dp))
                         .thumbnailBorder(RoundedCornerShape(11.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .then(
+                            if (onArtworkDoubleTap != null) {
+                                Modifier.combinedClickable(
+                                    onClick = onClick,
+                                    onLongClick = onLongPress,
+                                    onDoubleClick = onArtworkDoubleTap,
+                                )
+                            } else {
+                                Modifier
+                            },
+                        ),
                 )
                 if (searchPlayingStyle && isCurrent && isPlaying) {
                     SearchPlayingBars(Modifier.align(Alignment.Center))

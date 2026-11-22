@@ -63,6 +63,53 @@ class LocalizationTest {
     }
 
     @Test
+    fun indonesianCommonUiLabelsAreTranslated() {
+        val workingDirectory = File(".").canonicalFile
+        val projectRoot = if (File(workingDirectory, "sharedUi").isDirectory) {
+            workingDirectory
+        } else {
+            workingDirectory.parentFile ?: workingDirectory
+        }
+        val appStrings = File(projectRoot, "app/src/main/res/values-id/strings.xml")
+        val sharedStrings = File(projectRoot, "sharedUi/src/commonMain/composeResources/values-id/strings.xml")
+        assertTrue("Indonesian Android strings must exist", appStrings.exists())
+        assertTrue("Indonesian shared player strings must exist", sharedStrings.exists())
+
+        fun value(file: File, key: String): String {
+            val document = DocumentBuilderFactory.newInstance()
+                .newDocumentBuilder()
+                .parse(file)
+            val nodes = document.getElementsByTagName("string")
+            for (index in 0 until nodes.length) {
+                val element = nodes.item(index) as org.w3c.dom.Element
+                if (element.getAttribute("name") == key) return element.textContent.trim()
+            }
+            throw AssertionError("Missing Indonesian string '$key' in $file")
+        }
+
+        val appExpected = mapOf(
+            "settings_search_hint" to "Cari pengaturan",
+            "auto_empty_liked_title" to "Belum ada lagu yang disukai",
+            "cast_dialog_subtitle" to "Putar melalui Chromecast atau speaker Google Cast",
+            "switch_to_grid_view" to "Beralih ke tampilan kisi",
+            "listen_together_server_online" to "Daring · %1\$d ms",
+            "queue_like_sign_in" to "Masuk untuk menyukai lagu daring",
+        )
+        appExpected.forEach { (key, expected) ->
+            assertEquals("Incorrect Indonesian Android string: $key", expected, value(appStrings, key))
+        }
+
+        val sharedExpected = mapOf(
+            "audio_output" to "Keluaran audio",
+            "lyrics_offset_description" to "Nilai positif membuat lirik muncul lebih lambat",
+            "personal_phone" to "Ponsel milik %1\$s",
+        )
+        sharedExpected.forEach { (key, expected) ->
+            assertEquals("Incorrect Indonesian shared player string: $key", expected, value(sharedStrings, key))
+        }
+    }
+
+    @Test
     fun supportedLanguages_containsVietnamese() {
         val viLanguage = SUPPORTED_LANGUAGES.firstOrNull { it.tag == "vi" }
         assertNotNull("Vietnamese language must be in SUPPORTED_LANGUAGES", viLanguage)

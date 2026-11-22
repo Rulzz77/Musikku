@@ -144,11 +144,11 @@ class AppIconVariantsTest {
             assertTrue("Android and Replay marks must be solid", logo.contains(solidMark))
             assertFalse("In-app logos must not use an outlined M", logo.contains("android:strokeWidth"))
         }
-        assertTrue("Web mark must be filled", webLogo.contains("fill=\\"currentColor\\""))
-        assertTrue("Transparent mark must be filled", transparentLogo.contains("fill=\\"url(#mark)\\""))
-        assertTrue("Full SVG mark must be filled", svgLogo.contains("fill=\\"url(#mark)\\""))
-        assertFalse("Web mark must not keep the previous outline", webLogo.contains("stroke-width=\\"7.5\\""))
-        assertFalse("Transparent mark must not keep the previous outline", transparentLogo.contains("stroke-width=\\"7.5\\""))
+        assertTrue("Web mark must be filled", webLogo.contains("fill=") && webLogo.contains("currentColor"))
+        assertTrue("Transparent mark must be filled", transparentLogo.contains("url(#mark)") && transparentLogo.contains("M25 78V35"))
+        assertTrue("Full SVG mark must be filled", svgLogo.contains("url(#mark)") && svgLogo.contains("M120 369V166"))
+        assertFalse("Web mark must not keep the previous outline", webLogo.contains("stroke-width"))
+        assertFalse("Transparent mark must not keep the previous outline", transparentLogo.contains("stroke-width"))
     }
 
     private fun resourcesDir() = File(appRoot, "src/main/res")

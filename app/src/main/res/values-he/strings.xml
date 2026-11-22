@@ -1538,4 +1538,8 @@
     <string name="smart_playlist_editor_description">הרשימות האלה נוצרות מהיסטוריית ההאזנה שלך ומתעדכנות כשסטטיסטיקת ההאזנה נשמרת. הן לא משנות את הפלייליסטים הרגילים שלך.</string>
     <string name="smart_playlist_max_reached">אפשר ליצור עד 20 פלייליסטים חכמים מותאמים אישית.</string>
     <string name="storage_automix_models">מודלי AI של Automix (נוצרים מחדש בעת הצורך)</string>
+    <string name="show_total_duration">הצגת משך כולל</string>
+    <string name="show_total_duration_subtitle">מציג את אורך השיר המלא במקום את הזמן שנותר</string>
+    <string name="hide_lyrics_preview">הסתרת תצוגה מקדימה של מילים</string>
+    <string name="hide_lyrics_preview_subtitle">מסתיר את שורת המילים הנגללת בנגן; חלונית המילים המלאה נשארת זמינה</string>
 </resources>

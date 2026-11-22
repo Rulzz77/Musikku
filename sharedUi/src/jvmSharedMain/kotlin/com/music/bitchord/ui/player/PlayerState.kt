@@ -25,6 +25,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImagePainter
 import coil3.request.ImageRequest
 import com.music.bitchord.data.canvas.CanvasArtwork
+import com.music.bitchord.data.model.PLAYER_ART_MEMORY_CACHE_KEY_EXTRA
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.model.artworkAt
 import kotlin.math.abs
@@ -142,6 +143,7 @@ internal class PlayerArtwork(val url: String?, private val context: PlatformCont
         ImageRequest.Builder(context)
             .data(url)
             .size(ART_PX)
+            .memoryCacheKeyExtra(PLAYER_ART_MEMORY_CACHE_KEY_EXTRA, ART_PX.toString())
             // What makes a retry a new request as far as Coil's model comparison
             // is concerned. Only from the second go onwards, so the ordinary
             // request stays byte-identical to the one the mesh and the palette

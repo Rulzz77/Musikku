@@ -3304,41 +3304,6 @@ fun NowPlayingScreen(
                                 // banner included — a source on the surrounding layout
                                 // only captured its mesh backdrop.
                                 .hazeSource(playerHaze)
-                                // The artwork slot is the intentional tap
-                                // target: a double tap likes/unlikes the
-                                // current song, while single taps remain free
-                                // for the player's existing gestures.
-                                .then(
-                                    if (!queueOpen && !lyricsOpen &&
-                                        (signedIn || song.localUri != null)
-                                    ) {
-                                        Modifier.pointerInput(
-                                            song.videoId,
-                                            controlsLocked,
-                                            likeStatus,
-                                            queueOpen,
-                                            lyricsOpen,
-                                        ) {
-                                            detectTapGestures(
-                                                onDoubleTap = {
-                                                    if (controlsLocked) {
-                                                        onBlockedControl()
-                                                    } else {
-                                                        coverLikeBurstFilled = likeStatus != LikeStatus.LIKE
-                                                        onToggleLike()
-                                                        coverLikeBurstToken++
-                                                        haptics.play(
-                                                            if (coverLikeBurstFilled) Haptic.ToggleOn
-                                                            else Haptic.ToggleOff,
-                                                        )
-                                                    }
-                                                },
-                                            )
-                                        }
-                                    } else {
-                                        Modifier
-                                    },
-                                )
                                 .graphicsLayer {
                                     // Hands its opacity to a full-bleed clip as the clip
                                     // takes over, and takes it straight back if there
@@ -3611,6 +3576,39 @@ fun NowPlayingScreen(
                                     scaleY = idle
                                     translationX = swipeSettle.value * (1f - p())
                                 }
+                                // This is the sleeve's real hit target: the artwork
+                                // layer above is deliberately laid out with zero height
+                                // so its full-bleed banner can paint outside the card.
+                                .then(
+                                    if (!queueOpen && !lyricsOpen &&
+                                        (signedIn || song.localUri != null)
+                                    ) {
+                                        Modifier.pointerInput(
+                                            song.videoId,
+                                            controlsLocked,
+                                            likeStatus,
+                                            queueOpen,
+                                            lyricsOpen,
+                                        ) {
+                                            detectTapGestures(
+                                                onDoubleTap = {
+                                                    if (controlsLocked) {
+                                                        onBlockedControl()
+                                                    } else {
+                                                        coverLikeBurstFilled = likeStatus != LikeStatus.LIKE
+                                                        onToggleLike()
+                                                        coverLikeBurstToken++
+                                                        haptics.play(
+                                                            if (coverLikeBurstFilled) Haptic.ToggleOn else Haptic.ToggleOff,
+                                                        )
+                                                    }
+                                                },
+                                            )
+                                        }
+                                    } else {
+                                        Modifier
+                                    },
+                                )
                                 // Collapsed, the sleeve is the way back: tapping the
                                 // thumbnail puts the queue or the lyrics away again.
                                 .then(

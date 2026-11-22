@@ -1400,4 +1400,10 @@
     <string name="queue_playlist_added">%2$d곡 중 %1$d곡 추가됨</string>
     <string name="queue_playlist_partial">%1$s (호환되지 않음 %2$d개, 이미 있음 %3$d개, 실패 %4$d개)</string>
     <string name="queue_like_sign_in">온라인 곡에 좋아요를 누르려면 로그인하세요</string>
+
+    <!-- AutoMix artwork transitions -->
+    <string name="automix_art_transition">커버 아트 전환</string>
+    <string name="automix_art_transition_subtitle">AutoMix 중 트랙 사이의 커버 아트를 부드럽게 전환합니다.</string>
+    <string name="automix_mini_art_transition">미니 플레이어 커버 아트 전환</string>
+    <string name="automix_mini_art_transition_subtitle">AutoMix 중 미니 플레이어에서 커버 아트 전환 효과를 표시합니다.</string>
 </resources>

@@ -121,7 +121,7 @@ object BestParts {
             try {
                 song.localUri
                     ?.let { EmbeddedLyrics.forUri(context, it) }
-                    ?.takeIf(EmbeddedLyrics::isSynced)
+                    ?.takeIf(::hasSyncedLyrics)
                     ?: if (durationMs > 0) {
                         LyricsRepository.lyrics(
                             videoId = song.videoId,
@@ -131,7 +131,7 @@ object BestParts {
                             album = song.albumName,
                             sources = AppSettings.lyricsSources.value,
                             order = AppSettings.lyricsSourceOrder.value,
-                        )?.lines?.takeIf(EmbeddedLyrics::isSynced)
+                        )?.lines?.takeIf(::hasSyncedLyrics)
                     } else {
                         null
                     }
@@ -196,3 +196,8 @@ object BestParts {
     private const val MONTH_MS = 30L * 24 * 3600 * 1000
     private const val WEEK_MS = 7L * 24 * 3600 * 1000
 }
+
+
+/** True when the returned lyric list has at least one real timed line. */
+private fun hasSyncedLyrics(lines: List<LyricLine>): Boolean =
+    lines.any { it.timeMs >= 0L && !it.isGap && it.text.isNotBlank() }

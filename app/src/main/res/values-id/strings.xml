@@ -443,6 +443,8 @@
     <string name="signed_in_as">Masuk sebagai %1$s</string>
     <string name="signing_in">Sedang masuk…</string>
     <string name="sleep_timer">Timer tidur</string>
+    <string name="sleep_timer_fade_out">Turunkan volume sebelum berhenti</string>
+    <string name="sleep_timer_fade_out_subtitle">Volume dipelankan bertahap selama 30 detik terakhir timer tidur</string>
     <string name="sleep_timer_custom">Kustom</string>
     <string name="start_sleep_timer">Mulai timer</string>
     <string name="sources_no_lossless">Tidak ada sumber aktif yang dapat menyediakan audio lossless. Tambahkan modul kustom untuk memutar file lossless yang tersedia tanpa transcoding.</string>

@@ -1550,4 +1550,10 @@
     <string name="queue_playlist_added">%1$d von %2$d Songs hinzugefügt</string>
     <string name="queue_playlist_partial">%1$s (%2$d inkompatibel, %3$d bereits vorhanden, %4$d fehlgeschlagen)</string>
     <string name="queue_like_sign_in">Melde dich an, um Online-Songs zu liken</string>
+
+    <!-- AutoMix artwork transitions -->
+    <string name="automix_art_transition">Cover-Übergang</string>
+    <string name="automix_art_transition_subtitle">Blendet die Cover während AutoMix sanft zwischen den Titeln über.</string>
+    <string name="automix_mini_art_transition">Cover-Übergang im Mini-Player</string>
+    <string name="automix_mini_art_transition_subtitle">Zeigt während AutoMix Cover-Übergänge im Mini-Player.</string>
 </resources>

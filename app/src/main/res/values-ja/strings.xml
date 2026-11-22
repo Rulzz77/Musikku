@@ -1519,4 +1519,13 @@
     <string name="sleep_timer_fade_out_subtitle">スリープタイマー終了前の30秒間、音量を徐々に下げます</string>
     <string name="download_liked_songs">高評価した曲をダウンロード</string>
     <string name="download_liked_songs_subtitle">高評価した音楽と、今後高評価するすべての曲をダウンロードします</string>
+    <plurals name="queue_removed_count"><item quantity="one">%1$d 曲を削除しました</item><item quantity="other">%1$d 曲を削除しました</item></plurals>
+    <string name="queue_removed_song">%1$s を削除しました</string>
+    <string name="queue_undo_action">元に戻す</string>
+    <string name="queue_cleared_section">%1$s を消去しました</string>
+    <string name="next_in_queue">次の曲</string>
+    <string name="queue_selected_count">%1$d 件選択中</string>
+    <string name="queue_playlist_added">%2$d 曲中 %1$d 曲を追加しました</string>
+    <string name="queue_playlist_partial">%1$s（互換性なし %2$d、登録済み %3$d、失敗 %4$d）</string>
+    <string name="queue_like_sign_in">オンラインの曲に高評価するにはログインしてください</string>
 </resources>

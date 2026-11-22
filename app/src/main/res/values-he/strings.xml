@@ -1546,4 +1546,13 @@
     <string name="sleep_timer_fade_out_subtitle">מנמיך בהדרגה את עוצמת הקול ב־30 השניות האחרונות של טיימר השינה</string>
     <string name="download_liked_songs">הורדת שירים שאהבת</string>
     <string name="download_liked_songs_subtitle">מוריד את המוזיקה שאהבת וכל שיר שתאהב מעכשיו והלאה</string>
+    <plurals name="queue_removed_count"><item quantity="one">%1$d שיר הוסר</item><item quantity="other">%1$d שירים הוסרו</item></plurals>
+    <string name="queue_removed_song">הוסר %1$s</string>
+    <string name="queue_undo_action">ביטול</string>
+    <string name="queue_cleared_section">נוקה %1$s</string>
+    <string name="next_in_queue">הבא בתור</string>
+    <string name="queue_selected_count">%1$d נבחרו</string>
+    <string name="queue_playlist_added">נוספו %1$d מתוך %2$d שירים</string>
+    <string name="queue_playlist_partial">%1$s (%2$d לא תואמים, %3$d כבר קיימים, %4$d נכשלו)</string>
+    <string name="queue_like_sign_in">יש להתחבר כדי לסמן לייק לשירים מקוונים</string>
 </resources>

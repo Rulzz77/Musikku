@@ -1518,4 +1518,13 @@
     <string name="sleep_timer_fade_out_subtitle">在睡眠定时器结束前的最后30秒逐渐降低音量</string>
     <string name="download_liked_songs">下载喜欢的歌曲</string>
     <string name="download_liked_songs_subtitle">下载你喜欢的音乐，以及今后每一首你点过喜欢的歌曲</string>
+    <plurals name="queue_removed_count"><item quantity="one">已移除 %1$d 首歌曲</item><item quantity="other">已移除 %1$d 首歌曲</item></plurals>
+    <string name="queue_removed_song">已移除 %1$s</string>
+    <string name="queue_undo_action">撤销</string>
+    <string name="queue_cleared_section">已清空 %1$s</string>
+    <string name="next_in_queue">接下来播放</string>
+    <string name="queue_selected_count">已选择 %1$d 首</string>
+    <string name="queue_playlist_added">已添加 %1$d/%2$d 首歌曲</string>
+    <string name="queue_playlist_partial">%1$s（%2$d 首不兼容，%3$d 首已存在，%4$d 首失败）</string>
+    <string name="queue_like_sign_in">登录后即可喜欢在线歌曲</string>
 </resources>

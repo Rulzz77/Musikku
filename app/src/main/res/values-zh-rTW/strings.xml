@@ -1518,4 +1518,13 @@
     <string name="sleep_timer_fade_out_subtitle">在睡眠計時器結束前的最後 30 秒逐漸降低音量</string>
     <string name="download_liked_songs">下載已按讚的歌曲</string>
     <string name="download_liked_songs_subtitle">下載你按讚的音樂，以及今後每一首你按讚的歌曲</string>
+    <plurals name="queue_removed_count"><item quantity="one">已移除 %1$d 首歌曲</item><item quantity="other">已移除 %1$d 首歌曲</item></plurals>
+    <string name="queue_removed_song">已移除 %1$s</string>
+    <string name="queue_undo_action">復原</string>
+    <string name="queue_cleared_section">已清除 %1$s</string>
+    <string name="next_in_queue">接下來播放</string>
+    <string name="queue_selected_count">已選取 %1$d 首</string>
+    <string name="queue_playlist_added">已新增 %1$d/%2$d 首歌曲</string>
+    <string name="queue_playlist_partial">%1$s（%2$d 首不相容、%3$d 首已存在、%4$d 首失敗）</string>
+    <string name="queue_like_sign_in">登入後即可對線上歌曲按讚</string>
 </resources>

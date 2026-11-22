@@ -6727,10 +6727,39 @@ class PlaybackService : MediaLibraryService() {
         scope.launch {
             SleepTimer.deadline.collectLatest { deadline ->
                 if (deadline == null) return@collectLatest
-                val remaining = deadline - SystemClock.elapsedRealtime()
-                if (remaining > 0) delay(remaining)
-                player?.pause()
-                SleepTimer.cancel()
+                // Only restore the player this timer actually faded. AutoMix
+                // owns both players' gains during a transition, so resetting
+                // some other player's volume here would cut into its blend.
+                var faded: ExoPlayer? = null
+                try {
+                    val fadeDurationMs =
+                        if (AppSettings.sleepTimerFadeOut.value) SleepTimer.FADE_OUT_DURATION_MS else 0L
+                    val totalRemaining = deadline - SystemClock.elapsedRealtime()
+                    val waitBeforeFade = (totalRemaining - fadeDurationMs).coerceAtLeast(0L)
+                    if (waitBeforeFade > 0L) delay(waitBeforeFade)
+
+                    val remainingBeforeFade = deadline - SystemClock.elapsedRealtime()
+                    if (fadeDurationMs > 0L && remainingBeforeFade > 0L) {
+                        val fadeStart = SystemClock.elapsedRealtime()
+                        val actualDuration = remainingBeforeFade.coerceAtMost(fadeDurationMs)
+                        while (true) {
+                            val elapsed = SystemClock.elapsedRealtime() - fadeStart
+                            val remaining = (actualDuration - elapsed).coerceAtLeast(0L)
+                            player?.let { activePlayer ->
+                                activePlayer.volume =
+                                    SleepTimer.calculateFadeVolume(remaining, actualDuration, true)
+                                faded = activePlayer
+                            }
+                            if (elapsed >= actualDuration) break
+                            delay(100L)
+                        }
+                    }
+
+                    player?.pause()
+                    SleepTimer.cancel()
+                } finally {
+                    faded?.volume = 1f
+                }
             }
         }
     }

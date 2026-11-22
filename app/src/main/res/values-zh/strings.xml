@@ -1527,4 +1527,10 @@
     <string name="queue_playlist_added">已添加 %1$d/%2$d 首歌曲</string>
     <string name="queue_playlist_partial">%1$s（%2$d 首不兼容，%3$d 首已存在，%4$d 首失败）</string>
     <string name="queue_like_sign_in">登录后即可喜欢在线歌曲</string>
+
+    <!-- AutoMix artwork transitions -->
+    <string name="automix_art_transition">封面过渡</string>
+    <string name="automix_art_transition_subtitle">在 AutoMix 期间平滑衔接不同曲目的封面。</string>
+    <string name="automix_mini_art_transition">迷你播放器封面过渡</string>
+    <string name="automix_mini_art_transition_subtitle">在 AutoMix 期间于迷你播放器中显示封面过渡效果。</string>
 </resources>

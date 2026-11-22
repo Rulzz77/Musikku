@@ -1458,4 +1458,13 @@
     <string name="sleep_timer_fade_out_subtitle">Giảm âm lượng từ từ trong 30 giây cuối của hẹn giờ ngủ</string>
     <string name="download_liked_songs">Tải bài hát đã thích</string>
     <string name="download_liked_songs_subtitle">Tải nhạc bạn đã thích và mọi bài hát bạn thích từ bây giờ</string>
+    <plurals name="queue_removed_count"><item quantity="one">Đã xóa %1$d bài hát</item><item quantity="other">Đã xóa %1$d bài hát</item></plurals>
+    <string name="queue_removed_song">Đã xóa %1$s</string>
+    <string name="queue_undo_action">Hoàn tác</string>
+    <string name="queue_cleared_section">Đã xóa mục %1$s</string>
+    <string name="next_in_queue">Tiếp theo trong hàng đợi</string>
+    <string name="queue_selected_count">Đã chọn %1$d</string>
+    <string name="queue_playlist_added">Đã thêm %1$d trong tổng số %2$d bài hát</string>
+    <string name="queue_playlist_partial">%1$s (%2$d không tương thích, %3$d đã có, %4$d thất bại)</string>
+    <string name="queue_like_sign_in">Đăng nhập để thích bài hát trực tuyến</string>
 </resources>

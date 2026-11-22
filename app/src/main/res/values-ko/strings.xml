@@ -1391,4 +1391,13 @@
     <string name="sleep_timer_fade_out_subtitle">취침 타이머 종료 전 마지막 30초 동안 음량을 서서히 낮춥니다</string>
     <string name="download_liked_songs">좋아요한 노래 다운로드</string>
     <string name="download_liked_songs_subtitle">좋아요한 음악과 앞으로 좋아요를 누르는 모든 노래를 다운로드합니다</string>
+    <plurals name="queue_removed_count"><item quantity="one">노래 %1$d개 삭제됨</item><item quantity="other">노래 %1$d개 삭제됨</item></plurals>
+    <string name="queue_removed_song">%1$s 삭제됨</string>
+    <string name="queue_undo_action">실행 취소</string>
+    <string name="queue_cleared_section">%1$s 비움</string>
+    <string name="next_in_queue">다음 재생</string>
+    <string name="queue_selected_count">%1$d개 선택됨</string>
+    <string name="queue_playlist_added">%2$d곡 중 %1$d곡 추가됨</string>
+    <string name="queue_playlist_partial">%1$s (호환되지 않음 %2$d개, 이미 있음 %3$d개, 실패 %4$d개)</string>
+    <string name="queue_like_sign_in">온라인 곡에 좋아요를 누르려면 로그인하세요</string>
 </resources>

@@ -1542,4 +1542,8 @@
     <string name="show_total_duration_subtitle">Mostra a duração completa da música em vez do tempo restante</string>
     <string name="hide_lyrics_preview">Ocultar prévia da letra</string>
     <string name="hide_lyrics_preview_subtitle">Oculta a linha de letra em rolagem no player; o painel completo de letras continua disponível</string>
+    <string name="sleep_timer_fade_out">Diminuir o volume antes de parar</string>
+    <string name="sleep_timer_fade_out_subtitle">Reduz gradualmente o volume nos 30 segundos finais do temporizador de sono</string>
+    <string name="download_liked_songs">Baixar músicas curtidas</string>
+    <string name="download_liked_songs_subtitle">Baixa suas músicas curtidas e todas as músicas que você curtir daqui em diante</string>
 </resources>

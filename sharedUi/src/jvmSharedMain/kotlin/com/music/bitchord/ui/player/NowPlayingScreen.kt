@@ -3414,6 +3414,13 @@ fun NowPlayingScreen(
                                         imageVector = BitChordIcons.MusicNote,
                                         contentDescription = null,
                                         tint = Color.White.copy(alpha = 0.35f),
+                                        modifier = Modifier
+                                            .size(40.dp)
+                                            .graphicsLayer {
+                                                val scale = 1f - 0.5f * p()
+                                                scaleX = scale
+                                                scaleY = scale
+                                            },
                                     )
                                 }
                             }

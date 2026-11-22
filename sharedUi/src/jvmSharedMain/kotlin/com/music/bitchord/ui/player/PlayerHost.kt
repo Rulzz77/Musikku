@@ -2,6 +2,7 @@ package com.music.bitchord.ui.player
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.unit.IntSize
 import com.music.bitchord.data.canvas.CanvasArtwork
@@ -16,6 +17,7 @@ import com.music.bitchord.data.settings.SmartAnalysis
 import com.music.bitchord.data.settings.MixBlend
 import com.music.bitchord.data.settings.MixTransitionView
 import com.music.bitchord.data.settings.TransitionWindow
+import com.music.bitchord.playback.AutoMixVisualState
 import dev.chrisbanes.haze.HazeState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -32,6 +34,23 @@ import kotlinx.coroutines.flow.StateFlow
  */
 interface PlayerHost {
     val settings: PlayerSettingsSource
+
+    /** Optional in-process feed; platforms without AutoMix leave it absent. */
+    val autoMixVisualState: StateFlow<AutoMixVisualState?>? get() = null
+
+    /** Visual-only seek intent, before the scrubber dispatches its transport command. */
+    fun onAutoMixScrubIntent() = Unit
+
+    /** Incoming artwork layer; platforms without a spatial reveal use a simple alpha fade. */
+    @Composable
+    fun autoMixIncomingReveal(
+        eased: () -> Float,
+        reducedMotion: () -> Boolean,
+        generation: Long,
+        blur: Boolean,
+    ): Modifier = Modifier.graphicsLayer { alpha = eased() }
+
+    val supportsAutoMixCanvas: Boolean get() = false
 
     /** A Canvas already settled for [song], without a lookup. */
     fun cachedCanvas(song: Song): CanvasArtwork?
@@ -257,12 +276,15 @@ interface PlayerSettingsSource {
     /** A temporary cap over both ceilings, null when none applies — the watch's, on the phone. */
     val streamCeilingOverride: StateFlow<AudioQuality?>
     val preferUsbDac: StateFlow<Boolean>
+    val disableSpotifyCanvas: StateFlow<Boolean> get() = defaultFalsePlayerSetting
     val prioritizeSpotifyCanvas: StateFlow<Boolean>
     val reduceAnimation: StateFlow<Boolean>
     val reduceDynamicBlur: StateFlow<Boolean>
     /** Turns [LocalPlayerChrome] off: glyphs and text over the artwork in plain white. */
     val disableBlendEffects: StateFlow<Boolean>
     val showNerdStats: StateFlow<Boolean>
+    /** Whether the Best Part replay control is offered on artwork. */
+    val showBestPart: StateFlow<Boolean> get() = defaultTruePlayerSetting
     /** Whether the output / Listen Together pill sits under the transport. */
     val showListenTogetherButton: StateFlow<Boolean>
     val smartAnalysis: StateFlow<SmartAnalysis>
@@ -273,6 +295,7 @@ interface PlayerSettingsSource {
      */
     val automixDetail: StateFlow<String?>
     val smartFadeEnabled: StateFlow<Boolean>
+    val autoMixArtwork: StateFlow<AutoMixArtworkPreferences> get() = defaultAutoMixArtwork
     /** True only while an analysed Automix transition is audibly mixing two tracks. */
     val smartMixInProgress: StateFlow<Boolean>
     /** The Automix blend in flight, for the scrubber's beat glow; null between blends. */
@@ -294,6 +317,11 @@ interface PlayerSettingsSource {
     /** Whether the mix popup is up, so the host lays out [smartMixPreview] for it. */
     fun setMixViewOpen(open: Boolean)
 }
+
+private val defaultFalsePlayerSetting: StateFlow<Boolean> = MutableStateFlow(false)
+private val defaultTruePlayerSetting: StateFlow<Boolean> = MutableStateFlow(true)
+private val defaultAutoMixArtwork: StateFlow<AutoMixArtworkPreferences> =
+    MutableStateFlow(AutoMixArtworkPreferences())
 
 /** The player's name for the installed host's settings, read where AppSettings used to be. */
 internal val PlayerSettings: PlayerSettingsSource
@@ -402,6 +430,23 @@ class CanvasVideoSpec(
     val captureStill: Boolean,
     val onStillCaptured: (ImageBitmap?, Long) -> Unit,
     val onResumed: () -> Unit,
+    val nowPlaying: Boolean = false,
+    val organicReveal: CanvasOrganicReveal? = null,
+)
+
+/** Optional spatial reveal descriptor for a Canvas/video layer participating in AutoMix. */
+class CanvasOrganicReveal(
+    val generation: Long,
+    val progress: () -> Float,
+    val allowSpatialMask: Boolean,
+    val outgoingStill: CanvasStillRevealTarget? = null,
+)
+
+/** Still-art bounds used by a Canvas reveal when the outgoing layer is a still image. */
+class CanvasStillRevealTarget(
+    val bounds: IntSize,
+    val bottomFade: Float,
+    val presentationAlpha: () -> Float,
 )
 
 /**

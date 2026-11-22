@@ -88,6 +88,16 @@ internal fun rememberCanvasArtwork(song: Song): CanvasArtwork? {
 }
 
 /**
+ * Build the same full-resolution cover request used by the player. Reusing its
+ * cache-key extra prevents thumbnail/palette decodes from replacing the sleeve.
+ */
+internal fun playerCoverRequest(context: PlatformContext, artworkUrl: String?): ImageRequest.Builder =
+    ImageRequest.Builder(context)
+        .data(artworkUrl)
+        .size(ART_PX)
+        .memoryCacheKeyExtra(PLAYER_ART_MEMORY_CACHE_KEY_EXTRA, ART_PX.toString())
+
+/**
  * The player's cover: the one request every surface draws it from, whether it
  * has loaded, and the bounded retries after a failure.
  *
@@ -122,6 +132,20 @@ internal class PlayerArtwork(val url: String?, private val context: PlatformCont
 
     /** Latched on an error, and only upwards — cleared by the retry itself. */
     internal var failed by mutableStateOf(false)
+
+    /** The decoded still for this cover, retained for a later AutoMix pair. */
+    private var decodedCover: DecodedAutoMixCover? = null
+    private var decodedDuringMix: Long? = null
+
+    fun decodedCoverBefore(generation: Long): DecodedAutoMixCover? =
+        decodedCover?.takeIf { decodedDuringMix != generation }
+
+    /** Remember the exact decoded cover that has just been promoted on screen. */
+    fun noteDisplayedCover(cover: DecodedAutoMixCover) {
+        decodedCover = cover
+        decodedDuringMix = PlayerPlatform.host.autoMixVisualState?.value
+            ?.takeIf { it.mixActive }?.generation
+    }
 
     /**
      * The one request for this cover, built once.
@@ -160,7 +184,12 @@ internal class PlayerArtwork(val url: String?, private val context: PlatformCont
         // it is [failed]'s own effect, and clearing it from a Loading state here
         // would cancel that effect's wait every time the painter passed back
         // through Loading.
-        if (state is AsyncImagePainter.State.Success) failed = false
+        if (state is AsyncImagePainter.State.Success) {
+            failed = false
+            decodedCover = state.result.decodedAutoMixCover()
+            decodedDuringMix = PlayerPlatform.host.autoMixVisualState?.value
+                ?.takeIf { it.mixActive }?.generation
+        }
         if (state is AsyncImagePainter.State.Error) failed = true
     }
 

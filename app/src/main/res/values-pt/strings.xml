@@ -1538,4 +1538,8 @@
     <string name="smart_playlist_editor_description">Estas listas são geradas a partir do seu histórico de reprodução e atualizadas quando as estatísticas são salvas. Elas não alteram suas playlists normais.</string>
     <string name="smart_playlist_max_reached">Você pode criar até 20 playlists inteligentes personalizadas.</string>
     <string name="storage_automix_models">Modelos de IA do Automix (recriados quando necessário)</string>
+    <string name="show_total_duration">Mostrar duração total</string>
+    <string name="show_total_duration_subtitle">Mostra a duração completa da música em vez do tempo restante</string>
+    <string name="hide_lyrics_preview">Ocultar prévia da letra</string>
+    <string name="hide_lyrics_preview_subtitle">Oculta a linha de letra em rolagem no player; o painel completo de letras continua disponível</string>
 </resources>

@@ -278,4 +278,12 @@
     <string name="mix_view_seconds">%1$d detik</string>
     <string name="mix_view_bpm">%1$d BPM</string>
     <string name="automix_overview_unavailable">Belum ada transisi Automix berikutnya</string>
+    <string name="queue_selected_count">%1$d dipilih</string>
+    <string name="queue_select_all">Pilih semua</string>
+    <string name="queue_select">Pilih</string>
+    <string name="queue_close_selection">Tutup mode pilihan</string>
+    <string name="queue_add_to_playlist">Tambahkan ke playlist</string>
+    <string name="queue_download">Unduh</string>
+    <string name="queue_selection_remove">Hapus</string>
+    <string name="queue_add_all_to_playlist">Tambahkan semua ke playlist</string>
 </resources>

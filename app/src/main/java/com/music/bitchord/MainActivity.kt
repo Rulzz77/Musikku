@@ -3543,6 +3543,9 @@ private fun BitChordApp(
                                         }
                                     }
                                 } else null,
+                                // Only the Liked Music page wires double-tap on its artwork
+                                // to the same online/local Like action used by the rest of the app.
+                                onToggleSongLike = { song -> toggleLikeOf(song) },
                                 // Saving is an account action, so it isn't offered to a
                                 // guest at all — same as the like and add-to-playlist rows
                                 // in the track menu.

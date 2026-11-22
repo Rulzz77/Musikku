@@ -1490,4 +1490,8 @@
     <string name="smart_playlist_editor_description">Bu listeler dinleme geçmişinden oluşturulur ve dinleme istatistikleri kaydedildiğinde yenilenir. Normal çalma listelerini değiştirmez.</string>
     <string name="smart_playlist_max_reached">En fazla 20 özel akıllı çalma listesi oluşturabilirsin.</string>
     <string name="storage_automix_models">Automix yapay zekâ modelleri (gerektiğinde yeniden oluşturulur)</string>
+    <string name="show_total_duration">Toplam süreyi göster</string>
+    <string name="show_total_duration_subtitle">Kalan süre yerine şarkının tam uzunluğunu gösterir</string>
+    <string name="hide_lyrics_preview">Şarkı sözü önizlemesini gizle</string>
+    <string name="hide_lyrics_preview_subtitle">Oynatıcıdaki kayan şarkı sözü satırını gizler; tam şarkı sözü paneli kullanılabilir</string>
 </resources>

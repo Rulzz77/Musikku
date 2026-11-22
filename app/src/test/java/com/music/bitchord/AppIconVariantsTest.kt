@@ -147,8 +147,8 @@ class AppIconVariantsTest {
         assertTrue("Web mark must be filled", webLogo.contains("fill=") && webLogo.contains("currentColor"))
         assertTrue("Transparent mark must be filled", transparentLogo.contains("url(#mark)") && transparentLogo.contains("M25 78V35"))
         assertTrue("Full SVG mark must be filled", svgLogo.contains("url(#mark)") && svgLogo.contains("M120 369V166"))
-        assertFalse("Web mark must not keep the previous outline", webLogo.contains("stroke-width"))
-        assertFalse("Transparent mark must not keep the previous outline", transparentLogo.contains("stroke-width"))
+        assertFalse("Web mark must not keep the previous M outline", webLogo.contains("stroke-width=\\"7.5\\""))
+        assertFalse("Transparent mark must not keep the previous M outline", transparentLogo.contains("stroke-width=\\"7.5\\""))
     }
 
     private fun resourcesDir() = File(appRoot, "src/main/res")

@@ -1569,4 +1569,8 @@
     <string name="show_total_duration_subtitle">Показывает полную длительность композиции вместо оставшегося времени</string>
     <string name="hide_lyrics_preview">Скрыть предпросмотр текста</string>
     <string name="hide_lyrics_preview_subtitle">Скрывает бегущую строку текста в плеере; полная панель текста остаётся доступной</string>
+    <string name="sleep_timer_fade_out">Плавно снизить громкость перед остановкой</string>
+    <string name="sleep_timer_fade_out_subtitle">Постепенно снижает громкость в последние 30 секунд таймера сна</string>
+    <string name="download_liked_songs">Скачивать понравившиеся песни</string>
+    <string name="download_liked_songs_subtitle">Скачивает понравившуюся музыку и все песни, которые вы будете отмечать позже</string>
 </resources>

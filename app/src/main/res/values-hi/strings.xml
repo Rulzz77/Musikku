@@ -1537,4 +1537,8 @@
     <string name="show_total_duration_subtitle">बचे हुए समय के बजाय गाने की पूरी अवधि दिखाता है</string>
     <string name="hide_lyrics_preview">गीत के पूर्वावलोकन को छिपाएँ</string>
     <string name="hide_lyrics_preview_subtitle">प्लेयर में चलती हुई गीत-पंक्ति छिपाता है; पूरा गीत-पैनल उपलब्ध रहता है</string>
+    <string name="sleep_timer_fade_out">रोकने से पहले आवाज़ धीमी करें</string>
+    <string name="sleep_timer_fade_out_subtitle">स्लीप टाइमर के आख़िरी 30 सेकंड में आवाज़ धीरे-धीरे कम करता है</string>
+    <string name="download_liked_songs">पसंद किए गए गाने डाउनलोड करें</string>
+    <string name="download_liked_songs_subtitle">आपके पसंदीदा संगीत और अब से आपके पसंद किए जाने वाले हर गाने को डाउनलोड करता है</string>
 </resources>

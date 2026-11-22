@@ -122,5 +122,34 @@ class AppIconVariantsTest {
         assertTrue("Icon labels need a stable two-line area", settings.contains("minLines = 2"))
     }
 
+
+    @Test
+    fun replayAndProductLogosUseTheSameSolidMusikKuMark() {
+        val projectRoot = appRoot.parentFile ?: appRoot
+        val sharedLogo = File(
+            projectRoot,
+            "sharedUi/src/commonMain/composeResources/drawable/ic_logo.xml",
+        ).readText()
+        val appLogo = File(resourcesDir(), "drawable/ic_logo.xml").readText()
+        val wearLogo = File(
+            projectRoot,
+            "wearos/src/main/res/drawable/ic_logo.xml",
+        ).readText()
+        val webLogo = File(projectRoot, "web/app/src/assets/logo-mark.svg").readText()
+        val transparentLogo = File(appRoot, "src/main/assets/LogoTransparent.svg").readText()
+        val svgLogo = File(appRoot, "src/main/assets/Logo.svg").readText()
+        val solidMark = "M25,78 V35 C25,23 39,18 47,28 L54,37 L62,28 C70,18 84,23 84,35 V78 H70 V42 L54,58 L38,42 V78 Z"
+
+        listOf(sharedLogo, appLogo, wearLogo).forEach { logo ->
+            assertTrue("Android and Replay marks must be solid", logo.contains(solidMark))
+            assertFalse("In-app logos must not use an outlined M", logo.contains("android:strokeWidth"))
+        }
+        assertTrue("Web mark must be filled", webLogo.contains("fill=\\"currentColor\\""))
+        assertTrue("Transparent mark must be filled", transparentLogo.contains("fill=\\"url(#mark)\\""))
+        assertTrue("Full SVG mark must be filled", svgLogo.contains("fill=\\"url(#mark)\\""))
+        assertFalse("Web mark must not keep the previous outline", webLogo.contains("stroke-width=\\"7.5\\""))
+        assertFalse("Transparent mark must not keep the previous outline", transparentLogo.contains("stroke-width=\\"7.5\\""))
+    }
+
     private fun resourcesDir() = File(appRoot, "src/main/res")
 }

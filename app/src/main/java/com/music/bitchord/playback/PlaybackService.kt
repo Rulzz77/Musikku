@@ -1026,6 +1026,10 @@ class PlaybackService : MediaLibraryService() {
          * on the audio, which is what the media notification shows too.
          */
         override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+            // The audio controller may hold the end of an item for a late handoff.
+            if (!playWhenReady && reason != Player.PLAY_WHEN_READY_CHANGE_REASON_END_OF_MEDIA_ITEM) {
+                crossfade?.cancelAutoMixVisual()
+            }
             val active = this@PlaybackService.player
             TrackLog.i(
                 "PLAYBACK_LIFECYCLE",
@@ -8474,6 +8478,7 @@ class PlaybackService : MediaLibraryService() {
             about = player?.currentMediaItem?.mediaId,
         )
         if (AppSettings.stopOnTaskRemoved.value) {
+            crossfade?.cancelAutoMixVisual()
             // A receiver left playing with nothing on the phone to drive it
             // would run out its few queued tracks and stop on its own anyway;
             // better to say so now than leave the TV on a casting screen.
@@ -8487,6 +8492,7 @@ class PlaybackService : MediaLibraryService() {
 
 
     override fun onDestroy() {
+        crossfade?.cancelAutoMixVisual()
         invalidateQueueUndo()
         queueUndoRestoreBatch = null
         queueUndoMutationSettled = null
@@ -9282,7 +9288,7 @@ class PlaybackService : MediaLibraryService() {
         override fun seekToPreviousMediaItem() {
             if (routePartyPrevious(false)) return
             if (locked()) return
-            onUserIntent()
+            onAutoMixInterruptingIntent()
             crossfade.onSkipRequested()
             if (cast.active) {
                 castPrevious()

@@ -3,6 +3,7 @@ package com.music.bitchord.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -20,10 +21,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.AutoAwesome
-import androidx.compose.material.icons.rounded.Edit
-import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -91,35 +92,66 @@ fun SmartPlaylistsSection(
         )
     }
 
-    Column(modifier = modifier.fillMaxWidth().padding(bottom = 14.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
+    Column(modifier = modifier.fillMaxWidth().padding(bottom = 16.dp)) {
+        BoxWithConstraints(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 8.dp),
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = stringResource(R.string.smart_playlists_title),
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onBackground,
-                )
-                Text(
-                    text = stringResource(R.string.smart_playlist_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            val createPlaylist: () -> Unit = {
+                editingRule = null
+                editorOpen = true
             }
-            TextButton(
-                onClick = {
-                    editingRule = null
-                    editorOpen = true
-                },
-            ) {
-                Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(4.dp))
-                Text(stringResource(R.string.smart_playlist_create))
+            val sectionHeading: @Composable () -> Unit = {
+                Column {
+                    Text(
+                        text = stringResource(R.string.smart_playlists_title),
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = stringResource(R.string.smart_playlist_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            if (maxWidth < 400.dp) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    sectionHeading()
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                    ) {
+                        FilledTonalButton(
+                            onClick = createPlaylist,
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                        ) {
+                            Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text(stringResource(R.string.smart_playlist_create))
+                        }
+                    }
+                }
+            } else {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.weight(1f)) { sectionHeading() }
+                    FilledTonalButton(
+                        onClick = createPlaylist,
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                    ) {
+                        Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(stringResource(R.string.smart_playlist_create))
+                    }
+                }
             }
         }
-
+        Spacer(Modifier.height(10.dp))
         when {
             loading && summary == null -> {
                 Text(
@@ -379,7 +411,7 @@ private fun SmartPlaylistCard(
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
-                        imageVector = Icons.Rounded.AutoAwesome,
+                        imageVector = Icons.Filled.AutoAwesome,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(32.dp),
@@ -400,7 +432,7 @@ private fun SmartPlaylistCard(
                     )
                     if (item.tracks.isNotEmpty()) {
                         Icon(
-                            imageVector = Icons.Rounded.PlayArrow,
+                            imageVector = Icons.Filled.PlayArrow,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(18.dp),
@@ -418,7 +450,7 @@ private fun SmartPlaylistCard(
                         contentPadding = PaddingValues(0.dp),
                         modifier = Modifier.align(Alignment.End),
                     ) {
-                        Icon(Icons.Rounded.Edit, contentDescription = null, modifier = Modifier.size(15.dp))
+                        Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(15.dp))
                         Spacer(Modifier.width(3.dp))
                         Text(stringResource(R.string.smart_playlist_edit_action))
                     }

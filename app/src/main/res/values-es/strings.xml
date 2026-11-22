@@ -1509,4 +1509,8 @@
     <string name="show_total_duration_subtitle">Muestra la duración completa de la canción en lugar del tiempo restante</string>
     <string name="hide_lyrics_preview">Ocultar vista previa de letras</string>
     <string name="hide_lyrics_preview_subtitle">Oculta la línea de letra que se desplaza en el reproductor; el panel de letras completo sigue disponible</string>
+    <string name="sleep_timer_fade_out">Atenuar el volumen antes de detener</string>
+    <string name="sleep_timer_fade_out_subtitle">Reduce gradualmente el volumen durante los últimos 30 segundos del temporizador de sueño</string>
+    <string name="download_liked_songs">Descargar canciones que te gustan</string>
+    <string name="download_liked_songs_subtitle">Descarga tu Música que te gusta y todas las canciones que marques como favoritas a partir de ahora</string>
 </resources>

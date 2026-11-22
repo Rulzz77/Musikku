@@ -1510,4 +1510,8 @@
     <string name="smart_playlist_editor_description">這些清單根據你的聆聽紀錄建立，並會在聆聽統計儲存時更新。它們不會更動一般播放清單。</string>
     <string name="smart_playlist_max_reached">最多可建立 20 個自訂智慧播放清單。</string>
     <string name="storage_automix_models">Automix AI 模型（需要時重新產生）</string>
+    <string name="show_total_duration">顯示總曲長</string>
+    <string name="show_total_duration_subtitle">顯示歌曲完整長度，而非剩餘時間</string>
+    <string name="hide_lyrics_preview">隱藏歌詞預覽</string>
+    <string name="hide_lyrics_preview_subtitle">隱藏播放器中捲動顯示的歌詞行；完整歌詞面板仍可使用</string>
 </resources>

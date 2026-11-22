@@ -1538,4 +1538,8 @@
     <string name="show_total_duration_subtitle">Affiche la durée complète du morceau au lieu du temps restant</string>
     <string name="hide_lyrics_preview">Masquer l’aperçu des paroles</string>
     <string name="hide_lyrics_preview_subtitle">Masque la ligne de paroles défilante du lecteur ; le panneau complet des paroles reste disponible</string>
+    <string name="sleep_timer_fade_out">Baisser le volume avant l’arrêt</string>
+    <string name="sleep_timer_fade_out_subtitle">Baisse progressivement le volume pendant les 30 dernières secondes du minuteur de sommeil</string>
+    <string name="download_liked_songs">Télécharger les titres aimés</string>
+    <string name="download_liked_songs_subtitle">Télécharge vos titres aimés et chaque morceau que vous aimerez à partir de maintenant</string>
 </resources>

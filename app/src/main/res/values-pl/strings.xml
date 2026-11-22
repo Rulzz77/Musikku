@@ -1573,4 +1573,8 @@
     <string name="smart_playlist_editor_description">Te listy są tworzone na podstawie historii słuchania i odświeżane po zapisaniu statystyk. Nie zmieniają zwykłych playlist.</string>
     <string name="smart_playlist_max_reached">Możesz utworzyć maksymalnie 20 własnych inteligentnych playlist.</string>
     <string name="storage_automix_models">Modele AI Automix (odtwarzane w razie potrzeby)</string>
+    <string name="show_total_duration">Pokaż całkowity czas trwania</string>
+    <string name="show_total_duration_subtitle">Pokazuje pełną długość utworu zamiast pozostałego czasu</string>
+    <string name="hide_lyrics_preview">Ukryj podgląd tekstu</string>
+    <string name="hide_lyrics_preview_subtitle">Ukrywa przewijaną linijkę tekstu w odtwarzaczu; pełny panel tekstu pozostaje dostępny</string>
 </resources>

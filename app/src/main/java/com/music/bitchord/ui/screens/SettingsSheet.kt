@@ -12,11 +12,13 @@ import android.os.Build
 import android.provider.Settings
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -33,6 +35,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.ScrollState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.automirrored.rounded.Notes
 import androidx.compose.material.icons.rounded.Animation
 import androidx.compose.material.icons.rounded.Apps
@@ -1794,65 +1797,82 @@ fun SettingsScreen(
             val appIconTitle = stringResource(R.string.app_icon)
             row(appIconTitle, "icon", "launcher", "logo") {
                 var selectedIcon by remember { mutableStateOf(AppIcon.current(context)) }
-                SettingsRow(icon = SfIcons.Apps, title = appIconTitle)
+                SettingsRow(icon = Icons.Filled.Apps, title = appIconTitle)
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .horizontalScroll(rememberScrollState())
-                        .padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        .padding(start = ROW_INSET, end = ROW_INSET, bottom = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     AppIcon.entries.forEach { option ->
                         val selected = option == selectedIcon
+                        val tileShape = RoundedCornerShape(18.dp)
                         Column(
                             modifier = Modifier
-                                .width(84.dp)
-                                .clip(RoundedCornerShape(16.dp))
+                                .width(96.dp)
+                                .clip(tileShape)
+                                .background(
+                                    if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.36f),
+                                )
+                                .border(
+                                    width = 1.dp,
+                                    color = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.72f)
+                                    else MaterialTheme.colorScheme.outline.copy(alpha = 0.24f),
+                                    shape = tileShape,
+                                )
                                 .clickable {
                                     selectedIcon = option
                                     AppIcon.apply(context, option)
                                 }
-                                .padding(vertical = 6.dp),
+                                .padding(horizontal = 4.dp, vertical = 8.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
-                            // A glass foreground holds the finished icon in its own shape on the
-                            // central 72 of 108 dp: scaled 1.5× it fills the tile as designed.
-                            // Only the default goes through an adaptive mask.
-                            val preview = option.previewRes
-                            if (preview == null) {
-                                AndroidView(
-                                    factory = { ctx ->
-                                        android.widget.ImageView(ctx).apply { setImageResource(option.iconRes) }
-                                    },
-                                    modifier = Modifier
-                                        .size(68.dp)
-                                        .clip(RoundedCornerShape(22.dp)),
-                                )
-                            } else {
-                                Image(
-                                    painter = painterResource(preview),
-                                    contentDescription = null,
-                                    contentScale = ContentScale.Fit,
-                                    modifier = Modifier
-                                        .size(68.dp)
-                                        .scale(1.5f),
-                                )
+                            // Reserve the full preview slot in measurement: the previous 1.5x
+                            // draw scale enlarged pixels without enlarging the layout, so the
+                            // image painted over its own label on narrow screens.
+                            Box(
+                                modifier = Modifier.size(84.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                val preview = option.previewRes
+                                if (preview == null) {
+                                    AndroidView(
+                                        factory = { ctx ->
+                                            android.widget.ImageView(ctx).apply {
+                                                scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+                                                setImageResource(option.iconRes)
+                                            }
+                                        },
+                                        update = { view -> view.setImageResource(option.iconRes) },
+                                        modifier = Modifier.size(80.dp),
+                                    )
+                                } else {
+                                    Image(
+                                        painter = painterResource(preview),
+                                        contentDescription = null,
+                                        contentScale = ContentScale.Fit,
+                                        modifier = Modifier.size(84.dp),
+                                    )
+                                }
                             }
                             Text(
                                 text = stringResource(option.labelRes),
                                 textAlign = TextAlign.Center,
+                                minLines = 2,
                                 maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
                                 style = MaterialTheme.typography.labelMedium,
                                 color = if (selected) MaterialTheme.colorScheme.primary
                                 else MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                                modifier = Modifier.padding(top = 6.dp),
+                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                modifier = Modifier.padding(top = 7.dp),
                             )
                         }
                     }
                 }
             }
-        }
 
         if (shows(SettingsCategory.LANGUAGE)) SearchableSettingsGroup(search, header = stringResource(R.string.language)) {
             val appLanguageTitle = stringResource(R.string.app_language)
@@ -3220,31 +3240,49 @@ private fun StorageUsageOverview(
     cacheLimitBytes: Long,
     onRefresh: () -> Unit,
 ) {
-    SettingsGroup(topSpacing = 0.dp) {
+    SettingsGroup(topSpacing = 26.dp) {
         Column(Modifier.fillMaxWidth().padding(horizontal = ROW_INSET, vertical = 16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        text = stringResource(R.string.storage_usage_title),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Text(
-                        text = if (usage == null) {
-                            stringResource(R.string.storage_usage_loading)
-                        } else {
-                            stringResource(
-                                R.string.storage_usage_total,
-                                StorageUsage.formatBytes(usage.managedBytes),
-                            )
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                val titleAndTotal: @Composable () -> Unit = {
+                    Column {
+                        Text(
+                            text = stringResource(R.string.storage_usage_title),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            text = if (usage == null) {
+                                stringResource(R.string.storage_usage_loading)
+                            } else {
+                                stringResource(
+                                    R.string.storage_usage_total,
+                                    StorageUsage.formatBytes(usage.managedBytes),
+                                )
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
-                TextButton(onClick = onRefresh, enabled = !loading) {
-                    Text(stringResource(R.string.storage_usage_refresh))
+                if (maxWidth < 340.dp) {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        titleAndTotal()
+                        TextButton(
+                            onClick = onRefresh,
+                            enabled = !loading,
+                            modifier = Modifier.align(Alignment.End),
+                        ) {
+                            Text(stringResource(R.string.storage_usage_refresh))
+                        }
+                    }
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.weight(1f)) { titleAndTotal() }
+                        TextButton(onClick = onRefresh, enabled = !loading) {
+                            Text(stringResource(R.string.storage_usage_refresh))
+                        }
+                    }
                 }
             }
             Spacer(Modifier.height(12.dp))
@@ -3310,25 +3348,51 @@ private fun StorageUsageOverview(
             )
         }
     }
+    // Keep the next Storage setting outside the inventory card's visual edge.
+    Spacer(Modifier.height(20.dp))
 }
 
 @Composable
 private fun StorageUsageLine(label: String, bytes: Long?) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = label,
-            modifier = Modifier.weight(1f),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-        Text(
-            text = bytes?.let(StorageUsage::formatBytes) ?: "—",
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val value = bytes?.let(StorageUsage::formatBytes) ?: "—"
+        if (maxWidth < 360.dp) {
+            // Longer translations and model names get their own line on phones.
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text = value,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = label,
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Spacer(Modifier.width(12.dp))
+                Text(
+                    text = value,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
     }
 }

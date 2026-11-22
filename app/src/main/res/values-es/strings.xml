@@ -1513,4 +1513,13 @@
     <string name="sleep_timer_fade_out_subtitle">Reduce gradualmente el volumen durante los últimos 30 segundos del temporizador de sueño</string>
     <string name="download_liked_songs">Descargar canciones que te gustan</string>
     <string name="download_liked_songs_subtitle">Descarga tu Música que te gusta y todas las canciones que marques como favoritas a partir de ahora</string>
+    <plurals name="queue_removed_count"><item quantity="one">Se eliminó %1$d canción</item><item quantity="other">Se eliminaron %1$d canciones</item></plurals>
+    <string name="queue_removed_song">Se eliminó %1$s</string>
+    <string name="queue_undo_action">Deshacer</string>
+    <string name="queue_cleared_section">Se vació %1$s</string>
+    <string name="next_in_queue">A continuación</string>
+    <string name="queue_selected_count">%1$d seleccionadas</string>
+    <string name="queue_playlist_added">Se añadieron %1$d de %2$d canciones</string>
+    <string name="queue_playlist_partial">%1$s (%2$d incompatibles, %3$d ya presentes, %4$d fallidas)</string>
+    <string name="queue_like_sign_in">Inicia sesión para indicar que te gustan las canciones en línea</string>
 </resources>

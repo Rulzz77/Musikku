@@ -1542,4 +1542,13 @@
     <string name="sleep_timer_fade_out_subtitle">Baisse progressivement le volume pendant les 30 dernières secondes du minuteur de sommeil</string>
     <string name="download_liked_songs">Télécharger les titres aimés</string>
     <string name="download_liked_songs_subtitle">Télécharge vos titres aimés et chaque morceau que vous aimerez à partir de maintenant</string>
+    <plurals name="queue_removed_count"><item quantity="one">%1$d morceau supprimé</item><item quantity="other">%1$d morceaux supprimés</item></plurals>
+    <string name="queue_removed_song">%1$s supprimé</string>
+    <string name="queue_undo_action">Annuler</string>
+    <string name="queue_cleared_section">%1$s vidé</string>
+    <string name="next_in_queue">À suivre</string>
+    <string name="queue_selected_count">%1$d sélectionné(s)</string>
+    <string name="queue_playlist_added">%1$d morceau(x) ajouté(s) sur %2$d</string>
+    <string name="queue_playlist_partial">%1$s (%2$d incompatibles, %3$d déjà présents, %4$d échecs)</string>
+    <string name="queue_like_sign_in">Connectez-vous pour aimer les titres en ligne</string>
 </resources>

@@ -1516,4 +1516,13 @@
     <string name="smart_playlist_sort_listened">Durasi mendengarkan</string>
     <string name="smart_playlist_editor_description">Daftar ini dibuat dari riwayat mendengarkan dan diperbarui saat statistik disimpan. Playlist biasa tidak akan diubah.</string>
     <string name="smart_playlist_max_reached">Maksimal 20 playlist pintar kustom yang bisa dibuat.</string>
+    <plurals name="queue_removed_count"><item quantity="one">%1$d lagu dihapus</item><item quantity="other">%1$d lagu dihapus</item></plurals>
+    <string name="queue_removed_song">%1$s dihapus dari antrean</string>
+    <string name="queue_undo_action">Urungkan</string>
+    <string name="queue_cleared_section">%1$s dikosongkan</string>
+    <string name="next_in_queue">Berikutnya di antrean</string>
+    <string name="queue_selected_count">%1$d dipilih</string>
+    <string name="queue_playlist_added">%1$d dari %2$d lagu ditambahkan</string>
+    <string name="queue_playlist_partial">%1$s (%2$d tidak kompatibel, %3$d sudah ada, %4$d gagal)</string>
+    <string name="queue_like_sign_in">Masuk untuk menyukai lagu online</string>
 </resources>

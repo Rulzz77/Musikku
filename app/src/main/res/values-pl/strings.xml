@@ -1581,4 +1581,13 @@
     <string name="sleep_timer_fade_out_subtitle">Stopniowo zmniejsza głośność przez ostatnie 30 sekund wyłącznika czasowego</string>
     <string name="download_liked_songs">Pobieraj polubione utwory</string>
     <string name="download_liked_songs_subtitle">Pobiera Twoją polubioną muzykę oraz każdy utwór, który polubisz od teraz</string>
+    <plurals name="queue_removed_count"><item quantity="one">Usunięto %1$d utwór</item><item quantity="other">Usunięto %1$d utworów</item></plurals>
+    <string name="queue_removed_song">Usunięto %1$s</string>
+    <string name="queue_undo_action">Cofnij</string>
+    <string name="queue_cleared_section">Wyczyszczono %1$s</string>
+    <string name="next_in_queue">Następne w kolejce</string>
+    <string name="queue_selected_count">Wybrano: %1$d</string>
+    <string name="queue_playlist_added">Dodano %1$d z %2$d utworów</string>
+    <string name="queue_playlist_partial">%1$s (%2$d niezgodnych, %3$d już obecnych, %4$d nieudanych)</string>
+    <string name="queue_like_sign_in">Zaloguj się, aby polubić utwory online</string>
 </resources>

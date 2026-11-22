@@ -1418,4 +1418,13 @@
     <string name="smart_playlist_sort_listened">Listening time</string>
     <string name="smart_playlist_editor_description">These lists are generated from your listening history and refresh when listening stats are saved. They never change your regular playlists.</string>
     <string name="smart_playlist_max_reached">You can create up to 20 custom Smart Playlists.</string>
+    <plurals name="queue_removed_count"><item quantity="one">Removed %1$d song</item><item quantity="other">Removed %1$d songs</item></plurals>
+    <string name="queue_removed_song">Removed %1$s</string>
+    <string name="queue_undo_action">Undo</string>
+    <string name="queue_cleared_section">Cleared %1$s</string>
+    <string name="next_in_queue">Next in queue</string>
+    <string name="queue_selected_count">%1$d selected</string>
+    <string name="queue_playlist_added">Added %1$d of %2$d songs</string>
+    <string name="queue_playlist_partial">%1$s (%2$d incompatible, %3$d already present, %4$d failed)</string>
+    <string name="queue_like_sign_in">Sign in to like online songs</string>
 </resources>

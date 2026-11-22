@@ -1541,4 +1541,13 @@
     <string name="sleep_timer_fade_out_subtitle">Verringert die Lautstärke während der letzten 30 Sekunden des Sleep-Timers schrittweise</string>
     <string name="download_liked_songs">Gelikte Songs herunterladen</string>
     <string name="download_liked_songs_subtitle">Lädt deine Lieblingsmusik und alle Songs herunter, die du ab jetzt likest</string>
+    <plurals name="queue_removed_count"><item quantity="one">%1$d Song entfernt</item><item quantity="other">%1$d Songs entfernt</item></plurals>
+    <string name="queue_removed_song">%1$s entfernt</string>
+    <string name="queue_undo_action">Rückgängig</string>
+    <string name="queue_cleared_section">%1$s geleert</string>
+    <string name="next_in_queue">Als Nächstes</string>
+    <string name="queue_selected_count">%1$d ausgewählt</string>
+    <string name="queue_playlist_added">%1$d von %2$d Songs hinzugefügt</string>
+    <string name="queue_playlist_partial">%1$s (%2$d inkompatibel, %3$d bereits vorhanden, %4$d fehlgeschlagen)</string>
+    <string name="queue_like_sign_in">Melde dich an, um Online-Songs zu liken</string>
 </resources>

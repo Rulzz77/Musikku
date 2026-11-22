@@ -25,13 +25,47 @@ object YouTubeMusicLyrics {
         val browseId = (endpoint["browseId"] as? JsonPrimitive)?.contentOrNull
             ?: return@withContext null
         val params = (endpoint["params"] as? JsonPrimitive)?.contentOrNull
-        val page = runCatching { Innertube.browse(browseId, params) }.getOrNull() ?: return@withContext null
-        val shelf = page.objectsNamed("musicDescriptionShelfRenderer").firstOrNull()
-            ?: return@withContext null
-        val text = shelf["description"]?.youtubeStrings()?.joinToString("").orEmpty().trim()
-        text.lineSequence().map(String::trim).filter(String::isNotEmpty)
-            .map { LyricLine(0L, it) }.toList().takeIf { it.isNotEmpty() }
+        // The Android Music client can return line timings; fall back to the
+        // ordinary web shelf for tracks without a timed lyrics model.
+        val mobile = runCatching { Innertube.browseMobile(browseId, params) }.getOrNull()
+        mobile?.let(::timedLyrics)?.let { return@withContext it }
+        mobile?.let(::plainLyrics)?.let { return@withContext it }
+        val web = runCatching { Innertube.browse(browseId, params) }.getOrNull()
+        web?.let(::plainLyrics)
     }
+}
+
+/** YouTube Music's timed lyrics, when the track provides them. */
+internal fun timedLyrics(page: JsonObject): List<LyricLine>? {
+    val data = findArray(page, "timedLyricsData") ?: return null
+    return data.mapNotNull { element ->
+        val row = element as? JsonObject ?: return@mapNotNull null
+        val text = (row["lyricLine"] as? JsonPrimitive)?.contentOrNull?.trim().orEmpty()
+        if (text.isEmpty()) return@mapNotNull null
+        val cue = row["cueRange"] as? JsonObject
+        val start = (cue?.get("startTimeMilliseconds") as? JsonPrimitive)
+            ?.contentOrNull?.toLongOrNull() ?: return@mapNotNull null
+        val end = (cue?.get("endTimeMilliseconds") as? JsonPrimitive)
+            ?.contentOrNull?.toLongOrNull()
+        LyricLine(start, text, sungUntilMs = end)
+    }.sortedBy { it.timeMs }.takeIf { it.isNotEmpty() }
+}
+
+/** Plain description-shelf fallback returned to the web client. */
+internal fun plainLyrics(page: JsonObject): List<LyricLine>? {
+    val shelf = page.objectsNamed("musicDescriptionShelfRenderer").firstOrNull()
+        ?: return null
+    val text = shelf["description"]?.youtubeStrings()?.joinToString("").orEmpty().trim()
+    return text.lineSequence().map(String::trim).filter(String::isNotEmpty)
+        .map { LyricLine(0L, it) }.toList().takeIf { it.isNotEmpty() }
+}
+
+/** Finds the first array named [name] anywhere in a JSON value. */
+private fun findArray(element: JsonElement, name: String): JsonArray? = when (element) {
+    is JsonObject -> (element[name] as? JsonArray)
+        ?: element.values.firstNotNullOfOrNull { findArray(it, name) }
+    is JsonArray -> element.firstNotNullOfOrNull { findArray(it, name) }
+    else -> null
 }
 
 /** Timed YouTube transcript/captions for the exact playing video. */

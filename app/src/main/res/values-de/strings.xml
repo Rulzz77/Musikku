@@ -1533,4 +1533,8 @@
     <string name="smart_playlist_editor_description">Diese Listen werden aus deinem Hörverlauf erstellt und aktualisiert, sobald Hörstatistiken gespeichert werden. Deine normalen Playlists bleiben unverändert.</string>
     <string name="smart_playlist_max_reached">Du kannst bis zu 20 benutzerdefinierte Smart-Playlists erstellen.</string>
     <string name="storage_automix_models">Automix-KI-Modelle (bei Bedarf neu erstellt)</string>
+    <string name="show_total_duration">Gesamtdauer anzeigen</string>
+    <string name="show_total_duration_subtitle">Zeigt die gesamte Länge des Songs statt der verbleibenden Zeit</string>
+    <string name="hide_lyrics_preview">Textvorschau ausblenden</string>
+    <string name="hide_lyrics_preview_subtitle">Blendet die laufende Liedtextzeile im Player aus; die vollständige Liedtextansicht bleibt verfügbar</string>
 </resources>

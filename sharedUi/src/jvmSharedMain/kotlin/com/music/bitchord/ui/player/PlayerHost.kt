@@ -242,6 +242,8 @@ interface PlayerSettingsSource {
     val fullBleedArtwork: StateFlow<Boolean>
     val showTotalDuration: StateFlow<Boolean>
     val hideSongStatus: StateFlow<Boolean>
+    /** Hides the lyrics preview strip; the full lyrics panel remains available. */
+    val hideLyricsPreview: StateFlow<Boolean>
     val showQueueHistory: StateFlow<Boolean>
     val hideVolumeBar: StateFlow<Boolean>
     /** Hide the device status bar while the player is up. Always false where there is none. */

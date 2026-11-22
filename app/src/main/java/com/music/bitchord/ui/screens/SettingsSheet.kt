@@ -259,6 +259,7 @@ fun SettingsScreen(
     val showTotalDuration by AppSettings.showTotalDuration.collectAsStateWithLifecycle()
     val playerTheme by AppSettings.playerTheme.collectAsStateWithLifecycle()
     val syncedLyrics by AppSettings.syncedLyrics.collectAsStateWithLifecycle()
+    val hideLyricsPreview by AppSettings.hideLyricsPreview.collectAsStateWithLifecycle()
     val lyricsSources by AppSettings.lyricsSources.collectAsStateWithLifecycle()
     val translationLanguage by AppSettings.translationLanguage.collectAsStateWithLifecycle()
     val theme by AppSettings.themeMode.collectAsStateWithLifecycle()
@@ -1371,6 +1372,21 @@ fun SettingsScreen(
                         )
                     },
                     onClick = { AppSettings.setSyncedLyrics(!syncedLyrics) },
+                )
+            }
+            val hideLyricsTitle = stringResource(R.string.hide_lyrics_preview)
+            row(hideLyricsTitle, "lyrics", "hide", "preview") {
+                SettingsRow(
+                    icon = SfIcons.VisibilityOff,
+                    title = hideLyricsTitle,
+                    subtitle = stringResource(R.string.hide_lyrics_preview_subtitle),
+                    trailing = {
+                        IosSwitch(
+                            checked = hideLyricsPreview,
+                            onCheckedChange = AppSettings::setHideLyricsPreview,
+                        )
+                    },
+                    onClick = { AppSettings.setHideLyricsPreview(!hideLyricsPreview) },
                 )
             }
             // Nothing to choose between while the feature is off, and the

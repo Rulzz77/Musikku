@@ -12,6 +12,57 @@ import javax.xml.parsers.DocumentBuilderFactory
 class LocalizationTest {
 
     @Test
+    fun supportedLanguages_containsIndonesian() {
+        val idLanguage = SUPPORTED_LANGUAGES.firstOrNull { it.tag == "id" }
+        assertNotNull("Indonesian must be available in the app language picker", idLanguage)
+        assertEquals(R.string.indonesian, idLanguage?.nameRes)
+        assertEquals(R.string.indonesian, languageDisplayNameRes("id"))
+        assertEquals(R.string.indonesian, languageDisplayNameRes("in"))
+    }
+
+    @Test
+    fun indonesianSharedComposeResourcesContainsEveryBaseKey() {
+        val workingDirectory = File(".").canonicalFile
+        // Gradle may run this test with either the repository root or app/ as
+        // its working directory; sharedUi is a sibling of app, never below it.
+        val projectRoot = if (File(workingDirectory, "sharedUi").isDirectory) {
+            workingDirectory
+        } else {
+            workingDirectory.parentFile ?: workingDirectory
+        }
+        val resourceRoot = File(projectRoot, "sharedUi/src/commonMain/composeResources")
+        val baseFile = File(resourceRoot, "values/strings.xml")
+        val indonesianFile = File(resourceRoot, "values-id/strings.xml")
+
+        assertTrue("Shared Compose base strings must exist", baseFile.exists())
+        assertTrue("Indonesian shared Compose strings must exist", indonesianFile.exists())
+
+        val factory = DocumentBuilderFactory.newInstance()
+        val builder = factory.newDocumentBuilder()
+        val baseDoc = builder.parse(baseFile)
+        val indonesianDoc = builder.parse(indonesianFile)
+
+        fun keys(document: org.w3c.dom.Document): Set<String> {
+            val result = mutableSetOf<String>()
+            for (tagName in listOf("string", "plurals", "string-array")) {
+                val nodes = document.getElementsByTagName(tagName)
+                for (index in 0 until nodes.length) {
+                    val element = nodes.item(index) as org.w3c.dom.Element
+                    if (element.getAttribute("translatable") == "false") continue
+                    element.getAttribute("name").takeIf { it.isNotBlank() }?.let(result::add)
+                }
+            }
+            return result
+        }
+
+        val missingKeys = keys(baseDoc) - keys(indonesianDoc)
+        assertTrue(
+            "Indonesian shared Compose catalogue is missing " + missingKeys.size + " keys: " + missingKeys,
+            missingKeys.isEmpty(),
+        )
+    }
+
+    @Test
     fun supportedLanguages_containsVietnamese() {
         val viLanguage = SUPPORTED_LANGUAGES.firstOrNull { it.tag == "vi" }
         assertNotNull("Vietnamese language must be in SUPPORTED_LANGUAGES", viLanguage)

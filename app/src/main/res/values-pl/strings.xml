@@ -1577,4 +1577,8 @@
     <string name="show_total_duration_subtitle">Pokazuje pełną długość utworu zamiast pozostałego czasu</string>
     <string name="hide_lyrics_preview">Ukryj podgląd tekstu</string>
     <string name="hide_lyrics_preview_subtitle">Ukrywa przewijaną linijkę tekstu w odtwarzaczu; pełny panel tekstu pozostaje dostępny</string>
+    <string name="sleep_timer_fade_out">Ścisz przed zatrzymaniem</string>
+    <string name="sleep_timer_fade_out_subtitle">Stopniowo zmniejsza głośność przez ostatnie 30 sekund wyłącznika czasowego</string>
+    <string name="download_liked_songs">Pobieraj polubione utwory</string>
+    <string name="download_liked_songs_subtitle">Pobiera Twoją polubioną muzykę oraz każdy utwór, który polubisz od teraz</string>
 </resources>

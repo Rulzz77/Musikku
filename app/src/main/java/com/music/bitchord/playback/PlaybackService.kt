@@ -15,6 +15,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.SystemClock
 import com.music.bitchord.data.TelemetryProvenance
+import com.music.bitchord.data.DebugLog as Log
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import androidx.media3.common.AudioAttributes

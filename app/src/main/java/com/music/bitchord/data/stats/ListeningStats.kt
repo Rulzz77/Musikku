@@ -386,6 +386,43 @@ object ListeningStats {
         }
     }
 
+    /**
+     * A calendar year for the Replay year story, assembled from this device's
+     * monthly aggregates. Listening history remains local; no raw events are
+     * sent to a service to build this summary.
+     */
+    suspend fun year(year: Int): ReplayYearData = withContext(Dispatchers.IO) {
+        flushAndAwait()
+        val today = LocalDate.now()
+        val yearMonths = months().filter { it.year == year }
+        val merged = MergedBucket()
+        val dayMs = HashMap<String, Long>()
+        val monthTops = ArrayList<ReplayMonthTop>()
+
+        yearMonths.forEach { month ->
+            val bucket = read(month.toString()) ?: return@forEach
+            merged.add(bucket)
+            bucket.days.forEach { (day, ms) ->
+                val date = "${bucket.month}-%02d".format(Locale.ROOT, day)
+                dayMs[date] = (dayMs[date] ?: 0L) + ms
+            }
+            MergedBucket().apply { add(bucket) }
+                .toSummary(ReplayPeriod.THIS_YEAR, today)
+                .songs.firstOrNull()
+                ?.let { monthTops += ReplayMonthTop(month, it) }
+        }
+
+        val summary = merged.toSummary(ReplayPeriod.THIS_YEAR, today).copy(label = year.toString())
+        val busiestDaySong = summary.busiestDay?.let { date ->
+            val trackId = merged.tracks.values
+                .filter { (it.days[date]?.ms ?: 0L) > 0L }
+                .maxByOrNull { it.days[date]?.ms ?: 0L }
+                ?.id ?: return@let null
+            summary.songs.firstOrNull { it.song.videoId == trackId }?.song
+        }
+        ReplayYearData(year, summary, dayMs, monthTops, busiestDaySong)
+    }
+
     /** Every month with a file, oldest first. */
     fun months(): List<YearMonth> {
         if (!ready) return emptyList()
@@ -1090,6 +1127,21 @@ data class RankedSong(
     /** Epoch milliseconds of the most recent real playback sample. */
     val lastPlayedAt: Long = 0L,
 )
+
+/** One calendar year, ready for the Replay year story. */
+data class ReplayYearData(
+    val year: Int,
+    val summary: ReplaySummary,
+    /** Milliseconds listened per day, keyed as YYYY-MM-DD. */
+    val dayMs: Map<String, Long>,
+    /** Each month's top song, oldest month first. */
+    val monthTops: List<ReplayMonthTop>,
+    /** The track played most on the busiest day, when day-level data is available. */
+    val busiestDaySong: Song?,
+)
+
+/** One month's leading song. */
+data class ReplayMonthTop(val month: YearMonth, val song: RankedSong)
 
 /** How far back a Replay reaches. */
 enum class ReplayPeriod(val chip: String) {

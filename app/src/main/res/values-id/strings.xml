@@ -95,7 +95,7 @@
     <string name="login_failed">Login gagal</string>
     <string name="song_cache_cleared">Cache lagu dibersihkan</string>
     <string name="image_cache_cleared">Cache gambar dibersihkan</string>
-    <string name="no_equalizer">Tidak ada equalizer sistem di perangkat ini</string>
+    <string name="no_equalizer">Tidak ada ekualiser sistem di perangkat ini</string>
     <string name="no_dolby_atmos">Tidak ada panel Dolby Atmos di perangkat ini</string>
     <string name="dolby_atmos_open_failed">Tidak dapat membuka pengaturan Dolby Atmos</string>
     <string name="update_available">Pembaruan tersedia: v%1$s</string>
@@ -180,7 +180,7 @@
     <string name="show_all">Lihat semua</string>
     <string name="grid_view">Tampilan kisi</string>
     <string name="list_view">Daftar</string>
-    <string name="switch_to_grid_view">Beralih ke tampilan grid</string>
+    <string name="switch_to_grid_view">Beralih ke tampilan kisi</string>
     <string name="switch_to_list_view">Beralih ke tampilan daftar</string>
     <string name="audio_quality">Kualitas audio</string>
     <string name="playback">Pemutaran</string>
@@ -198,11 +198,11 @@
     <string name="automix">Automix [BETA]</string>
     <string name="skip_silence">Lewati keheningan</string>
     <string name="skip_silence_subtitle">Memotong jeda lebih dari satu detik</string>
-    <string name="skip_silence_float_subtitle">Tidak tersedia pada output float 32-bit</string>
+    <string name="skip_silence_float_subtitle">Tidak tersedia pada keluaran float 32-bit</string>
     <string name="equalizer">Ekualiser</string>
     <string name="equalizer_subtitle">Panel sistem perangkat Anda</string>
     <string name="show_nerd_stats">Tampilkan statistik teknis</string>
-    <string name="show_nerd_stats_subtitle">Codec, bitrate, dan sample rate pada pemutar</string>
+    <string name="show_nerd_stats_subtitle">Kodek, laju bit, dan laju sampel di pemutar</string>
     <string name="theme">Tema</string>
     <string name="reduce_animation">Kurangi animasi</string>
     <string name="reduce_animation_subtitle">Membekukan gradien pemutar utama alih-alih bergerak</string>
@@ -390,7 +390,7 @@
     <string name="lead_with_song_subtitle">Menempatkan judul pada baris tebal, bukan artis</string>
     <string name="like">Suka</string>
     <string name="listenbrainz_token">Token ListenBrainz</string>
-    <string name="listenbrainz_token_description">Tempel token pengguna ListenBrainz Anda untuk mengaktifkan scrobbling.</string>
+    <string name="listenbrainz_token_description">Tempel token pengguna ListenBrainz Anda untuk mengaktifkan pencatatan pemutaran.</string>
     <string name="listening_history">Riwayat mendengarkan</string>
     <string name="lyrics_sources_order">Sumber dicoba dalam urutan ini. Seret untuk mengatur ulang urutannya. Sumber pertama yang memiliki lirik akan digunakan, kecuali lirik per suku kata diprioritaskan.</string>
     <string name="max_delay">Penundaan maksimum</string>
@@ -425,7 +425,7 @@
     <string name="reorder_failed">Tidak dapat menyimpan urutan baru</string>
     <string name="playlist_reordered">Urutan playlist disimpan</string>
     <string name="save_order">Simpan</string>
-    <string name="reset_to_default">Setel ulang ke default</string>
+    <string name="reset_to_default">Setel ulang ke bawaan</string>
     <string name="rich_presence_footer">Tampilkan apa yang sedang Anda putar di profil Discord Anda.</string>
     <string name="save_name">Simpan nama</string>
     <string name="saved_to_downloads">Disimpan ke Unduhan</string>
@@ -451,7 +451,7 @@
     <string name="sleep_timer_fade_out_subtitle">Volume dipelankan bertahap selama 30 detik terakhir timer tidur</string>
     <string name="sleep_timer_custom">Kustom</string>
     <string name="start_sleep_timer">Mulai timer</string>
-    <string name="sources_no_lossless">Tidak ada sumber aktif yang dapat menyediakan audio lossless. Tambahkan modul kustom untuk memutar file lossless yang tersedia tanpa transcoding.</string>
+    <string name="sources_no_lossless">Tidak ada sumber aktif yang dapat menyediakan audio lossless. Tambahkan modul kustom untuk memutar file lossless yang tersedia tanpa konversi format.</string>
     <string name="sources_order_footer">Jika suatu sumber tidak memiliki trek atau tidak dapat dijangkau, MusikKu mencoba sumber berikutnya. Sumber di atas YouTube dapat menggantikan rekamannya saat menghasilkan versi yang lebih baik.</string>
     <string name="sources_order_header">Sumber, dicoba dalam urutan ini</string>
     <string name="sources_quality_capped">Koneksi ini diatur di bawah Kualitas tinggi, sehingga stream ditranskode agar sesuai dengan batas tersebut. Unduhan tidak terpengaruh.</string>
@@ -606,7 +606,7 @@
     <string name="smb_not_configured">Hubungkan folder berbagi di Sumber</string>
     <string name="smb_empty">Tidak ada file audio di folder berbagi SMB. Periksa server di Sumber.</string>
     <string name="smb_description">Arahkan MusikKu ke folder musik bersama — NAS atau folder berbagi Windows lewat SMB.</string>
-    <string name="smb_server_hint">nas.local or 192.168.1.10:4445</string>
+    <string name="smb_server_hint">nas.local atau 192.168.1.10:4445</string>
     <string name="smb_share_hint">Nama share, mis. Music</string>
     <string name="smb_folder_hint">Folder (opsional)</string>
     <string name="smb_disconnect">Putuskan</string>
@@ -664,8 +664,8 @@
     <string name="listen_together_in_party">Dalam pesta · %1$s</string>
     <string name="listen_together_sign_in_footer">Mendengar bersama butuh akun, supaya semua orang di pesta bisa lihat siapa saja yang ikut.</string>
     <string name="listen_together_server">Server pesta</string>
-    <string name="listen_together_server_online">Online · %1$d ms</string>
-    <string name="listen_together_server_online_fallback">Online (cadangan bawaan) · %1$d ms</string>
+    <string name="listen_together_server_online">Daring · %1$d ms</string>
+    <string name="listen_together_server_online_fallback">Daring (cadangan bawaan) · %1$d ms</string>
     <string name="listen_together_server_offline">Sedang tidak bisa dihubungi</string>
     <string name="listen_together_server_checking">Memeriksa…</string>
     <string name="listen_together_server_unknown">Ketuk untuk memeriksa</string>
@@ -830,7 +830,7 @@
 
     <string name="current_profile">Profil saat ini</string>
 
-    <string name="default_youtube_profile">Profil default YouTube Music</string>
+    <string name="default_youtube_profile">Profil bawaan YouTube Music</string>
 
     <string name="dolby_atmos">Dolby Atmos</string>
 
@@ -987,7 +987,7 @@
 
     <string name="sort_date_added_toggle">Tanggal ditambahkan</string>
 
-    <string name="sort_default">Urutan default</string>
+    <string name="sort_default">Urutan bawaan</string>
 
     <string name="sort_library">Urutkan</string>
 
@@ -1113,7 +1113,7 @@
     <string name="equalizer_balance_footer">Menggeser suara ke salah satu telinga dengan mengecilkan volume sisi lainnya.</string>
     <string name="equalizer_bitstream_title">Tidak berjalan saat ini</string>
     <string name="equalizer_bitstream_subtitle">Lagu ini dikirim ke output tanpa didekode</string>
-    <string name="equalizer_bitstream_footer">Equalizer bekerja pada audio yang sudah didekode. Lagu ini diteruskan sebagai bitstream untuk didekode oleh perangkatmu, jadi tidak ada sampel yang bisa difilter di sini.</string>
+    <string name="equalizer_bitstream_footer">Ekualiser bekerja pada audio yang sudah didekode. Lagu ini diteruskan sebagai bitstream untuk didekode oleh perangkat Anda, sehingga tidak ada sampel yang bisa difilter di sini.</string>
 
     <string name="system_equalizer">Ekualiser sistem</string>
 
@@ -1420,7 +1420,7 @@
     <string name="font_footer">Lama mempertahankan tampilan huruf yang lebih tebal dan rapat.</string>
     <string name="bit_perfect_output">Output bit-perfect</string>
     <string name="bit_perfect_bypassed_footer">Output bit-perfect sudah siap, jadi pengaturan yang redup dilewati dan versi Dolby Atmos tidak diminta. Semuanya berfungsi lagi saat DAC dilepas atau mode dimatikan.</string>
-    <string name="bit_perfect_sheet_warning">Mengirim trek ke DAC tanpa perubahan. Equalizer, normalisasi kenyaringan, crossfade, Automix, kecepatan putar, dan volume MusikKu dilewati.</string>
+    <string name="bit_perfect_sheet_warning">Mengirim trek ke DAC tanpa perubahan. Ekualiser, normalisasi kenyaringan, transisi silang, AutoMix, kecepatan putar, dan volume MusikKu dilewati.</string>
     <string name="bit_perfect_mode_off_subtitle">Audio melewati mixer Android dan efek MusikKu.</string>
     <string name="bit_perfect_mode_usb_android">DAC USB</string>
     <string name="bit_perfect_mode_usb_android_subtitle">Android 14 membuka DAC pada rate dan kedalaman bit masing-masing trek, tanpa mixing atau resampling.</string>
@@ -1474,9 +1474,9 @@
     <string name="storage_usage_available">Ruang perangkat: %1$s kosong dari %2$s</string>
     <string name="storage_usage_loading">Menghitung penyimpanan…</string>
     <string name="storage_usage_refresh">Muat ulang</string>
-    <string name="storage_downloaded_files">Musik dan artwork yang diunduh</string>
+    <string name="storage_downloaded_files">Musik dan sampul yang diunduh</string>
     <string name="storage_audio_cache">Cache audio (siap diputar offline)</string>
-    <string name="storage_artwork_cache">Cache gambar artwork</string>
+    <string name="storage_artwork_cache">Cache sampul</string>
     <string name="storage_canvas_cache">Cache video Canvas</string>
     <string name="storage_automix_models">Model AI Automix (dibuat ulang saat diperlukan)</string>
     <string name="storage_usage_safety_note">Unduhan tetap tersimpan sampai kamu menghapusnya. Membersihkan cache tidak menghapus musik lokal, playlist, atau cadangan.</string>
@@ -1524,7 +1524,7 @@
     <string name="queue_selected_count">%1$d dipilih</string>
     <string name="queue_playlist_added">%1$d dari %2$d lagu ditambahkan</string>
     <string name="queue_playlist_partial">%1$s (%2$d tidak kompatibel, %3$d sudah ada, %4$d gagal)</string>
-    <string name="queue_like_sign_in">Masuk untuk menyukai lagu online</string>
+    <string name="queue_like_sign_in">Masuk untuk menyukai lagu daring</string>
 
     <!-- AutoMix artwork transitions -->
     <string name="automix_art_transition">Transisi sampul</string>

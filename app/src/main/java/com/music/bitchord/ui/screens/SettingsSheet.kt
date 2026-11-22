@@ -638,7 +638,7 @@ fun SettingsScreen(
                 //
                 // Greyed rather than hidden where the device can't decode E-AC-3.
                 // A missing row reads as a feature the app doesn't have; a disabled
-                // one with a reason under it is the difference between "BitChord
+                // one with a reason under it is the difference between "MusikKu
                 // has no Atmos" and "this phone has no Dolby decoder", and only the
                 // second is true. The stored preference is left untouched either
                 // way — see [AppSettings.dolbyAtmos].
@@ -996,7 +996,7 @@ fun SettingsScreen(
                 }
             }
             // The system panel is not listed here as well. A device with a
-            // Dolby or Dirac panel has something BitChord cannot reproduce and
+            // Dolby or Dirac panel has something MusikKu cannot reproduce and
             // keeps its row — but one level in, at the foot of the equaliser
             // screen, rather than as a second equaliser entry alongside ours.
             val equalizerTitle = stringResource(R.string.equalizer)
@@ -2036,14 +2036,14 @@ fun SettingsScreen(
         if (section == null && searchQuery.isBlank()) {
         Text(
             text = buildAnnotatedString {
-                append("bitchord $version  ")
+                append("MusikKu $version  ")
                 val linkStyles = TextLinkStyles(
                     style = SpanStyle(
                         color = MaterialTheme.colorScheme.primary,
                         textDecoration = TextDecoration.Underline,
                     ),
                 )
-                withLink(LinkAnnotation.Url("https://github.com/kushagrasinghx/BitChord", linkStyles)) {
+                withLink(LinkAnnotation.Url("https://github.com/Rulzz77/Musikku", linkStyles)) {
                     append("GitHub")
                 }
                 append("  ")
@@ -2055,7 +2055,7 @@ fun SettingsScreen(
                     append("Discord")
                 }
                 append("  ")
-                withLink(LinkAnnotation.Url("https://bitchord.kushagrasingh.in/", linkStyles)) {
+                withLink(LinkAnnotation.Url("https://bitchord.in/", linkStyles)) {
                     append("Website")
                 }
                 append("\n~YouTube Music & Listen Together Backend")

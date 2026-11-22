@@ -1515,4 +1515,8 @@
     <string name="show_total_duration_subtitle">残り時間の代わりに曲の全体の長さを表示します</string>
     <string name="hide_lyrics_preview">歌詞プレビューを非表示</string>
     <string name="hide_lyrics_preview_subtitle">プレーヤー上のスクロールする歌詞行を非表示にします。歌詞全文のパネルは引き続き利用できます</string>
+    <string name="sleep_timer_fade_out">停止前に音量を下げる</string>
+    <string name="sleep_timer_fade_out_subtitle">スリープタイマー終了前の30秒間、音量を徐々に下げます</string>
+    <string name="download_liked_songs">高評価した曲をダウンロード</string>
+    <string name="download_liked_songs_subtitle">高評価した音楽と、今後高評価するすべての曲をダウンロードします</string>
 </resources>

@@ -1582,4 +1582,10 @@
     <string name="queue_playlist_added">Добавлено %1$d из %2$d песен</string>
     <string name="queue_playlist_partial">%1$s (несовместимых: %2$d, уже есть: %3$d, ошибок: %4$d)</string>
     <string name="queue_like_sign_in">Войдите, чтобы отмечать онлайн-песни</string>
+
+    <!-- AutoMix artwork transitions -->
+    <string name="automix_art_transition">Переход обложек</string>
+    <string name="automix_art_transition_subtitle">Плавно смешивает обложки при переходе между треками во время AutoMix.</string>
+    <string name="automix_mini_art_transition">Переход обложек в мини-плеере</string>
+    <string name="automix_mini_art_transition_subtitle">Показывает переходы обложек в мини-плеере во время AutoMix.</string>
 </resources>

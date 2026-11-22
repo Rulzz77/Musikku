@@ -1565,4 +1565,8 @@
     <string name="smart_playlist_editor_description">Эти списки создаются на основе истории прослушивания и обновляются при сохранении статистики. Обычные плейлисты остаются без изменений.</string>
     <string name="smart_playlist_max_reached">Можно создать до 20 пользовательских умных плейлистов.</string>
     <string name="storage_automix_models">ИИ-модели Automix (создаются заново при необходимости)</string>
+    <string name="show_total_duration">Показывать полную длительность</string>
+    <string name="show_total_duration_subtitle">Показывает полную длительность композиции вместо оставшегося времени</string>
+    <string name="hide_lyrics_preview">Скрыть предпросмотр текста</string>
+    <string name="hide_lyrics_preview_subtitle">Скрывает бегущую строку текста в плеере; полная панель текста остаётся доступной</string>
 </resources>

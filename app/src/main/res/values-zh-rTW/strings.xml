@@ -1514,4 +1514,8 @@
     <string name="show_total_duration_subtitle">顯示歌曲完整長度，而非剩餘時間</string>
     <string name="hide_lyrics_preview">隱藏歌詞預覽</string>
     <string name="hide_lyrics_preview_subtitle">隱藏播放器中捲動顯示的歌詞行；完整歌詞面板仍可使用</string>
+    <string name="sleep_timer_fade_out">停止前逐漸降低音量</string>
+    <string name="sleep_timer_fade_out_subtitle">在睡眠計時器結束前的最後 30 秒逐漸降低音量</string>
+    <string name="download_liked_songs">下載已按讚的歌曲</string>
+    <string name="download_liked_songs_subtitle">下載你按讚的音樂，以及今後每一首你按讚的歌曲</string>
 </resources>

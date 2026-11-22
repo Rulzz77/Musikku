@@ -1450,4 +1450,8 @@
     <string name="smart_playlist_editor_description">Các danh sách này được tạo từ lịch sử nghe nhạc và cập nhật khi thống kê nghe được lưu. Chúng không thay đổi danh sách phát thông thường.</string>
     <string name="smart_playlist_max_reached">Bạn có thể tạo tối đa 20 danh sách phát thông minh tùy chỉnh.</string>
     <string name="storage_automix_models">Mô hình AI Automix (được tạo lại khi cần)</string>
+    <string name="show_total_duration">Hiển thị tổng thời lượng</string>
+    <string name="show_total_duration_subtitle">Hiển thị độ dài đầy đủ của bài hát thay vì thời gian còn lại</string>
+    <string name="hide_lyrics_preview">Ẩn bản xem trước lời bài hát</string>
+    <string name="hide_lyrics_preview_subtitle">Ẩn dòng lời bài hát đang chạy trong trình phát; bảng lời bài hát đầy đủ vẫn khả dụng</string>
 </resources>

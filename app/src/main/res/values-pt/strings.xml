@@ -1555,4 +1555,10 @@
     <string name="queue_playlist_added">%1$d de %2$d músicas adicionadas</string>
     <string name="queue_playlist_partial">%1$s (%2$d incompatíveis, %3$d já presentes, %4$d falharam)</string>
     <string name="queue_like_sign_in">Inicie sessão para gostar de músicas online</string>
+
+    <!-- AutoMix artwork transitions -->
+    <string name="automix_art_transition">Transição de capas</string>
+    <string name="automix_art_transition_subtitle">Mistura suavemente as capas entre faixas durante o AutoMix.</string>
+    <string name="automix_mini_art_transition">Transição de capa no minirreprodutor</string>
+    <string name="automix_mini_art_transition_subtitle">Mostra transições de capas no minirreprodutor durante o AutoMix.</string>
 </resources>

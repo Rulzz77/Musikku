@@ -1431,4 +1431,13 @@
     <string name="queue_playlist_added">Added %1$d of %2$d songs</string>
     <string name="queue_playlist_partial">%1$s (%2$d incompatible, %3$d already present, %4$d failed)</string>
     <string name="queue_like_sign_in">Sign in to like online songs</string>
+    <string name="auto_backup_title" translatable="false">Automatic Google Drive backup</string>
+    <string name="auto_backup_setup_subtitle" translatable="false">Choose a Google Drive folder to save a new backup each day</string>
+    <string name="auto_backup_enabled_subtitle" translatable="false">Automatic backups are on. Tap to change the folder</string>
+    <string name="auto_backup_disabled_subtitle" translatable="false">Automatic backups are off. Turn on to choose a Drive folder</string>
+    <string name="auto_backup_now" translatable="false">Back up now</string>
+    <string name="auto_backup_now_subtitle" translatable="false">Create a new backup in the selected Google Drive folder</string>
+    <string name="auto_backup_no_folder" translatable="false">Choose a Google Drive folder first</string>
+    <string name="auto_backup_failed" translatable="false">The last backup failed. Check Drive access and your internet connection</string>
+    <string name="auto_backup_last_success" translatable="false">Last backup: %1$s</string>
 </resources>

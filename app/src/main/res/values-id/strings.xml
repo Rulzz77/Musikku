@@ -1531,4 +1531,13 @@
     <string name="automix_art_transition_subtitle">Memadukan sampul secara halus saat berpindah lagu selama AutoMix.</string>
     <string name="automix_mini_art_transition">Transisi sampul pemutar mini</string>
     <string name="automix_mini_art_transition_subtitle">Menampilkan transisi sampul di pemutar mini selama AutoMix.</string>
+    <string name="auto_backup_title" translatable="false">Cadangan otomatis Google Drive</string>
+    <string name="auto_backup_setup_subtitle" translatable="false">Pilih folder Google Drive untuk menyimpan cadangan baru setiap hari</string>
+    <string name="auto_backup_enabled_subtitle" translatable="false">Cadangan otomatis aktif. Ketuk untuk mengganti folder</string>
+    <string name="auto_backup_disabled_subtitle" translatable="false">Cadangan otomatis nonaktif. Aktifkan untuk memilih folder Drive</string>
+    <string name="auto_backup_now" translatable="false">Cadangkan sekarang</string>
+    <string name="auto_backup_now_subtitle" translatable="false">Buat cadangan baru di folder Google Drive yang dipilih</string>
+    <string name="auto_backup_no_folder" translatable="false">Pilih folder Google Drive terlebih dahulu</string>
+    <string name="auto_backup_failed" translatable="false">Cadangan terakhir gagal. Periksa akses Drive dan koneksi internet</string>
+    <string name="auto_backup_last_success" translatable="false">Cadangan terakhir: %1$s</string>
 </resources>

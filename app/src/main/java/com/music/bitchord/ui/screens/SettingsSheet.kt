@@ -171,6 +171,7 @@ import com.music.bitchord.data.settings.ThemeMode
 import com.music.bitchord.data.settings.AppFont
 import com.music.bitchord.data.settings.PlayerTheme
 import com.music.bitchord.data.stats.Backup
+import com.music.bitchord.data.stats.AutoBackupController
 import com.music.bitchord.playback.AudioCache
 import com.music.bitchord.ui.player.fullBleedArtworkAvailable
 import kotlinx.coroutines.launch
@@ -331,6 +332,11 @@ fun SettingsScreen(
 
     val replayGenres by AppSettings.replayGenres.collectAsStateWithLifecycle()
 
+    val autoBackupStatusFlow = remember(context) { AutoBackupController.observe(context) }
+    val autoBackupStatus by autoBackupStatusFlow.collectAsStateWithLifecycle(
+        initialValue = AutoBackupController.status(context),
+    )
+
     // Read here so the row can say "In a party · ABC123" rather than making
     // somebody open the screen to find out whether they are still in one.
     val party by ListenTogether.state.collectAsStateWithLifecycle()
@@ -380,6 +386,16 @@ fun SettingsScreen(
             )
         }
         AppSettings.setLocalMusicFolderUri(folder.toString())
+    }
+
+    var cloudBackupMessage by remember { mutableStateOf<String?>(null) }
+    val autoBackupFolderPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree(),
+    ) { folder ->
+        if (folder == null) return@rememberLauncherForActivityResult
+        runCatching { AutoBackupController.setFolder(context, folder) }
+            .onSuccess { cloudBackupMessage = null }
+            .onFailure { cloudBackupMessage = context.getString(R.string.auto_backup_failed) }
     }
 
     /**
@@ -1673,6 +1689,68 @@ fun SettingsScreen(
                         )
                     },
                     onClick = { AppSettings.setReplayGenres(!replayGenres) },
+                )
+            }
+            val autoBackupTitle = stringResource(R.string.auto_backup_title)
+            row(autoBackupTitle, "backup", "cloud", "drive") {
+                SettingsRow(
+                    icon = SfIcons.FileUpload,
+                    title = autoBackupTitle,
+                    subtitle = cloudBackupMessage ?: stringResource(
+                        when {
+                            !autoBackupStatus.configured -> R.string.auto_backup_setup_subtitle
+                            autoBackupStatus.enabled -> R.string.auto_backup_enabled_subtitle
+                            else -> R.string.auto_backup_disabled_subtitle
+                        },
+                    ),
+                    trailing = {
+                        IosSwitch(
+                            checked = autoBackupStatus.enabled,
+                            onCheckedChange = { enabled ->
+                                if (enabled) {
+                                    if (autoBackupStatus.configured) {
+                                        AutoBackupController.setEnabled(context, true)
+                                    } else {
+                                        autoBackupFolderPicker.launch(null)
+                                    }
+                                } else {
+                                    AutoBackupController.setEnabled(context, false)
+                                }
+                            },
+                        )
+                    },
+                    onClick = {
+                        autoBackupFolderPicker.launch(
+                            autoBackupStatus.folderUri?.let { Uri.parse(it) },
+                        )
+                    },
+                )
+            }
+            val autoBackupNowTitle = stringResource(R.string.auto_backup_now)
+            row(autoBackupNowTitle, "backup", "cloud", "drive") {
+                val statusText = when {
+                    !autoBackupStatus.configured -> stringResource(R.string.auto_backup_no_folder)
+                    autoBackupStatus.lastRunFailed -> stringResource(R.string.auto_backup_failed)
+                    autoBackupStatus.lastSuccessAtMillis > 0L -> stringResource(
+                        R.string.auto_backup_last_success,
+                        java.text.DateFormat.getDateTimeInstance().format(
+                            java.util.Date(autoBackupStatus.lastSuccessAtMillis),
+                        ),
+                    )
+                    else -> stringResource(R.string.auto_backup_now_subtitle)
+                }
+                SettingsRow(
+                    icon = SfIcons.FileUpload,
+                    title = autoBackupNowTitle,
+                    subtitle = cloudBackupMessage ?: statusText,
+                    onClick = {
+                        cloudBackupMessage = null
+                        if (autoBackupStatus.configured) {
+                            AutoBackupController.backupNow(context)
+                        } else {
+                            autoBackupFolderPicker.launch(null)
+                        }
+                    },
                 )
             }
             val exportDataTitle = stringResource(R.string.export_data)

@@ -242,6 +242,8 @@
     <string name="full_screen_cover_art_subtitle">Membuat sampul memenuhi tepi pemutar alih-alih berbentuk persegi</string>
     <string name="full_screen_detail_cover">Sampul album/playlist layar penuh</string>
     <string name="full_screen_detail_cover_subtitle">Membuat sampul album dan playlist memenuhi tepi halaman alih-alih berbingkai</string>
+    <string name="show_total_duration">Tampilkan durasi total</string>
+    <string name="show_total_duration_subtitle">Menampilkan durasi penuh lagu, bukan sisa waktu pemutaran</string>
     <string name="animated_cover_art_subtitle">Memutar video berulang yang disertakan beberapa rilisan alih-alih sampul diam</string>
     <string name="dont_repeat_songs_subtitle">Putar Otomatis tidak akan menyarankan lagu yang sudah diputar atau disarankan dalam sesi ini</string>
     <string name="download_quality_subtitle">%1$s per trek, apa pun koneksinya</string>

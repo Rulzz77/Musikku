@@ -1871,6 +1871,7 @@ fun SettingsScreen(
                     }
                 }
             }
+        }
 
         if (shows(SettingsCategory.LANGUAGE)) SearchableSettingsGroup(search, header = stringResource(R.string.language)) {
             val appLanguageTitle = stringResource(R.string.app_language)

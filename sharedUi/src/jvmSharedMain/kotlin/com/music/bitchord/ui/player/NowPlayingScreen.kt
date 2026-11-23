@@ -109,6 +109,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.geometry.lerp
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.BlendMode
@@ -888,17 +889,21 @@ private fun ArtworkUnlikeSplit(
             // Their pivots sit on that seam, so the two pieces visibly peel apart.
             Box(
                 modifier = Modifier
-                    .align(Alignment.CenterStart)
-                    .size(56.dp, 112.dp)
+                    .align(Alignment.Center)
+                    .size(112.dp)
                     .graphicsLayer {
                         translationX = -separation.value
                         rotationZ = -rotation.value
                         scaleX = scale.value
                         scaleY = scale.value
                         this.alpha = alpha.value
-                        transformOrigin = TransformOrigin(1f, 0.5f)
+                        transformOrigin = TransformOrigin(0.5f, 0.5f)
                     }
-                    .clip(RectangleShape),
+                    .drawWithContent {
+                        clipRect(right = size.width / 2f) {
+                            this@drawWithContent.drawContent()
+                        }
+                    },
             ) {
                 Icon(
                     imageVector = BitChordIcons.HeartFilled,
@@ -910,25 +915,27 @@ private fun ArtworkUnlikeSplit(
 
             Box(
                 modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .size(56.dp, 112.dp)
+                    .align(Alignment.Center)
+                    .size(112.dp)
                     .graphicsLayer {
                         translationX = separation.value
                         rotationZ = rotation.value
                         scaleX = scale.value
                         scaleY = scale.value
                         this.alpha = alpha.value
-                        transformOrigin = TransformOrigin(0f, 0.5f)
+                        transformOrigin = TransformOrigin(0.5f, 0.5f)
                     }
-                    .clip(RectangleShape),
+                    .drawWithContent {
+                        clipRect(left = size.width / 2f) {
+                            this@drawWithContent.drawContent()
+                        }
+                    },
             ) {
                 Icon(
                     imageVector = BitChordIcons.HeartFilled,
                     contentDescription = null,
                     tint = Color(0xFFFF3B5C),
-                    modifier = Modifier
-                        .offset(x = (-56).dp)
-                        .size(112.dp),
+                    modifier = Modifier.size(112.dp),
                 )
             }
 

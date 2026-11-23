@@ -1736,9 +1736,11 @@ fun NowPlayingScreen(
     }
 
     // Double-tapping the expanded sleeve likes or unlikes the current song.
+    // Guests can Like streamed tracks in MusikKu's own Liked playlist, so this
+    // depends on the song having a stable local or remote key, not on sign-in.
     // Observe in the Initial pass without consuming taps, before child controls
     // or the sheet can consume the up event and cancel this gesture.
-    val canLikeCurrentSong = signedIn || song.localUri != null
+    val canLikeCurrentSong = song.videoId.isNotBlank() || song.localUri != null
     var artworkLikeBurstTrigger by remember(song.videoId) { mutableIntStateOf(0) }
     val latestArtworkLikeStatus by rememberUpdatedState(likeStatus)
     val latestArtworkLike by rememberUpdatedState(onToggleLike)
@@ -1784,10 +1786,10 @@ fun NowPlayingScreen(
                     val wasLiked = latestArtworkLikeStatus == LikeStatus.LIKE
                     haptics.play(if (wasLiked) Haptic.ToggleOff else Haptic.ToggleOn)
                     if (!wasLiked) artworkLikeBurstTrigger++
+                    // The host stores guest stream Likes locally and syncs signed-in
+                    // stream Likes to YouTube Music; both use the same gesture.
+                    latestArtworkLike()
                 }
-                // Still dispatch the request for guest sessions so the existing
-                // sign-in guard can report why an online Like could not be applied.
-                latestArtworkLike()
             } else {
                 previousTapTime = released.uptimeMillis
                 previousTapPosition = released.position

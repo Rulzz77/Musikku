@@ -35,6 +35,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.gestures.awaitVerticalTouchSlopOrCancellation
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.verticalDrag
@@ -122,6 +123,7 @@ import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.AwaitPointerEventScope
 import androidx.compose.ui.input.pointer.PointerInputChange
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.input.pointer.util.VelocityTracker
@@ -1669,6 +1671,42 @@ fun NowPlayingScreen(
         )
     }
 
+    // Double-tapping the expanded sleeve likes or unlikes the current song.
+    // Observe in the Final pass without consuming taps, so the existing queue
+    // pull and horizontal-skip gestures still receive their full pointer stream.
+    val canLikeCurrentSong = signedIn || song.localUri != null
+    val latestArtworkLike by rememberUpdatedState(onToggleLike)
+    val artworkDoubleTapLike = Modifier.pointerInput(song.videoId, canLikeCurrentSong) {
+        var previousTapTime = 0L
+        var previousTapPosition = Offset.Zero
+        awaitEachGesture {
+            awaitFirstDown(
+                requireUnconsumed = false,
+                pass = PointerEventPass.Final,
+            )
+            val up = waitForUpOrCancellation(pass = PointerEventPass.Final)
+            if (up == null) {
+                previousTapTime = 0L
+                return@awaitEachGesture
+            }
+
+            val isDoubleTap = previousTapTime > 0L &&
+                up.uptimeMillis - previousTapTime in 1L..viewConfiguration.doubleTapTimeoutMillis &&
+                (up.position - previousTapPosition).getDistance() <= viewConfiguration.touchSlop * 2f
+
+            if (isDoubleTap) {
+                previousTapTime = 0L
+                if (canLikeCurrentSong) {
+                    haptics.play(if (likeStatus == LikeStatus.LIKE) Haptic.ToggleOff else Haptic.ToggleOn)
+                    latestArtworkLike()
+                }
+            } else {
+                previousTapTime = up.uptimeMillis
+                previousTapPosition = up.position
+            }
+        }
+    }
+
     // The scrubber's two halves, shared by both layouts so a drop point is held
     // the same way in each — see [PlayerScrub.pendingSeek].
     val onScrub: (Float) -> Unit = scrub::drag
@@ -2168,6 +2206,7 @@ fun NowPlayingScreen(
                                     }
                                 }
                                 .then(skipSwipeGesture)
+                                .then(if (!panelOpen && canLikeCurrentSong) artworkDoubleTapLike else Modifier)
                                 .graphicsLayer {
                                     // The paused shrink and the swipe nudge are
                                     // let go of on the way, as the portrait
@@ -3564,6 +3603,13 @@ fun NowPlayingScreen(
                                             queueOpen = false
                                             closeLyrics()
                                         }
+                                    } else {
+                                        Modifier
+                                    },
+                                )
+                                .then(
+                                    if (!queueOpen && !lyricsOpen && canLikeCurrentSong) {
+                                        artworkDoubleTapLike
                                     } else {
                                         Modifier
                                     },

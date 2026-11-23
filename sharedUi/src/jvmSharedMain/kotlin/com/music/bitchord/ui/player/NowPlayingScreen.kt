@@ -1747,21 +1747,37 @@ fun NowPlayingScreen(
         var previousTapTime = 0L
         var previousTapPosition = Offset.Zero
         awaitEachGesture {
-            awaitFirstDown(
+            val down = awaitFirstDown(
                 requireUnconsumed = false,
-                // Observe before child clickables or the sheet can consume the up event.
-                // The Final pass could see a consumed up and cancel the Like gesture.
+                // Observe the whole artwork zone before a child control consumes its tap.
                 pass = PointerEventPass.Initial,
             )
-            val up = waitForUpOrCancellation(pass = PointerEventPass.Initial)
+            var up: PointerInputChange? = null
+            var movedBeyondSlop = false
+
+            // Read the Initial pass so child controls do not hide the release, but
+            // apply touch slop ourselves: vertical queue drags and horizontal skips
+            // must never be mistaken for a pair of taps.
+            while (up == null && !movedBeyondSlop) {
+                val event = awaitPointerEvent(PointerEventPass.Initial)
+                val change = event.changes.firstOrNull { it.id == down.id }
+                when {
+                    change == null -> movedBeyondSlop = true
+                    !change.pressed -> up = change
+                    (change.position - down.position).getDistance() > viewConfiguration.touchSlop ->
+                        movedBeyondSlop = true
+                }
+            }
+
             if (up == null) {
                 previousTapTime = 0L
                 return@awaitEachGesture
             }
 
+            val released = up
             val isDoubleTap = previousTapTime > 0L &&
-                up.uptimeMillis - previousTapTime in 1L..viewConfiguration.doubleTapTimeoutMillis &&
-                (up.position - previousTapPosition).getDistance() <= viewConfiguration.touchSlop * 2f
+                released.uptimeMillis - previousTapTime in 1L..viewConfiguration.doubleTapTimeoutMillis &&
+                (released.position - previousTapPosition).getDistance() <= viewConfiguration.touchSlop * 2f
 
             if (isDoubleTap) {
                 previousTapTime = 0L
@@ -1772,8 +1788,8 @@ fun NowPlayingScreen(
                     latestArtworkLike()
                 }
             } else {
-                previousTapTime = up.uptimeMillis
-                previousTapPosition = up.position
+                previousTapTime = released.uptimeMillis
+                previousTapPosition = released.position
             }
         }
     }
@@ -3018,6 +3034,16 @@ fun NowPlayingScreen(
                             .weight(1f)
                             .widthIn(max = PLAYER_MAX_WIDTH)
                             .fillMaxWidth()
+                            // The gesture target is the complete expanded artwork zone,
+                            // including the breathing room around the square cover. The
+                            // visual sleeve itself is smaller than this box on phones.
+                            .then(
+                                if (!queueOpen && !lyricsOpen && canLikeCurrentSong) {
+                                    artworkDoubleTapLike
+                                } else {
+                                    Modifier
+                                },
+                            )
                             .padding(top = ART_BOX_TOP_PAD, bottom = 18.dp),
                     ) {
                         if (spotifyCanvasPresentation && playerDeckSettledOpen &&
@@ -3682,13 +3708,7 @@ fun NowPlayingScreen(
                                         Modifier
                                     },
                                 )
-                                .then(
-                                    if (!queueOpen && !lyricsOpen && canLikeCurrentSong) {
-                                        artworkDoubleTapLike
-                                    } else {
-                                        Modifier
-                                    },
-                                ),
+                                ,
                             contentAlignment = Alignment.Center,
                         ) {
                             ArtworkLikeBurst(trackKey = song.videoId, trigger = artworkLikeBurstTrigger)

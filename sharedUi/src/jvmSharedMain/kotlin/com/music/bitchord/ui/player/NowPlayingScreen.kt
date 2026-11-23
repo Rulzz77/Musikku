@@ -1784,8 +1784,10 @@ fun NowPlayingScreen(
                     val wasLiked = latestArtworkLikeStatus == LikeStatus.LIKE
                     haptics.play(if (wasLiked) Haptic.ToggleOff else Haptic.ToggleOn)
                     if (!wasLiked) artworkLikeBurstTrigger++
-                    latestArtworkLike()
                 }
+                // Still dispatch the request for guest sessions so the existing
+                // sign-in guard can report why an online Like could not be applied.
+                latestArtworkLike()
             } else {
                 previousTapTime = released.uptimeMillis
                 previousTapPosition = released.position
@@ -2308,7 +2310,7 @@ fun NowPlayingScreen(
                                     }
                                 }
                                 .then(skipSwipeGesture)
-                                .then(if (!panelOpen && canLikeCurrentSong) artworkDoubleTapLike else Modifier)
+                                .then(if (!panelOpen) artworkDoubleTapLike else Modifier)
                                 .graphicsLayer {
                                     // The paused shrink and the swipe nudge are
                                     // let go of on the way, as the portrait
@@ -3037,7 +3039,7 @@ fun NowPlayingScreen(
                             // including the breathing room around the square cover. The
                             // visual sleeve itself is smaller than this box on phones.
                             .then(
-                                if (!queueOpen && !lyricsOpen && canLikeCurrentSong) {
+                                if (!queueOpen && !lyricsOpen) {
                                     artworkDoubleTapLike
                                 } else {
                                     Modifier

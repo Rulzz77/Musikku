@@ -2786,15 +2786,24 @@ private fun BitChordApp(
             onToggleLike = {
                 if (song.localUri != null) {
                     OfflinePlaylists.toggleLike(song)
+                } else if (!signedIn) {
+                    // A guest can still reach the artwork gesture, but online
+                    // ratings require a YouTube Music session. Say so explicitly
+                    // rather than reporting the gesture as a generic failure.
+                    Toast.makeText(context, R.string.queue_like_sign_in, Toast.LENGTH_SHORT).show()
                 } else {
                     val target = if (likeStatusOf(song) == LikeStatus.LIKE) {
                         LikeStatus.INDIFFERENT
                     } else {
                         LikeStatus.LIKE
                     }
-                    viewModel.setLike(song.videoId, target) { succeeded ->
-                        if (!succeeded) {
-                            Toast.makeText(context, R.string.failed, Toast.LENGTH_SHORT).show()
+                    viewModel.setLikeWithResult(song.videoId, target) { result ->
+                        result.exceptionOrNull()?.let { failure ->
+                            Toast.makeText(
+                                context,
+                                viewModel.likeErrorMessage(failure),
+                                Toast.LENGTH_LONG,
+                            ).show()
                         }
                     }
                 }

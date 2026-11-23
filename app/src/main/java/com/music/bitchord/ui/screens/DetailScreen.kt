@@ -311,7 +311,7 @@ fun DetailScreen(
     onAddSuggested: (Song) -> Unit,
     /** Removes one entry from a playlist this listener owns or keeps on this device. */
     onRemoveSongFromPlaylist: ((Song) -> Unit)? = null,
-    /** Toggles Like for artwork double-taps inside the Liked Music playlist. */
+    /** Toggles Like for double-taps on song artwork in detail-page track lists. */
     onToggleSongLike: ((Song) -> Unit)? = null,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
@@ -797,9 +797,10 @@ fun DetailScreen(
                             },
                             onLongPress = { onSongLongPress(song) },
                             onSwipeToQueue = { onSongSwipe(song) },
-                            onArtworkDoubleTap = if (isLikedMusicPage) {
-                                onToggleSongLike?.let { toggle -> { toggle(song) } }
-                            } else null,
+                            // Like is available from any song list reached through Library/detail pages,
+                            // not just from Liked Music (where every entry is already liked).
+                            // The main Now Playing cover is a separate surface and stays unchanged.
+                            onArtworkDoubleTap = onToggleSongLike?.let { toggle -> { toggle(song) } },
                             rowBackground = Color.Transparent,
                             // The track's place on the release, not its place in
                             // what the filter — or a sort — left standing.

@@ -3739,6 +3739,7 @@ private fun BitChordApp(
                                 },
                                 onSongLongPress = openSongMenu,
                                 onSongSwipe = onSongSwipe,
+                                onToggleSongLike = { song -> toggleLikeOf(song) },
                                 onTopResultPlay = { song ->
                                     viewModel.recordEntity(SearchHistoryEntity(
                                         id = song.videoId,

@@ -109,6 +109,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.geometry.lerp
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.BlendMode
@@ -808,6 +809,148 @@ private fun ArtworkLikeBurst(
                     this.alpha = alpha.value
                 },
         )
+    }
+}
+
+
+/**
+ * The opposite of [ArtworkLikeBurst]: the heart cracks down its centre, then
+ * its two halves peel away from one another when a Like is removed.
+ */
+@Composable
+private fun ArtworkUnlikeSplit(
+    trackKey: String,
+    trigger: Int,
+    modifier: Modifier = Modifier,
+) {
+    val density = LocalDensity.current
+    val splitDistancePx = with(density) { 68.dp.toPx() }
+    val separation = remember { Animatable(0f) }
+    val rotation = remember { Animatable(0f) }
+    val alpha = remember { Animatable(1f) }
+    val scale = remember { Animatable(1f) }
+    val crackAlpha = remember { Animatable(0f) }
+    var visible by remember { mutableStateOf(false) }
+
+    LaunchedEffect(trackKey, trigger) {
+        if (trigger == 0) {
+            visible = false
+            separation.snapTo(0f)
+            rotation.snapTo(0f)
+            alpha.snapTo(1f)
+            scale.snapTo(1f)
+            crackAlpha.snapTo(0f)
+            return@LaunchedEffect
+        }
+
+        visible = true
+        separation.snapTo(0f)
+        rotation.snapTo(0f)
+        alpha.snapTo(1f)
+        scale.snapTo(1.04f)
+        crackAlpha.snapTo(0f)
+
+        val splitAnimation = launch {
+            separation.animateTo(
+                targetValue = splitDistancePx,
+                animationSpec = tween(390, easing = FastOutSlowInEasing),
+            )
+        }
+        val rotationAnimation = launch {
+            rotation.animateTo(
+                targetValue = 21f,
+                animationSpec = tween(390, easing = FastOutSlowInEasing),
+            )
+        }
+        val fadeAnimation = launch {
+            delay(80L)
+            alpha.animateTo(0f, tween(300, easing = FastOutSlowInEasing))
+        }
+        val scaleAnimation = launch {
+            scale.animateTo(0.92f, tween(390, easing = FastOutSlowInEasing))
+        }
+        val crackAnimation = launch {
+            crackAlpha.animateTo(1f, tween(55))
+            delay(35L)
+            crackAlpha.animateTo(0f, tween(190))
+        }
+
+        splitAnimation.join()
+        rotationAnimation.join()
+        fadeAnimation.join()
+        scaleAnimation.join()
+        crackAnimation.join()
+        visible = false
+    }
+
+    if (visible) {
+        Box(modifier = modifier.size(112.dp)) {
+            // Each half draws the same heart but clips it at the centre seam.
+            // Their pivots sit on that seam, so the two pieces visibly peel apart.
+            Box(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .size(112.dp)
+                    .graphicsLayer {
+                        translationX = -separation.value
+                        rotationZ = -rotation.value
+                        scaleX = scale.value
+                        scaleY = scale.value
+                        this.alpha = alpha.value
+                        transformOrigin = TransformOrigin(0.5f, 0.5f)
+                    }
+                    .drawWithContent {
+                        clipRect(right = size.width / 2f) {
+                            this@drawWithContent.drawContent()
+                        }
+                    },
+            ) {
+                Icon(
+                    imageVector = BitChordIcons.HeartFilled,
+                    contentDescription = null,
+                    tint = Color(0xFFFF3B5C),
+                    modifier = Modifier.size(112.dp),
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .size(112.dp)
+                    .graphicsLayer {
+                        translationX = separation.value
+                        rotationZ = rotation.value
+                        scaleX = scale.value
+                        scaleY = scale.value
+                        this.alpha = alpha.value
+                        transformOrigin = TransformOrigin(0.5f, 0.5f)
+                    }
+                    .drawWithContent {
+                        clipRect(left = size.width / 2f) {
+                            this@drawWithContent.drawContent()
+                        }
+                    },
+            ) {
+                Icon(
+                    imageVector = BitChordIcons.HeartFilled,
+                    contentDescription = null,
+                    tint = Color(0xFFFF3B5C),
+                    modifier = Modifier.size(112.dp),
+                )
+            }
+
+            Spacer(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .width(2.dp)
+                    .height(58.dp)
+                    .graphicsLayer {
+                        this.alpha = crackAlpha.value
+                        rotationZ = 8f
+                    }
+                    .background(Color.White, RoundedCornerShape(2.dp)),
+            )
+        }
     }
 }
 
@@ -1742,6 +1885,7 @@ fun NowPlayingScreen(
     // or the sheet can consume the up event and cancel this gesture.
     val canLikeCurrentSong = song.videoId.isNotBlank() || song.localUri != null
     var artworkLikeBurstTrigger by remember(song.videoId) { mutableIntStateOf(0) }
+    var artworkUnlikeSplitTrigger by remember(song.videoId) { mutableIntStateOf(0) }
     val latestArtworkLikeStatus by rememberUpdatedState(likeStatus)
     val latestArtworkLike by rememberUpdatedState(onToggleLike)
     val artworkDoubleTapLike = Modifier.pointerInput(song.videoId, canLikeCurrentSong) {
@@ -1785,7 +1929,11 @@ fun NowPlayingScreen(
                 if (canLikeCurrentSong) {
                     val wasLiked = latestArtworkLikeStatus == LikeStatus.LIKE
                     haptics.play(if (wasLiked) Haptic.ToggleOff else Haptic.ToggleOn)
-                    if (!wasLiked) artworkLikeBurstTrigger++
+                    if (wasLiked) {
+                        artworkUnlikeSplitTrigger++
+                    } else {
+                        artworkLikeBurstTrigger++
+                    }
                     // The host stores guest stream Likes locally and syncs signed-in
                     // stream Likes to YouTube Music; both use the same gesture.
                     latestArtworkLike()
@@ -2270,6 +2418,11 @@ fun NowPlayingScreen(
                                 ArtworkLikeBurst(
                                     trackKey = song.videoId,
                                     trigger = artworkLikeBurstTrigger,
+                                    modifier = Modifier.align(Alignment.Center),
+                                )
+                                ArtworkUnlikeSplit(
+                                    trackKey = song.videoId,
+                                    trigger = artworkUnlikeSplitTrigger,
                                     modifier = Modifier.align(Alignment.Center),
                                 )
                                 // The stats belong to the player, not to the sleeve,
@@ -3714,6 +3867,7 @@ fun NowPlayingScreen(
                             contentAlignment = Alignment.Center,
                         ) {
                             ArtworkLikeBurst(trackKey = song.videoId, trigger = artworkLikeBurstTrigger)
+                            ArtworkUnlikeSplit(trackKey = song.videoId, trigger = artworkUnlikeSplitTrigger)
                             // Measured stats stay on the sleeve's bottom centre. They
                             // fade away with Spotify's lower control deck rather than
                             // following the compact credits to the bottom edge.

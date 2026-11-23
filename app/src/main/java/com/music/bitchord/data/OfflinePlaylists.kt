@@ -16,15 +16,15 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * A playlist of files on this device, made in the Local Music folder's
- * Playlists tab — the offline player's own playlists, which never touch the
- * account. [LIKED_ID] is always there and always first.
+ * Playlists owned by this MusikKu installation, made in the Local Music
+ * folder's Playlists tab — they never require or write to a Google account.
+ * [LIKED_ID] is always there and always first.
  *
- * Tracks are held by [Song.localUri], the one thing about a file that the
- * folder, the player and a download all agree on. A track's row is kept whole
- * so the page can be drawn without listing the device first; whether the file
- * is still there is asked when the page is read (see
- * [LocalMediaRepository.present]), not by rewriting the record.
+ * Entries can be device files or streamed tracks. Files are keyed by their
+ * local URI; YouTube tracks are keyed by video id, so a guest can keep a local
+ * Liked Music list without signing in. A row is kept whole so the page can be
+ * drawn without listing the device first; whether a local file is still there
+ * is checked when the page is read (see [LocalMediaRepository.present]).
  */
 data class OfflinePlaylist(
     val id: String,
@@ -69,7 +69,7 @@ object OfflinePlaylists {
 
     private val _liked = MutableStateFlow<Set<String>>(emptySet())
 
-    /** The [Song.localUri]s in [LIKED_ID], for a heart to be drawn without a scan. */
+    /** Local liked keys: a file URI for device audio, or a video id for streamed tracks. */
     val liked: StateFlow<Set<String>> = _liked.asStateFlow()
 
     fun init(context: Context, likedTitle: String) {
@@ -94,17 +94,22 @@ object OfflinePlaylists {
         return _playlists.value.firstOrNull { it.id == id }
     }
 
-    fun isLiked(song: Song): Boolean = song.localUri?.let { it in _liked.value } == true
+    fun isLiked(song: Song): Boolean = song.playlistKey() in _liked.value
 
-    /** Likes or unlikes a device file; returns whether it is liked now. */
+    /**
+     * Likes or unlikes a track in MusikKu's own Liked playlist; works for
+     * streamed YouTube tracks as well as device files, with no account needed.
+     * Returns whether it is liked now.
+     */
     fun toggleLike(song: Song): Boolean {
-        val key = song.localUri ?: return false
+        val key = song.playlistKey()
+        if (key.isBlank()) return false
         var nowLiked = false
         mutate { list ->
             nowLiked = key !in _liked.value
             list.map { playlist ->
                 if (!playlist.isLiked) return@map playlist
-                val rest = playlist.songs.filterNot { it.localUri == key }
+                val rest = playlist.songs.filterNot { it.playlistKey() == key }
                 playlist.copy(songs = if (nowLiked) listOf(song.stored()) + rest else rest)
             }
         }
@@ -263,7 +268,7 @@ object OfflinePlaylists {
         val liked = list.firstOrNull { it.isLiked } ?: OfflinePlaylist(LIKED_ID, likedTitle, emptyList())
         val ordered = listOf(liked.copy(title = likedTitle)) + list.filterNot { it.isLiked }
         _playlists.value = ordered
-        _liked.value = liked.songs.mapNotNullTo(HashSet()) { it.localUri }
+        _liked.value = liked.songs.mapTo(HashSet()) { it.playlistKey() }
     }
 
     /**

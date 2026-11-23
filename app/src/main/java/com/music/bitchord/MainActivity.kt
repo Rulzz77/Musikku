@@ -1041,22 +1041,27 @@ private fun BitChordApp(
         if (!remoteConfig.features.playlistSearch) detailSearching = false
     }
     val likeStatuses by viewModel.likeStatuses.collectAsStateWithLifecycle()
-    // A device file's heart is the device's Liked playlist, not a YouTube
-    // rating: the file has no identity there to rate. One rule for every
-    // surface that draws a heart — the player and the track menu alike.
+    // MusikKu's own Liked playlist stores local files and streamed tracks.
+    // Guests use it for YouTube tracks too; signed-in listeners can still use
+    // their YouTube Music account rating unless the track is already locally liked.
     val offlineLiked by OfflinePlaylists.liked.collectAsStateWithLifecycle()
     val offlinePlaylists by OfflinePlaylists.playlists.collectAsStateWithLifecycle()
     val playlistFolders by PlaylistFolders.folders.collectAsStateWithLifecycle()
     val offlinePlaylistGroups = remember(offlinePlaylists) { offlinePlaylists.map { it.toGroup() } }
     val likeStatusOf: (Song) -> LikeStatus = { song ->
-        val uri = song.localUri
+        val localKey = song.localUri ?: song.videoId
         when {
-            uri != null -> if (uri in offlineLiked) LikeStatus.LIKE else LikeStatus.INDIFFERENT
+            localKey in offlineLiked -> LikeStatus.LIKE
+            song.localUri != null -> LikeStatus.INDIFFERENT
             else -> likeStatuses[song.videoId] ?: LikeStatus.INDIFFERENT
         }
     }
     val toggleLikeOf: (Song) -> Unit = { song ->
-        if (song.localUri != null) OfflinePlaylists.toggleLike(song) else viewModel.toggleLike(song.videoId)
+        if (song.localUri != null || !signedIn || song.videoId in offlineLiked) {
+            OfflinePlaylists.toggleLike(song)
+        } else {
+            viewModel.toggleLike(song.videoId)
+        }
     }
     // Which tracks are being held on YouTube's own upload, so the player's menu
     // offers the way back out of a revert rather than the revert again.
@@ -2573,19 +2578,17 @@ private fun BitChordApp(
                 }
                 QueueBulkAction.LIKE -> {
                     val requested = songs.distinctBy { it.localUri ?: it.videoId }
-                    if (!signedIn && requested.any { it.localUri == null }) {
-                        Toast.makeText(context, R.string.queue_like_sign_in, Toast.LENGTH_SHORT).show()
-                    }
                     var succeeded = true
                     for (song in requested) {
-                        if (song.localUri != null) OfflinePlaylists.like(song)
-                        else {
+                        if (song.localUri != null || !signedIn || song.videoId in offlineLiked) {
+                            OfflinePlaylists.like(song)
+                        } else {
                             val completion = CompletableDeferred<Boolean>()
                             viewModel.setLike(song.videoId, LikeStatus.LIKE) { completion.complete(it) }
                             if (!completion.await()) succeeded = false
                         }
                     }
-                    if (!succeeded && signedIn) Toast.makeText(context, R.string.failed, Toast.LENGTH_SHORT).show()
+                    if (!succeeded) Toast.makeText(context, R.string.failed, Toast.LENGTH_SHORT).show()
                     succeeded
                 }
                 QueueBulkAction.DOWNLOAD -> {
@@ -2784,7 +2787,9 @@ private fun BitChordApp(
             signedIn = signedIn,
             likeStatus = likeStatusOf(song),
             onToggleLike = {
-                if (song.localUri != null) {
+                if (song.localUri != null || !signedIn || song.videoId in offlineLiked) {
+                    // Guest Likes are stored in MusikKu's own Liked playlist.
+                    // No Google session or YouTube request is needed.
                     OfflinePlaylists.toggleLike(song)
                 } else {
                     val target = if (likeStatusOf(song) == LikeStatus.LIKE) {
@@ -2792,9 +2797,13 @@ private fun BitChordApp(
                     } else {
                         LikeStatus.LIKE
                     }
-                    viewModel.setLike(song.videoId, target) { succeeded ->
-                        if (!succeeded) {
-                            Toast.makeText(context, R.string.failed, Toast.LENGTH_SHORT).show()
+                    viewModel.setLikeWithResult(song.videoId, target) { result ->
+                        result.exceptionOrNull()?.let { failure ->
+                            Toast.makeText(
+                                context,
+                                viewModel.likeErrorMessage(failure),
+                                Toast.LENGTH_LONG,
+                            ).show()
                         }
                     }
                 }

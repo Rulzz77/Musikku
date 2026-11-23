@@ -16,6 +16,7 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import com.music.bitchord.ui.components.PillSegmentedControl
 import com.music.bitchord.ui.components.longPressMenuClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -104,6 +105,8 @@ fun SearchScreen(
     onSongClick: (List<Song>, Int) -> Unit,
     onSongLongPress: (Song) -> Unit,
     onSongSwipe: (Song) -> Unit,
+    /** Toggles Like when a song's artwork is double-tapped in search surfaces. */
+    onToggleSongLike: (Song) -> Unit = {},
     onTopResultPlay: (Song) -> Unit,
     onTopResultPlaylist: (Song) -> Unit,
     onBrowseClick: (BrowseItem) -> Unit,
@@ -274,6 +277,7 @@ fun SearchScreen(
                     onSongClick = onLibrarySongClick,
                     onSongLongPress = onSongLongPress,
                     onSongSwipe = onSongSwipe,
+                    onToggleSongLike = onToggleSongLike,
                     isBlocked = if (searchingAddons) isBlocked else { _ -> false },
                     onBlockedSongClick = onBlockedSongClick,
                 )
@@ -293,6 +297,7 @@ fun SearchScreen(
                             typeaheadResults = typeaheadResults,
                             onSongClick = { song -> onTopResultPlay(song) },
                             onSongLongPress = onTypeaheadLongPress,
+                            onSongDoubleTap = onToggleSongLike,
                             onBrowseClick = { item ->
                                 onBrowseClick(item)
                             },
@@ -313,6 +318,7 @@ fun SearchScreen(
                         onRemove = onHistoryRemove,
                         onClear = onHistoryClear,
                         onSongSwipe = onSongSwipe,
+                        onSongDoubleTap = onToggleSongLike,
                     )
                 }
                 results is UiState.Loading -> songListSkeleton(circular = filter == SearchFilter.ARTISTS)
@@ -338,6 +344,7 @@ fun SearchScreen(
                                     onPlay = { onTopResultPlay(topResult.song) },
                                     onPlaylist = { onTopResultPlaylist(topResult.song) },
                                     onLongPress = { onSongLongPress(topResult.song) },
+                                    onArtworkDoubleTap = { onToggleSongLike(topResult.song) },
                                 )
                             }
                         }
@@ -377,6 +384,7 @@ fun SearchScreen(
                                     },
                                     onLongPress = { onSongLongPress(row.song) },
                                     onSwipeToQueue = { onSongSwipe(row.song) },
+                                    onArtworkDoubleTap = { onToggleSongLike(row.song) },
                                     isCurrent = isCurrentRow(row.song),
                                     isPlaying = isPlaying && isCurrentRow(row.song),
                                     searchPlayingStyle = true,
@@ -441,6 +449,7 @@ private fun LazyListScope.librarySearchResults(
     onSongClick: (List<Song>, Int) -> Unit,
     onSongLongPress: (Song) -> Unit,
     onSongSwipe: (Song) -> Unit,
+    onToggleSongLike: (Song) -> Unit,
     isBlocked: (Song) -> Boolean,
     onBlockedSongClick: (Song) -> Unit,
 ) {
@@ -486,6 +495,7 @@ private fun LazyListScope.librarySearchResults(
                     },
                     onLongPress = { onSongLongPress(song) },
                     onSwipeToQueue = { if (blocked) onBlockedSongClick(song) else onSongSwipe(song) },
+                    onArtworkDoubleTap = { onToggleSongLike(song) },
                     isCurrent = isCurrentRow(song),
                     isPlaying = isPlaying && isCurrentRow(song),
                     searchPlayingStyle = true,
@@ -511,6 +521,7 @@ private fun TopResultCard(
     onPlay: () -> Unit,
     onPlaylist: () -> Unit,
     onLongPress: () -> Unit,
+    onArtworkDoubleTap: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -532,7 +543,20 @@ private fun TopResultCard(
                 model = song.thumbnailUrl?.artworkAt(ROW_ART_PX),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.trackArtSize(72.dp, song.isVideo).clip(RoundedCornerShape(10.dp)),
+                modifier = Modifier
+                    .trackArtSize(72.dp, song.isVideo)
+                    .clip(RoundedCornerShape(10.dp))
+                    .then(
+                        if (onArtworkDoubleTap != null) {
+                            Modifier.combinedClickable(
+                                onClick = onPlay,
+                                onLongClick = onLongPress,
+                                onDoubleClick = onArtworkDoubleTap,
+                            )
+                        } else {
+                            Modifier
+                        },
+                    ),
             )
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
@@ -687,6 +711,7 @@ private fun LazyListScope.searchTypeaheadDropdown(
     typeaheadResults: List<SearchResult>,
     onSongClick: (Song) -> Unit,
     onSongLongPress: ((Song) -> Unit)?,
+    onSongDoubleTap: (Song) -> Unit,
     onBrowseClick: (BrowseItem) -> Unit,
     currentSong: Song?,
     isPlaying: Boolean,
@@ -714,6 +739,7 @@ private fun LazyListScope.searchTypeaheadDropdown(
                 song = result.song,
                 onClick = { onSongClick(result.song) },
                 onLongPress = onSongLongPress?.let { { it(result.song) } },
+                onArtworkDoubleTap = { onSongDoubleTap(result.song) },
                 isCurrent = isCurrentRow(result.song),
                 isPlaying = isPlaying && isCurrentRow(result.song),
             )
@@ -726,6 +752,7 @@ private fun LazyListScope.searchTypeaheadDropdown(
                 song = result.song,
                 onClick = { onSongClick(result.song) },
                 onLongPress = onSongLongPress?.let { { it(result.song) } },
+                onArtworkDoubleTap = { onSongDoubleTap(result.song) },
                 isCurrent = isCurrentRow(result.song),
                 isPlaying = isPlaying && isCurrentRow(result.song),
             )
@@ -737,11 +764,13 @@ private fun LazyListScope.searchTypeaheadDropdown(
  * A single media row inside the typeahead dropdown: 52dp cover art, title,
  * and artist/album subtitle. Tap plays the track; long-press opens the menu.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun TypeaheadSongRow(
     song: Song,
     onClick: () -> Unit,
     onLongPress: (() -> Unit)? = null,
+    onArtworkDoubleTap: (() -> Unit)? = null,
     isCurrent: Boolean = false,
     isPlaying: Boolean = false,
 ) {
@@ -766,7 +795,18 @@ private fun TypeaheadSongRow(
                     .matchParentSize()
                     .clip(RoundedCornerShape(8.dp))
                     .thumbnailBorder(RoundedCornerShape(8.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .then(
+                        if (onArtworkDoubleTap != null) {
+                            Modifier.combinedClickable(
+                                onClick = onClick,
+                                onLongClick = onLongPress,
+                                onDoubleClick = onArtworkDoubleTap,
+                            )
+                        } else {
+                            Modifier
+                        },
+                    ),
             )
             if (isCurrent && isPlaying) SearchPlayingBars(Modifier.align(Alignment.Center))
         }
@@ -805,6 +845,7 @@ private fun LazyListScope.recentSearches(
     onRemove: (String) -> Unit,
     onClear: () -> Unit,
     onSongSwipe: (Song) -> Unit,
+    onSongDoubleTap: (Song) -> Unit,
 ) {
     item(key = "recent:header") {
         Row(
@@ -843,6 +884,7 @@ private fun LazyListScope.recentSearches(
             onLongPress = song?.let { { onSongLongPress(it) } },
             onRemove = { onRemove(entity.id) },
             onSwipeToQueue = song?.let { { onSongSwipe(it) } },
+            onArtworkDoubleTap = song?.let { { onSongDoubleTap(it) } },
         )
     }
 }
@@ -934,6 +976,7 @@ private fun RecentSearchEntityRow(
     onLongPress: (() -> Unit)?,
     onRemove: () -> Unit,
     onSwipeToQueue: (() -> Unit)? = null,
+    onArtworkDoubleTap: (() -> Unit)? = null,
 ) {
     SwipeToQueueBox(
         onSwipeToQueue = onSwipeToQueue,
@@ -960,7 +1003,18 @@ private fun RecentSearchEntityRow(
                         .size(52.dp)
                         .clip(RoundedCornerShape(8.dp))
                         .thumbnailBorder(RoundedCornerShape(8.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .then(
+                            if (onArtworkDoubleTap != null) {
+                                Modifier.combinedClickable(
+                                    onClick = onClick,
+                                    onLongClick = onLongPress,
+                                    onDoubleClick = onArtworkDoubleTap,
+                                )
+                            } else {
+                                Modifier
+                            },
+                        ),
                 )
                 if (isCurrent && isPlaying) {
                     SearchPlayingBars(Modifier.align(Alignment.Center))

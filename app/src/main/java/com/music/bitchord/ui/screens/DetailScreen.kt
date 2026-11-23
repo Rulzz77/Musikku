@@ -311,7 +311,7 @@ fun DetailScreen(
     onAddSuggested: (Song) -> Unit,
     /** Removes one entry from a playlist this listener owns or keeps on this device. */
     onRemoveSongFromPlaylist: ((Song) -> Unit)? = null,
-    /** Toggles Like for artwork double-taps inside the Liked Music playlist. */
+    /** Toggles Like for double-taps on song artwork in detail-page track lists. */
     onToggleSongLike: ((Song) -> Unit)? = null,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,

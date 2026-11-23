@@ -749,6 +749,71 @@ private fun SlidingPlayerDeck(
 }
 
 /**
+ * A short, unmistakable heart burst over the artwork after a Like gesture is
+ * recognised. The trigger is incremented rather than toggled, so a later Like
+ * can play the animation again after the previous burst has finished.
+ */
+@Composable
+private fun ArtworkLikeBurst(
+    trackKey: String,
+    trigger: Int,
+    modifier: Modifier = Modifier,
+) {
+    val scale = remember { Animatable(0.42f) }
+    val alpha = remember { Animatable(0f) }
+    var visible by remember { mutableStateOf(false) }
+
+    LaunchedEffect(trackKey, trigger) {
+        if (trigger == 0) {
+            // A new track starts with no burst; do not leave the previous
+            // track's heart frozen on the new artwork if a transition cancels it.
+            visible = false
+            scale.snapTo(0.42f)
+            alpha.snapTo(0f)
+            return@LaunchedEffect
+        }
+
+        visible = true
+        scale.snapTo(0.42f)
+        alpha.snapTo(0f)
+
+        val scaleAnimation = launch {
+            scale.animateTo(
+                targetValue = 1.18f,
+                animationSpec = spring(dampingRatio = 0.48f, stiffness = 520f),
+            )
+        }
+        alpha.animateTo(1f, tween(120))
+        scaleAnimation.join()
+
+        delay(320L)
+        val fadeAnimation = launch { alpha.animateTo(0f, tween(220)) }
+        scale.animateTo(
+            targetValue = 0.86f,
+            animationSpec = tween(220, easing = FastOutSlowInEasing),
+        )
+        fadeAnimation.join()
+        visible = false
+    }
+
+    if (visible) {
+        Icon(
+            imageVector = BitChordIcons.HeartFilled,
+            contentDescription = null,
+            tint = Color(0xFFFF3B5C),
+            modifier = modifier
+                .size(112.dp)
+                .graphicsLayer {
+                    scaleX = scale.value
+                    scaleY = scale.value
+                    this.alpha = alpha.value
+                },
+        )
+    }
+}
+
+
+/**
  * Apple Music's Now Playing, closely: artwork that shrinks when paused, a
  * hairline scrubber with elapsed / remaining either side, oversized transport
  * glyphs, a volume capsule flanked by speaker icons, and lyrics / AirPlay /
@@ -1672,9 +1737,11 @@ fun NowPlayingScreen(
     }
 
     // Double-tapping the expanded sleeve likes or unlikes the current song.
-    // Observe in the Final pass without consuming taps, so the existing queue
-    // pull and horizontal-skip gestures still receive their full pointer stream.
+    // Observe in the Initial pass without consuming taps, before child controls
+    // or the sheet can consume the up event and cancel this gesture.
     val canLikeCurrentSong = signedIn || song.localUri != null
+    var artworkLikeBurstTrigger by remember(song.videoId) { mutableIntStateOf(0) }
+    val latestArtworkLikeStatus by rememberUpdatedState(likeStatus)
     val latestArtworkLike by rememberUpdatedState(onToggleLike)
     val artworkDoubleTapLike = Modifier.pointerInput(song.videoId, canLikeCurrentSong) {
         var previousTapTime = 0L
@@ -1682,9 +1749,11 @@ fun NowPlayingScreen(
         awaitEachGesture {
             awaitFirstDown(
                 requireUnconsumed = false,
-                pass = PointerEventPass.Final,
+                // Observe before child clickables or the sheet can consume the up event.
+                // The Final pass could see a consumed up and cancel the Like gesture.
+                pass = PointerEventPass.Initial,
             )
-            val up = waitForUpOrCancellation(pass = PointerEventPass.Final)
+            val up = waitForUpOrCancellation(pass = PointerEventPass.Initial)
             if (up == null) {
                 previousTapTime = 0L
                 return@awaitEachGesture
@@ -1697,7 +1766,9 @@ fun NowPlayingScreen(
             if (isDoubleTap) {
                 previousTapTime = 0L
                 if (canLikeCurrentSong) {
-                    haptics.play(if (likeStatus == LikeStatus.LIKE) Haptic.ToggleOff else Haptic.ToggleOn)
+                    val wasLiked = latestArtworkLikeStatus == LikeStatus.LIKE
+                    haptics.play(if (wasLiked) Haptic.ToggleOff else Haptic.ToggleOn)
+                    if (!wasLiked) artworkLikeBurstTrigger++
                     latestArtworkLike()
                 }
             } else {
@@ -2176,6 +2247,22 @@ fun NowPlayingScreen(
                             // Let go of on the way to the mini player, whose
                             // cover sits flat in its bar.
                             shadowFraction = dockT,
+                            overlay = {
+                                ArtworkLikeBurst(
+                                    trackKey = song.videoId,
+                                    trigger = artworkLikeBurstTrigger,
+                                    modifier = Modifier.align(Alignment.Center),
+                                )
+                                // The stats belong to the player, not to the sleeve,
+                                // so they fade with the player as it docks.
+                                SleeveNerdStats(
+                                    song = song,
+                                    modifier = Modifier
+                                        .align(Alignment.BottomCenter)
+                                        .padding(horizontal = 10.dp, vertical = 8.dp)
+                                        .graphicsLayer { alpha = if (panelOpen) 0f else dockFade() },
+                                )
+                            },
                             modifier = artworkModifier
                                 .then(
                                     if (dock != null) {
@@ -2227,19 +2314,7 @@ fun NowPlayingScreen(
                                     queueOpen = false
                                     closeLyrics()
                                 },
-                        ) {
-                            // The stats belong to the player, not to the sleeve, so
-                            // they leave it along with the rest of the player.
-                            SleeveNerdStats(
-                                song = song,
-                                modifier = Modifier
-                                    .align(Alignment.BottomCenter)
-                                    .padding(horizontal = 10.dp, vertical = 8.dp)
-                                    // Faded with the player rather than flown with
-                                    // the sleeve: the cover in the bar has none.
-                                    .graphicsLayer { alpha = if (panelOpen) 0f else dockFade() },
-                            )
-                        }
+                        )
                     },
                     actions = playerActions,
                     mainPane = { compact ->
@@ -3616,6 +3691,7 @@ fun NowPlayingScreen(
                                 ),
                             contentAlignment = Alignment.Center,
                         ) {
+                            ArtworkLikeBurst(trackKey = song.videoId, trigger = artworkLikeBurstTrigger)
                             // Measured stats stay on the sleeve's bottom centre. They
                             // fade away with Spotify's lower control deck rather than
                             // following the compact credits to the bottom edge.

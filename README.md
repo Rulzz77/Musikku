@@ -47,7 +47,7 @@
 
 **MusikKu** is an independent Android music player that brings online music discovery and local audio playback together with tools for organising playlists, understanding listening habits, and managing an offline library.
 
-> **Current source version:** `0.1.67` (`versionCode 68`). The Download section always links to the latest release that has actually been published.
+> **Current source version:** `0.1.68` (`versionCode 69`). The Download section always links to the latest release that has actually been published.
 
 The Android application is built with **Kotlin and Jetpack Compose**. The repository also contains shared Kotlin modules, Android TV and Wear OS targets, a Go service for Listen Together, and a web player with a companion browser extension.
 
@@ -96,7 +96,7 @@ Availability and playback behaviour depend on the selected source, account state
 - Group YouTube Music, Spotify-imported, and device playlists with **Playlist Folders**.
 - Sort and organise playlists, manage tracks individually or in batches, and customise playlist artwork.
 - Like or unlike tracks by double-tapping their artwork in Library track lists, playlist and album track lists, and search results.
-- On the expanded Player Page, double-tap the large artwork to Like or unlike the currently playing track, with an animated heart burst on Like. The existing Like control beside the track details remains available.
+- On the expanded Player Page, double-tap anywhere in the large artwork area — including the surrounding space around the cover — to Like or unlike the currently playing track, with an animated heart burst on Like. The existing Like control beside the track details remains available.
 - Keep local listening statistics and revisit recently played or favourite music.
 
 ### Smart Playlists

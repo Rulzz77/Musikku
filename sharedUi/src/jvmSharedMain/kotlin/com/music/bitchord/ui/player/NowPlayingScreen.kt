@@ -764,7 +764,14 @@ private fun ArtworkLikeBurst(
     var visible by remember { mutableStateOf(false) }
 
     LaunchedEffect(trackKey, trigger) {
-        if (trigger == 0) return@LaunchedEffect
+        if (trigger == 0) {
+            // A new track starts with no burst; do not leave the previous
+            // track's heart frozen on the new artwork if a transition cancels it.
+            visible = false
+            scale.snapTo(0.42f)
+            alpha.snapTo(0f)
+            return@LaunchedEffect
+        }
 
         visible = true
         scale.snapTo(0.42f)

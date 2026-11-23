@@ -701,15 +701,25 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun setLike(videoId: String, status: LikeStatus) = setLike(videoId, status) {}
 
-    /** The same rating action, acknowledged after its request and any rollback finish. */
-    fun setLike(videoId: String, status: LikeStatus, onResult: (Boolean) -> Unit) {
+    /** Compatibility wrapper for callers that only need a success flag. */
+    fun setLike(videoId: String, status: LikeStatus, onResult: (Boolean) -> Unit) =
+        setLikeWithResult(videoId, status) { onResult(it.isSuccess) }
+
+    /**
+     * Sets a rating and returns the actual failure to the UI.
+     *
+     * A boolean made "not signed in", network failures and YouTube rejections
+     * indistinguishable; the player then showed a generic "Failed" toast even
+     * when the gesture itself had been recognised correctly.
+     */
+    fun setLikeWithResult(videoId: String, status: LikeStatus, onResult: (Result<Unit>) -> Unit) {
         if (!requireSignIn()) {
-            onResult(false)
+            onResult(Result.failure(IllegalStateException("Sign in to YouTube Music to do that")))
             return
         }
         val previous = likeStatusOf(videoId)
         if (previous == status) {
-            onResult(true)
+            onResult(Result.success(Unit))
             return
         }
         LikeState.set(videoId, status)
@@ -730,9 +740,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     LikeState.set(videoId, previous)
                 },
             )
-            onResult(result.isSuccess)
+            onResult(result)
         }
     }
+
+    /** Localised message for a failed Like request; keeps YouTube's reason when useful. */
+    fun likeErrorMessage(failure: Throwable): String = failure.friendly()
 
     /**
      * Takes an un-liked track out of the library as well, and reports whether

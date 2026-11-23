@@ -41,8 +41,8 @@ buildscript {
  * No "v" in the name — the in-app updater reads it as a number; the "v" is the
  * release tag's alone.
  */
-extra["musikkuVersionCode"] = 69
-extra["musikkuVersionName"] = "0.1.68"
+extra["musikkuVersionCode"] = 70
+extra["musikkuVersionName"] = "0.1.69"
 extra["musikkuBetaSuffix"] = ""
 /*
  * Bump this by hand before cutting each sideloaded test build ("beta2",

@@ -2783,7 +2783,22 @@ private fun BitChordApp(
             autoplayEnabled = autoplayEnabled,
             signedIn = signedIn,
             likeStatus = likeStatusOf(song),
-            onToggleLike = { toggleLikeOf(song) },
+            onToggleLike = {
+                if (song.localUri != null) {
+                    OfflinePlaylists.toggleLike(song)
+                } else {
+                    val target = if (likeStatusOf(song) == LikeStatus.LIKE) {
+                        LikeStatus.INDIFFERENT
+                    } else {
+                        LikeStatus.LIKE
+                    }
+                    viewModel.setLike(song.videoId, target) { succeeded ->
+                        if (!succeeded) {
+                            Toast.makeText(context, R.string.failed, Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+            },
             // The service owns both the queue and the Shuffle state. Keeping
             // the toggle on that side prevents the UI from changing the icon
             // before its asynchronous reorder command has actually landed.

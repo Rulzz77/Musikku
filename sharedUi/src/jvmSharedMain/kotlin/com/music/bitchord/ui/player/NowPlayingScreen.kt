@@ -2249,8 +2249,18 @@ fun NowPlayingScreen(
                             shadowFraction = dockT,
                             overlay = {
                                 ArtworkLikeBurst(
+                                    trackKey = song.videoId,
                                     trigger = artworkLikeBurstTrigger,
                                     modifier = Modifier.align(Alignment.Center),
+                                )
+                                // The stats belong to the player, not to the sleeve,
+                                // so they fade with the player as it docks.
+                                SleeveNerdStats(
+                                    song = song,
+                                    modifier = Modifier
+                                        .align(Alignment.BottomCenter)
+                                        .padding(horizontal = 10.dp, vertical = 8.dp)
+                                        .graphicsLayer { alpha = if (panelOpen) 0f else dockFade() },
                                 )
                             },
                             modifier = artworkModifier
@@ -2304,19 +2314,7 @@ fun NowPlayingScreen(
                                     queueOpen = false
                                     closeLyrics()
                                 },
-                        ) {
-                            // The stats belong to the player, not to the sleeve, so
-                            // they leave it along with the rest of the player.
-                            SleeveNerdStats(
-                                song = song,
-                                modifier = Modifier
-                                    .align(Alignment.BottomCenter)
-                                    .padding(horizontal = 10.dp, vertical = 8.dp)
-                                    // Faded with the player rather than flown with
-                                    // the sleeve: the cover in the bar has none.
-                                    .graphicsLayer { alpha = if (panelOpen) 0f else dockFade() },
-                            )
-                        }
+                        )
                     },
                     actions = playerActions,
                     mainPane = { compact ->

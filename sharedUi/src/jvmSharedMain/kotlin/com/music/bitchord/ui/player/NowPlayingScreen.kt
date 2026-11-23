@@ -755,6 +755,7 @@ private fun SlidingPlayerDeck(
  */
 @Composable
 private fun ArtworkLikeBurst(
+    trackKey: String,
     trigger: Int,
     modifier: Modifier = Modifier,
 ) {
@@ -762,7 +763,7 @@ private fun ArtworkLikeBurst(
     val alpha = remember { Animatable(0f) }
     var visible by remember { mutableStateOf(false) }
 
-    LaunchedEffect(trigger) {
+    LaunchedEffect(trackKey, trigger) {
         if (trigger == 0) return@LaunchedEffect
 
         visible = true
@@ -1729,8 +1730,8 @@ fun NowPlayingScreen(
     }
 
     // Double-tapping the expanded sleeve likes or unlikes the current song.
-    // Observe in the Final pass without consuming taps, so the existing queue
-    // pull and horizontal-skip gestures still receive their full pointer stream.
+    // Observe in the Initial pass without consuming taps, before child controls
+    // or the sheet can consume the up event and cancel this gesture.
     val canLikeCurrentSong = signedIn || song.localUri != null
     var artworkLikeBurstTrigger by remember(song.videoId) { mutableIntStateOf(0) }
     val latestArtworkLikeStatus by rememberUpdatedState(likeStatus)
@@ -3685,7 +3686,7 @@ fun NowPlayingScreen(
                                 ),
                             contentAlignment = Alignment.Center,
                         ) {
-                            ArtworkLikeBurst(trigger = artworkLikeBurstTrigger)
+                            ArtworkLikeBurst(trackKey = song.videoId, trigger = artworkLikeBurstTrigger)
                             // Measured stats stay on the sleeve's bottom centre. They
                             // fade away with Spotify's lower control deck rather than
                             // following the compact credits to the bottom edge.

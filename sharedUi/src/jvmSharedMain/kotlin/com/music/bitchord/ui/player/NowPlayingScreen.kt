@@ -32,6 +32,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -60,12 +61,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Undo
 import androidx.compose.material.icons.rounded.FastForward
 import androidx.compose.material.icons.rounded.FastRewind
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.IosShare
 import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material3.Icon
@@ -950,6 +953,56 @@ private fun ArtworkUnlikeSplit(
                     }
                     .background(Color.White, RoundedCornerShape(2.dp)),
             )
+        }
+    }
+}
+
+
+/**
+ * A persistent mark on the Player Page artwork while the current track is liked.
+ * It follows [LikeStatus], so device-only guest Likes and account Likes look the same.
+ */
+@Composable
+private fun ArtworkLikedIndicator(
+    liked: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    AnimatedVisibility(
+        visible = liked,
+        enter = fadeIn(tween(150)),
+        exit = fadeOut(tween(100)),
+        modifier = modifier,
+    ) {
+        Box(
+            modifier = Modifier
+                .padding(12.dp)
+                .size(36.dp)
+                .background(Color(0xE61A1C23), CircleShape)
+                .border(1.dp, Color(0xAAFF5B7D), CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = BitChordIcons.HeartFilled,
+                contentDescription = stringResource(Res.string.remove_from_liked),
+                tint = Color(0xFFFF5277),
+                modifier = Modifier.size(19.dp),
+            )
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 1.dp, bottom = 1.dp)
+                    .size(12.dp)
+                    .background(Color(0xFF29B765), CircleShape)
+                    .border(1.dp, Color(0xEE1A1C23), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Check,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(8.dp),
+                )
+            }
         }
     }
 }
@@ -2425,6 +2478,10 @@ fun NowPlayingScreen(
                                     trigger = artworkUnlikeSplitTrigger,
                                     modifier = Modifier.align(Alignment.Center),
                                 )
+                                ArtworkLikedIndicator(
+                                    liked = likeStatus == LikeStatus.LIKE,
+                                    modifier = Modifier.align(Alignment.TopEnd),
+                                )
                                 // The stats belong to the player, not to the sleeve,
                                 // so they fade with the player as it docks.
                                 SleeveNerdStats(
@@ -3868,6 +3925,10 @@ fun NowPlayingScreen(
                         ) {
                             ArtworkLikeBurst(trackKey = song.videoId, trigger = artworkLikeBurstTrigger)
                             ArtworkUnlikeSplit(trackKey = song.videoId, trigger = artworkUnlikeSplitTrigger)
+                            ArtworkLikedIndicator(
+                                liked = likeStatus == LikeStatus.LIKE,
+                                modifier = Modifier.align(Alignment.TopEnd),
+                            )
                             // Measured stats stay on the sleeve's bottom centre. They
                             // fade away with Spotify's lower control deck rather than
                             // following the compact credits to the bottom edge.

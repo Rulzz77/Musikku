@@ -64,6 +64,7 @@ class AppIconVariantsTest {
         assertTrue("Round launcher must use the adaptive icon", manifest.contains("android:roundIcon=\"@mipmap/ic_launcher_round\""))
         assertTrue("Missing adaptive launcher resource", File(resourcesDir(), "mipmap-anydpi-v26/ic_launcher.xml").isFile)
         assertTrue("Missing round adaptive launcher resource", File(resourcesDir(), "mipmap-anydpi-v26/ic_launcher_round.xml").isFile)
+        assertTrue("Missing monochrome adaptive launcher resource", File(resourcesDir(), "mipmap-anydpi/ic_monochrome.xml").isFile)
     }
 
 
@@ -111,6 +112,11 @@ class AppIconVariantsTest {
         expectedAliases.forEach { alias ->
             assertTrue("Missing launcher alias $alias", manifest.contains("android:name=\".$alias\""))
         }
+        assertEquals(
+            "Settings should expose exactly the eight launcher styles",
+            8,
+            Regex("android:name=\\\"\\.Launcher").findAll(manifest).count(),
+        )
         assertFalse("Samsung-specific duplicate aliases should be removed", manifest.contains("LauncherSamsung"))
         assertFalse("Pixel-specific duplicate aliases should be removed", manifest.contains("LauncherPixel"))
     }

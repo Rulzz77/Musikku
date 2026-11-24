@@ -68,7 +68,6 @@ import androidx.compose.material.icons.automirrored.rounded.Undo
 import androidx.compose.material.icons.rounded.FastForward
 import androidx.compose.material.icons.rounded.FastRewind
 import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.IosShare
 import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material3.Icon
@@ -953,55 +952,6 @@ private fun ArtworkUnlikeSplit(
                     }
                     .background(Color.White, RoundedCornerShape(2.dp)),
             )
-        }
-    }
-}
-
-
-/**
- * A compact status mark beside the Player Page overflow menu while the current track is liked.
- * It follows [LikeStatus], so device-only guest Likes and account Likes look the same.
- */
-@Composable
-private fun ArtworkLikedIndicator(
-    liked: Boolean,
-    modifier: Modifier = Modifier,
-) {
-    AnimatedVisibility(
-        visible = liked,
-        enter = fadeIn(tween(150)),
-        exit = fadeOut(tween(100)),
-        modifier = modifier,
-    ) {
-        Box(
-            modifier = Modifier
-                .size(32.dp)
-                .background(Color(0xE61A1C23), CircleShape)
-                .border(1.dp, Color(0xAAFF5B7D), CircleShape),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = BitChordIcons.HeartFilled,
-                contentDescription = null,
-                tint = Color(0xFFFF5277),
-                modifier = Modifier.size(17.dp),
-            )
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(end = 1.dp, bottom = 1.dp)
-                    .size(11.dp)
-                    .background(Color(0xFF29B765), CircleShape)
-                    .border(1.dp, Color(0xEE1A1C23), CircleShape),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.Check,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(7.dp),
-                )
-            }
         }
     }
 }
@@ -2549,7 +2499,6 @@ fun NowPlayingScreen(
                             credits = {
                                 LandscapeCredits(
                                     song = song,
-                                    signedIn = signedIn,
                                     likeStatus = likeStatus,
                                     showRevertCue = showRevertCue,
                                     onToggleLike = onToggleLike,
@@ -4169,25 +4118,8 @@ fun NowPlayingScreen(
                                 }
                             }
                             Spacer(Modifier.width(10.dp))
-                            // Beside the credits rather than down in the toggle row:
-                            // liking is about *this song*, and the row below is about
-                            // how the queue plays. Guests get nothing to tap, since
-                            // there's no account to record it against — except on a
-                            // local file or a finished download, whose star is the
-                            // device's own Liked playlist and needs no account.
-                            if (signedIn || song.localUri != null) {
-                                val liked = likeStatus == LikeStatus.LIKE
-                                CircleGlyph(
-                                    icon = if (liked) BitChordIcons.StarFilled else BitChordIcons.Star,
-                                    contentDescription = stringResource(
-                                        if (liked) Res.string.remove_from_liked else Res.string.like,
-                                    ),
-                                    onClick = onToggleLike,
-                                    active = liked,
-                                    haptic = if (liked) Haptic.ToggleOff else Haptic.ToggleOn,
-                                )
-                                Spacer(Modifier.width(8.dp))
-                            }
+                            // Like lives beside the overflow menu so the track actions
+                            // share one compact, glass-treated control group.
                             // While the lyrics are up the menu glyph becomes the share
                             // entry: the same pick mode a long-press on a line opens,
                             // only on phones where a card can actually be made. While
@@ -4201,11 +4133,23 @@ fun NowPlayingScreen(
                             // whichever way the controls are.
                             val lyricsShareGlyphVisible = lyricsOpen && collapseDone && lyricsShareEnabled &&
                                 !lyrics.isNullOrEmpty() && (!lyricsControlsOpen || lyricPicker.picking)
-                            if (!lyricsShareGlyphVisible && !showRevertCue) {
-                                ArtworkLikedIndicator(
-                                    liked = likeStatus == LikeStatus.LIKE,
-                                    modifier = Modifier.padding(end = 6.dp),
+                            if (
+                                !lyricsShareGlyphVisible &&
+                                !showRevertCue &&
+                                (song.videoId.isNotBlank() || song.localUri != null)
+                            ) {
+                                val liked = likeStatus == LikeStatus.LIKE
+                                CircleGlyph(
+                                    icon = if (liked) BitChordIcons.HeartFilled else BitChordIcons.Heart,
+                                    contentDescription = stringResource(
+                                        if (liked) Res.string.remove_from_liked else Res.string.like,
+                                    ),
+                                    onClick = onToggleLike,
+                                    active = liked,
+                                    tint = if (liked) MaterialTheme.colorScheme.primary else chromeWhite(0.82f),
+                                    haptic = if (liked) Haptic.ToggleOff else Haptic.ToggleOn,
                                 )
+                                Spacer(Modifier.width(4.dp))
                             }
                             CircleGlyph(
                                 icon = when {

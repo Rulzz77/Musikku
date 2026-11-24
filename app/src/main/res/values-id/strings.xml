@@ -99,6 +99,12 @@
     <string name="no_dolby_atmos">Tidak ada panel Dolby Atmos di perangkat ini</string>
     <string name="dolby_atmos_open_failed">Tidak dapat membuka pengaturan Dolby Atmos</string>
     <string name="update_available">Pembaruan tersedia: v%1$s</string>
+    <string name="check_for_updates">Periksa pembaruan</string>
+    <string name="check_for_updates_subtitle">Periksa rilis GitHub terbaru tanpa keluar dari Pengaturan</string>
+    <string name="update_checking">Memeriksa…</string>
+    <string name="update_check_action">Muat ulang</string>
+    <string name="app_up_to_date">MusikKu sudah versi terbaru</string>
+    <string name="app_update_check_failed">Gagal memeriksa pembaruan. Periksa koneksi lalu coba lagi.</string>
     <string name="software_update">Pembaruan Perangkat Lunak</string>
     <string name="update_available_body">MusikKu %1$s tersedia untuk diunduh.</string>
     <string name="update_downloading_body">Mengunduh MusikKu %1$s…</string>

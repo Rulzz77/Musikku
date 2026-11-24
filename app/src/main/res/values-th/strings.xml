@@ -103,6 +103,12 @@
     <string name="no_dolby_atmos">อุปกรณ์นี้ไม่มีแผงควบคุม Dolby Atmos</string>
     <string name="dolby_atmos_open_failed">เปิดการตั้งค่า Dolby Atmos ไม่ได้</string>
     <string name="update_available">มีอัปเดต: v%1$s</string>
+    <string name="check_for_updates">ตรวจสอบการอัปเดต</string>
+    <string name="check_for_updates_subtitle">รีเฟรช GitHub Releases โดยไม่ต้องออกจากการตั้งค่า</string>
+    <string name="update_checking">กำลังตรวจสอบ…</string>
+    <string name="update_check_action">รีเฟรช</string>
+    <string name="app_up_to_date">MusikKu เป็นเวอร์ชันล่าสุดแล้ว</string>
+    <string name="app_update_check_failed">ตรวจสอบการอัปเดตไม่สำเร็จ โปรดตรวจสอบการเชื่อมต่อแล้วลองอีกครั้ง</string>
     <string name="software_update">การอัปเดตซอฟต์แวร์</string>
     <string name="update_available_body">MusikKu %1$s พร้อมให้ดาวน์โหลดแล้ว</string>
     <string name="update_downloading_body">กำลังดาวน์โหลด MusikKu %1$s…</string>

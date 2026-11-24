@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -25,6 +27,8 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -44,6 +48,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -52,6 +58,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.music.bitchord.R
 import com.music.bitchord.data.model.Song
+import com.music.bitchord.data.model.ROW_ART_PX
+import com.music.bitchord.data.model.artworkAt
 import com.music.bitchord.data.stats.ArtistFacts
 import com.music.bitchord.data.stats.ListeningStats
 import com.music.bitchord.data.stats.ReplayPeriod
@@ -61,6 +69,9 @@ import com.music.bitchord.data.stats.SmartPlaylistRule
 import com.music.bitchord.data.stats.SmartPlaylistSort
 import com.music.bitchord.data.stats.SmartPlaylists
 import com.music.bitchord.data.stats.buildSmartPlaylistItems
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 
 /**
  * Compact, Library-native entry to dynamic playlists. The cards are generated
@@ -75,22 +86,28 @@ fun SmartPlaylistsSection(
     val revision by ListeningStats.revision.collectAsStateWithLifecycle()
     val artistRevision by ArtistFacts.revision.collectAsStateWithLifecycle()
     var summary by remember { mutableStateOf<com.music.bitchord.data.stats.ReplaySummary?>(null) }
+    var playlistItems by remember { mutableStateOf<List<SmartPlaylistItem>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var editorOpen by remember { mutableStateOf(false) }
     var editingRule by remember { mutableStateOf<SmartPlaylistRule?>(null) }
 
     LaunchedEffect(revision) {
+        // Coalesce rapid playback-stat writes; the list does not need to
+        // rebuild every time a short listening sample is flushed.
+        delay(350)
         loading = summary == null
         summary = ListeningStats.summary(ReplayPeriod.ALL_TIME)
         loading = false
     }
 
-    val items = remember(summary, rules, artistRevision) {
-        buildSmartPlaylistItems(
-            tracks = summary?.songs.orEmpty(),
-            rules = rules,
-            nowMs = System.currentTimeMillis(),
-        )
+    LaunchedEffect(summary, rules, artistRevision) {
+        playlistItems = withContext(Dispatchers.Default) {
+            buildSmartPlaylistItems(
+                tracks = summary?.songs.orEmpty(),
+                rules = rules,
+                nowMs = System.currentTimeMillis(),
+            )
+        }
     }
 
     Column(modifier = modifier.fillMaxWidth().padding(bottom = 16.dp)) {
@@ -162,7 +179,7 @@ fun SmartPlaylistsSection(
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
                 )
             }
-            items.isEmpty() -> {
+            playlistItems.isEmpty() -> {
                 Text(
                     text = stringResource(R.string.smart_playlist_empty),
                     style = MaterialTheme.typography.bodyMedium,
@@ -175,7 +192,7 @@ fun SmartPlaylistsSection(
                     contentPadding = PaddingValues(horizontal = 20.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    items(items, key = SmartPlaylistItem::id) { item ->
+                    items(playlistItems, key = SmartPlaylistItem::id) { item ->
                         val title = when (item.id) {
                             "most_played" -> stringResource(R.string.smart_playlist_most_played)
                             "recently_played" -> stringResource(R.string.smart_playlist_recently_played)
@@ -387,40 +404,93 @@ private fun SmartPlaylistCard(
     onPlay: () -> Unit,
     onEdit: () -> Unit,
 ) {
+    val artShape = RoundedCornerShape(20.dp)
     Card(
         modifier = Modifier
-            .width(184.dp)
-            .clip(RoundedCornerShape(18.dp))
+            .width(206.dp)
+            .clip(artShape)
             .clickable(enabled = item.tracks.isNotEmpty(), onClick = onPlay),
+        shape = artShape,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
     ) {
         Column {
-            val artwork = item.tracks.firstOrNull()?.song?.thumbnailUrl
-            if (artwork != null) {
-                AsyncImage(
-                    model = artwork,
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxWidth().height(92.dp),
-                    contentScale = ContentScale.Crop,
-                )
-            } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(116.dp)
+                    .background(MaterialTheme.colorScheme.surface),
+            ) {
+                val covers = item.tracks.take(4)
+                if (covers.isNotEmpty()) {
+                    Column(Modifier.fillMaxSize()) {
+                        repeat(2) { rowIndex ->
+                            Row(Modifier.weight(1f).fillMaxWidth()) {
+                                repeat(2) { columnIndex ->
+                                    val song = covers.getOrNull(rowIndex * 2 + columnIndex)?.song
+                                    if (song != null) {
+                                        AsyncImage(
+                                            model = song.thumbnailUrl.artworkAt(ROW_ART_PX),
+                                            contentDescription = null,
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .fillMaxHeight()
+                                                .padding(1.dp),
+                                            contentScale = ContentScale.Crop,
+                                        )
+                                    } else {
+                                        Box(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .fillMaxHeight()
+                                                .padding(1.dp)
+                                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = playlistGlyph(item.id),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(34.dp),
+                        )
+                    }
+                }
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(92.dp)
-                        .background(MaterialTheme.colorScheme.surface),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.AutoAwesome,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(32.dp),
-                    )
-                }
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.34f)),
+                            ),
+                        ),
+                )
+                Icon(
+                    imageVector = playlistGlyph(item.id),
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(10.dp)
+                        .size(22.dp),
+                )
+                Text(
+                    text = stringResource(R.string.smart_playlist_track_count, item.tracks.size),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White,
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(10.dp),
+                )
             }
             Column(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 13.dp, end = 9.dp, top = 11.dp, bottom = 8.dp),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
@@ -436,22 +506,17 @@ private fun SmartPlaylistCard(
                             imageVector = Icons.Filled.PlayArrow,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(18.dp),
+                            modifier = Modifier.size(19.dp),
                         )
                     }
                 }
-                Text(
-                    text = stringResource(R.string.smart_playlist_track_count, item.tracks.size),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
                 item.rule?.let {
                     TextButton(
                         onClick = onEdit,
                         contentPadding = PaddingValues(0.dp),
                         modifier = Modifier.align(Alignment.End),
                     ) {
-                        Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(15.dp))
+                        Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(14.dp))
                         Spacer(Modifier.width(3.dp))
                         Text(stringResource(R.string.smart_playlist_edit_action))
                     }
@@ -459,4 +524,12 @@ private fun SmartPlaylistCard(
             }
         }
     }
+}
+
+@Composable
+private fun playlistGlyph(id: String) = when (id) {
+    "most_played" -> Icons.Filled.PlayArrow
+    "recently_played" -> Icons.Rounded.History
+    "most_listened" -> Icons.Rounded.GraphicEq
+    else -> Icons.Filled.AutoAwesome
 }

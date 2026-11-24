@@ -142,6 +142,12 @@
     <string name="no_dolby_atmos">이 기기에는 Dolby Atmos 패널이 없습니다</string>
     <string name="dolby_atmos_open_failed">Dolby Atmos 설정을 열 수 없습니다</string>
     <string name="update_available">업데이트 가능: v%1$s</string>
+    <string name="check_for_updates">업데이트 확인</string>
+    <string name="check_for_updates_subtitle">설정을 나가지 않고 GitHub 릴리스 새로고침</string>
+    <string name="update_checking">확인 중…</string>
+    <string name="update_check_action">새로고침</string>
+    <string name="app_up_to_date">MusikKu가 최신 버전입니다</string>
+    <string name="app_update_check_failed">업데이트를 확인할 수 없습니다. 연결을 확인한 후 다시 시도하세요.</string>
     <string name="software_update">소프트웨어 업데이트</string>
     <string name="update_available_body">MusikKu %1$s 버전을 다운로드할 수 있습니다.</string>
     <string name="update_downloading_body">MusikKu %1$s 다운로드 중…</string>

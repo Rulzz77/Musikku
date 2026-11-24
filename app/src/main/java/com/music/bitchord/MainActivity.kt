@@ -3340,6 +3340,25 @@ private fun BitChordApp(
                                 section = (pageRoute as? AppRoute.SettingsSection)?.category,
                                 onOpenSection = { navigator.push(AppRoute.SettingsSection(it)) },
                                 onOpenChoice = { navigator.push(AppRoute.SettingsChoice(it)) },
+                                onCheckForUpdates = {
+                                    val result = AppUpdateChecker.check()
+                                    when {
+                                        result.isFailure -> Toast.makeText(
+                                            context,
+                                            R.string.app_update_check_failed,
+                                            Toast.LENGTH_SHORT,
+                                        ).show()
+                                        AppUpdateChecker.available.value != null -> {
+                                            updateDialogShown = true
+                                            showUpdateDialog = true
+                                        }
+                                        else -> Toast.makeText(
+                                            context,
+                                            R.string.app_up_to_date,
+                                            Toast.LENGTH_SHORT,
+                                        ).show()
+                                    }
+                                },
                                 windowWidth = windowWidth,
                                 signedIn = signedIn,
                                 account = account,

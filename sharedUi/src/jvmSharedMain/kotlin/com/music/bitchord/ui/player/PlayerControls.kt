@@ -744,12 +744,10 @@ internal fun PlayerActionRow(
 private const val CIRCLE_DISC_DODGE_GAIN = 2.5f
 
 /**
- * Translucent circular button used for the track menu and the like control.
+ * Translucent circular button used for the track menu.
  *
- * [active] brightens the translucent disc, while [tint] lets stateful
- * controls follow the current theme accent without losing contrast over artwork.
- * The same glass-like chrome treatment is shared by the Player Page's Like and
- * overflow controls.
+ * [active] brightens the translucent disc, while [tint] leaves room for a
+ * theme-aware glyph when a screen needs one.
  */
 @Composable
 internal fun CircleGlyph(

@@ -60,6 +60,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -69,6 +70,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.music.bitchord.R
+import com.music.bitchord.data.OfflinePlaylists
 import com.music.bitchord.data.model.PlaylistPrivacy
 import com.music.bitchord.data.model.ROW_ART_PX
 import com.music.bitchord.data.model.Song
@@ -336,15 +338,33 @@ private fun PlaylistRow(
             .padding(horizontal = 22.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        AsyncImage(
-            model = playlist.thumbnailUrl.artworkAt(ROW_ART_PX),
-            contentDescription = null,
-            modifier = Modifier
-                .size(44.dp)
-                .clip(RoundedCornerShape(7.dp))
-                .thumbnailBorder(RoundedCornerShape(7.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-        )
+        val artworkShape = RoundedCornerShape(7.dp)
+        val artworkModifier = Modifier
+            .size(44.dp)
+            .clip(artworkShape)
+            .thumbnailBorder(artworkShape)
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+        if (playlist.isLikedPlaylist()) {
+            // Liked songs has no remote cover by design; give it the heart
+            // artwork instead of the empty image tile in the playlist picker.
+            Box(
+                modifier = artworkModifier,
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = BitChordIcons.HeartFilled,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(23.dp),
+                )
+            }
+        } else {
+            AsyncImage(
+                model = playlist.thumbnailUrl.artworkAt(ROW_ART_PX),
+                contentDescription = null,
+                modifier = artworkModifier,
+            )
+        }
         Spacer(Modifier.width(16.dp))
         Column(Modifier.weight(1f)) {
             Text(
@@ -389,6 +409,13 @@ private fun PlaylistRow(
         )
     }
 }
+
+/** The built-in Liked playlist has no cover image; recognise its local id and known titles. */
+private fun UserPlaylist.isLikedPlaylist(): Boolean =
+    playlistId == OfflinePlaylists.LIKED_ID ||
+        title.equals("Liked songs", ignoreCase = true) ||
+        title.equals("Liked music", ignoreCase = true) ||
+        title.equals("Lagu yang disukai", ignoreCase = true)
 
 /**
  * Name and visibility, and nothing else. YouTube also takes a description,

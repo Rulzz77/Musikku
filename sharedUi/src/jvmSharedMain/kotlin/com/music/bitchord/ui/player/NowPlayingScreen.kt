@@ -2499,9 +2499,7 @@ fun NowPlayingScreen(
                             credits = {
                                 LandscapeCredits(
                                     song = song,
-                                    likeStatus = likeStatus,
                                     showRevertCue = showRevertCue,
-                                    onToggleLike = onToggleLike,
                                     onOpenMenu = onOpenMenu,
                                     onOpenAlbum = onOpenAlbum,
                                     onOpenArtist = onOpenArtist,
@@ -4118,39 +4116,11 @@ fun NowPlayingScreen(
                                 }
                             }
                             Spacer(Modifier.width(10.dp))
-                            // Like lives beside the overflow menu so the track actions
-                            // share one compact, glass-treated control group.
-                            // While the lyrics are up the menu glyph becomes the share
-                            // entry: the same pick mode a long-press on a line opens,
-                            // only on phones where a card can actually be made. While
-                            // picking it is the way back out again — the bar below
-                            // already holds Share.
-                            // Only once the sleeve has fully collapsed: the moment it starts
-                            // coming back the glyph is the menu again.
-                            // And only while the half player under the lyrics is tucked
-                            // away: with it up, the screen is the player again and the
-                            // glyph is its menu. A pick in progress keeps its Close
-                            // whichever way the controls are.
+                            // The menu glyph becomes the share entry while lyrics are open;
+                            // double-tapping the large artwork remains the Player Page's
+                            // direct Like / Unlike gesture.
                             val lyricsShareGlyphVisible = lyricsOpen && collapseDone && lyricsShareEnabled &&
                                 !lyrics.isNullOrEmpty() && (!lyricsControlsOpen || lyricPicker.picking)
-                            if (
-                                !lyricsShareGlyphVisible &&
-                                !showRevertCue &&
-                                (song.videoId.isNotBlank() || song.localUri != null)
-                            ) {
-                                val liked = likeStatus == LikeStatus.LIKE
-                                CircleGlyph(
-                                    icon = if (liked) BitChordIcons.HeartFilled else BitChordIcons.Heart,
-                                    contentDescription = stringResource(
-                                        if (liked) Res.string.remove_from_liked else Res.string.like,
-                                    ),
-                                    onClick = onToggleLike,
-                                    active = liked,
-                                    tint = if (liked) MaterialTheme.colorScheme.primary else chromeWhite(0.82f),
-                                    haptic = if (liked) Haptic.ToggleOff else Haptic.ToggleOn,
-                                )
-                                Spacer(Modifier.width(4.dp))
-                            }
                             CircleGlyph(
                                 icon = when {
                                     showRevertCue -> Icons.AutoMirrored.Rounded.Undo

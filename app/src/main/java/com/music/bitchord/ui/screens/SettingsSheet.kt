@@ -2014,12 +2014,17 @@ fun SettingsScreen(
                                         .padding(horizontal = 2.dp, vertical = 5.dp),
                                     horizontalAlignment = Alignment.CenterHorizontally,
                                 ) {
-                                    Image(
-                                        painter = painterResource(option.previewRes),
-                                        contentDescription = null,
-                                        contentScale = ContentScale.Fit,
+                                    Box(
                                         modifier = Modifier.size(68.dp),
-                                    )
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Image(
+                                            painter = painterResource(option.previewRes),
+                                            contentDescription = null,
+                                            contentScale = ContentScale.Fit,
+                                            modifier = Modifier.size(64.dp),
+                                        )
+                                    }
                                     Text(
                                         text = stringResource(option.labelRes),
                                         textAlign = TextAlign.Center,

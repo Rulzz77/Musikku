@@ -2499,6 +2499,8 @@ fun NowPlayingScreen(
                             credits = {
                                 LandscapeCredits(
                                     song = song,
+                                    likeStatus = likeStatus,
+                                    onToggleLike = onToggleLike,
                                     showRevertCue = showRevertCue,
                                     onOpenMenu = onOpenMenu,
                                     onOpenAlbum = onOpenAlbum,
@@ -4121,6 +4123,25 @@ fun NowPlayingScreen(
                             // direct Like / Unlike gesture.
                             val lyricsShareGlyphVisible = lyricsOpen && collapseDone && lyricsShareEnabled &&
                                 !lyrics.isNullOrEmpty() && (!lyricsControlsOpen || lyricPicker.picking)
+                            // Like stays outside the overflow menu as its own glass heart control.
+                            if (
+                                !lyricsShareGlyphVisible &&
+                                !showRevertCue &&
+                                (song.videoId.isNotBlank() || song.localUri != null)
+                            ) {
+                                val liked = likeStatus == LikeStatus.LIKE
+                                CircleGlyph(
+                                    icon = if (liked) BitChordIcons.HeartFilled else BitChordIcons.Heart,
+                                    contentDescription = stringResource(
+                                        if (liked) Res.string.remove_from_liked else Res.string.like,
+                                    ),
+                                    onClick = onToggleLike,
+                                    active = liked,
+                                    tint = if (liked) MaterialTheme.colorScheme.primary else chromeWhite(0.82f),
+                                    haptic = if (liked) Haptic.ToggleOff else Haptic.ToggleOn,
+                                )
+                                Spacer(Modifier.width(4.dp))
+                            }
                             CircleGlyph(
                                 icon = when {
                                     showRevertCue -> Icons.AutoMirrored.Rounded.Undo

@@ -80,10 +80,10 @@ import java.util.Locale
  * what the menu is opened for; the queue and navigation rows below it were
  * always the fallback for "I meant to do something with this song".
  *
- * Account-only actions are hidden when [signedIn] is false. The Like quick
- * action is available to guests too and stores streamed tracks in the device-owned
- * [com.music.bitchord.data.OfflinePlaylists] store. Add to playlist uses that
- * same store, so neither action needs Google sign-in.
+ * Account-only actions are hidden when [signedIn] is false. The Player Page's
+ * Like action stays on its separate glass heart button beside the three-dot menu
+ * and on the artwork double-tap gesture. This menu keeps Dislike and Share among
+ * its quick actions; Add to playlist remains available without Google sign-in.
  *
  * [showSleepTimer] and [onShare] are the player's extras: a sleep timer isn't a
  * property of some row in a list, so it only appears where it means something.
@@ -193,7 +193,6 @@ fun SongActionsMenu(
     // or the player, and an accent pitched against the artwork's tint is not
     // guaranteed to read against the panel.
     val palette = neutralMenuPalette()
-    val liked = likeStatus == LikeStatus.LIKE
     val disliked = likeStatus == LikeStatus.DISLIKE
     // A local file or a finished download has no YouTube identity behind it to
     // rate, save, queue into a playlist, fetch again, or share a link for.
@@ -205,22 +204,14 @@ fun SongActionsMenu(
         var drawnAny = false
         fun startsGroup(): Boolean = drawnAny.also { drawnAny = true }
         val canRate = isOffline || signedIn
-        val canLike = isOffline || song.videoId.isNotBlank()
         val shareAction = onShare?.takeIf { !isOffline }
 
-        // Leads with the actions it is opened for most, as tiles: the rating
-        // — kept up after a tap, so the new state shows in place — and Share.
-        if (canLike || shareAction != null) {
+        // Like is deliberately kept on the Player Page's adjacent heart button,
+        // not duplicated inside the three-dot menu. These quick actions are
+        // reserved for Dislike and Share.
+        if ((signedIn && !isOffline) || shareAction != null) {
             if (startsGroup()) IosMenuSeparator()
             IosMenuQuickActions {
-                if (canLike) {
-                    IosMenuQuickAction(
-                        icon = if (liked) SfIcons.HeartFill else SfIcons.Heart,
-                        label = stringResource(R.string.like),
-                        tint = if (liked) palette.accent else null,
-                        onClick = onToggleLike,
-                    )
-                }
                 // No dislike for a device file: there is no recommendation
                 // feed on the device for one to steer.
                 if (signedIn && !isOffline) {

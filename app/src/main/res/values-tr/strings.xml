@@ -109,6 +109,12 @@
     <string name="no_dolby_atmos">Bu cihazda Dolby Atmos paneli yok</string>
     <string name="dolby_atmos_open_failed">Dolby Atmos ayarları açılamadı</string>
     <string name="update_available">Güncelleme mevcut: v%1$s</string>
+    <string name="check_for_updates">Güncellemeleri kontrol et</string>
+    <string name="check_for_updates_subtitle">Ayarlardan çıkmadan GitHub sürümlerini yenile</string>
+    <string name="update_checking">Kontrol ediliyor…</string>
+    <string name="update_check_action">Yenile</string>
+    <string name="app_up_to_date">MusikKu güncel</string>
+    <string name="app_update_check_failed">Güncellemeler kontrol edilemedi. Bağlantını kontrol edip tekrar dene.</string>
     <string name="software_update">Yazılım Güncellemesi</string>
     <string name="update_available_body">MusikKu %1$s indirilmeye hazır.</string>
     <string name="update_downloading_body">MusikKu %1$s indiriliyor…</string>

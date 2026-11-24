@@ -110,6 +110,8 @@ Smart Playlists turn listening statistics into dynamic collections. Built-in lis
 - **Most listened**
 - **Forgotten tracks**
 
+The built-in cards use a compact four-cover collage, with separate play, history, and listening-time glyphs for the three main rankings. Their statistics are built from the local aggregate history.
+
 Create up to 20 custom Smart Playlists with optional artist, cached genre, release-year, duration, and last-played filters. Combine optional criteria with **ALL (AND)** or **ANY (OR)**, then sort by play count, recent playback, or listening time.
 
 Genre, release-year, and duration filters depend on metadata being available. Missing metadata is not guessed; a track without the required value will not match that active filter.
@@ -131,6 +133,8 @@ See the guides for [Backup & Restore](docs/BACKUP_RESTORE_2026-11-16.md), [Downl
 - **Music DNA** and **Memories** provide summaries based on local listening history.
 - **MusikKu Flow** creates mood-oriented mixes from available track metadata and listening history.
 - Save favourite artists, customise themes, and manage tracks hidden from Flow.
+- Choose from eight consistent five-bar equalizer launcher icons: Default, Monochrome, three Glass styles, and Neon Silver, Cyan, or Violet.
+- Check GitHub Releases and open the in-app download/install flow from **Settings**, without leaving the settings page.
 - Keep a manual **Radio Diary**, use the **Focus Timer**, or switch to the in-app **Car Mode** layout.
 - Use **Listen Together** to synchronise playback and queues with other participants on a configured server.
 

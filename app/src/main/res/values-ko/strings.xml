@@ -330,6 +330,13 @@
     <string name="show_nerd_stats">전문가 통계 표시</string>
     <string name="show_nerd_stats_subtitle">플레이어에 코덱, 비트레이트, 샘플 레이트 표시</string>
     <string name="app_icon">앱 아이콘</string>
+    <string name="app_icon_monochrome">기본 아이콘\n단색</string>
+    <string name="app_icon_liquid_glass">글래스\n라이트</string>
+    <string name="app_icon_liquid_glass_dark">글래스\n다크</string>
+    <string name="app_icon_liquid_glass_clear">글래스\n클리어</string>
+    <string name="app_icon_neon_silver">네온\n실버</string>
+    <string name="app_icon_neon_cyan">네온\n시안</string>
+    <string name="app_icon_neon_violet">네온\n바이올렛</string>
     <string name="app_icon_default">기본값</string>
     <string name="app_icon_liquid_glass" translatable="false">Liquid Glass</string>
     <string name="app_icon_liquid_glass_dark" translatable="false">Liquid Glass Dark</string>

@@ -1348,6 +1348,13 @@
     <string name="search_source_addons">תוספים</string>
     <string name="search_addons_none">אין תוספים מופעלים. אפשר להוסיף אחד בהגדרות ← מקורות.</string>
     <string name="app_icon">סמל האפליקציה</string>
+    <string name="app_icon_monochrome">סמל ראשי\nמונוכרום</string>
+    <string name="app_icon_liquid_glass">זכוכית\nבהירה</string>
+    <string name="app_icon_liquid_glass_dark">זכוכית\nכהה</string>
+    <string name="app_icon_liquid_glass_clear">זכוכית\nשקופה</string>
+    <string name="app_icon_neon_silver">ניאון\nכסוף</string>
+    <string name="app_icon_neon_cyan">ניאון\nציאן</string>
+    <string name="app_icon_neon_violet">ניאון\nסגול</string>
     <string name="app_icon_default">ברירת מחדל</string>
     <string name="show_queue_history">הצגת היסטוריית התור</string>
     <string name="show_queue_history_subtitle">מציג עד 25 שירים שהושמעו מעל \"מתנגן עכשיו\" בתור</string>

@@ -110,12 +110,6 @@
     <string name="update_check_action">Aktualisieren</string>
     <string name="app_up_to_date">MusikKu ist auf dem neuesten Stand</string>
     <string name="app_update_check_failed">Updates konnten nicht geprüft werden. Prüfe deine Verbindung und versuche es erneut.</string>
-    <string name="check_for_updates">Nach Updates suchen</string>
-    <string name="check_for_updates_subtitle">GitHub-Releases aktualisieren, ohne die Einstellungen zu verlassen</string>
-    <string name="update_checking">Wird geprüft…</string>
-    <string name="update_check_action">Aktualisieren</string>
-    <string name="app_up_to_date">MusikKu ist auf dem neuesten Stand</string>
-    <string name="app_update_check_failed">Updates konnten nicht geprüft werden. Prüfe deine Verbindung und versuche es erneut.</string>
     <string name="software_update">Softwareupdate</string>
     <string name="update_available_body">MusikKu %1$s steht zum Download bereit.</string>
     <string name="update_downloading_body">MusikKu %1$s wird heruntergeladen…</string>

@@ -113,12 +113,6 @@
     <string name="update_check_action">Odśwież</string>
     <string name="app_up_to_date">MusikKu jest aktualne</string>
     <string name="app_update_check_failed">Nie można sprawdzić aktualizacji. Sprawdź połączenie i spróbuj ponownie.</string>
-    <string name="check_for_updates">Sprawdź aktualizacje</string>
-    <string name="check_for_updates_subtitle">Odśwież wydania GitHub bez opuszczania Ustawień</string>
-    <string name="update_checking">Sprawdzanie…</string>
-    <string name="update_check_action">Odśwież</string>
-    <string name="app_up_to_date">MusikKu jest aktualne</string>
-    <string name="app_update_check_failed">Nie można sprawdzić aktualizacji. Sprawdź połączenie i spróbuj ponownie.</string>
     <string name="software_update">Aktualizacja oprogramowania</string>
     <string name="update_available_body">MusikKu %1$s jest dostępny do pobrania.</string>
     <string name="update_downloading_body">Pobieranie MusikKu %1$s…</string>

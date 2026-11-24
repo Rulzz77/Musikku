@@ -1326,6 +1326,13 @@
     <string name="search_source_addons">แอดออน</string>
     <string name="search_addons_none">ยังไม่ได้เปิดใช้แอดออน เพิ่มได้ที่ การตั้งค่า → แหล่งที่มา</string>
     <string name="app_icon">ไอคอนแอป</string>
+    <string name="app_icon_monochrome">ไอคอนหลัก\nขาวดำ</string>
+    <string name="app_icon_liquid_glass">กลาส\nสว่าง</string>
+    <string name="app_icon_liquid_glass_dark">กลาส\nมืด</string>
+    <string name="app_icon_liquid_glass_clear">กลาส\nใส</string>
+    <string name="app_icon_neon_silver">นีออน\nเงิน</string>
+    <string name="app_icon_neon_cyan">นีออน\nไซแอน</string>
+    <string name="app_icon_neon_violet">นีออน\nม่วง</string>
     <string name="app_icon_default">ค่าเริ่มต้น</string>
     <string name="show_queue_history">แสดงประวัติคิว</string>
     <string name="show_queue_history_subtitle">แสดงเพลงที่เล่นไปแล้วสูงสุด 25 เพลงเหนือ “กำลังเล่น” ในคิว</string>

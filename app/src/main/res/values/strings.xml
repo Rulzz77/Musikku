@@ -151,6 +151,12 @@
     <string name="no_dolby_atmos">No Dolby Atmos panel on this device</string>
     <string name="dolby_atmos_open_failed">Couldn’t open Dolby Atmos settings</string>
     <string name="update_available">Update available: v%1$s</string>
+    <string name="check_for_updates">Check for updates</string>
+    <string name="check_for_updates_subtitle">Refresh GitHub Releases without leaving Settings</string>
+    <string name="update_checking">Checking…</string>
+    <string name="update_check_action">Refresh</string>
+    <string name="app_up_to_date">MusikKu is up to date</string>
+    <string name="app_update_check_failed">Couldn’t check for updates. Check your connection and try again.</string>
     <string name="software_update">Software Update</string>
     <string name="update_available_body">MusikKu %1$s is available to download.</string>
     <string name="update_downloading_body">Downloading MusikKu %1$s…</string>

@@ -1313,6 +1313,13 @@
     <string name="search_source_addons">外掛</string>
     <string name="search_addons_none">尚未啟用任何外掛。請在「設定 → 來源」中新增。</string>
     <string name="app_icon">應用程式圖示</string>
+    <string name="app_icon_monochrome">主圖示\n單色</string>
+    <string name="app_icon_liquid_glass">玻璃\n淺色</string>
+    <string name="app_icon_liquid_glass_dark">玻璃\n深色</string>
+    <string name="app_icon_liquid_glass_clear">玻璃\n清透</string>
+    <string name="app_icon_neon_silver">霓虹\n銀色</string>
+    <string name="app_icon_neon_cyan">霓虹\n青色</string>
+    <string name="app_icon_neon_violet">霓虹\n紫色</string>
     <string name="app_icon_default">預設</string>
     <string name="show_queue_history">顯示佇列記錄</string>
     <string name="show_queue_history_subtitle">在佇列中「正在播放」上方顯示最多 25 首已播放的歌曲</string>

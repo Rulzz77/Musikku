@@ -72,11 +72,11 @@ class AppIconVariantsTest {
     fun allLauncherStylesUseTheSameFiveBarEqualizer() {
         val resources = resourcesDir()
         val barPaths = listOf(
-            "M24,28 V78",
-            "M39,42 V78",
-            "M54,33 V78",
-            "M69,47 V78",
-            "M84,27 V78",
+            "M30,39 V74",
+            "M42,48 V74",
+            "M54,30 V74",
+            "M66,43 V74",
+            "M78,35 V74",
         )
         val launcherAssets = listOf(
             "drawable/ic_variant_default.xml",
@@ -95,7 +95,8 @@ class AppIconVariantsTest {
             barPaths.forEach { bar ->
                 assertTrue("$path must use the shared bar path $bar", artwork.contains(bar))
             }
-            assertFalse("$path must not keep the old M monogram", artwork.contains("M25,78 V35"))
+            assertTrue("$path must keep the smaller safe-area stroke", artwork.contains("android:strokeWidth=\"5.5\""))
+            assertFalse("$path must not keep the old M monogram or music-note tail", artwork.contains("M25,78 V35") || artwork.contains("M45,63 V80"))
         }
 
         val manifest = File(appRoot, "src/main/AndroidManifest.xml").readText()
@@ -130,36 +131,95 @@ class AppIconVariantsTest {
 
         assertFalse("Icon previews must not paint outside their measured layout", settings.contains(".scale(1.5f)"))
         assertTrue("Every icon preview needs a measured square slot", settings.contains("Modifier.size(68.dp)"))
+        assertTrue("Artwork should sit smaller inside its preview slot", settings.contains("Modifier.size(64.dp)"))
         assertTrue("Icon labels need a stable two-line area", settings.contains("minLines = 2"))
     }
 
 
     @Test
-    fun replayAndProductLogosUseTheSameSolidMusikKuMark() {
+    fun everyProductSurfaceUsesTheSameEqualizerBrandMark() {
         val projectRoot = appRoot.parentFile ?: appRoot
         val sharedLogo = File(
             projectRoot,
             "sharedUi/src/commonMain/composeResources/drawable/ic_logo.xml",
         ).readText()
         val appLogo = File(resourcesDir(), "drawable/ic_logo.xml").readText()
+        val notificationLogo = File(resourcesDir(), "drawable/ic_notification_logo.xml").readText()
         val wearLogo = File(
             projectRoot,
             "wearos/src/main/res/drawable/ic_logo.xml",
         ).readText()
+        val wearLauncher = File(
+            projectRoot,
+            "wearos/src/main/res/drawable/ic_launcher_foreground.xml",
+        ).readText()
+        val wearMonochrome = File(
+            projectRoot,
+            "wearos/src/main/res/drawable/ic_musikku_monochrome.xml",
+        ).readText()
+        val xmlBars = listOf(
+            "M30,39 V74",
+            "M42,48 V74",
+            "M54,30 V74",
+            "M66,43 V74",
+            "M78,35 V74",
+        )
+        listOf(sharedLogo, appLogo, notificationLogo, wearLogo, wearLauncher, wearMonochrome).forEach { logo ->
+            xmlBars.forEach { bar ->
+                assertTrue("Android/Wear OS logo must use $bar", logo.contains(bar))
+            }
+            assertFalse("Product logos must not retain the old M monogram", logo.contains("M25,78 V35"))
+            assertFalse("Product logos must not retain the old music-note tail", logo.contains("M45,63 V80"))
+        }
+
         val webLogo = File(projectRoot, "web/app/src/assets/logo-mark.svg").readText()
         val transparentLogo = File(appRoot, "src/main/assets/LogoTransparent.svg").readText()
-        val svgLogo = File(appRoot, "src/main/assets/Logo.svg").readText()
-        val solidMark = "M25,78 V35 C25,23 39,18 47,28 L54,37 L62,28 C70,18 84,23 84,35 V78 H70 V42 L54,58 L38,42 V78 Z"
-
-        listOf(sharedLogo, appLogo, wearLogo).forEach { logo ->
-            assertTrue("Android and Replay marks must be solid", logo.contains(solidMark))
-            assertFalse("In-app logos must not use an outlined M", logo.contains("android:strokeWidth"))
+        val svgBars = listOf(
+            "M30 39V74",
+            "M42 48V74",
+            "M54 30V74",
+            "M66 43V74",
+            "M78 35V74",
+        )
+        listOf(webLogo, transparentLogo).forEach { logo ->
+            svgBars.forEach { bar ->
+                assertTrue("SVG logo must use $bar", logo.contains(bar))
+            }
+            assertFalse("SVG logos must not keep the old M monogram", logo.contains("M25 78V35"))
+            assertFalse("SVG logos must not keep the old music-note tail", logo.contains("M45 63V80"))
         }
-        assertTrue("Web mark must be filled", webLogo.contains("fill=") && webLogo.contains("currentColor"))
-        assertTrue("Transparent mark must be filled", transparentLogo.contains("url(#mark)") && transparentLogo.contains("M25 78V35"))
-        assertTrue("Full SVG mark must be filled", svgLogo.contains("url(#mark)") && svgLogo.contains("M120 369V166"))
-        assertFalse("Web mark must not keep the previous M outline", webLogo.contains("stroke-width") && webLogo.contains("7.5"))
-        assertFalse("Transparent mark must not keep the previous M outline", transparentLogo.contains("stroke-width") && transparentLogo.contains("7.5"))
+        assertTrue("Web logo remains theme-aware", webLogo.contains("stroke=\"currentColor\""))
+        assertTrue("Transparent logo remains gradient-coloured", transparentLogo.contains("stroke=\"url(#mark)\""))
+
+        val fullLogo = File(appRoot, "src/main/assets/Logo.svg").readText()
+        val rootLogo = File(projectRoot, "Logo.svg").readText()
+        val favicon = File(projectRoot, "web/app/public/favicon.svg").readText()
+        val fullSvgBars = listOf(
+            "M176 238V350",
+            "M216 272V350",
+            "M256 210V350",
+            "M296 252V350",
+            "M336 226V350",
+        )
+        listOf(fullLogo, rootLogo, favicon).forEach { logo ->
+            fullSvgBars.forEach { bar ->
+                assertTrue("Full-size brand artwork must use $bar", logo.contains(bar))
+            }
+            assertFalse("Full-size logo must not keep the old M monogram", logo.contains("M120 369V166"))
+        }
+        assertEquals("Root logo and web favicon must stay identical", rootLogo, favicon)
+
+        val tvBanner = File(projectRoot, "tv/src/main/res/drawable/tv_banner.xml").readText()
+        listOf(
+            "M190,130 V186",
+            "M223,150 V186",
+            "M256,116 V186",
+            "M289,142 V186",
+            "M322,126 V186",
+        ).forEach { bar ->
+            assertTrue("TV banner must use the equalizer mark $bar", tvBanner.contains(bar))
+        }
+        assertFalse("TV banner must not keep the old music-note symbol", tvBanner.contains("M256,73v92"))
     }
 
     private fun resourcesDir() = File(appRoot, "src/main/res")

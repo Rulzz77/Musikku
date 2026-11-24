@@ -959,7 +959,7 @@ private fun ArtworkUnlikeSplit(
 
 
 /**
- * A persistent mark on the Player Page artwork while the current track is liked.
+ * A compact status mark beside the Player Page overflow menu while the current track is liked.
  * It follows [LikeStatus], so device-only guest Likes and account Likes look the same.
  */
 @Composable
@@ -975,23 +975,22 @@ private fun ArtworkLikedIndicator(
     ) {
         Box(
             modifier = Modifier
-                .padding(12.dp)
-                .size(36.dp)
+                .size(32.dp)
                 .background(Color(0xE61A1C23), CircleShape)
                 .border(1.dp, Color(0xAAFF5B7D), CircleShape),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
                 imageVector = BitChordIcons.HeartFilled,
-                contentDescription = stringResource(Res.string.remove_from_liked),
+                contentDescription = null,
                 tint = Color(0xFFFF5277),
-                modifier = Modifier.size(19.dp),
+                modifier = Modifier.size(17.dp),
             )
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(end = 1.dp, bottom = 1.dp)
-                    .size(12.dp)
+                    .size(11.dp)
                     .background(Color(0xFF29B765), CircleShape)
                     .border(1.dp, Color(0xEE1A1C23), CircleShape),
                 contentAlignment = Alignment.Center,
@@ -1000,7 +999,7 @@ private fun ArtworkLikedIndicator(
                     imageVector = Icons.Rounded.Check,
                     contentDescription = null,
                     tint = Color.White,
-                    modifier = Modifier.size(8.dp),
+                    modifier = Modifier.size(7.dp),
                 )
             }
         }
@@ -2478,10 +2477,6 @@ fun NowPlayingScreen(
                                     trigger = artworkUnlikeSplitTrigger,
                                     modifier = Modifier.align(Alignment.Center),
                                 )
-                                ArtworkLikedIndicator(
-                                    liked = likeStatus == LikeStatus.LIKE,
-                                    modifier = Modifier.align(Alignment.TopEnd),
-                                )
                                 // The stats belong to the player, not to the sleeve,
                                 // so they fade with the player as it docks.
                                 SleeveNerdStats(
@@ -3925,10 +3920,6 @@ fun NowPlayingScreen(
                         ) {
                             ArtworkLikeBurst(trackKey = song.videoId, trigger = artworkLikeBurstTrigger)
                             ArtworkUnlikeSplit(trackKey = song.videoId, trigger = artworkUnlikeSplitTrigger)
-                            ArtworkLikedIndicator(
-                                liked = likeStatus == LikeStatus.LIKE,
-                                modifier = Modifier.align(Alignment.TopEnd),
-                            )
                             // Measured stats stay on the sleeve's bottom centre. They
                             // fade away with Spotify's lower control deck rather than
                             // following the compact credits to the bottom edge.
@@ -4210,6 +4201,12 @@ fun NowPlayingScreen(
                             // whichever way the controls are.
                             val lyricsShareGlyphVisible = lyricsOpen && collapseDone && lyricsShareEnabled &&
                                 !lyrics.isNullOrEmpty() && (!lyricsControlsOpen || lyricPicker.picking)
+                            if (!lyricsShareGlyphVisible && !showRevertCue) {
+                                ArtworkLikedIndicator(
+                                    liked = likeStatus == LikeStatus.LIKE,
+                                    modifier = Modifier.padding(end = 6.dp),
+                                )
+                            }
                             CircleGlyph(
                                 icon = when {
                                     showRevertCue -> Icons.AutoMirrored.Rounded.Undo

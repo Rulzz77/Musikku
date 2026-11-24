@@ -1343,6 +1343,13 @@
     <string name="search_source_addons">Addons</string>
     <string name="search_addons_none">Es sind keine Addons aktiviert. Füge eines unter Einstellungen → Quellen hinzu.</string>
     <string name="app_icon">App-Symbol</string>
+    <string name="app_icon_monochrome">Hauptsymbol\nMonochrom</string>
+    <string name="app_icon_liquid_glass">Glas\nHell</string>
+    <string name="app_icon_liquid_glass_dark">Glas\nDunkel</string>
+    <string name="app_icon_liquid_glass_clear">Glas\nKlar</string>
+    <string name="app_icon_neon_silver">Neon\nSilber</string>
+    <string name="app_icon_neon_cyan">Neon\nCyan</string>
+    <string name="app_icon_neon_violet">Neon\nViolett</string>
     <string name="app_icon_default">Standard</string>
     <string name="show_queue_history">Wiedergabeverlauf anzeigen</string>
     <string name="show_queue_history_subtitle">Bis zu 25 zuletzt gespielte Songs über „Aktuelle Wiedergabe“ in der Warteschlange anzeigen</string>

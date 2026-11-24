@@ -47,7 +47,7 @@
 
 **MusikKu** is an independent Android music player that brings online music discovery and local audio playback together with tools for organising playlists, understanding listening habits, and managing an offline library.
 
-> **Current source version:** `0.1.75` (`versionCode 76`). The Download section always links to the latest release that has actually been published.
+> **Current source version:** `0.1.76` (`versionCode 77`). The Download section always links to the latest release that has actually been published.
 
 The Android application is built with **Kotlin and Jetpack Compose**. The repository also contains shared Kotlin modules, Android TV and Wear OS targets, a Go service for Listen Together, and a web player with a companion browser extension.
 

@@ -1348,6 +1348,13 @@
     <string name="search_source_addons">Addons</string>
     <string name="search_addons_none">Nenhum addon ativado. Adicione um em Configurações → Fontes.</string>
     <string name="app_icon">Ícone do app</string>
+    <string name="app_icon_monochrome">Ícone principal\nMonocromático</string>
+    <string name="app_icon_liquid_glass">Vidro\nClaro</string>
+    <string name="app_icon_liquid_glass_dark">Vidro\nEscuro</string>
+    <string name="app_icon_liquid_glass_clear">Vidro\nTransparente</string>
+    <string name="app_icon_neon_silver">Neon\nPrateado</string>
+    <string name="app_icon_neon_cyan">Neon\nCiano</string>
+    <string name="app_icon_neon_violet">Neon\nVioleta</string>
     <string name="app_icon_default">Padrão</string>
     <string name="show_queue_history">Mostrar histórico da fila</string>
     <string name="show_queue_history_subtitle">Mostra até 25 músicas já tocadas acima de «Tocando agora» na fila</string>

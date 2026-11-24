@@ -103,6 +103,12 @@
     <string name="no_dolby_atmos">อุปกรณ์นี้ไม่มีแผงควบคุม Dolby Atmos</string>
     <string name="dolby_atmos_open_failed">เปิดการตั้งค่า Dolby Atmos ไม่ได้</string>
     <string name="update_available">มีอัปเดต: v%1$s</string>
+    <string name="check_for_updates">ตรวจสอบการอัปเดต</string>
+    <string name="check_for_updates_subtitle">รีเฟรช GitHub Releases โดยไม่ต้องออกจากการตั้งค่า</string>
+    <string name="update_checking">กำลังตรวจสอบ…</string>
+    <string name="update_check_action">รีเฟรช</string>
+    <string name="app_up_to_date">MusikKu เป็นเวอร์ชันล่าสุดแล้ว</string>
+    <string name="app_update_check_failed">ตรวจสอบการอัปเดตไม่สำเร็จ โปรดตรวจสอบการเชื่อมต่อแล้วลองอีกครั้ง</string>
     <string name="software_update">การอัปเดตซอฟต์แวร์</string>
     <string name="update_available_body">MusikKu %1$s พร้อมให้ดาวน์โหลดแล้ว</string>
     <string name="update_downloading_body">กำลังดาวน์โหลด MusikKu %1$s…</string>
@@ -1320,6 +1326,13 @@
     <string name="search_source_addons">แอดออน</string>
     <string name="search_addons_none">ยังไม่ได้เปิดใช้แอดออน เพิ่มได้ที่ การตั้งค่า → แหล่งที่มา</string>
     <string name="app_icon">ไอคอนแอป</string>
+    <string name="app_icon_monochrome">ไอคอนหลัก\nขาวดำ</string>
+    <string name="app_icon_liquid_glass">กลาส\nสว่าง</string>
+    <string name="app_icon_liquid_glass_dark">กลาส\nมืด</string>
+    <string name="app_icon_liquid_glass_clear">กลาส\nใส</string>
+    <string name="app_icon_neon_silver">นีออน\nเงิน</string>
+    <string name="app_icon_neon_cyan">นีออน\nไซแอน</string>
+    <string name="app_icon_neon_violet">นีออน\nม่วง</string>
     <string name="app_icon_default">ค่าเริ่มต้น</string>
     <string name="show_queue_history">แสดงประวัติคิว</string>
     <string name="show_queue_history_subtitle">แสดงเพลงที่เล่นไปแล้วสูงสุด 25 เพลงเหนือ “กำลังเล่น” ในคิว</string>

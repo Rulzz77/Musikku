@@ -97,7 +97,7 @@ Availability and playback behaviour depend on the selected source, account state
 - Sort and organise playlists, manage tracks individually or in batches, and customise playlist artwork.
 - Like or unlike tracks by double-tapping their artwork in Library track lists, playlist and album track lists, and search results.
 - On the expanded Player Page, double-tap anywhere in the large artwork area — including the surrounding space around the cover — to Like or unlike the currently playing track. Like plays an animated heart burst; Unlike flashes a centre crack and splits the heart into two halves that move apart and fade. The gesture works for guests and signed-in users.
-- In the Add to playlist sheet, the built-in **Liked songs** row uses a solid white heart in its cover tile instead of an empty square. The Player Page keeps a separate glass-style Like button beside the three-dot menu in portrait and landscape: an outline heart means not liked, while a filled heart follows the theme accent when liked. Like / Unlike is removed from inside the three-dot menu; artwork double-tap and the adjacent heart button both remain available.
+- In the Add to playlist sheet, the built-in **Liked songs** row uses a solid white heart in its cover tile instead of an empty square. The Player Page keeps a separate glass-style Like button beside the three-dot menu in portrait and landscape: both the outline and filled heart are white, with the glass disc brightening when liked. Like / Unlike is removed from inside the three-dot menu; artwork double-tap and the adjacent heart button both remain available.
 - Guest users can Like and unlike streamed tracks without signing in. Double-tapping the expanded Player Page artwork gives the same Like burst or split-heart Unlike animation and haptic feedback. These Likes are saved locally in **Local Music → Playlists → Liked** by track video ID and stay on that device; they do not change the user's YouTube Music account. Signed-in Likes continue to sync through YouTube Music.
 - Keep local listening statistics and revisit recently played or favourite music.
 
@@ -109,6 +109,8 @@ Smart Playlists turn listening statistics into dynamic collections. Built-in lis
 - **Recently played**
 - **Most listened**
 - **Forgotten tracks**
+
+The built-in cards use a compact four-cover collage, with separate play, history, and listening-time glyphs for the three main rankings. Their statistics are built from the local aggregate history.
 
 Create up to 20 custom Smart Playlists with optional artist, cached genre, release-year, duration, and last-played filters. Combine optional criteria with **ALL (AND)** or **ANY (OR)**, then sort by play count, recent playback, or listening time.
 
@@ -131,6 +133,8 @@ See the guides for [Backup & Restore](docs/BACKUP_RESTORE_2026-11-16.md), [Downl
 - **Music DNA** and **Memories** provide summaries based on local listening history.
 - **MusikKu Flow** creates mood-oriented mixes from available track metadata and listening history.
 - Save favourite artists, customise themes, and manage tracks hidden from Flow.
+- Choose from eight consistent five-bar equalizer launcher icons: Default, Monochrome, three Glass styles, and Neon Silver, Cyan, or Violet.
+- Check GitHub Releases and open the in-app download/install flow from **Settings**, without leaving the settings page.
 - Keep a manual **Radio Diary**, use the **Focus Timer**, or switch to the in-app **Car Mode** layout.
 - Use **Listen Together** to synchronise playback and queues with other participants on a configured server.
 

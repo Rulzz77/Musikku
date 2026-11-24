@@ -106,6 +106,12 @@
     <string name="no_dolby_atmos">אין פאנל Dolby Atmos במכשיר זה</string>
     <string name="dolby_atmos_open_failed">לא ניתן לפתוח את הגדרות Dolby Atmos</string>
     <string name="update_available">עדכון זמין: גרסה %1$s</string>
+    <string name="check_for_updates">בדיקת עדכונים</string>
+    <string name="check_for_updates_subtitle">רענון גרסאות GitHub בלי לצאת מההגדרות</string>
+    <string name="update_checking">בודק…</string>
+    <string name="update_check_action">רענון</string>
+    <string name="app_up_to_date">MusikKu מעודכנת</string>
+    <string name="app_update_check_failed">לא ניתן לבדוק עדכונים. בדקו את החיבור ונסו שוב.</string>
     <string name="software_update">עדכון תוכנה</string>
     <string name="update_available_body">MusikKu %1$s זמין להורדה.</string>
     <string name="update_downloading_body">מוריד את MusikKu %1$s…</string>
@@ -1342,6 +1348,13 @@
     <string name="search_source_addons">תוספים</string>
     <string name="search_addons_none">אין תוספים מופעלים. אפשר להוסיף אחד בהגדרות ← מקורות.</string>
     <string name="app_icon">סמל האפליקציה</string>
+    <string name="app_icon_monochrome">סמל ראשי\nמונוכרום</string>
+    <string name="app_icon_liquid_glass">זכוכית\nבהירה</string>
+    <string name="app_icon_liquid_glass_dark">זכוכית\nכהה</string>
+    <string name="app_icon_liquid_glass_clear">זכוכית\nשקופה</string>
+    <string name="app_icon_neon_silver">ניאון\nכסוף</string>
+    <string name="app_icon_neon_cyan">ניאון\nציאן</string>
+    <string name="app_icon_neon_violet">ניאון\nסגול</string>
     <string name="app_icon_default">ברירת מחדל</string>
     <string name="show_queue_history">הצגת היסטוריית התור</string>
     <string name="show_queue_history_subtitle">מציג עד 25 שירים שהושמעו מעל \"מתנגן עכשיו\" בתור</string>

@@ -15,7 +15,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -81,6 +80,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatDelegate
 import com.music.bitchord.data.lyrics.translationLanguageName
+import com.music.bitchord.data.AppUpdateChecker
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -125,7 +125,6 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.viewinterop.AndroidView
 import com.music.bitchord.AppIcon
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.LinkAnnotation
@@ -223,8 +222,12 @@ fun SettingsScreen(
     onOpenSection: (SettingsCategory) -> Unit = {},
     /** Opens a choice with more options than its row can show, as a page. */
     onOpenChoice: (SettingsChoiceKind) -> Unit = {},
+    /** Refreshes GitHub Releases and surfaces the existing in-app update dialog. */
+    onCheckForUpdates: suspend () -> Unit = {},
 ) {
     val context = LocalContext.current
+    val updateAvailable by AppUpdateChecker.available.collectAsStateWithLifecycle()
+    var checkingForUpdates by remember { mutableStateOf(false) }
 
     val wifiQuality by AppSettings.audioQualityWifi.collectAsStateWithLifecycle()
     val cellularQuality by AppSettings.audioQualityCellular.collectAsStateWithLifecycle()
@@ -361,6 +364,19 @@ fun SettingsScreen(
     var showPerformanceWarning by remember { mutableStateOf(false) }
     var showPerformanceConfirmation by remember { mutableStateOf(false) }
     val backupScope = rememberCoroutineScope()
+
+    val refreshUpdates: () -> Unit = {
+        if (!checkingForUpdates) {
+            backupScope.launch {
+                checkingForUpdates = true
+                try {
+                    onCheckForUpdates()
+                } finally {
+                    checkingForUpdates = false
+                }
+            }
+        }
+    }
 
     LaunchedEffect(section, storageRefreshSignal) {
         if (section == SettingsCategory.STORAGE) {
@@ -1930,81 +1946,95 @@ fun SettingsScreen(
                     onClick = { AppSettings.setShowNerdStats(!nerdStats) },
                 )
             }
+            val updateTitle = stringResource(R.string.check_for_updates)
+            row(updateTitle, "update", "refresh", "github", "release", "version") {
+                val subtitle = when {
+                    checkingForUpdates -> stringResource(R.string.update_checking)
+                    updateAvailable != null -> stringResource(R.string.update_available, updateAvailable!!.version)
+                    else -> stringResource(R.string.check_for_updates_subtitle)
+                }
+                SettingsRow(
+                    icon = Icons.Rounded.Cached,
+                    title = updateTitle,
+                    subtitle = subtitle,
+                    trailing = {
+                        TextButton(
+                            enabled = !checkingForUpdates,
+                            onClick = refreshUpdates,
+                        ) {
+                            Text(
+                                stringResource(
+                                    if (checkingForUpdates) R.string.update_checking
+                                    else R.string.update_check_action,
+                                ),
+                            )
+                        }
+                    },
+                    onClick = refreshUpdates,
+                )
+            }
+
             val appIconTitle = stringResource(R.string.app_icon)
             row(appIconTitle, "icon", "launcher", "logo") {
                 var selectedIcon by remember { mutableStateOf(AppIcon.current(context)) }
                 SettingsRow(icon = Icons.Filled.Apps, title = appIconTitle)
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState())
                         .padding(start = ROW_INSET, end = ROW_INSET, bottom = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(5.dp),
                 ) {
-                    AppIcon.entries.forEach { option ->
-                        val selected = option == selectedIcon
-                        val tileShape = RoundedCornerShape(18.dp)
-                        Column(
-                            modifier = Modifier
-                                .width(96.dp)
-                                .clip(tileShape)
-                                .background(
-                                    if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-                                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.36f),
-                                )
-                                .border(
-                                    width = 1.dp,
-                                    color = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.72f)
-                                    else MaterialTheme.colorScheme.outline.copy(alpha = 0.24f),
-                                    shape = tileShape,
-                                )
-                                .clickable {
-                                    selectedIcon = option
-                                    AppIcon.apply(context, option)
-                                }
-                                .padding(horizontal = 4.dp, vertical = 8.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
+                    AppIcon.entries.chunked(4).forEach { iconRow ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.Top,
                         ) {
-                            // Reserve the full preview slot in measurement: the previous 1.5x
-                            // draw scale enlarged pixels without enlarging the layout, so the
-                            // image painted over its own label on narrow screens.
-                            Box(
-                                modifier = Modifier.size(84.dp),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                val preview = option.previewRes
-                                if (preview == null) {
-                                    AndroidView(
-                                        factory = { ctx ->
-                                            android.widget.ImageView(ctx).apply {
-                                                scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
-                                                setImageResource(option.iconRes)
-                                            }
-                                        },
-                                        update = { view -> view.setImageResource(option.iconRes) },
-                                        modifier = Modifier.size(80.dp),
-                                    )
-                                } else {
+                            iconRow.forEach { option ->
+                                val selected = option == selectedIcon
+                                val tileShape = RoundedCornerShape(14.dp)
+                                Column(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(tileShape)
+                                        .background(
+                                            if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
+                                            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f),
+                                        )
+                                        .border(
+                                            width = 1.dp,
+                                            color = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.72f)
+                                            else MaterialTheme.colorScheme.outline.copy(alpha = 0.12f),
+                                            shape = tileShape,
+                                        )
+                                        .clickable {
+                                            selectedIcon = option
+                                            AppIcon.apply(context, option)
+                                        }
+                                        .padding(horizontal = 2.dp, vertical = 5.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                ) {
                                     Image(
-                                        painter = painterResource(preview),
+                                        painter = painterResource(option.previewRes),
                                         contentDescription = null,
                                         contentScale = ContentScale.Fit,
-                                        modifier = Modifier.size(84.dp),
+                                        modifier = Modifier.size(68.dp),
+                                    )
+                                    Text(
+                                        text = stringResource(option.labelRes),
+                                        textAlign = TextAlign.Center,
+                                        minLines = 2,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (selected) MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                        modifier = Modifier.padding(top = 2.dp),
                                     )
                                 }
                             }
-                            Text(
-                                text = stringResource(option.labelRes),
-                                textAlign = TextAlign.Center,
-                                minLines = 2,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                                style = MaterialTheme.typography.labelMedium,
-                                color = if (selected) MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                                modifier = Modifier.padding(top = 7.dp),
-                            )
+                            repeat(4 - iconRow.size) { Spacer(Modifier.weight(1f)) }
                         }
                     }
                 }

@@ -106,6 +106,12 @@
     <string name="no_dolby_atmos">Thiết bị này không có bảng điều khiển Dolby Atmos</string>
     <string name="dolby_atmos_open_failed">Không thể mở cài đặt Dolby Atmos</string>
     <string name="update_available">Có bản cập nhật mới: v%1$s</string>
+    <string name="check_for_updates">Kiểm tra bản cập nhật</string>
+    <string name="check_for_updates_subtitle">Làm mới GitHub Releases mà không rời khỏi Cài đặt</string>
+    <string name="update_checking">Đang kiểm tra…</string>
+    <string name="update_check_action">Làm mới</string>
+    <string name="app_up_to_date">MusikKu đã được cập nhật</string>
+    <string name="app_update_check_failed">Không thể kiểm tra bản cập nhật. Hãy kiểm tra kết nối rồi thử lại.</string>
     <string name="software_update">Cập nhật phần mềm</string>
     <string name="update_available_body">MusikKu %1$s đã sẵn sàng để tải xuống.</string>
     <string name="update_downloading_body">Đang tải xuống MusikKu %1$s…</string>
@@ -1254,6 +1260,13 @@
     <string name="search_source_addons">Addon</string>
     <string name="search_addons_none">Chưa bật addon nào. Hãy thêm một addon trong Cài đặt → Nguồn.</string>
     <string name="app_icon">Biểu tượng ứng dụng</string>
+    <string name="app_icon_monochrome">Biểu tượng chính\nĐơn sắc</string>
+    <string name="app_icon_liquid_glass">Kính\nSáng</string>
+    <string name="app_icon_liquid_glass_dark">Kính\nTối</string>
+    <string name="app_icon_liquid_glass_clear">Kính\nTrong</string>
+    <string name="app_icon_neon_silver">Neon\nBạc</string>
+    <string name="app_icon_neon_cyan">Neon\nCyan</string>
+    <string name="app_icon_neon_violet">Neon\nTím</string>
     <string name="app_icon_default">Mặc định</string>
     <string name="show_queue_history">Hiện lịch sử hàng đợi</string>
     <string name="show_queue_history_subtitle">Hiện tối đa 25 bài đã phát phía trên “Đang phát” trong hàng đợi</string>

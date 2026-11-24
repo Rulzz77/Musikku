@@ -151,6 +151,12 @@
     <string name="no_dolby_atmos">No Dolby Atmos panel on this device</string>
     <string name="dolby_atmos_open_failed">Couldn’t open Dolby Atmos settings</string>
     <string name="update_available">Update available: v%1$s</string>
+    <string name="check_for_updates">Check for updates</string>
+    <string name="check_for_updates_subtitle">Refresh GitHub Releases without leaving Settings</string>
+    <string name="update_checking">Checking…</string>
+    <string name="update_check_action">Refresh</string>
+    <string name="app_up_to_date">MusikKu is up to date</string>
+    <string name="app_update_check_failed">Couldn’t check for updates. Check your connection and try again.</string>
     <string name="software_update">Software Update</string>
     <string name="update_available_body">MusikKu %1$s is available to download.</string>
     <string name="update_downloading_body">Downloading MusikKu %1$s…</string>
@@ -366,29 +372,14 @@
     <string name="show_listen_together_button">Show Listen Together button</string>
     <string name="show_listen_together_button_subtitle">Off, the player shows only the audio output button between lyrics and the queue</string>
     <string name="app_icon">App icon</string>
-    <string name="app_icon_default">Default</string>
-    <string name="app_icon_monochrome" translatable="false">Monochrome</string>
-    <string name="app_icon_liquid_glass" translatable="false">Liquid Glass</string>
-    <string name="app_icon_liquid_glass_dark" translatable="false">Liquid Glass Dark</string>
-    <string name="app_icon_liquid_glass_clear" translatable="false">Liquid Glass Clear</string>
-    <string name="app_icon_liquid_glass_clear_dark" translatable="false">Liquid Glass Clear Dark</string>
-    <string name="app_icon_samsung_glass" translatable="false">Samsung Glass</string>
-    <string name="app_icon_samsung_glass_dark" translatable="false">Samsung Glass Dark</string>
-    <string name="app_icon_samsung_glass_clear" translatable="false">Samsung Glass Clear</string>
-    <string name="app_icon_samsung_glass_clear_dark" translatable="false">Samsung Glass Clear Dark</string>
-    <string name="app_icon_pixel_glass" translatable="false">Pixel Glass</string>
-    <string name="app_icon_pixel_glass_dark" translatable="false">Pixel Glass Dark</string>
-    <string name="app_icon_pixel_glass_clear" translatable="false">Pixel Glass Clear</string>
-    <string name="app_icon_pixel_glass_clear_dark" translatable="false">Pixel Glass Clear Dark</string>
-    <string name="app_icon_neon_silver" translatable="false">Neon Silver</string>
-    <string name="app_icon_neon_cyan" translatable="false">Neon Cyan</string>
-    <string name="app_icon_neon_violet" translatable="false">Neon Violet</string>
-    <string name="app_icon_samsung_neon_silver" translatable="false">Samsung Neon Silver</string>
-    <string name="app_icon_samsung_neon_cyan" translatable="false">Samsung Neon Cyan</string>
-    <string name="app_icon_samsung_neon_violet" translatable="false">Samsung Neon Violet</string>
-    <string name="app_icon_pixel_neon_silver" translatable="false">Pixel Neon Silver</string>
-    <string name="app_icon_pixel_neon_cyan" translatable="false">Pixel Neon Cyan</string>
-    <string name="app_icon_pixel_neon_violet" translatable="false">Pixel Neon Violet</string>
+<string name="app_icon_default">Main icon\nDefault</string>
+<string name="app_icon_monochrome">Main icon\nMonochrome</string>
+<string name="app_icon_liquid_glass">Glass\nLight</string>
+<string name="app_icon_liquid_glass_dark">Glass\nDark</string>
+<string name="app_icon_liquid_glass_clear">Glass\nClear</string>
+<string name="app_icon_neon_silver">Neon\nSilver</string>
+<string name="app_icon_neon_cyan">Neon\nCyan</string>
+<string name="app_icon_neon_violet">Neon\nViolet</string>
     <string name="theme">Theme</string>
     <string name="font">Font</string>
     <string name="font_default">Default</string>

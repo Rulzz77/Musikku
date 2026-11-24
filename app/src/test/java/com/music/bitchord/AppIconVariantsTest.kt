@@ -11,24 +11,9 @@ class AppIconVariantsTest {
         "liquid_glass",
         "liquid_glass_dark",
         "liquid_glass_clear",
-        "liquid_glass_clear_dark",
-        "samsung_glass",
-        "samsung_glass_dark",
-        "samsung_glass_clear",
-        "samsung_glass_clear_dark",
-        "pixel_glass",
-        "pixel_glass_dark",
-        "pixel_glass_clear",
-        "pixel_glass_clear_dark",
         "neon_silver",
         "neon_cyan",
         "neon_violet",
-        "samsung_neon_silver",
-        "samsung_neon_cyan",
-        "samsung_neon_violet",
-        "pixel_neon_silver",
-        "pixel_neon_cyan",
-        "pixel_neon_violet",
     )
 
     private val appRoot: File
@@ -79,14 +64,24 @@ class AppIconVariantsTest {
         assertTrue("Round launcher must use the adaptive icon", manifest.contains("android:roundIcon=\"@mipmap/ic_launcher_round\""))
         assertTrue("Missing adaptive launcher resource", File(resourcesDir(), "mipmap-anydpi-v26/ic_launcher.xml").isFile)
         assertTrue("Missing round adaptive launcher resource", File(resourcesDir(), "mipmap-anydpi-v26/ic_launcher_round.xml").isFile)
+        assertTrue("Missing monochrome adaptive launcher resource", File(resourcesDir(), "mipmap-anydpi/ic_monochrome.xml").isFile)
     }
 
 
     @Test
-    fun launcherArtworkUsesASolidMusikKuMonogram() {
+    fun allLauncherStylesUseTheSameFiveBarEqualizer() {
         val resources = resourcesDir()
-        val solidMark = "M25,78 V35 C25,23 39,18 47,28 L54,37 L62,28 C70,18 84,23 84,35 V78 H70 V42 L54,58 L38,42 V78 Z"
-        val launcherAssets = variantIds.map { "drawable/ic_variant_$it.xml" } + listOf(
+        val barPaths = listOf(
+            "M24,28 V78",
+            "M39,42 V78",
+            "M54,33 V78",
+            "M69,47 V78",
+            "M84,27 V78",
+        )
+        val launcherAssets = listOf(
+            "drawable/ic_variant_default.xml",
+            "drawable/ic_variant_monochrome.xml",
+        ) + variantIds.map { "drawable/ic_variant_$it.xml" } + listOf(
             "drawable/ic_launcher_foreground.xml",
             "drawable/ic_musikku_launcher.xml",
             "drawable/ic_musikku_launcher_round.xml",
@@ -94,20 +89,36 @@ class AppIconVariantsTest {
         )
 
         launcherAssets.forEach { path ->
-            val artwork = File(resources, path).readText()
-            assertTrue("$path must use the filled MusikKu mark", artwork.contains(solidMark))
-            assertFalse(
-                "$path must not retain the old outline M paths",
-                artwork.contains("M27,77 V34") || artwork.contains("M24,75 V36"),
-            )
+            val file = File(resources, path)
+            assertTrue("Missing equalizer artwork: $path", file.isFile)
+            val artwork = file.readText()
+            barPaths.forEach { bar ->
+                assertTrue("$path must use the shared bar path $bar", artwork.contains(bar))
+            }
+            assertFalse("$path must not keep the old M monogram", artwork.contains("M25,78 V35"))
         }
 
-        val projectRoot = appRoot.parentFile ?: appRoot
-        val wearForeground = File(projectRoot, "wearos/src/main/res/drawable/ic_launcher_foreground.xml").readText()
-        val wearMonochrome = File(projectRoot, "wearos/src/main/res/drawable/ic_musikku_monochrome.xml").readText()
-        assertTrue("Wear OS foreground must use the same solid MusikKu mark", wearForeground.contains(solidMark))
-        assertTrue("Wear OS monochrome must use the solid MusikKu mark", wearMonochrome.contains(solidMark))
-        assertFalse("Wear OS foreground must not retain the old music-note glyph", wearForeground.contains("M54,22v39.6"))
+        val manifest = File(appRoot, "src/main/AndroidManifest.xml").readText()
+        val expectedAliases = listOf(
+            "LauncherDefault",
+            "LauncherMonochrome",
+            "LauncherGlassLight",
+            "LauncherGlassDark",
+            "LauncherGlassClear",
+            "LauncherNeonSilver",
+            "LauncherNeonCyan",
+            "LauncherNeonViolet",
+        )
+        expectedAliases.forEach { alias ->
+            assertTrue("Missing launcher alias $alias", manifest.contains("android:name=\".$alias\""))
+        }
+        assertEquals(
+            "Settings should expose exactly the eight launcher styles",
+            8,
+            Regex("android:name=\\\"\\.Launcher").findAll(manifest).count(),
+        )
+        assertFalse("Samsung-specific duplicate aliases should be removed", manifest.contains("LauncherSamsung"))
+        assertFalse("Pixel-specific duplicate aliases should be removed", manifest.contains("LauncherPixel"))
     }
 
     @Test
@@ -118,7 +129,7 @@ class AppIconVariantsTest {
         ).readText()
 
         assertFalse("Icon previews must not paint outside their measured layout", settings.contains(".scale(1.5f)"))
-        assertTrue("Every icon preview needs a measured square slot", settings.contains("Modifier.size(84.dp)"))
+        assertTrue("Every icon preview needs a measured square slot", settings.contains("Modifier.size(68.dp)"))
         assertTrue("Icon labels need a stable two-line area", settings.contains("minLines = 2"))
     }
 

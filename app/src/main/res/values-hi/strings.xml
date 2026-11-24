@@ -104,6 +104,12 @@
     <string name="no_dolby_atmos">इस डिवाइस पर कोई Dolby Atmos पैनल नहीं है</string>
     <string name="dolby_atmos_open_failed">Dolby Atmos सेटिंग्स नहीं खोली जा सकीं</string>
     <string name="update_available">अपडेट उपलब्ध है: v%1$s</string>
+    <string name="check_for_updates">अपडेट देखें</string>
+    <string name="check_for_updates_subtitle">सेटिंग्स छोड़े बिना GitHub Releases रीफ़्रेश करें</string>
+    <string name="update_checking">जाँच हो रही है…</string>
+    <string name="update_check_action">रीफ़्रेश करें</string>
+    <string name="app_up_to_date">MusikKu अप टू डेट है</string>
+    <string name="app_update_check_failed">अपडेट की जाँच नहीं हो सकी। अपना कनेक्शन जाँचें और फिर कोशिश करें।</string>
     <string name="software_update">सॉफ़्टवेयर अपडेट</string>
     <string name="update_available_body">MusikKu %1$s डाउनलोड के लिए उपलब्ध है।</string>
     <string name="update_downloading_body">MusikKu %1$s डाउनलोड हो रहा है…</string>
@@ -1337,6 +1343,13 @@
     <string name="search_source_addons">ऐडऑन</string>
     <string name="search_addons_none">कोई ऐडऑन चालू नहीं है। सेटिंग → स्रोत में जाकर एक जोड़ें।</string>
     <string name="app_icon">ऐप आइकन</string>
+    <string name="app_icon_monochrome">मुख्य आइकन\nमोनोक्रोम</string>
+    <string name="app_icon_liquid_glass">ग्लास\nहल्का</string>
+    <string name="app_icon_liquid_glass_dark">ग्लास\nगहरा</string>
+    <string name="app_icon_liquid_glass_clear">ग्लास\nक्लियर</string>
+    <string name="app_icon_neon_silver">नियॉन\nसिल्वर</string>
+    <string name="app_icon_neon_cyan">नियॉन\nसायन</string>
+    <string name="app_icon_neon_violet">नियॉन\nवायलेट</string>
     <string name="app_icon_default">डिफ़ॉल्ट</string>
     <string name="show_queue_history">कतार का इतिहास दिखाएँ</string>
     <string name="show_queue_history_subtitle">कतार में “अभी चल रहा है” के ऊपर पहले चले 25 तक गाने दिखाएँ</string>

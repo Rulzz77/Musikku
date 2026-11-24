@@ -127,6 +127,12 @@
     <string name="no_dolby_atmos">Nessun pannello Dolby Atmos su questo dispositivo</string>
     <string name="dolby_atmos_open_failed">Impossibile aprire le impostazioni Dolby Atmos</string>
     <string name="update_available">Aggiornamento disponibile: v%1$s</string>
+    <string name="check_for_updates">Controlla aggiornamenti</string>
+    <string name="check_for_updates_subtitle">Aggiorna le release GitHub senza uscire dalle Impostazioni</string>
+    <string name="update_checking">Controllo in corso…</string>
+    <string name="update_check_action">Aggiorna</string>
+    <string name="app_up_to_date">MusikKu è aggiornato</string>
+    <string name="app_update_check_failed">Impossibile controllare gli aggiornamenti. Controlla la connessione e riprova.</string>
     <string name="software_update">Aggiornamento software</string>
     <string name="update_available_body">MusikKu %1$s è disponibile per il download.</string>
     <string name="update_downloading_body">Download di MusikKu %1$s in corso…</string>
@@ -1276,6 +1282,13 @@
     <string name="search_source_addons">Addon</string>
     <string name="search_addons_none">Nessun addon attivo. Aggiungine uno in Impostazioni → Fonti.</string>
     <string name="app_icon">Icona dell’app</string>
+    <string name="app_icon_monochrome">Icona principale\nMonocromatica</string>
+    <string name="app_icon_liquid_glass">Vetro\nChiaro</string>
+    <string name="app_icon_liquid_glass_dark">Vetro\nScuro</string>
+    <string name="app_icon_liquid_glass_clear">Vetro\nTrasparente</string>
+    <string name="app_icon_neon_silver">Neon\nArgento</string>
+    <string name="app_icon_neon_cyan">Neon\nCiano</string>
+    <string name="app_icon_neon_violet">Neon\nViola</string>
     <string name="app_icon_default">Predefinita</string>
     <string name="show_queue_history">Mostra cronologia della coda</string>
     <string name="show_queue_history_subtitle">Mostra fino a 25 brani riprodotti sopra «In riproduzione» nella coda</string>

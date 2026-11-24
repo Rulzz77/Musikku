@@ -47,7 +47,7 @@
 
 **MusikKu** is an independent Android music player that brings online music discovery and local audio playback together with tools for organising playlists, understanding listening habits, and managing an offline library.
 
-> **Current source version:** `0.1.71` (`versionCode 72`). The Download section always links to the latest release that has actually been published.
+> **Current source version:** `0.1.72` (`versionCode 73`). The Download section always links to the latest release that has actually been published.
 
 The Android application is built with **Kotlin and Jetpack Compose**. The repository also contains shared Kotlin modules, Android TV and Wear OS targets, a Go service for Listen Together, and a web player with a companion browser extension.
 
@@ -97,6 +97,7 @@ Availability and playback behaviour depend on the selected source, account state
 - Sort and organise playlists, manage tracks individually or in batches, and customise playlist artwork.
 - Like or unlike tracks by double-tapping their artwork in Library track lists, playlist and album track lists, and search results.
 - On the expanded Player Page, double-tap anywhere in the large artwork area — including the surrounding space around the cover — to Like or unlike the currently playing track. Like plays an animated heart burst; Unlike flashes a centre crack and splits the heart into two halves that move apart and fade. The existing Like control beside the track details remains available.
+- Show a persistent pink heart with a green check in the top-right corner of the expanded Player Page artwork while the current track is liked. The marker fades out when the track is unliked and works for locally saved guest Likes as well as signed-in YouTube Music Likes.
 - Guest users can Like and unlike streamed tracks without signing in. Double-tapping the expanded Player Page artwork gives the same Like burst or split-heart Unlike animation and haptic feedback. These Likes are saved locally in **Local Music → Playlists → Liked** by track video ID and stay on that device; they do not change the user's YouTube Music account. Signed-in Likes continue to sync through YouTube Music.
 - Keep local listening statistics and revisit recently played or favourite music.
 

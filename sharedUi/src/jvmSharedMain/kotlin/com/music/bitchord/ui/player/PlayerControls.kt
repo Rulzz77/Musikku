@@ -746,10 +746,10 @@ private const val CIRCLE_DISC_DODGE_GAIN = 2.5f
 /**
  * Translucent circular button used for the track menu and the like control.
  *
- * [active] brightens the disc rather than only the glyph: this sits on album
- * artwork of any colour, and a white icon on a white-ish sleeve has no tint
- * change left to make. The filled star carries the state as a shape too —
- * see [BitChordIcons.StarFilled].
+ * [active] brightens the translucent disc, while [tint] lets stateful
+ * controls follow the current theme accent without losing contrast over artwork.
+ * The same glass-like chrome treatment is shared by the Player Page's Like and
+ * overflow controls.
  */
 @Composable
 internal fun CircleGlyph(
@@ -757,6 +757,7 @@ internal fun CircleGlyph(
     contentDescription: String,
     onClick: () -> Unit,
     active: Boolean = false,
+    tint: Color = Color.White,
     haptic: Haptic = Haptic.Tap,
     modifier: Modifier = Modifier,
 ) {
@@ -802,7 +803,7 @@ internal fun CircleGlyph(
             Icon(
                 imageVector = glyph,
                 contentDescription = contentDescription,
-                tint = Color.White,
+                tint = tint,
                 modifier = Modifier.size(19.dp),
             )
         }

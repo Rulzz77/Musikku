@@ -104,6 +104,12 @@
     <string name="no_dolby_atmos">इस डिवाइस पर कोई Dolby Atmos पैनल नहीं है</string>
     <string name="dolby_atmos_open_failed">Dolby Atmos सेटिंग्स नहीं खोली जा सकीं</string>
     <string name="update_available">अपडेट उपलब्ध है: v%1$s</string>
+    <string name="check_for_updates">अपडेट देखें</string>
+    <string name="check_for_updates_subtitle">सेटिंग्स छोड़े बिना GitHub Releases रीफ़्रेश करें</string>
+    <string name="update_checking">जाँच हो रही है…</string>
+    <string name="update_check_action">रीफ़्रेश करें</string>
+    <string name="app_up_to_date">MusikKu अप टू डेट है</string>
+    <string name="app_update_check_failed">अपडेट की जाँच नहीं हो सकी। अपना कनेक्शन जाँचें और फिर कोशिश करें।</string>
     <string name="software_update">सॉफ़्टवेयर अपडेट</string>
     <string name="update_available_body">MusikKu %1$s डाउनलोड के लिए उपलब्ध है।</string>
     <string name="update_downloading_body">MusikKu %1$s डाउनलोड हो रहा है…</string>

@@ -1322,7 +1322,14 @@
     <string name="search_source_addons">Addon</string>
     <string name="search_addons_none">Tidak ada addon yang aktif. Tambahkan satu di Pengaturan → Sumber.</string>
     <string name="app_icon">Ikon aplikasi</string>
-    <string name="app_icon_default">Bawaan</string>
+<string name="app_icon_neon_violet">Neon\nViolet</string>
+<string name="app_icon_neon_cyan">Neon\nCyan</string>
+<string name="app_icon_neon_silver">Neon\nSilver</string>
+<string name="app_icon_liquid_glass_clear">Glass\nClear</string>
+<string name="app_icon_liquid_glass_dark">Glass\nGelap</string>
+<string name="app_icon_liquid_glass">Glass\nTerang</string>
+<string name="app_icon_monochrome">Ikon utama\nMonochrome</string>
+<string name="app_icon_default">Ikon utama\nDefault</string>
     <string name="show_queue_history">Tampilkan riwayat antrean</string>
     <string name="show_queue_history_subtitle">Menampilkan hingga 25 lagu yang sudah diputar di atas “Sedang diputar” di antrean</string>
     <string name="not_enough_this_week">Putar beberapa lagu lagi minggu ini untuk membuka Replay Anda.</string>

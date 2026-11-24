@@ -1343,6 +1343,13 @@
     <string name="search_source_addons">ऐडऑन</string>
     <string name="search_addons_none">कोई ऐडऑन चालू नहीं है। सेटिंग → स्रोत में जाकर एक जोड़ें।</string>
     <string name="app_icon">ऐप आइकन</string>
+    <string name="app_icon_monochrome">मुख्य आइकन\nमोनोक्रोम</string>
+    <string name="app_icon_liquid_glass">ग्लास\nहल्का</string>
+    <string name="app_icon_liquid_glass_dark">ग्लास\nगहरा</string>
+    <string name="app_icon_liquid_glass_clear">ग्लास\nक्लियर</string>
+    <string name="app_icon_neon_silver">नियॉन\nसिल्वर</string>
+    <string name="app_icon_neon_cyan">नियॉन\nसायन</string>
+    <string name="app_icon_neon_violet">नियॉन\nवायलेट</string>
     <string name="app_icon_default">डिफ़ॉल्ट</string>
     <string name="show_queue_history">कतार का इतिहास दिखाएँ</string>
     <string name="show_queue_history_subtitle">कतार में “अभी चल रहा है” के ऊपर पहले चले 25 तक गाने दिखाएँ</string>

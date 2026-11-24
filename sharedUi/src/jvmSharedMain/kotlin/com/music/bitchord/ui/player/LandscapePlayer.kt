@@ -414,7 +414,6 @@ internal fun LandscapeMainPane(
 @Composable
 internal fun LandscapeCredits(
     song: Song,
-    signedIn: Boolean,
     likeStatus: LikeStatus,
     /** The menu glyph is briefly the undo arrow after a quality upgrade. */
     showRevertCue: Boolean,
@@ -464,21 +463,20 @@ internal fun LandscapeCredits(
             }
         }
         Spacer(Modifier.width(10.dp))
-        // Same gate as the portrait player's: no account to like against for a
-        // guest — but a local file or a finished download is liked on the
-        // device, which needs none.
-        if (signedIn || song.localUri != null) {
+        // Keep Like beside the overflow control and available for guests too.
+        if (!showRevertCue && (song.videoId.isNotBlank() || song.localUri != null)) {
             val liked = likeStatus == LikeStatus.LIKE
             CircleGlyph(
-                icon = if (liked) BitChordIcons.StarFilled else BitChordIcons.Star,
+                icon = if (liked) BitChordIcons.HeartFilled else BitChordIcons.Heart,
                 contentDescription = stringResource(
                     if (liked) Res.string.remove_from_liked else Res.string.like,
                 ),
                 onClick = onToggleLike,
                 active = liked,
+                tint = if (liked) MaterialTheme.colorScheme.primary else chromeWhite(0.82f),
                 haptic = if (liked) Haptic.ToggleOff else Haptic.ToggleOn,
             )
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(4.dp))
         }
         CircleGlyph(
             icon = if (showRevertCue) Icons.AutoMirrored.Rounded.Undo else Icons.Rounded.MoreHoriz,

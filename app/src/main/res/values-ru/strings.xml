@@ -1375,6 +1375,13 @@
     <string name="search_source_addons">Аддоны</string>
     <string name="search_addons_none">Нет включённых аддонов. Добавьте аддон в Настройки → Источники.</string>
     <string name="app_icon">Значок приложения</string>
+    <string name="app_icon_monochrome">Основной значок\nМонохромный</string>
+    <string name="app_icon_liquid_glass">Стекло\nСветлое</string>
+    <string name="app_icon_liquid_glass_dark">Стекло\nТёмное</string>
+    <string name="app_icon_liquid_glass_clear">Стекло\nПрозрачное</string>
+    <string name="app_icon_neon_silver">Неон\nСеребряный</string>
+    <string name="app_icon_neon_cyan">Неон\nГолубой</string>
+    <string name="app_icon_neon_violet">Неон\nФиолетовый</string>
     <string name="app_icon_default">По умолчанию</string>
     <string name="show_queue_history">Показывать историю очереди</string>
     <string name="show_queue_history_subtitle">Показывать в очереди до 25 ранее прослушанных треков над текущим</string>

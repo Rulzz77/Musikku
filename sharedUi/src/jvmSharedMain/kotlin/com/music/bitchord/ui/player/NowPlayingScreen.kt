@@ -4137,7 +4137,7 @@ fun NowPlayingScreen(
                                     ),
                                     onClick = onToggleLike,
                                     active = liked,
-                                    tint = if (liked) MaterialTheme.colorScheme.primary else chromeWhite(0.82f),
+                                    tint = if (liked) Color(0xFFFF4B5C) else Color.White,
                                     haptic = if (liked) Haptic.ToggleOff else Haptic.ToggleOn,
                                 )
                                 Spacer(Modifier.width(4.dp))

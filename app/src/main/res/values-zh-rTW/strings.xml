@@ -99,6 +99,12 @@
     <string name="no_dolby_atmos">此裝置沒有杜比全景聲面板</string>
     <string name="dolby_atmos_open_failed">無法開啟杜比全景聲設定</string>
     <string name="update_available">有可用更新：v%1$s</string>
+    <string name="check_for_updates">檢查更新</string>
+    <string name="check_for_updates_subtitle">不離開設定即可重新整理 GitHub Releases</string>
+    <string name="update_checking">正在檢查…</string>
+    <string name="update_check_action">重新整理</string>
+    <string name="app_up_to_date">MusikKu 已是最新版本</string>
+    <string name="app_update_check_failed">無法檢查更新。請檢查網路連線後再試一次。</string>
     <string name="software_update">軟體更新</string>
     <string name="update_available_body">MusikKu %1$s 現已可供下載。</string>
     <string name="update_downloading_body">正在下載 MusikKu %1$s…</string>

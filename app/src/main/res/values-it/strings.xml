@@ -1282,6 +1282,13 @@
     <string name="search_source_addons">Addon</string>
     <string name="search_addons_none">Nessun addon attivo. Aggiungine uno in Impostazioni → Fonti.</string>
     <string name="app_icon">Icona dell’app</string>
+    <string name="app_icon_monochrome">Icona principale\nMonocromatica</string>
+    <string name="app_icon_liquid_glass">Vetro\nChiaro</string>
+    <string name="app_icon_liquid_glass_dark">Vetro\nScuro</string>
+    <string name="app_icon_liquid_glass_clear">Vetro\nTrasparente</string>
+    <string name="app_icon_neon_silver">Neon\nArgento</string>
+    <string name="app_icon_neon_cyan">Neon\nCiano</string>
+    <string name="app_icon_neon_violet">Neon\nViola</string>
     <string name="app_icon_default">Predefinita</string>
     <string name="show_queue_history">Mostra cronologia della coda</string>
     <string name="show_queue_history_subtitle">Mostra fino a 25 brani riprodotti sopra «In riproduzione» nella coda</string>

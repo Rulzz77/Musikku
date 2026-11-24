@@ -114,6 +114,12 @@
     <string name="no_dolby_atmos">На этом устройстве нет панели Dolby Atmos</string>
     <string name="dolby_atmos_open_failed">Не удалось открыть настройки Dolby Atmos</string>
     <string name="update_available">Доступно обновление: v%1$s</string>
+    <string name="check_for_updates">Проверить обновления</string>
+    <string name="check_for_updates_subtitle">Обновить релизы GitHub, не выходя из настроек</string>
+    <string name="update_checking">Проверка…</string>
+    <string name="update_check_action">Обновить</string>
+    <string name="app_up_to_date">Установлена последняя версия MusikKu</string>
+    <string name="app_update_check_failed">Не удалось проверить обновления. Проверьте подключение и попробуйте снова.</string>
     <string name="software_update">Обновление ПО</string>
     <string name="update_available_body">MusikKu %1$s доступен для загрузки.</string>
     <string name="update_downloading_body">Загрузка MusikKu %1$s…</string>

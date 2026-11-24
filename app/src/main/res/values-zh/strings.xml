@@ -1314,6 +1314,13 @@
     <string name="search_source_addons">插件</string>
     <string name="search_addons_none">未启用任何插件。请在“设置 → 音源”中添加。</string>
     <string name="app_icon">应用图标</string>
+    <string name="app_icon_monochrome">主图标\n单色</string>
+    <string name="app_icon_liquid_glass">玻璃\n浅色</string>
+    <string name="app_icon_liquid_glass_dark">玻璃\n深色</string>
+    <string name="app_icon_liquid_glass_clear">玻璃\n清透</string>
+    <string name="app_icon_neon_silver">霓虹\n银色</string>
+    <string name="app_icon_neon_cyan">霓虹\n青色</string>
+    <string name="app_icon_neon_violet">霓虹\n紫色</string>
     <string name="app_icon_default">默认</string>
     <string name="show_queue_history">显示队列历史</string>
     <string name="show_queue_history_subtitle">在队列中“正在播放”上方显示最多 25 首已播放的歌曲</string>

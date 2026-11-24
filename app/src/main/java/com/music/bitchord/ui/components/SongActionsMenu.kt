@@ -80,10 +80,10 @@ import java.util.Locale
  * what the menu is opened for; the queue and navigation rows below it were
  * always the fallback for "I meant to do something with this song".
  *
- * Account-only actions are hidden when [signedIn] is false. Add to playlist
- * always uses the device-owned [com.music.bitchord.data.OfflinePlaylists]
- * store, so both YouTube tracks and device files can be saved without Google
- * sign-in.
+ * Account-only actions are hidden when [signedIn] is false. The Like quick
+ * action is available to guests too and stores streamed tracks in the device-owned
+ * [com.music.bitchord.data.OfflinePlaylists] store. Add to playlist uses that
+ * same store, so neither action needs Google sign-in.
  *
  * [showSleepTimer] and [onShare] are the player's extras: a sleep timer isn't a
  * property of some row in a list, so it only appears where it means something.
@@ -205,16 +205,17 @@ fun SongActionsMenu(
         var drawnAny = false
         fun startsGroup(): Boolean = drawnAny.also { drawnAny = true }
         val canRate = isOffline || signedIn
+        val canLike = isOffline || song.videoId.isNotBlank()
         val shareAction = onShare?.takeIf { !isOffline }
 
         // Leads with the actions it is opened for most, as tiles: the rating
         // — kept up after a tap, so the new state shows in place — and Share.
-        if (canRate || shareAction != null) {
+        if (canLike || shareAction != null) {
             if (startsGroup()) IosMenuSeparator()
             IosMenuQuickActions {
-                if (canRate) {
+                if (canLike) {
                     IosMenuQuickAction(
-                        icon = if (liked) SfIcons.StarFill else SfIcons.Star,
+                        icon = if (liked) SfIcons.HeartFill else SfIcons.Heart,
                         label = stringResource(R.string.like),
                         tint = if (liked) palette.accent else null,
                         onClick = onToggleLike,

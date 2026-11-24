@@ -1344,6 +1344,13 @@
     <string name="search_source_addons">Addons</string>
     <string name="search_addons_none">Aucun addon n\'est activé. Ajoutez-en un dans Réglages → Sources.</string>
     <string name="app_icon">Icône de l\'app</string>
+    <string name="app_icon_monochrome">Icône principale\nMonochrome</string>
+    <string name="app_icon_liquid_glass">Verre\nClair</string>
+    <string name="app_icon_liquid_glass_dark">Verre\nSombre</string>
+    <string name="app_icon_liquid_glass_clear">Verre\nTransparent</string>
+    <string name="app_icon_neon_silver">Néon\nArgent</string>
+    <string name="app_icon_neon_cyan">Néon\nCyan</string>
+    <string name="app_icon_neon_violet">Néon\nViolet</string>
     <string name="app_icon_default">Par défaut</string>
     <string name="show_queue_history">Afficher l\'historique de la file</string>
     <string name="show_queue_history_subtitle">Affiche jusqu\'à 25 titres déjà écoutés au-dessus de « En cours de lecture » dans la file</string>

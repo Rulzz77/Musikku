@@ -1260,6 +1260,13 @@
     <string name="search_source_addons">Addon</string>
     <string name="search_addons_none">Chưa bật addon nào. Hãy thêm một addon trong Cài đặt → Nguồn.</string>
     <string name="app_icon">Biểu tượng ứng dụng</string>
+    <string name="app_icon_monochrome">Biểu tượng chính\nĐơn sắc</string>
+    <string name="app_icon_liquid_glass">Kính\nSáng</string>
+    <string name="app_icon_liquid_glass_dark">Kính\nTối</string>
+    <string name="app_icon_liquid_glass_clear">Kính\nTrong</string>
+    <string name="app_icon_neon_silver">Neon\nBạc</string>
+    <string name="app_icon_neon_cyan">Neon\nCyan</string>
+    <string name="app_icon_neon_violet">Neon\nTím</string>
     <string name="app_icon_default">Mặc định</string>
     <string name="show_queue_history">Hiện lịch sử hàng đợi</string>
     <string name="show_queue_history_subtitle">Hiện tối đa 25 bài đã phát phía trên “Đang phát” trong hàng đợi</string>

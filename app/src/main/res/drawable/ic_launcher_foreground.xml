@@ -5,9 +5,9 @@
     android:viewportHeight="108">
     
     
-    <path android:pathData="M24,28 V78" android:strokeColor="#18D5E8" android:strokeWidth="6" android:strokeLineCap="round" />
-    <path android:pathData="M39,42 V78" android:strokeColor="#4FA8EC" android:strokeWidth="6" android:strokeLineCap="round" />
-    <path android:pathData="M54,33 V78" android:strokeColor="#9177F4" android:strokeWidth="6" android:strokeLineCap="round" />
-    <path android:pathData="M69,47 V78" android:strokeColor="#B078EA" android:strokeWidth="6" android:strokeLineCap="round" />
-    <path android:pathData="M84,27 V78" android:strokeColor="#18D5E8" android:strokeWidth="6" android:strokeLineCap="round" />
+    <path android:pathData="M30,39 V74" android:strokeColor="#18D5E8" android:strokeWidth="5.5" android:strokeLineCap="round" />
+    <path android:pathData="M42,48 V74" android:strokeColor="#4FA8EC" android:strokeWidth="5.5" android:strokeLineCap="round" />
+    <path android:pathData="M54,30 V74" android:strokeColor="#9177F4" android:strokeWidth="5.5" android:strokeLineCap="round" />
+    <path android:pathData="M66,43 V74" android:strokeColor="#B078EA" android:strokeWidth="5.5" android:strokeLineCap="round" />
+    <path android:pathData="M78,35 V74" android:strokeColor="#18D5E8" android:strokeWidth="5.5" android:strokeLineCap="round" />
 </vector>

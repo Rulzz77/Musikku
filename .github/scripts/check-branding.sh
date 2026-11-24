@@ -25,7 +25,7 @@ if grep -nE '<title>BitChord|flutter_application_5|A new Flutter project' \
   fail "Legacy product branding remains in web/PWA metadata."
 fi
 
-# The 24 launcher aliases must use the new vector layers, not old PNG mipmaps.
+# The eight selectable launcher aliases must use the new vector layers, not old PNG mipmaps.
 if grep -RInE '@mipmap/ic_[A-Za-z0-9_]+_(foreground|background)' \
   app/src/main/res/mipmap-anydpi 2>/dev/null; then
   fail "An adaptive launcher icon still points at a legacy mipmap image."
@@ -62,5 +62,42 @@ test -f web/app/public/favicon.svg || fail "Missing web brand source SVG."
 grep -q "favicon.svg" web/extension/scripts/gen-icons.mjs || fail "Browser/store icon generator is not using the MusikKu source SVG."
 grep -q "playStorePath" web/extension/scripts/gen-icons.mjs || fail "Play Store artwork generation is missing."
 grep -q "pnpm run icons && wxt build" web/extension/package.json || fail "Extension builds do not regenerate branded icons."
+
+
+# All visible MusikKu brand surfaces use the same five-bar equalizer, not the
+# retired M/music-note monogram. Keep Android, Wear OS, TV, SVG and web assets aligned.
+legacy_logo_files=(
+  app/src/main/res/drawable/ic_logo.xml
+  app/src/main/res/drawable/ic_notification_logo.xml
+  sharedUi/src/commonMain/composeResources/drawable/ic_logo.xml
+  wearos/src/main/res/drawable/ic_logo.xml
+  wearos/src/main/res/drawable/ic_launcher_foreground.xml
+  wearos/src/main/res/drawable/ic_musikku_monochrome.xml
+  tv/src/main/res/drawable/tv_banner.xml
+  app/src/main/assets/Logo.svg
+  app/src/main/assets/LogoTransparent.svg
+  Logo.svg
+  web/app/public/favicon.svg
+  web/app/src/assets/logo-mark.svg
+)
+if grep -nE 'M25,78 V35|M25 78V35|M120 369V166|M45,63 V80|M45 63V80|M256,73v92' "${legacy_logo_files[@]}"; then
+  fail "A product surface still contains the retired M/music-note logo."
+fi
+
+for file in \
+  app/src/main/res/drawable/ic_logo.xml \
+  app/src/main/res/drawable/ic_notification_logo.xml \
+  sharedUi/src/commonMain/composeResources/drawable/ic_logo.xml \
+  wearos/src/main/res/drawable/ic_logo.xml
+do
+  grep -q 'M30,39 V74' "$file" || fail "The equalizer brand mark is missing from $file."
+done
+
+for file in \
+  app/src/main/assets/LogoTransparent.svg \
+  web/app/src/assets/logo-mark.svg
+do
+  grep -q 'M30 39V74' "$file" || fail "The equalizer SVG mark is missing from $file."
+done
 
 echo "MusikKu branding and icon audit passed."

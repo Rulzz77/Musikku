@@ -338,7 +338,6 @@
     <string name="app_icon_neon_cyan">네온\n시안</string>
     <string name="app_icon_neon_violet">네온\n바이올렛</string>
     <string name="app_icon_default">기본값</string>
-    <string name="app_icon_liquid_glass" translatable="false">Liquid Glass</string>
     <string name="app_icon_liquid_glass_dark" translatable="false">Liquid Glass Dark</string>
     <string name="app_icon_liquid_glass_clear" translatable="false">Liquid Glass Clear</string>
     <string name="app_icon_liquid_glass_clear_dark" translatable="false">Liquid Glass Clear Dark</string>

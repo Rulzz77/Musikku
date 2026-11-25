@@ -1541,4 +1541,5 @@
     <string name="automix_art_transition_subtitle">Mezcla suavemente las portadas entre canciones durante AutoMix.</string>
     <string name="automix_mini_art_transition">Transición de portada del minirreproductor</string>
     <string name="automix_mini_art_transition_subtitle">Muestra las transiciones de portada en el minirreproductor durante AutoMix.</string>
+    <string name="listen_together_invalid_qr">Este código QR no es una invitación válida para escuchar juntos.</string>
 </resources>

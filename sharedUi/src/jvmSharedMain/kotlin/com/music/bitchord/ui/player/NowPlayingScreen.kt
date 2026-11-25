@@ -2161,7 +2161,9 @@ fun NowPlayingScreen(
                         ),
                 )
 
-                val coverSize = (maxHeight - 140.dp).coerceIn(120.dp, 220.dp)
+                // Leave room for the always-available transport beneath the track details.
+                val coverSize = (maxHeight - 236.dp).coerceIn(104.dp, 176.dp)
+                val coverColumnWidth = maxOf(188.dp, coverSize)
                 Row(
                     modifier = Modifier
                         .fillMaxSize()
@@ -2170,7 +2172,7 @@ fun NowPlayingScreen(
                 ) {
                     Column(
                         modifier = Modifier
-                            .width(coverSize)
+                            .width(coverColumnWidth)
                             .fillMaxHeight(),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
@@ -2211,6 +2213,23 @@ fun NowPlayingScreen(
                                 overflow = TextOverflow.Ellipsis,
                                 textAlign = TextAlign.Center,
                                 modifier = Modifier.padding(top = 4.dp),
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 12.dp),
+                        ) {
+                            TransportRow(
+                                isPlaying = isPlaying,
+                                isLoading = isLoading || audioVersionSwitching,
+                                previousEnabled = !controlsLocked &&
+                                    (canSkipPrevious || pastRestartPoint),
+                                nextEnabled = !controlsLocked && canSkipNext,
+                                onPrevious = onPrevious,
+                                onPlayPause = onPlayPause,
+                                onNext = onNext,
+                                compact = true,
                             )
                         }
                         Spacer(Modifier.weight(1f))
@@ -4344,6 +4363,20 @@ fun NowPlayingScreen(
                                 )
                                 Spacer(Modifier.width(4.dp))
                             }
+                            // Keep portrait fullscreen beside the other player actions.
+                            // It no longer floats over the lyrics or steals space from the text.
+                            if (
+                                lyricsOpen && collapseDone && lyricsControlsOpen &&
+                                !lyricsFullscreen && !sideways && !lyricPicker.picking
+                            ) {
+                                CircleGlyph(
+                                    icon = Icons.Rounded.Fullscreen,
+                                    contentDescription = stringResource(Res.string.lyrics_fullscreen),
+                                    onClick = enterLyricsFullscreen,
+                                    tint = Color.White,
+                                )
+                                Spacer(Modifier.width(4.dp))
+                            }
                             CircleGlyph(
                                 icon = when {
                                     showRevertCue -> Icons.AutoMirrored.Rounded.Undo
@@ -4420,21 +4453,6 @@ fun NowPlayingScreen(
                                         modifier = Modifier.fillMaxSize(),
                                     )
                                 }
-                            if (lyricsPanelVisible && lyricsControlsOpen && !lyricsFullscreen && !lyricPicker.picking) {
-                                CircleGlyph(
-                                    icon = Icons.Rounded.Fullscreen,
-                                    contentDescription = stringResource(Res.string.lyrics_fullscreen),
-                                    onClick = {
-                                        lyricsControlsOpen = true
-                                        enterLyricsFullscreen()
-                                    },
-                                    tint = Color.White,
-                                    modifier = Modifier
-                                        .align(Alignment.TopEnd)
-                                        .padding(top = HEADER_HEIGHT + 12.dp, end = 18.dp),
-                                )
-                            }
-
                             // Floated over the foot of the lyrics rather than placed in
                             // the controls below them. In the controls it was a row of
                             // layout like any other, and the bottom block is measured at

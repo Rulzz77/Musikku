@@ -1526,4 +1526,5 @@
     <string name="automix_art_transition_subtitle">AutoMix sırasında parçalar arasında kapak görsellerini yumuşak biçimde harmanlar.</string>
     <string name="automix_mini_art_transition">Mini oynatıcı kapak geçişi</string>
     <string name="automix_mini_art_transition_subtitle">AutoMix sırasında mini oynatıcıda kapak geçişlerini gösterir.</string>
+    <string name="listen_together_invalid_qr">Bu QR kodu, Birlikte Dinle için geçerli bir davet değil.</string>
 </resources>

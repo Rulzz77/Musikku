@@ -1569,4 +1569,5 @@
     <string name="automix_art_transition_subtitle">Blendet die Cover während AutoMix sanft zwischen den Titeln über.</string>
     <string name="automix_mini_art_transition">Cover-Übergang im Mini-Player</string>
     <string name="automix_mini_art_transition_subtitle">Zeigt während AutoMix Cover-Übergänge im Mini-Player.</string>
+    <string name="listen_together_invalid_qr">Dieser QR-Code ist keine gültige Einladung zum gemeinsamen Hören.</string>
 </resources>

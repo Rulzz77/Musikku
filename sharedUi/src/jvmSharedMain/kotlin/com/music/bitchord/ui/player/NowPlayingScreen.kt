@@ -1061,6 +1061,7 @@ fun NowPlayingScreen(
     lyricsSource: LyricsSource?,
     lyricsProviderStates: Map<LyricsSource, LyricsProviderState>,
     onSelectLyricsProvider: (LyricsSource) -> Unit,
+    onReloadLyrics: () -> Unit = {},
     lyricsUnavailable: Boolean,
     lyricsOffsetOpen: Boolean,
     onDismissLyricsOffset: () -> Unit,
@@ -2017,7 +2018,10 @@ fun NowPlayingScreen(
                 hazeState = playerHaze,
                 currentSource = lyricsSource,
                 states = lyricsProviderStates,
+                trackId = song.videoId,
+                trackTitle = song.title,
                 onSelect = onSelectLyricsProvider,
+                onImportedTtml = onReloadLyrics,
                 onDismiss = { showLyricsProviders = false },
             )
         }

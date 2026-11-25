@@ -1486,4 +1486,5 @@
     <string name="automix_art_transition_subtitle">Chuyển đổi ảnh bìa mượt mà giữa các bài hát trong AutoMix.</string>
     <string name="automix_mini_art_transition">Chuyển cảnh ảnh bìa ở trình phát thu nhỏ</string>
     <string name="automix_mini_art_transition_subtitle">Hiển thị hiệu ứng chuyển ảnh bìa trong trình phát thu nhỏ khi dùng AutoMix.</string>
+    <string name="listen_together_invalid_qr">Mã QR này không phải là lời mời nghe cùng hợp lệ.</string>
 </resources>

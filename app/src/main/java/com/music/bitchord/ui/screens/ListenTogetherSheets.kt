@@ -25,6 +25,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -434,6 +435,7 @@ internal fun JoinPartySheet(
     enabled: Boolean,
     error: String?,
     onSubmit: () -> Unit,
+    onScanQr: () -> Unit,
 ) {
     Column(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
@@ -450,7 +452,21 @@ internal fun JoinPartySheet(
             enabled = enabled && !busy,
             onSubmit = onSubmit,
         )
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(8.dp))
+        TextButton(
+            onClick = onScanQr,
+            enabled = enabled && !busy,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Icon(
+                Icons.Rounded.QrCodeScanner,
+                contentDescription = null,
+                modifier = Modifier.size(19.dp),
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(stringResource(R.string.listen_together_scan_qr))
+        }
+        Spacer(Modifier.height(12.dp))
         Button(
             onClick = onSubmit,
             enabled = enabled && !busy && code.length == ListenTogether.CODE_LENGTH,

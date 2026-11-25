@@ -67,6 +67,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Undo
 import androidx.compose.material.icons.rounded.FastForward
 import androidx.compose.material.icons.rounded.FastRewind
+import androidx.compose.material.icons.rounded.Fullscreen
+import androidx.compose.material.icons.rounded.FullscreenExit
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.IosShare
 import androidx.compose.material.icons.rounded.MoreHoriz
@@ -150,6 +152,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.isSpecified
 import androidx.compose.ui.unit.lerp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import coil3.compose.AsyncImage
 import com.music.bitchord.ui.components.ExplicitBadge
 import com.music.bitchord.ui.components.VideoThumbnails
@@ -1256,6 +1260,7 @@ fun NowPlayingScreen(
     var lyricsOpen by remember {
         mutableStateOf(restoredPlayerScreen == LastPlayerScreen.LYRICS)
     }
+    var lyricsFullscreen by remember { mutableStateOf(false) }
     val queueSlide = remember { mutableFloatStateOf(0f) }
     // Expensive, song-scoped preparation is deliberately staggered. The small
     // backdrop decode runs after the track hand-off has settled; lyrics and
@@ -1278,7 +1283,12 @@ fun NowPlayingScreen(
     // out never gets a matching "stopped scrolling" event of its own.
     var lyricsScrolling by remember { mutableStateOf(false) }
     var queueScrolling by remember { mutableStateOf(false) }
-    LaunchedEffect(lyricsOpen) { if (!lyricsOpen) lyricsScrolling = false }
+    LaunchedEffect(lyricsOpen) {
+        if (!lyricsOpen) {
+            lyricsScrolling = false
+            lyricsFullscreen = false
+        }
+    }
     LaunchedEffect(queueOpen) { if (!queueOpen) queueScrolling = false }
     val panelScrolling = lyricsScrolling || queueScrolling
     var lyricsControlsOpen by remember {
@@ -1320,6 +1330,7 @@ fun NowPlayingScreen(
         queueOpen = false
     }
     val closeLyrics: () -> Unit = {
+        lyricsFullscreen = false
         lyricsControlsOpen = false
         lyricsOpen = false
     }
@@ -1419,6 +1430,10 @@ fun NowPlayingScreen(
     // Controls being visible must not insert an extra navigation level. Back
     // always leaves lyrics in one step, whether it starts over the lyrics list
     // or over the half-player at the bottom.
+    PlayerBackHandler(enabled = lyricsFullscreen) {
+        lyricsFullscreen = false
+    }
+
     PlayerBackHandler(enabled = lyricsOpen, onBack = closeLyrics)
 
     // Back out of the queue to the player.
@@ -1543,7 +1558,7 @@ fun NowPlayingScreen(
     // Never while a finger is on the scrubber or the volume bar: those are the
     // two controls that are *being used* while nothing else on screen moves,
     // and timing out underneath them would take the thing away mid-gesture.
-    LaunchedEffect(lyricsOpen, lyricsControlsOpen, scrub.scrubbing, volume.dragging) {
+    LaunchedEffect(lyricsOpen, lyricsFullscreen, lyricsControlsOpen, scrub.scrubbing, volume.dragging)
         if (lyricsOpen && lyricsControlsOpen && !scrub.scrubbing && !volume.dragging) {
             delay(LYRICS_CONTROLS_IDLE_MS)
             lyricsControlsOpen = false
@@ -2100,6 +2115,129 @@ fun NowPlayingScreen(
                 image = currentFullArtworkBlurImage.value,
                 modifier = backdropModifier,
             )
+        }
+    }
+
+    // Optional full-screen reader. It reuses the same karaoke playhead and
+    // lyric data as the half-player; the normal layout is left intact underneath.
+    if (lyricsFullscreen && lyricsOpen) {
+        Dialog(
+            onDismissRequest = { lyricsFullscreen = false },
+            properties = DialogProperties(
+                usePlatformDefaultWidth = false,
+                dismissOnClickOutside = false,
+            ),
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black),
+            ) {
+                FullArtworkBlurBackdrop(
+                    image = fullArtworkBlurImage,
+                    modifier = Modifier.fillMaxSize(),
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(
+                                    Color.Black.copy(alpha = 0.34f),
+                                    Color.Black.copy(alpha = 0.78f),
+                                ),
+                            ),
+                        ),
+                )
+                LyricsPanel(
+                    lines = lyrics.orEmpty(),
+                    subLines = lyricsTranslation.subLines,
+                    trackKey = song.videoId,
+                    playhead = lyricsPlayhead,
+                    looking = !lyricsUnavailable,
+                    isPlaying = isPlaying && position.advancing,
+                    active = true,
+                    onSeekToLine = seekToLyric,
+                    controlsOpen = lyricsControlsOpen,
+                    onRevealControls = { lyricsControlsOpen = true },
+                    onHideControls = { lyricsControlsOpen = false },
+                    onScrollingChange = { lyricsScrolling = it },
+                    canPick = lyricsShareEnabled,
+                    picking = lyricPicker.picking,
+                    picked = lyricPicker.picks,
+                    onPickLine = lyricPicker.pick,
+                    onTogglePick = lyricPicker.toggle,
+                    centerFocus = true,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(top = 92.dp, bottom = 64.dp),
+                )
+                if (lyricsControlsOpen) {
+                    Row(
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .fillMaxWidth()
+                            .padding(start = 22.dp, top = 22.dp, end = 18.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                text = song.title,
+                                style = MaterialTheme.typography.titleMedium,
+                                color = Color.White,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                text = song.artist,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.White.copy(alpha = 0.68f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        CircleGlyph(
+                            icon = Icons.Rounded.FullscreenExit,
+                            contentDescription = stringResource(Res.string.lyrics_exit_fullscreen),
+                            onClick = { lyricsFullscreen = false },
+                            tint = Color.White,
+                        )
+                    }
+                    if (lyricPicker.picking) {
+                        LyricsPickBar(
+                            shareEnabled = lyricPicker.picks.isNotEmpty() && !lyricPicker.overBudget,
+                            onCancel = lyricPicker.cancel,
+                            onShare = lyricPicker.share,
+                            modifier = Modifier.align(Alignment.BottomCenter),
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomStart)
+                                .padding(start = 16.dp, bottom = 12.dp),
+                        ) {
+                            RomanizationToggleButton(
+                                state = lyricsTranslation.romanizationState,
+                                showingRomanization = lyricsTranslation.showingRomanization,
+                                enabled = !lyrics.isNullOrEmpty(),
+                                onClick = lyricsTranslation.toggleRomanization,
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(end = 16.dp, bottom = 12.dp),
+                        ) {
+                            TranslationToggleButton(
+                                state = lyricsTranslation.translationState,
+                                showingTranslation = lyricsTranslation.showingTranslation,
+                                enabled = !lyrics.isNullOrEmpty(),
+                                onClick = lyricsTranslation.toggleTranslation,
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -4207,7 +4345,7 @@ fun NowPlayingScreen(
                                         playhead = lyricsPlayhead,
                                         looking = !lyricsUnavailable,
                                         isPlaying = isPlaying && position.advancing,
-                                        active = lyricsPanelVisible,
+                                        active = lyricsPanelVisible && !lyricsFullscreen,
                                         onSeekToLine = seekToLyric,
                                         controlsOpen = lyricsControlsOpen,
                                         onRevealControls = { lyricsControlsOpen = true },
@@ -4222,6 +4360,20 @@ fun NowPlayingScreen(
                                         modifier = Modifier.fillMaxSize(),
                                     )
                                 }
+                            if (lyricsPanelVisible && lyricsControlsOpen && !lyricsFullscreen && !lyricPicker.picking) {
+                                CircleGlyph(
+                                    icon = Icons.Rounded.Fullscreen,
+                                    contentDescription = stringResource(Res.string.lyrics_fullscreen),
+                                    onClick = {
+                                        lyricsControlsOpen = true
+                                        lyricsFullscreen = true
+                                    },
+                                    tint = Color.White,
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .padding(top = HEADER_HEIGHT + 12.dp, end = 18.dp),
+                                )
+                            }
 
                             // Floated over the foot of the lyrics rather than placed in
                             // the controls below them. In the controls it was a row of

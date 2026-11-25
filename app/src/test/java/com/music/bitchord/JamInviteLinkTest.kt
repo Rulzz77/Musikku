@@ -36,14 +36,27 @@ class JamInviteLinkTest {
     }
 
     @Test
-    fun `rejects other hosts schemes paths and malformed codes`() {
+    fun `rejects malformed invite paths while accepting custom server hosts`() {
         assertNull(JamInviteLink.parse("http://bitchord.kushagrasingh.in/invite/ABC123"))
-        assertNull(JamInviteLink.parse("https://example.com/invite/ABC123"))
         assertNull(JamInviteLink.parse("https://bitchord.kushagrasingh.in/"))
         assertNull(JamInviteLink.parse("https://bitchord.kushagrasingh.in/download"))
         assertNull(JamInviteLink.parse("https://bitchord.kushagrasingh.in/invite/ABC123/"))
         assertNull(JamInviteLink.parse("https://bitchord.kushagrasingh.in/invite/ABC123/extra"))
         assertNull(JamInviteLink.parse("https://bitchord.kushagrasingh.in/invite/TOO-LONG"))
+
+        assertEquals(
+            "ABC123",
+            JamInviteLink.parse("https://my-party.onrender.com/invite/ABC123"),
+        )
+    }
+
+    @Test
+    fun `recovers a custom server base path from its QR invite URL`() {
+        val invite = JamInviteLink.parseInvite(
+            "https://listen.example.com/musikku/invite/a1b2c3",
+        )
+        assertEquals("A1B2C3", invite?.code)
+        assertEquals("https://listen.example.com/musikku", invite?.serverUrl)
     }
 
     @Test

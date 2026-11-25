@@ -1431,4 +1431,5 @@
     <string name="auto_backup_no_folder" translatable="false">Choose a Google Drive folder first</string>
     <string name="auto_backup_failed" translatable="false">The last backup failed. Check Drive access and your internet connection</string>
     <string name="auto_backup_last_success" translatable="false">Last backup: %1$s</string>
+    <string name="listen_together_invalid_qr">This is not a valid party invite QR code.</string>
 </resources>

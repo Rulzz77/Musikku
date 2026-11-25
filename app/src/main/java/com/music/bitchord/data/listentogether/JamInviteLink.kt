@@ -67,14 +67,25 @@ object JamInviteLink {
             return ParsedJamInvite(code = code, serverUrl = server)
         }
 
-        // 2. Official web domain: https://bitchord.kushagrasingh.in/invite/<CODE>
-        if (scheme == "https" && host == HOST) {
-            val match = INVITE_PATH.matchEntire(uri.path.orEmpty()) ?: return null
-            val code = match.groupValues[1].uppercase()
+        // 2. Web invite. The official host uses the configured fallback unless
+        // an explicit server parameter is present. Custom servers generate the
+        // same /invite/<CODE> suffix, so the scanner can recover their base URL
+        // instead of accidentally trying to join that code on the default host.
+        if (uri.rawUserInfo != null) return null
+        if (scheme != "https" && scheme != "http") return null
+        if (host == HOST && scheme != "https") return null
+
+        val match = INVITE_PATH.matchEntire(uri.path.orEmpty()) ?: return null
+        val code = match.groupValues[2].uppercase()
+        val basePath = match.groupValues[1].trimEnd('/')
+
+        if (host == HOST && basePath.isEmpty()) {
             return ParsedJamInvite(code = code, serverUrl = server)
         }
 
-        return null
+        val authority = uri.rawAuthority ?: return null
+        val inferredServer = sanitizeServerUrl("$scheme://$authority$basePath") ?: return null
+        return ParsedJamInvite(code = code, serverUrl = server ?: inferredServer)
     }
 
     fun url(code: String, customServer: String? = null): String {
@@ -124,6 +135,6 @@ object JamInviteLink {
         return withScheme
     }
 
-    private val INVITE_PATH = Regex("""/invite/([A-Za-z0-9]{${ListenTogether.CODE_LENGTH}})""")
+    private val INVITE_PATH = Regex("""^(.*)/invite/([A-Za-z0-9]{${ListenTogether.CODE_LENGTH}})$""")
 }
 

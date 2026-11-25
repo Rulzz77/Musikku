@@ -4,6 +4,7 @@ import com.music.bitchord.ui.icons.SfIcons
 import android.content.Intent
 import android.text.format.DateFormat
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -43,6 +44,8 @@ import androidx.compose.material.icons.rounded.Logout
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Share
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -230,6 +233,33 @@ fun ListenTogetherScreen(
         }
     }
 
+    // A QR on the invite sheet must be useful from the other phone too. The
+    // scanner accepts both the six-character fallback and the actual invite URL,
+    // including a custom party server encoded in that URL.
+    val qrScanLauncher = rememberLauncherForActivityResult(
+        contract = ScanContract(),
+    ) { result ->
+        val raw = result.contents?.trim().orEmpty()
+        if (raw.isNotEmpty()) {
+            val invite = JamInviteLink.parseInvite(raw)
+            when {
+                invite != null -> openPartyPreview(invite.code, invite.serverUrl)
+                raw.matches(Regex("[A-Za-z0-9]{${ListenTogether.CODE_LENGTH}}")) ->
+                    openPartyPreview(raw.uppercase(), null)
+                else -> failure = context.getString(R.string.listen_together_invalid_qr)
+            }
+        }
+    }
+    val startQrScan: () -> Unit = {
+        val options = ScanOptions().apply {
+            setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+            setPrompt(context.getString(R.string.listen_together_scan_qr))
+            setBeepEnabled(false)
+            setOrientationLocked(false)
+        }
+        qrScanLauncher.launch(options)
+    }
+
     // A membership outlives the process; the socket does not. Opening it when
     // the screen is looked at — rather than on every cold start — is what keeps
     // a feature nobody is currently using off the radio.
@@ -392,6 +422,7 @@ fun ListenTogetherScreen(
                     enabled = ListenTogether.canJoin() && ListenTogether.hasServer,
                     error = failure,
                     onSubmit = { openPartyPreview(codeInput, null) },
+                    onScanQr = startQrScan,
                 )
 
                 is PartySheet.Confirm -> JoinConfirmSheet(

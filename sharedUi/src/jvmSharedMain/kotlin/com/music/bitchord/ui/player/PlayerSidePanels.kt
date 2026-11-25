@@ -46,6 +46,7 @@ fun LyricsSidePanel(
     lyricsUnavailable: Boolean,
     onSeek: (Long) -> Unit,
     modifier: Modifier = Modifier,
+    onReloadLyrics: () -> Unit = {},
 ) {
     val haptics = rememberHaptics()
     val lyricsOffsetMs by PlayerSettings.lyricsOffsetMs.collectAsStateWithLifecycle()
@@ -128,7 +129,10 @@ fun LyricsSidePanel(
                 hazeState = haze,
                 currentSource = lyricsSource,
                 states = lyricsProviderStates,
+                trackId = song.videoId,
+                trackTitle = song.title,
                 onSelect = onSelectLyricsProvider,
+                onImportedTtml = onReloadLyrics,
                 onDismiss = { showLyricsProviders = false },
             )
         }

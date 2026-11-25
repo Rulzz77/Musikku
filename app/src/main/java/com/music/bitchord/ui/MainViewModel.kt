@@ -34,6 +34,7 @@ import com.music.bitchord.data.spotify.SpotifyImporter
 import com.music.bitchord.data.spotify.isSamePlaylistTrack
 import com.music.bitchord.data.spotify.SpotifyLibrary
 import com.music.bitchord.data.spotify.SpotifyTrack
+import com.music.bitchord.data.lyrics.CommunityTtmlLyricsStore
 import com.music.bitchord.data.lyrics.EmbeddedLyrics
 import com.music.bitchord.data.lyrics.LyricLine
 import com.music.bitchord.data.lyrics.LyricsRepository
@@ -357,6 +358,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val artist: String,
         val durationMs: Long,
         val album: String?,
+        val localUri: String?,
     )
 
     private var currentLyricsRequest: LyricsRequest? = null
@@ -409,7 +411,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         lyricsFor = key
         lyricsGeneration += 1
         val generation = lyricsGeneration
-        currentLyricsRequest = LyricsRequest(videoId, title, artist, durationMs, album)
+        currentLyricsRequest = LyricsRequest(videoId, title, artist, durationMs, album, localUri)
         selectedLyricsSource = null
         manualLyricsJobs.values.forEach(Job::cancel)
         manualLyricsJobs.clear()
@@ -428,6 +430,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
         _lyricsChecked.value = false
         lyricsJob = viewModelScope.launch {
+            // A listener-imported TTML is a deliberate per-track override. It is
+            // parsed locally and stays usable without a lyrics-service request.
+            val communityLyrics = withContext(Dispatchers.IO) {
+                CommunityTtmlLyricsStore.read(getApplication<Application>().filesDir, videoId)
+            }
+            if (communityLyrics != null) {
+                _lyrics.value = communityLyrics
+                _lyricsSource.value = LyricsSource.COMMUNITY_TTML
+                _lyricsChecked.value = true
+                return@launch
+            }
+
             // The file first, and without the duration gate below: a length is
             // only needed to *match* a track against a stranger's database, and
             // nothing is being matched here — these lyrics were written into
@@ -461,6 +475,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             _lyricsSource.value = selected?.source
             _lyricsChecked.value = true
         }
+    }
+
+    /** Re-run the current track's lookup after importing or removing local TTML. */
+    fun reloadCurrentLyrics() {
+        val request = currentLyricsRequest ?: return
+        lyricsFor = null
+        loadLyrics(
+            videoId = request.videoId,
+            title = request.title,
+            artist = request.artist,
+            durationMs = request.durationMs,
+            album = request.album,
+            localUri = request.localUri,
+        )
     }
 
     /**

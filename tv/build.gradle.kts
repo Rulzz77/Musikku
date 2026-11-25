@@ -370,14 +370,13 @@ dependencies {
     implementation("dev.chrisbanes.haze:haze:1.3.1")
     implementation("dev.chrisbanes.haze:haze-materials:1.3.1")
 
-    // ---- QR encoding, for the party invite ----
-    // `core` only: the `android-core`/`zxing-android-embedded` artifacts bring
-    // a camera scanner and an Activity with it, and nothing here reads a code —
-    // a party is joined by tapping somebody else's link or typing six
-    // characters. This produces the bit matrix; the drawing is ours, in
-    // [com.music.bitchord.ui.components.QrCode], so the result is styled like
-    // the rest of the app rather than a stock black-and-white bitmap.
+    // ---- QR encoding and invite scanning ----
+    // TV compiles the phone app's shared ListenTogetherScreen source, so it
+    // needs the scanner API on its classpath as well.
     implementation("com.google.zxing:core:3.5.3")
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
+    add("devImplementation", "com.journeyapps:zxing-android-embedded:4.3.0")
+    add("prodImplementation", "com.journeyapps:zxing-android-embedded:4.3.0")
 
     // ---- Markdown rendering (release notes in the update dialog) ----
     // Pure Compose, not an AndroidView wrapper — needed so the text composes

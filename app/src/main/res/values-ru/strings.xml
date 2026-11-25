@@ -1601,4 +1601,5 @@
     <string name="automix_art_transition_subtitle">Плавно смешивает обложки при переходе между треками во время AutoMix.</string>
     <string name="automix_mini_art_transition">Переход обложек в мини-плеере</string>
     <string name="automix_mini_art_transition_subtitle">Показывает переходы обложек в мини-плеере во время AutoMix.</string>
+    <string name="listen_together_invalid_qr">Этот QR-код не является действительным приглашением для совместного прослушивания.</string>
 </resources>

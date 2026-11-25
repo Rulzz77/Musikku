@@ -378,10 +378,12 @@ class AndroidPlayerHost(context: Context) : PlayerHost {
                                 val removed = withContext(Dispatchers.IO) {
                                     CommunityTtmlLyricsStore.remove(app.filesDir, trackId)
                                 }
-                                hasImported = false
                                 if (removed) {
+                                    hasImported = false
                                     showMessage("Imported TTML removed for $trackTitle")
                                     onImported()
+                                } else {
+                                    showMessage("Could not remove the imported TTML file.")
                                 }
                             }
                         }

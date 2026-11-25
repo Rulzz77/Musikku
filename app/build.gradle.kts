@@ -355,6 +355,9 @@ dependencies {
     // the Activity Result camera scanner used by the joining device.
     implementation("com.google.zxing:core:3.5.3")
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
+    // Keep the scanner on both environment variants (dev/prod).
+    add("devImplementation", "com.journeyapps:zxing-android-embedded:4.3.0")
+    add("prodImplementation", "com.journeyapps:zxing-android-embedded:4.3.0")
 
     // ---- Markdown rendering (release notes in the update dialog) ----
     // Pure Compose, not an AndroidView wrapper — needed so the text composes

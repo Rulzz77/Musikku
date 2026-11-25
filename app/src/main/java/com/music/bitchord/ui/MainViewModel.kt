@@ -421,10 +421,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _lyrics.value = null
         _lyricsSource.value = null
         lyricsJob?.cancel()
-        if (sources.isEmpty()) {
-            // Switched off, or every source unticked. Nothing to look up, and
-            // nothing to say about it — the player drops the lyric strip
-            // rather than reporting a track with no lyrics.
+        if (!AppSettings.syncedLyrics.value) {
+            // The master lyrics switch is off. Local imports and embedded
+            // lyrics respect the same switch as online sources.
             _lyricsChecked.value = true
             return
         }
@@ -455,6 +454,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     _lyricsChecked.value = true
                     return@launch
                 }
+            }
+            if (sources.isEmpty()) {
+                // A local import or embedded lyric still works when every
+                // remote provider is unchecked; no network query is made.
+                _lyricsChecked.value = true
+                return@launch
             }
             if (durationMs <= 0L) {
                 // Duration arrives a beat after the track does; wait for it.

@@ -1552,4 +1552,5 @@
     <string name="automix_art_transition_subtitle">ผสมภาพปกระหว่างเพลงอย่างนุ่มนวลระหว่างใช้ AutoMix</string>
     <string name="automix_mini_art_transition">การเปลี่ยนภาพปกในมินิเพลเยอร์</string>
     <string name="automix_mini_art_transition_subtitle">แสดงการเปลี่ยนภาพปกในมินิเพลเยอร์ระหว่างใช้ AutoMix</string>
+    <string name="listen_together_invalid_qr">QR นี้ไม่ใช่คำเชิญเข้าร่วมฟังเพลงด้วยกันที่ถูกต้อง</string>
 </resources>

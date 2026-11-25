@@ -41,7 +41,7 @@ jobs:
         run: test -n "$(find app/build/outputs/apk/prod/debug -maxdepth 1 -type f -name '*.apk' -print -quit)"
 
       - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: MusikKu-prod-debug-${{ github.run_number }}
           path: app/build/outputs/apk/prod/debug/*.apk

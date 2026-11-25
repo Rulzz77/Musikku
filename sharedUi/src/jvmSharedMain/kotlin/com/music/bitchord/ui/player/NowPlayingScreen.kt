@@ -1558,7 +1558,7 @@ fun NowPlayingScreen(
     // Never while a finger is on the scrubber or the volume bar: those are the
     // two controls that are *being used* while nothing else on screen moves,
     // and timing out underneath them would take the thing away mid-gesture.
-    LaunchedEffect(lyricsOpen, lyricsFullscreen, lyricsControlsOpen, scrub.scrubbing, volume.dragging)
+    LaunchedEffect(lyricsOpen, lyricsFullscreen, lyricsControlsOpen, scrub.scrubbing, volume.dragging) {
         if (lyricsOpen && lyricsControlsOpen && !scrub.scrubbing && !volume.dragging) {
             delay(LYRICS_CONTROLS_IDLE_MS)
             lyricsControlsOpen = false

@@ -1609,4 +1609,5 @@
     <string name="automix_art_transition_subtitle">Płynnie łączy okładki kolejnych utworów podczas AutoMix.</string>
     <string name="automix_mini_art_transition">Przejście okładek w miniodtwarzaczu</string>
     <string name="automix_mini_art_transition_subtitle">Pokazuje przejścia okładek w miniodtwarzaczu podczas AutoMix.</string>
+    <string name="listen_together_invalid_qr">Ten kod QR nie jest prawidłowym zaproszeniem do wspólnego słuchania.</string>
 </resources>

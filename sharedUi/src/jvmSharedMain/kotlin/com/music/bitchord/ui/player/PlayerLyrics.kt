@@ -1797,8 +1797,11 @@ internal fun LyricsPanel(
      * read from its top edge leaves most of the screen below the words.
      */
     centerFocus: Boolean = false,
+    /** Scales lyric typography independently for compact fullscreen layouts. */
+    fontScale: Float = 1f,
     modifier: Modifier = Modifier,
 ) {
+    val lyricFontScale = fontScale.coerceIn(0.65f, 1.15f)
     val panelPlaying = isPlaying && active
     val clock = rememberLyricClock(trackKey, playhead, panelPlaying)
     val subReveal = rememberSubLyricsReveal(subLines, trackKey)
@@ -2227,15 +2230,15 @@ internal fun LyricsPanel(
                 val alignEnd = duet && line.alignment == LyricAlignment.End
                 val style = if (isSynced) {
                     MaterialTheme.typography.headlineLarge.copy(
-                        fontSize = 34.sp,
-                        lineHeight = 41.sp,
+                        fontSize = 34.sp * lyricFontScale,
+                        lineHeight = 41.sp * lyricFontScale,
                         fontWeight = FontWeight.ExtraBold,
                         textAlign = if (alignEnd) TextAlign.End else TextAlign.Start,
                     )
                 } else {
                     MaterialTheme.typography.headlineMedium.copy(
-                        fontSize = 30.sp,
-                        lineHeight = 38.sp,
+                        fontSize = 30.sp * lyricFontScale,
+                        lineHeight = 38.sp * lyricFontScale,
                         fontWeight = FontWeight.ExtraBold,
                         textAlign = if (alignEnd) TextAlign.End else TextAlign.Start,
                     )
@@ -2374,8 +2377,8 @@ internal fun LyricsPanel(
                 // seeks to the same place.
                 val sub = subReveal.lines?.getOrNull(index)
                 val subStyle = style.copy(
-                    fontSize = SUB_LYRIC_FONT_SIZE,
-                    lineHeight = SUB_LYRIC_LINE_HEIGHT,
+                    fontSize = SUB_LYRIC_FONT_SIZE * lyricFontScale,
+                    lineHeight = SUB_LYRIC_LINE_HEIGHT * lyricFontScale,
                     fontWeight = FontWeight.Bold,
                 )
                 // The answering voice is only on screen while it is being sung,
@@ -2479,8 +2482,8 @@ internal fun LyricsPanel(
                                 line = backing.withoutBracketPunctuation(),
                                 clock = clock,
                                 style = voiceStyle(style.copy(
-                                    fontSize = BACKING_FONT_SIZE,
-                                    lineHeight = BACKING_LINE_HEIGHT,
+                                    fontSize = BACKING_FONT_SIZE * lyricFontScale,
+                                    lineHeight = BACKING_LINE_HEIGHT * lyricFontScale,
                                 ), backing.text, alignEnd, duet),
                                 isActive = isActive,
                                 sung = sung,
@@ -2510,8 +2513,8 @@ internal fun LyricsPanel(
                                         line = subBacking.withoutBracketPunctuation(),
                                         clock = clock,
                                         style = voiceStyle(subStyle.copy(
-                                            fontSize = SUB_BACKING_FONT_SIZE,
-                                            lineHeight = SUB_BACKING_LINE_HEIGHT,
+                                            fontSize = SUB_BACKING_FONT_SIZE * lyricFontScale,
+                                            lineHeight = SUB_BACKING_LINE_HEIGHT * lyricFontScale,
                                         ), subBacking.text, alignEnd, duet),
                                         isActive = isActive,
                                         sung = sung,

@@ -1,0 +1,426 @@
+name: MusikKu Android Release
+
+# Simpan sebagai .github/workflows/release-android.yml (menggantikan workflow rilis lama).
+#
+# Cara pakai:
+#   1. Ganti musikkuVersionName di build.gradle.kts (satu-satunya tempat).
+#   2. Commit dan push ke branch main.
+# Workflow akan membaca versi, membuat tag v<versi>, build, lalu publish Release.
+# Kalau tag/release untuk versi itu sudah ada, build dilewati.
+# Build dilewati juga kalau musikkuBetaSuffix tidak kosong (beta sideload manual).
+# musikkuVersionCode tetap diisi manual, tapi harus lebih tinggi dari rilis sebelumnya.
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: musikku-release
+  cancel-in-progress: false
+
+jobs:
+  # ==========================================
+  # JOB 1: BACA VERSI & CEK SUDAH PERNAH RILIS
+  # ==========================================
+  check-version:
+    name: Check version
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+      should_release: ${{ steps.read.outputs.should_release }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read version and check existing release
+        id: read
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          VERSION="$(sed -n 's/.*extra\["musikkuVersionName"][[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' build.gradle.kts | head -n 1)"
+          SUFFIX="$(sed -n 's/.*extra\["musikkuBetaSuffix"][[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' build.gradle.kts | head -n 1)"
+          VERSION_CODE="$(sed -n 's/.*extra\["musikkuVersionCode"][[:space:]]*=[[:space:]]*\([0-9][0-9]*\).*/\1/p' build.gradle.kts | head -n 1)"
+
+          if [[ -z "$VERSION" ]]; then
+            echo "::error::musikkuVersionName not found in build.gradle.kts."
+            exit 1
+          fi
+
+          if [[ -z "$VERSION_CODE" ]]; then
+            echo "::error::musikkuVersionCode not found in build.gradle.kts."
+            exit 1
+          fi
+
+          if ! [[ "$VERSION" =~ ^[0-9]+(\.[0-9]+)*$ ]]; then
+            echo "::error::Invalid version format: $VERSION"
+            exit 1
+          fi
+
+          TAG="v$VERSION"
+          SHOULD_RELEASE=true
+          REASON=""
+
+          # Build beta (sideload manual) tidak dipublish otomatis.
+          if [[ -n "$SUFFIX" ]]; then
+            SHOULD_RELEASE=false
+            REASON="musikkuBetaSuffix is set ($SUFFIX). Beta builds are not published automatically."
+          fi
+
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            SHOULD_RELEASE=false
+            REASON="Tag $TAG already exists."
+          fi
+
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            SHOULD_RELEASE=false
+            REASON="Release $TAG already exists."
+          fi
+
+          # versionCode harus naik dibanding rilis sebelumnya,
+          # kalau tidak Android menolak update.
+          if [[ "$SHOULD_RELEASE" == "true" ]]; then
+            PREV_TAG="$(git tag --list 'v*' --sort=-v:refname | head -n 1)"
+
+            if [[ -n "$PREV_TAG" ]]; then
+              PREV_BUILD="$(git show "$PREV_TAG:build.gradle.kts" 2>/dev/null || true)"
+              PREV_CODE="$(printf '%s\n' "$PREV_BUILD" | sed -n 's/.*extra\["musikkuVersionCode"\][[:space:]]*=[[:space:]]*\([0-9][0-9]*\).*/\1/p' | head -n 1)"
+              if [[ -z "$PREV_CODE" ]]; then
+                # Older release tags keep the pre-rebrand property key.
+                PREV_CODE="$(printf '%s\n' "$PREV_BUILD" | sed -n 's/.*extra\["bitchordVersionCode"\][[:space:]]*=[[:space:]]*\([0-9][0-9]*\).*/\1/p' | head -n 1)"
+              fi
+
+              if [[ -n "$PREV_CODE" && "$VERSION_CODE" -le "$PREV_CODE" ]]; then
+                echo "::error::musikkuVersionCode ($VERSION_CODE) must be higher than $PREV_TAG ($PREV_CODE). Bump it and push again."
+                exit 1
+              fi
+            fi
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "should_release=$SHOULD_RELEASE" >> "$GITHUB_OUTPUT"
+
+          if [[ "$SHOULD_RELEASE" == "true" ]]; then
+            echo "Version $VERSION (code $VERSION_CODE) is new. Release $TAG will be built." | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Build skipped: $REASON" | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+
+  # ==========================================
+  # JOB 2: BUILD & PUBLISH
+  # ==========================================
+  build-release:
+    name: Build and Publish Android + Wear OS
+    needs: check-version
+    if: needs.check-version.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    env:
+      RELEASE_VERSION: ${{ needs.check-version.outputs.version }}
+
+    steps:
+      # ==========================================
+      # 1. CHECKOUT
+      # ==========================================
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # ==========================================
+      # 2. JAVA SETUP
+      # ==========================================
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      # ==========================================
+      # 3. GRADLE SETUP
+      # (Android SDK bawaan runner dipakai; AGP mengunduh sisanya,
+      #  sama seperti workflow "Android Release APK".)
+      # ==========================================
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # ==========================================
+      # 5. LOCAL.PROPERTIES (API key dari secrets)
+      # ==========================================
+      - name: Write local.properties
+        env:
+          LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
+          LASTFM_SECRET: ${{ secrets.LASTFM_SECRET }}
+          LISTEN_TOGETHER_SERVER: ${{ secrets.LISTEN_TOGETHER_SERVER }}
+          ADDON_AUTH_SERVER: ${{ secrets.ADDON_AUTH_SERVER }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            printf 'LASTFM_API_KEY=%s\n' "$LASTFM_API_KEY"
+            printf 'LASTFM_SECRET=%s\n' "$LASTFM_SECRET"
+            printf 'LISTEN_TOGETHER_SERVER=%s\n' "$LISTEN_TOGETHER_SERVER"
+            printf 'ADDON_AUTH_SERVER=%s\n' "$ADDON_AUTH_SERVER"
+          } > local.properties
+
+      # ==========================================
+      # 6. RELEASE SIGNING
+      # ==========================================
+      - name: Prepare and validate release signing
+        shell: bash
+        env:
+          MUSIKKU_KEYSTORE_BASE64: ${{ secrets.MUSIKKU_KEYSTORE_BASE64 || secrets.KEYSTORE_BASE64 }}
+          MUSIKKU_STORE_PASSWORD: ${{ secrets.MUSIKKU_STORE_PASSWORD || secrets.KEYSTORE_PASSWORD }}
+          MUSIKKU_KEY_ALIAS: ${{ secrets.MUSIKKU_KEY_ALIAS || secrets.KEY_ALIAS }}
+          MUSIKKU_KEY_PASSWORD: ${{ secrets.MUSIKKU_KEY_PASSWORD || secrets.KEY_PASSWORD }}
+
+        run: |
+          set -euo pipefail
+
+          for name in \
+            MUSIKKU_KEYSTORE_BASE64 \
+            MUSIKKU_STORE_PASSWORD \
+            MUSIKKU_KEY_ALIAS \
+            MUSIKKU_KEY_PASSWORD
+          do
+            if [[ -z "${!name:-}" ]]; then
+              echo "::error::Missing GitHub secret: $name"
+              exit 1
+            fi
+          done
+
+          # Decode keystore.
+          if ! printf '%s' "$MUSIKKU_KEYSTORE_BASE64" |
+            tr -d '[:space:]' |
+            base64 --decode > musikku-release.jks; then
+
+            echo "::error::Invalid Base64 keystore."
+            exit 1
+          fi
+
+          if [[ ! -s musikku-release.jks ]]; then
+            echo "::error::Decoded keystore is empty."
+            exit 1
+          fi
+
+          # Validate keystore and alias.
+          if ! keytool -list \
+            -keystore musikku-release.jks \
+            -storepass "$MUSIKKU_STORE_PASSWORD" \
+            -alias "$MUSIKKU_KEY_ALIAS"; then
+
+            echo "::error::Keystore validation failed."
+            exit 1
+          fi
+
+          echo "Keystore SHA-256:"
+          sha256sum musikku-release.jks
+
+          # Main Android signing configuration.
+          cat > keystore.properties <<EOF
+          storeFile=musikku-release.jks
+          storePassword=${MUSIKKU_STORE_PASSWORD}
+          keyAlias=${MUSIKKU_KEY_ALIAS}
+          keyPassword=${MUSIKKU_KEY_PASSWORD}
+          EOF
+
+          echo "Release signing configuration prepared."
+
+      # ==========================================
+      # 7. BUILD ANDROID + WEAR OS
+      # ==========================================
+      - name: Build production phone and Wear OS
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          chmod +x ./gradlew
+
+          ./gradlew --no-daemon --max-workers=2 :app:assembleProdRelease
+
+      # ==========================================
+      # 8. PREPARE RELEASE ASSETS
+      # ==========================================
+      - name: Prepare APK release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          SOURCE="app/build/outputs/apk/prod/release"
+          WEAR_SOURCE="wearos/build/outputs/apk/prod/release"
+          DEST="release-assets"
+
+          mkdir -p "$DEST"
+
+          echo "Phone APK output:"
+          ls -lh "$SOURCE" || true
+          echo "Wear OS APK output:"
+          ls -lh "$WEAR_SOURCE" || true
+
+          copy_apk() {
+            # $1 = folder, $2 = glob, $3 = destination file name
+            local found
+            found="$(find "$1" -maxdepth 1 -type f -name "$2" 2>/dev/null | sort | head -n 1 || true)"
+
+            if [[ -z "$found" ]]; then
+              echo "::error::No APK matching '$2' found in $1"
+              exit 1
+            fi
+
+            cp "$found" "$DEST/$3"
+            echo "$found -> $DEST/$3"
+          }
+
+          # Nama tujuan harus diawali "MusikKu-" (dipakai AppUpdateChecker).
+          copy_apk "$SOURCE" "*arm64-v8a*.apk" "MusikKu-arm64-v8a.apk"
+          copy_apk "$SOURCE" "*armeabi-v7a*.apk" "MusikKu-armeabi-v7a.apk"
+          copy_apk "$SOURCE" "*x86_64*.apk" "MusikKu-x86_64.apk"
+          copy_apk "$SOURCE" "*universal*.apk" "MusikKu-universal.apk"
+          copy_apk "$WEAR_SOURCE" "*.apk" "MusikKu-WearOS.apk"
+
+          # Validate APK count.
+          APK_COUNT=$(find "$DEST" \
+            -maxdepth 1 \
+            -type f \
+            -name "*.apk" | wc -l)
+
+          if [[ "$APK_COUNT" -ne 5 ]]; then
+            echo "::error::Expected 5 APK files, found $APK_COUNT."
+            exit 1
+          fi
+
+          echo "Release assets prepared:"
+          ls -lh "$DEST"
+
+      # ==========================================
+      # 9. VERIFY APK SIGNATURES
+      # ==========================================
+      - name: Verify APK signatures
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/.android/sdk}}"
+
+          APKSIGNER="$(find "$SDK_ROOT/build-tools" \
+            -type f \
+            -name apksigner | sort -V | tail -n 1)"
+
+          if [[ -z "$APKSIGNER" ]]; then
+            echo "::error::apksigner not found."
+            exit 1
+          fi
+
+          EXPECTED_SHA256="cb554bfa8ea9f4d56a035d3ffa922e4b560f02023652d5f9e7d3261ac1733120"
+
+          APK_COUNT=0
+
+          for apk in release-assets/*.apk; do
+
+            echo "======================================"
+            echo "Checking: $apk"
+
+            if [[ ! -f "$apk" ]]; then
+              echo "::error::APK not found: $apk"
+              exit 1
+            fi
+
+            VERIFY_OUTPUT="$("$APKSIGNER" verify \
+              --verbose \
+              --print-certs \
+              "$apk")"
+
+            echo "$VERIFY_OUTPUT"
+
+            # Support both old and new apksigner output formats.
+            ACTUAL_SHA256="$(
+              printf '%s\n' "$VERIFY_OUTPUT" |
+              awk '/certificate SHA-256 digest:/ {
+                print tolower($NF)
+                exit
+              }' |
+              tr -d ':'
+            )"
+
+            if [[ -z "$ACTUAL_SHA256" ]]; then
+              echo "::error::Unable to extract SHA-256 fingerprint: $apk"
+              exit 1
+            fi
+
+            echo "Expected SHA256: $EXPECTED_SHA256"
+            echo "Actual SHA256:   $ACTUAL_SHA256"
+
+            if [[ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]]; then
+              echo "::error::APK signing certificate mismatch: $apk"
+              exit 1
+            fi
+
+            echo "Signature verified: $apk"
+
+            APK_COUNT=$((APK_COUNT + 1))
+
+          done
+
+          if [[ "$APK_COUNT" -ne 5 ]]; then
+            echo "::error::Expected 5 APKs, verified $APK_COUNT."
+            exit 1
+          fi
+
+          echo "======================================"
+          echo "All five APK signatures are valid."
+
+      # ==========================================
+      # 10. UPLOAD BUILD ARTIFACTS
+      # ==========================================
+      - name: Upload APK build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: MusikKu-Android-WearOS-APKs
+          path: release-assets/*.apk
+          retention-days: 14
+          if-no-files-found: error
+
+      # ==========================================
+      # 11. PUBLISH GITHUB RELEASE (tag dibuat otomatis)
+      # ==========================================
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+        run: |
+          set -euo pipefail
+
+          TAG="v${RELEASE_VERSION}"
+
+          gh release create "$TAG" \
+            release-assets/*.apk \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "MusikKu $TAG" \
+            --generate-notes
+
+          echo "GitHub Release $TAG published successfully."
+
+      # ==========================================
+      # 12. CLEANUP
+      # ==========================================
+      - name: Remove temporary signing files
+        if: always()
+        run: |
+          rm -f musikku-release.jks
+          rm -f keystore.properties
+          rm -f local.properties

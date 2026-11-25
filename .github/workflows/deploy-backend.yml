@@ -1,0 +1,46 @@
+name: Deploy backend
+
+on:
+  push:
+    branches: [main]
+    paths: ['backend/**', '.github/workflows/deploy-backend.yml']
+  pull_request:
+    paths: ['backend/**', '.github/workflows/deploy-backend.yml']
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-backend
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - run: go vet ./... && go test ./...
+        working-directory: backend
+      - name: Check deployment shell scripts
+        run: bash -n deploy/bitchord-deploy.sh deploy/setup.sh
+        working-directory: backend
+
+  deploy:
+    needs: test
+    # Enable only after the VM's forced-command hook has been migrated from the upstream BitChord checkout.
+    if: github.event_name != 'pull_request' && vars.MUSIKKU_ORACLE_HOOK_MIGRATED == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to the Oracle VM
+        env:
+          KEY: ${{ secrets.ORACLE_DEPLOY_KEY }}
+          HOST: ${{ secrets.ORACLE_HOST }}
+          KNOWN_HOSTS: ${{ secrets.ORACLE_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/deploy && chmod 600 ~/.ssh/deploy
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          # The key is pinned to /usr/local/sbin/bitchord-deploy on the VM.
+          ssh -i ~/.ssh/deploy deploy@"$HOST"

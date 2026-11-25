@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+<title id="title">MusikKu</title>
+<defs>
+  <linearGradient id="bg" x1="40" y1="20" x2="470" y2="500" gradientUnits="userSpaceOnUse"><stop stop-color="#171044"/><stop offset=".55" stop-color="#09152f"/><stop offset="1" stop-color="#031b32"/></linearGradient>
+  <linearGradient id="ring" x1="80" y1="110" x2="450" y2="420" gradientUnits="userSpaceOnUse"><stop stop-color="#e34cff"/><stop offset=".5" stop-color="#7358ff"/><stop offset="1" stop-color="#16e2ee"/></linearGradient>
+  <linearGradient id="mark" x1="164" y1="220" x2="348" y2="220" gradientUnits="userSpaceOnUse"><stop stop-color="#18dceb"/><stop offset=".52" stop-color="#9b67ff"/><stop offset="1" stop-color="#f05be8"/></linearGradient>
+</defs>
+<rect width="512" height="512" rx="116" fill="url(#bg)"/>
+<circle cx="256" cy="256" r="190" fill="#101a3a" fill-opacity=".94" stroke="url(#ring)" stroke-width="12"/>
+<circle cx="256" cy="256" r="162" fill="none" stroke="#7880d5" stroke-width="3" opacity=".28"/>
+<g fill="none" stroke="url(#mark)" stroke-width="24" stroke-linecap="round">
+  <path d="M176 238V350"/>
+  <path d="M216 272V350"/>
+  <path d="M256 210V350"/>
+  <path d="M296 252V350"/>
+  <path d="M336 226V350"/>
+</g>
+</svg>

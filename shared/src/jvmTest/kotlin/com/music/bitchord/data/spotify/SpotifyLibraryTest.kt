@@ -1,0 +1,152 @@
+package com.music.bitchord.data.spotify
+
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNull
+
+class SpotifyLibraryTest {
+    private val json = Json { ignoreUnknownKeys = true }
+
+    @Test
+    fun playlistsIncludeFolderLeaves() {
+        val root = json.parseToJsonElement(
+            """
+            {"data":{"me":{"libraryV3":{"totalCount":1,"items":[
+              {"item":{"__typename":"PlaylistResponseWrapper","_uri":"spotify:playlist:abc","data":{
+                "__typename":"Playlist","name":"Road","ownerV2":{"data":{"name":"Amit"}},
+                "images":{"items":[{"sources":[{"url":"https://i.scdn.co/x"}]}]}
+              }}}
+            ]}}}}
+            """.trimIndent(),
+        ).jsonObject
+        val (items, total) = parsePlaylistPage(root)
+        assertEquals(1, total)
+        assertEquals("abc", items.single().id)
+        assertEquals("Road", items.single().name)
+        assertEquals("Amit", items.single().owner)
+        assertEquals("https://i.scdn.co/x", items.single().imageUrl)
+    }
+
+    @Test
+    fun tracksReadTitleArtistAndDuration() {
+        val root = json.parseToJsonElement(
+            """
+            {"data":{"playlistV2":{"content":{"totalCount":1,"items":[
+              {"itemV2":{"data":{
+                "name":"Song","uri":"spotify:track:t1",
+                "artists":{"items":[{"uri":"spotify:artist:a","profile":{"name":"Artist"}}]},
+                "albumOfTrack":{"name":"Album","coverArt":{"sources":[{"url":"https://img"}]}},
+                "duration":{"totalMilliseconds":180000}
+              }}}
+            ]}}}}
+            """.trimIndent(),
+        ).jsonObject
+        val track = parseTrackPage(root).first.single()
+        assertEquals("t1", track.id)
+        assertEquals("Song", track.title)
+        assertEquals("Artist", track.artist)
+        assertEquals("Album", track.album)
+        assertEquals(180000, track.durationMs)
+        assertEquals("https://img", track.imageUrl)
+    }
+
+    @Test
+    fun tracksPreserveFirstSpotifyArtistEvenWhenTheNameContainsAComma() {
+        val root = json.parseToJsonElement(
+            """
+            {"data":{"playlistV2":{"content":{"totalCount":1,"items":[
+              {"itemV2":{"data":{
+                "name":"September","uri":"spotify:track:t2",
+                "artists":{"items":[
+                  {"uri":"spotify:artist:earth","profile":{"name":"Earth, Wind & Fire"}},
+                  {"uri":"spotify:artist:guest","profile":{"name":"Guest Artist"}}
+                ]},
+                "albumOfTrack":{"name":"Greatest Hits"},
+                "duration":{"totalMilliseconds":215000}
+              }}}
+            ]}}}}
+            """.trimIndent(),
+        ).jsonObject
+
+        val track = parseTrackPage(root).first.single()
+        assertEquals("Earth, Wind & Fire, Guest Artist", track.artist)
+        assertEquals("Earth, Wind & Fire", track.leadArtist)
+        assertEquals(listOf("Earth, Wind & Fire", "Guest Artist"), track.artistCredits)
+    }
+
+    @Test
+    fun likedSongsPreserveStructuredArtistNamesAndPrimaryCredit() {
+        val root = json.parseToJsonElement(
+            """
+            {"data":{"me":{"library":{"tracks":{"totalCount":1,"items":[
+              {"track":{"_uri":"spotify:track:liked1","data":{
+                "name":"September",
+                "artists":{"items":[
+                  {"profile":{"name":"Earth, Wind & Fire"}},
+                  {"profile":{"name":"Guest Artist"}}
+                ]},
+                "albumOfTrack":{"name":"Greatest Hits"},
+                "trackDuration":{"totalMilliseconds":215000}
+              }}}
+            ]}}}}}
+            """.trimIndent(),
+        ).jsonObject
+
+        val track = parseLikedPage(root).first.single()
+        assertEquals("September", track.title)
+        assertEquals("Earth, Wind & Fire", track.leadArtist)
+        assertEquals(listOf("Earth, Wind & Fire", "Guest Artist"), track.artistCredits)
+    }
+
+    @Test
+    fun tracksAcceptArtistArraysAsWellAsItemsWrappers() {
+        val root = json.parseToJsonElement(
+            """
+            {"data":{"playlistV2":{"content":{"totalCount":1,"items":[
+              {"itemV2":{"data":{
+                "name":"Song","uri":"spotify:track:array-artists",
+                "artists":[
+                  {"profile":{"name":"The Band"}},
+                  {"name":"Guest"}
+                ],
+                "duration":{"totalMilliseconds":180000}
+              }}}
+            ]}}}}
+            """.trimIndent(),
+        ).jsonObject
+
+        val track = parseTrackPage(root).first.single()
+        assertEquals(listOf("The Band", "Guest"), track.artistCredits)
+        assertEquals("The Band", track.leadArtist)
+    }
+
+    @Test
+    fun spotifyPagingRejectsPrematureEmptyPages() {
+        assertEquals(100, nextSpotifyPageOffset(0, 250, 100))
+        assertEquals(200, nextSpotifyPageOffset(100, 250, 100))
+        assertEquals(null, nextSpotifyPageOffset(200, 250, 50))
+        assertEquals(null, nextSpotifyPageOffset(0, 0, 0))
+        kotlin.test.assertFailsWith<IllegalStateException> {
+            nextSpotifyPageOffset(100, 250, 0)
+        }
+        kotlin.test.assertFailsWith<IllegalStateException> {
+            nextSpotifyPageOffset(0, 50, 100)
+        }
+    }
+
+    @Test
+    fun playlistIdsComeFromLinksAndUris() {
+        val id = "37i9dQZF1DXcBWIGoYBM5M"
+        assertEquals(id, SpotifyImporter.extractPlaylistId("https://open.spotify.com/playlist/$id"))
+        assertEquals(id, SpotifyImporter.extractPlaylistId("  https://open.spotify.com/playlist/$id?si=abc123  "))
+        assertEquals(id, SpotifyImporter.extractPlaylistId("https://open.spotify.com/intl-id/playlist/$id"))
+        assertEquals(id, SpotifyImporter.extractPlaylistId("spotify:playlist:$id"))
+        assertNull(SpotifyImporter.extractPlaylistId("https://open.spotify.com/album/$id"))
+        assertNull(SpotifyImporter.extractPlaylistId("https://notspotify.com/playlist/$id"))
+        assertNull(SpotifyImporter.extractPlaylistId("ftp://open.spotify.com/playlist/$id"))
+        assertNull(SpotifyImporter.extractPlaylistId("https://open.spotify.com/playlist/short"))
+        assertNull(SpotifyImporter.extractPlaylistId(""))
+    }
+}

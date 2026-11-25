@@ -1,0 +1,1503 @@
+package com.music.bitchord.data.sources
+
+import com.music.bitchord.data.model.Song
+import kotlin.math.abs
+import java.text.Normalizer
+import java.util.Locale
+
+/**
+ * Decides whether one catalogue's track is the same recording as another's,
+ * and what to ask that catalogue for in the first place.
+ *
+ * Split out of [SourceResolver] because it is the only part of the source
+ * layer that is a judgement rather than plumbing, and because both of its
+ * failure modes are silent:
+ *
+ *  - **Too loose** and the wrong recording plays under the right title — a
+ *    cover, a remix, an hour-long loop — with nothing on screen to say so.
+ *  - **Too strict** and the module the user configured is quietly never used,
+ *    which is what "Paniyon Sa (From "Satyamev Jayate")" by Atif Aslam did
+ *    against a catalogue holding the same audio as "Paniyon Sa" by
+ *    Atif Aslam, Tulsi Kumar.
+ *
+ * The way out of both is to be explicit about *what part of a title carries
+ * identity*. Services disagree constantly about the packaging — the film a
+ * song is from, the "Official Audio" tag, which of the credited singers make
+ * it into the title — and agree about the recording underneath. So the title
+ * is taken apart into three pieces:
+ *
+ *  - [TitleParts.words], the title proper. Must agree exactly.
+ *  - [TitleParts.versions], the words that mean *a different take* — remix,
+ *    live, acoustic. Must agree exactly, in both directions: "Song (Live)"
+ *    is not "Song", and neither is the other way round.
+ *  - [TitleParts.context], everything else thrown away with the brackets.
+ *    Never a veto, only a tie-break, because one service writing the film
+ *    name in the title is not a disagreement about the audio.
+ *
+ * Artist and duration are then checked against that: a shared credit is
+ * required when both sides name one, and a runtime far from the one asked for
+ * rules a candidate out however well its title reads.
+ */
+object TrackMatcher {
+
+    /** The recording being looked for, as much of it as the queue knows. */
+    data class Target(
+        val title: String,
+        val artist: String = "",
+        /** Runtime in whole seconds; null when the queue row never carried one. */
+        val durationSec: Int? = null,
+        /** Release name, when the queue knows it. Used to separate catalogue collisions. */
+        val album: String? = null,
+        /** Explicit/clean edition, null when the originating catalogue did not say. */
+        val isExplicit: Boolean? = null,
+        /** Music-video timing includes visual intros/outros that catalogue audio omits. */
+        val isVideo: Boolean = false,
+        /** Imports with a known credited performer must not substitute another singer on runtime alone. */
+        val requireSharedArtist: Boolean = false,
+        /** Spotify's exact lead performer name, when the source exposes structured artist credits. */
+        val requiredArtistName: String? = null,
+        /** Spotify imports must match the same title identity, not a longer title containing it. */
+        val requireExactTitle: Boolean = false,
+        /** Original Spotify credits, kept as separate names (commas may belong inside a name). */
+        val artistCredits: List<String> = emptyList(),
+    )
+
+    fun targetOf(song: Song) = Target(
+        song.title,
+        song.artist,
+        secondsOf(song.durationText),
+        song.albumName,
+        song.isExplicit,
+        song.isVideo,
+    )
+
+    // ── Asking ──────────────────────────────────────────────────────────────
+
+    /**
+     * What to put to a source's search box, best query first.
+     *
+     * The raw title is deliberately *not* one of them. A YouTube title carries
+     * the packaging — `Paniyon Sa (From "Satyamev Jayate")` — and handing that
+     * verbatim to a catalogue that lists the track as `Paniyon Sa` is asking it
+     * to match on words it has never stored. Most search backends score that as
+     * a poor hit or no hit at all, and the track was then written off as
+     * missing before any of the matching below ever ran.
+     *
+     * Two queries, not one: the second drops the artist, for the catalogues
+     * that credit a track to the composer or the film rather than the singer
+     * and would otherwise score every result down. A kana title gets a third,
+     * in the other script (below).
+     */
+    fun queries(target: Target): List<String> {
+        val title = searchableTitle(target.title, target.artist)
+        if (title.isBlank()) return emptyList()
+        val artist = target.requiredArtistName
+            ?.takeIf { it.isNotBlank() }
+            ?.let(::normalize)
+            ?: primaryArtist(target.artist)
+        val out = if (artist.isBlank()) mutableListOf(title) else mutableListOf("$title $artist", title)
+        // The other script, asked once and without the artist: a pure-katakana
+        // title ("コイコガレ") never meets its romaji-filed row ("Koi Kogare")
+        // when only one script is asked for, and neither index answers the
+        // other script of a transliterated pair ("コイコガレ - koikogare").
+        // One extra query, not a second pair: every query is a search on every
+        // source, and the download lookup budget is sized off the count.
+        // Romaji is skipped when kana leaves non-Latin behind (kanji has no
+        // reading) — a half-garbled query helps nobody.
+        val latin = romajiOf(title).trim()
+        val otherScript = latin.takeIf { it.isNotBlank() && it != title && it.all { c -> c in LATIN_QUERY_CHARS } }
+            ?: scriptMates(target.title).firstOrNull { it.isNotBlank() && it != title }
+        otherScript?.let { out += it }
+        return out.distinct()
+    }
+
+    /** The title with the packaging taken off, version markers kept. */
+    internal fun searchableTitle(title: String, artist: String = ""): String =
+        parseTitle(title, artist).let { (it.words + it.versions).joinToString(" ") }
+
+    /** The first credited artist — who a catalogue is most likely to file the track under. */
+    internal fun primaryArtist(artist: String): String {
+        val primary = normalize(artist).split(ARTIST_SEPARATORS).firstOrNull()?.trim().orEmpty()
+        return primary.takeUnless { it in YOUTUBE_TYPE_LABELS }.orEmpty()
+    }
+
+    /** Whether both credits name at least one of the same artists. */
+    fun sharesArtist(wanted: String, got: String): Boolean {
+        val want = artistNames(wanted)
+        val have = artistNames(got)
+        return want.isNotEmpty() && have.isNotEmpty() &&
+                want.any { w -> have.any { h -> sameArtist(w, h) } }
+    }
+
+    // ── Judging ─────────────────────────────────────────────────────────────
+
+    /**
+     * The best of [candidates] that is genuinely [target], or null if none is.
+     *
+     * Best, not first. A search for a track routinely answers with the single,
+     * the album cut, a sped-up edit and a karaoke version, in whatever order
+     * the backend felt like — and taking the first acceptable one means the
+     * ranking of somebody else's search engine decides which copy plays.
+     * Scoring them all and taking the top lets the runtime and the fuller
+     * artist credit break that tie instead.
+     */
+    fun best(candidates: List<Song>, target: Target): Song? =
+        ranked(candidates, target).firstOrNull()
+
+    /**
+     * The catalogue counterpart for a music-video upload selected explicitly
+     * by the listener.
+     *
+     * A video and the song it promotes can legitimately differ by well over a
+     * minute: the video includes an intro, an outro and sometimes dialogue.
+     * The ordinary source matcher must reject that gap because it is choosing
+     * a stream without anyone watching it. The player audio switch is a
+     * different contract: it asks YouTube Music's *Songs* shelf for the
+     * official release of a known video. Here an exact recording title,
+     * identical version markers and a shared artist are enough to establish
+     * that relationship; duration only ranks equivalent releases and never
+     * vetoes one.
+     *
+     * This remains deliberately stricter than a search engine's first row.
+     * A cover, remix or karaoke version still cannot cross the switch just
+     * because it happens to share a title.
+     */
+    fun bestOfficialAudioForVideo(candidates: List<Song>, target: Target): Song? {
+        val wanted = parseTitle(target.title, target.artist)
+        if (wanted.core.isEmpty()) return null
+        return candidates
+            .mapNotNull { candidate ->
+                val got = parseTitle(candidate.title, candidate.artist)
+                if (wanted.core != got.core || wanted.versions != got.versions) return@mapNotNull null
+                val artist = artistScore(target.artist, candidate.artist) ?: return@mapNotNull null
+                val duration = target.durationSec?.let { expected ->
+                    secondsOf(candidate.durationText)?.let { actual -> -abs(expected - actual) }
+                        ?: -120
+                } ?: 0
+                candidate to (artist * 1_000 + duration)
+            }
+            .sortedByDescending { it.second }
+            .firstOrNull()
+            ?.first
+    }
+
+    /**
+     * Every candidate that really is [target], most confident first.
+     *
+     * The whole list rather than the winner, because identity is not the only
+     * question worth asking of it: two catalogues can both genuinely hold a
+     * recording and offer it at different qualities, and that choice belongs
+     * to [SourceResolver], which knows what was asked for. Confidence orders
+     * what it is given; it does not get to spend it.
+     */
+    fun ranked(candidates: List<Song>, target: Target): List<Song> =
+        candidates
+            .mapNotNull { candidate -> score(candidate, target)?.let { candidate to it } }
+            // A runtime-identical cover is only a last-resort explanation for
+            // catalogues crediting the same master differently. If this search
+            // also returned anything carrying the requested artist, there is
+            // no reason to keep the different-artist rows in contention. Apart
+            // from preventing covers winning ties, this avoids opening their
+            // stream URLs while a correct lossy result waits to be returned.
+            .let { scored ->
+                val credited = scored.filter { (candidate, _) ->
+                    artistScore(target.artist, candidate.artist) != null
+                }
+                credited.ifEmpty { scored }
+            }
+            .sortedByDescending { it.second }
+            .map { it.first }
+
+    /**
+     * How confident this is the same recording, or null when it is not one.
+     *
+     * Null is the common answer and the safe one: it costs a source its turn,
+     * and the next source — ultimately YouTube, which by definition has the
+     * track — still plays what the user asked for.
+     */
+    fun score(candidate: Song, target: Target): Int? {
+        val wanted = parseTitle(target.title, target.artist)
+        // A YouTube title can put a featured performer before the song
+        // ("Lead feat. Guest - Title") while its structured byline carries
+        // only the lead. Use Spotify's complete credit as extra parsing
+        // context for this prefix only; actual artist acceptance below still
+        // requires the primary credit or a guarded composite alias.
+        val candidateTitleArtist = if (target.requireExactTitle) {
+            listOf(candidate.artist, target.artist).filter { it.isNotBlank() }.distinct().joinToString(", ")
+        } else candidate.artist
+        val got = parseTitle(candidate.title, candidateTitleArtist)
+        if (wanted.core.isBlank() || got.core.isBlank()) return null
+        // Same word, different script: katakana vs romaji is bridged by
+        // Hepburn transliteration; kanji has no algorithmic reading and stays
+        // exact-only. Past that, a guarded containment absorbs minor
+        // punctuation and symbol differences. A bracketed translation is the
+        // same title in another script: the bracket word lives in
+        // [TitleParts.context], so a core appearing verbatim as the other
+        // side's context is accepted — but only across scripts (CJK-only vs
+        // Latin), so same-script packaging never rescues a different title.
+        val isTitleMatch = when {
+            wanted.core == got.core -> true
+            titleAccentKey(wanted.core) == titleAccentKey(got.core) -> true
+            romajiOf(wanted.core) == romajiOf(got.core) -> true
+            isTranslationMatch(wanted, got) -> true
+            target.requireExactTitle -> false
+            wanted.core.length <= 3 || got.core.length <= 3 -> false
+            else -> wanted.core.contains(got.core) || got.core.contains(wanted.core)
+        }
+        // A one-letter catalogue typo can still be the same track, but only
+        // when its primary artist is exact and the known runtime is within
+        // three seconds. Version identity is checked below as usual.
+        val nearTitleSpellingMatch = target.requireExactTitle &&
+            nearTitleSpelling(wanted.words, got.words)
+        // Liner Desktop uses token-sorted similarity instead of requiring every
+        // title token to be byte-for-byte identical. Keep the fallback bounded:
+        // same token count, at least one shared token and a high overall ratio.
+        // Version markers are still checked strictly below.
+        val linerFuzzyTitleMatch = target.requireExactTitle &&
+            !isTitleMatch &&
+            linerTitleSimilarity(wanted.words, got.words)
+        if (!isTitleMatch && !nearTitleSpellingMatch && !linerFuzzyTitleMatch) return null
+        // Direction matters both ways round: asking for the album cut must not
+        // land on the live take, and asking for the live take must not land on
+        // the album cut. Markers living on the release rather than the row come
+        // in two kinds. A wanted take found on the album completes the row
+        // (Tidal's "KALYANI" + "KALYANI (Remix)"), but only ever in that
+        // direction. The no-vocal takes are bidirectional instead: a row from
+        // an "INSTRUMENTAL EDITION" album *is* the instrumental even when its
+        // title says nothing, so it must neither stand in for the vocal nor be
+        // refused its own instrumental request. Anything else on an album
+        // ("Party Mix 2024", "Deluxe Version") is compilation naming and is
+        // rightly ignored in both directions.
+        // Only markers the request asked for are taken from the album: the
+        // rest of an album name ("Song (Remixes)", "MTV Unplugged") describes
+        // the release, and adding it would refuse the right row.
+        val albumMarks = albumVersionMarkers(candidate.albumName)
+        val effectiveVersions = got.versions + (albumMarks intersect NOVOCAL_TAKES) +
+            (albumMarks intersect wanted.versions)
+        if (wanted.versions != effectiveVersions) return null
+
+        val creditedArtist = artistScore(target.artist, candidate.artist)
+        // Spotify supplies an ordered artist credit. Requiring any overlap is
+        // not enough: a candidate credited only to a featured/remix artist can
+        // share a secondary name while replacing the requested lead singer.
+        // Match the complete first credited artist name against one complete
+        // candidate credit instead of accepting a partial token overlap.
+        val requiredArtist = target.requiredArtistName?.takeIf { it.isNotBlank() }
+        val candidateCreditNames = candidateArtistCredits(candidate)
+        val candidateNames = candidateCreditNames
+            .map(::artistIdentityKey)
+            .filter(String::isNotBlank)
+            .toSet()
+        val nearLeadArtistMatched = requiredArtist != null &&
+            candidateCreditNames.any { nearArtistSpelling(requiredArtist, it) }
+        // Port Liner's weighted artist similarity for regional spellings and
+        // transpositions. Whole-name token boundaries prevent "X Ambassadors"
+        // from collapsing into the unrelated artist "Ambassadors".
+        val requiredArtistMatched = if (requiredArtist != null) {
+            // Keep this as one complete name. Splitting the required artist
+            // with collaboration separators would turn names such as
+            // "X Ambassadors" into the unrelated name "Ambassadors".
+            val expectedNames = setOf(artistIdentityKey(requiredArtist))
+            expectedNames.any { it.isNotBlank() && it in candidateNames }
+        } else {
+            false
+        }
+        // Only use Liner's broader ratio when the credit is neither exact nor
+        // already covered by the legacy one-character spelling exception.
+        // This keeps existing 3s/8s tolerances intact for those old paths.
+        val linerFuzzyLeadArtistMatched = requiredArtist != null &&
+            !requiredArtistMatched && !nearLeadArtistMatched &&
+            candidateCreditNames.any { linerArtistSimilarity(requiredArtist, it) }
+        if (nearTitleSpellingMatch && !isTitleMatch &&
+            (!(requiredArtistMatched || nearLeadArtistMatched) ||
+                !withinSeconds(candidate, target, DURATION_TIGHT_SEC))
+        ) return null
+        if (linerFuzzyTitleMatch &&
+            !requiredArtistMatched && !nearLeadArtistMatched &&
+            !linerFuzzyLeadArtistMatched
+        ) return null
+        val spotifyCredits = target.artistCredits.ifEmpty {
+            artistNames(target.artist).map { it.joinToString(" ") }
+        }
+        // A secondary contributor is still an official Spotify performer.
+        // Accept an exact full-name match to another structured Spotify credit,
+        // but only with exact title/version and runtime within three seconds.
+        // Never split the display string to guess the identity: "Earth, Wind &
+        // Fire" must remain one artist.
+        val secondarySpotifyArtistMatched = requiredArtist != null &&
+            target.artistCredits.drop(1).any { credit ->
+                val key = artistIdentityKey(credit)
+                key.isNotBlank() && key in candidateNames
+            }
+        val compositeArtistAlias = requiredArtist != null && !requiredArtistMatched &&
+            !secondarySpotifyArtistMatched &&
+            sharesCompositeSpotifyCredit(
+                spotifyCredits,
+                listOf(candidate.artist) + candidate.artists.map { it.name },
+            )
+        if (requiredArtist != null && !requiredArtistMatched &&
+            !secondarySpotifyArtistMatched && !compositeArtistAlias &&
+            !nearLeadArtistMatched && !linerFuzzyLeadArtistMatched
+        ) {
+            // YouTube Music sometimes files a recording under its composer,
+            // label, or uploader rather than the credited singer. Keep the
+            // strict lead-artist rule by default, but allow the documented
+            // exact-runtime override as a last resort. Spotify import always
+            // supplies requiredArtistName, so returning here unconditionally
+            // made that fallback unreachable for real imports.
+            // An explicit Spotify lead-artist requirement must never
+            // be bypassed here. Spotify's importer has its own isolated,
+            // one-second composer/uploader fallback after credited rows fail.
+            if (requiredArtist != null || target.isVideo ||
+                !withinSeconds(candidate, target, CREDIT_OVERRIDE_SEC)
+            ) {
+                return null
+            }
+        }
+        if (requiredArtist != null && artistIdentityKey(requiredArtist).isBlank()) return null
+        if (requiredArtist == null && target.requireSharedArtist &&
+            (artistNames(target.artist).isEmpty() ||
+                artistNames(candidate.artist).isEmpty() ||
+                creditedArtist == null)
+        ) return null
+        val duration = durationScore(
+            target.durationSec,
+            secondsOf(candidate.durationText),
+            // A music video may carry a long visual intro or outro. That drift
+            // is credible only when the catalogue row names the same artist;
+            // duration must never make an unrelated artist into the song.
+            // YouTube does not reliably label official music videos as video
+            // rows (square release artwork is common), so the flag cannot be
+            // the only way through the wider window. Exact title/version plus
+            // a shared artist is strong enough; a different artist still gets
+            // the ordinary 30-second ceiling below.
+            allowVideoDrift = creditedArtist != null || requiredArtistMatched ||
+                secondarySpotifyArtistMatched || compositeArtistAlias,
+        ) ?: return null
+        // A secondary structured Spotify credit or a flattened composite alias
+        // may differ from the primary credit, but must still have near-identical
+        // runtime. This protects against covers and different takes with the
+        // same title while handling catalogues that file the vocalist alone.
+        // A secondary Spotify singer or a flattened collaborative credit
+        // still needs close timing for an audio catalogue row. A music-video
+        // upload can include a visual intro/outro, so use the same bounded
+        // drift already allowed by durationScore for explicitly credited video
+        // candidates. Exact title and version checks above remain mandatory.
+        val collaborativeCreditRuntimeWindow = if (candidate.isVideo) {
+            VIDEO_DURATION_LIMIT_SEC
+        } else {
+            DURATION_TIGHT_SEC
+        }
+        if ((secondarySpotifyArtistMatched || compositeArtistAlias) &&
+            !withinSeconds(candidate, target, collaborativeCreditRuntimeWindow)
+        ) return null
+        // Liner-style fuzzy matches need a close, known runtime. The broader
+        // visual-video allowance above remains reserved for trusted exact credits.
+        if ((linerFuzzyTitleMatch || linerFuzzyLeadArtistMatched) &&
+            !withinSeconds(candidate, target, LINER_FUZZY_RUNTIME_SEC)
+        ) return null
+        val artist = creditedArtist
+            ?: ARTIST_EXACT.takeIf { requiredArtistMatched }
+            ?: ARTIST_SHARED.takeIf { secondarySpotifyArtistMatched || compositeArtistAlias }
+            // A one-character spelling alias is lower confidence than an exact
+            // credit and needs a known runtime within eight seconds.
+            ?: ARTIST_NEAR_SPELLING.takeIf {
+                nearLeadArtistMatched && withinSeconds(candidate, target, ARTIST_SPELLING_RUNTIME_SEC)
+            }
+            ?: ARTIST_NEAR_SPELLING.takeIf {
+                linerFuzzyLeadArtistMatched &&
+                    withinSeconds(candidate, target, LINER_FUZZY_RUNTIME_SEC)
+            }
+        // The credits don't merely differ in spelling, they name different
+        // people — and sometimes that is because they are describing the
+        // same recording from different ends of it. Film catalogues are
+        // full of this: YouTube Music files "Jhak Maar Ke" under Pritam,
+        // who *wrote* it, while every store files it under Neeraj
+        // Shridhar, who *sang* it. Neither is wrong and nothing in either
+        // credit hints at the other, so a matcher that insists on an
+        // overlap refuses the correct track every time.
+        //
+        // What breaks the tie is length. Two recordings that share an
+        // exact title and agree on their runtime to the second are the
+        // same master; a cover, a remix or a re-recording essentially
+        // never lands there — of the four candidates for that track, the
+        // remix ran 241s and the acoustic cover 66s against the 233s being
+        // played. So an exact runtime is allowed to stand in for a shared
+        // credit, and *only* an exact one: with no runtime on either side
+        // there is nothing corroborating anything, and the strict refusal
+        // stands. The match still scores below a genuine credit match, so
+        // it never wins where a properly-credited copy exists.
+        // A music video's runtime includes visuals and therefore cannot
+        // vouch for a catalogue row credited to completely different
+        // people. This exact exception is what admitted the 3:30 Lovely
+        // track for Yo Yo Honey Singh's 3:31 "Brown Rang" video.
+            ?: CREDITS_DISAGREE.takeIf {
+                // Spotify imports carry a structured lead performer. An
+                // uncredited row must not pass the generic matcher on runtime
+                // alone; the importer applies its narrower composer fallback
+                // only after credited candidates have been exhausted.
+                requiredArtist == null &&
+                    !target.isVideo &&
+                    !candidate.isVideo &&
+                    withinSeconds(candidate, target, CREDIT_OVERRIDE_SEC)
+            }
+            ?: return null
+        val explicit = explicitScore(target.isExplicit, candidate.isExplicit) ?: return null
+        return BASE + artist + duration + albumScore(target.album, candidate.albumName) + explicit +
+                contextScore(wanted, got)
+    }
+
+    /**
+     * Whether [candidate] has a trustworthy artist-credit relationship to [target].
+     *
+     * A duration-only composer/uploader override can still be a last-resort
+     * match, but it must not stop Spotify import from checking remaining
+     * queries and artist pages. Near-spelling aliases are trusted only with
+     * an eight-second runtime guard.
+     */
+    fun hasTrustedArtistCredit(candidate: Song, target: Target): Boolean {
+        if (score(candidate, target) == null) return false
+        val required = target.requiredArtistName?.takeIf { it.isNotBlank() }
+            ?: return artistNames(target.artist).isNotEmpty() &&
+                artistNames(candidate.artist).isNotEmpty() &&
+                artistScore(target.artist, candidate.artist) != null
+
+        val candidateCredits = candidateArtistCredits(candidate)
+        val candidateKeys = candidateCredits.map(::artistIdentityKey).toSet()
+        val requiredKey = artistIdentityKey(required)
+        if (requiredKey.isNotBlank() && requiredKey in candidateKeys) return true
+
+        if (target.artistCredits.drop(1).any { credit ->
+                val key = artistIdentityKey(credit)
+                key.isNotBlank() && key in candidateKeys
+            }
+        ) return true
+
+        val spotifyCredits = target.artistCredits.ifEmpty {
+            artistNames(target.artist).map { it.joinToString(" ") }
+        }
+        if (sharesCompositeSpotifyCredit(
+                spotifyCredits,
+                listOf(candidate.artist) + candidate.artists.map { it.name },
+            )
+        ) return true
+
+        if (candidateCredits.any { nearArtistSpelling(required, it) }) {
+            return withinSeconds(candidate, target, ARTIST_SPELLING_RUNTIME_SEC)
+        }
+        return candidateCredits.any { linerArtistSimilarity(required, it) } &&
+            withinSeconds(candidate, target, LINER_FUZZY_RUNTIME_SEC)
+    }
+
+    /** Candidate byline and linked credits, also split at known artist joiners. */
+    private fun candidateArtistCredits(candidate: Song): List<String> = buildList {
+        candidate.artist.takeIf { it.isNotBlank() }?.let { add(it) }
+        addAll(candidate.artists.map { it.name })
+        addAll(candidate.artist.split(","))
+        addAll(artistNames(candidate.artist).map { it.joinToString(" ") })
+    }.map(String::trim).filter(String::isNotBlank).distinct()
+
+    /**
+     * Whether otherwise valid rows describe more than one release while the
+     * requested track gives us no release with which to choose between them.
+     *
+     * JioSaavn has catalogue collisions where title and artist are identical
+     * but the audio is not. Picking the runtime-nearest row is unsafe there:
+     * a different recording can be only a second nearer than the wanted one.
+     * The caller uses this as a conservative source miss and leaves the track
+     * on YouTube instead of guessing.
+     */
+    fun hasConflictingAlbums(candidates: List<Song>, target: Target): Boolean {
+        if (!target.album.isNullOrBlank()) return false
+        val comparable = if (target.durationSec != null) {
+            candidates.filter { withinSeconds(it, target, DURATION_LIMIT_SEC) }
+        } else {
+            candidates
+        }
+        // No catalogue audio is within the normal song window. This is the
+        // shape of an unlabelled music video with a long visual intro/outro;
+        // release disagreement cannot be resolved from that video runtime and
+        // must not veto the search engine's top same-artist result.
+        if (target.durationSec != null && comparable.isEmpty()) return false
+        return comparable.mapNotNull { albumKey(it.albumName) }.distinct().size > 1
+    }
+
+    /**
+     * Resolves a JioSaavn release collision only when one candidate is plainly
+     * more specifically credited than every other close-duration candidate.
+     *
+     * A film's original release often names the complete vocal ensemble while
+     * compilation rows reduce it to the lead singer or add composer/lyricist
+     * credits. That is useful evidence, but not enough to guess on a tie: a
+     * unique, fuller credit may win; otherwise callers must keep the fallback.
+     */
+    fun uniquelyMostCreditedCloseMatch(candidates: List<Song>, target: Target): Song? {
+        val close = candidates.filter { withinSeconds(it, target, DURATION_LIMIT_SEC) }
+        if (close.size < 2) return null
+        val ranked = close.map { it to artistNames(it.artist).size }
+        val topCredits = ranked.maxOfOrNull { it.second } ?: return null
+        // A single name cannot establish that a row is the canonical recording
+        // rather than a compilation's abbreviated credit.
+        if (topCredits < 2) return null
+        val winners = ranked.filter { it.second == topCredits }.map { it.first }
+        return winners.singleOrNull()
+    }
+
+    /**
+     * Whether [candidate] states a runtime, and one within [seconds] of
+     * [target]'s.
+     *
+     * Both halves are requirements. A candidate that doesn't say how long it
+     * is fails this — for the callers that ask, an unstated runtime is not a
+     * near miss, it is a candidate that cannot be checked, and the whole
+     * reason to ask is that the check is the last thing standing between a
+     * listener and the wrong recording.
+     */
+    fun withinSeconds(candidate: Song, target: Target, seconds: Int): Boolean {
+        val wanted = target.durationSec ?: return false
+        val got = secondsOf(candidate.durationText) ?: return false
+        return abs(wanted - got) <= seconds
+    }
+
+    /**
+     * Kept for the callers that only want a yes or no — the YouTube seed
+     * lookup behind AutoPlay, and the tests.
+     */
+    fun matches(candidate: Song, title: String, artist: String, durationSec: Int? = null): Boolean =
+        score(candidate, Target(title, artist, durationSec)) != null
+
+    // ── Title ───────────────────────────────────────────────────────────────
+
+    /**
+     * A title split into the part that is the recording's identity and the
+     * parts that are the listing's.
+     */
+    internal data class TitleParts(
+        /** The title proper, lowercased, one entry per word. */
+        val words: List<String>,
+        /** [words] with everything but letters and digits removed — what identity is compared on. */
+        val core: String,
+        /** Markers that mean a different take of the same song: `remix`, `live`, `acoustic`. */
+        val versions: Set<String>,
+        /** Words dropped with the packaging. A hint for scoring, never a veto. */
+        val context: Set<String>,
+    )
+
+    internal fun parseTitle(raw: String, artist: String = ""): TitleParts {
+        val versions = sortedSetOf<String>()
+        val context = mutableSetOf<String>()
+        var text = normalize(raw)
+
+        // A guest credit printed in Portuguese — YouTube Music Brazil writes
+        // "O Mundo É Mal (part. Clara Lima)" — is a feat. credit, and `part`
+        // alone is a [VERSION_WORDS] marker: left to the bracket pass, the
+        // aside comes back out as the query "… part", a word no catalogue
+        // files a track under. The dot is what tells it apart from an English
+        // title ("Part of Me"), and a numeral after it is still the title
+        // ("Part. 2").
+        text = text.replace(PT_BR_FEATURING, " ")
+
+        // Bracketed asides, innermost first: "(From "Satyamev Jayate")",
+        // "[Official Audio]", "(Live at Wembley)".
+        repeat(BRACKET_PASSES) {
+            if (!BRACKETED.containsMatchIn(text)) return@repeat
+            text = BRACKETED.replace(text) { match ->
+                classify(match.groupValues[1], versions, context)
+                " "
+            }
+        }
+        // An unbalanced bracket — a title truncated mid-aside — takes the rest
+        // of the line with it rather than leaving half an aside in the core.
+        text.indexOfFirst { it == '(' || it == '[' }.takeIf { it >= 0 }?.let { open ->
+            classify(text.substring(open), versions, context)
+            text = text.substring(0, open)
+        }
+
+        // Dash- and pipe-separated tails: "Paniyon Sa - Satyamev Jayate",
+        // "Song | Official Video". The head is normally the title, but the
+        // "Artist - Title" upload convention inverts that, so a head that is
+        // just the artist's name hands over to the tail instead of eating it.
+        // A mixed-script head with no Latin in it ("第ゼロ感 - Dai Zero Kan")
+        // is the transliteration shape: catalogues file the track under the
+        // Latin tail, so the tail becomes the identity and the head is kept
+        // as context rather than the other way round.
+        repeat(DASH_PASSES) {
+            val dash = DASH.find(text) ?: return@repeat
+            val head = text.substring(0, dash.range.first)
+            val tail = text.substring(dash.range.last + 1)
+            text = if (isArtistName(head, artist)) {
+                classify(head, versions, context)
+                tail
+            } else if (!hasFilingLatin(head) && hasFilingLatin(tail) && !isArtistName(tail, artist)) {
+                // "紅蓮華 - LiSA" is the title and its artist, not a
+                // transliteration: the Latin tail only takes over when it
+                // isn't just the credit.
+                classify(head, versions, context)
+                tail
+            } else {
+                classify(tail, versions, context)
+                head
+            }
+        }
+
+        // "With" can be part of a real title ("With or Without You",
+        // "Dancing With Myself"). Strip a feat/with suffix only when every
+        // name after its marker is present in the known artist credits.
+        val creditSuffix = CREDIT_MARKER.findAll(text).lastOrNull { marker ->
+            marker.range.first > 0 &&
+                isArtistName(text.substring(marker.range.last + 1).trim(), artist)
+        }
+        if (creditSuffix != null) text = text.substring(0, creditSuffix.range.first).trim()
+
+        // DJ edits are often appended without brackets ("Song DJ Koplo Remix").
+        // Pull only known version-shaped suffixes into the identity markers.
+        TRAILING_MIX_LABEL.find(text)?.let { match ->
+            classify(match.groupValues[1], versions, context)
+            text = text.substring(0, match.range.first)
+        }
+
+        // CJK languages do not use spaces between
+        // words. Standard word splitting and non-alphanumeric filtering fragment
+        // these titles into empty or broken strings, so CJK titles keep their
+        // raw character sequence intact (stripping only punctuation and whitespace).
+        val containsCJK = text.any { Character.UnicodeBlock.of(it) in CJK_BLOCKS }
+
+        var words = text.split(WORD_SPLIT)
+            .map { it.replace(NON_ALNUM, "") }
+            .filter { it.isNotEmpty() && it !in JOINING_WORDS }
+        // "Paniyon Sa Full Song", "Tum Hi Ho Audio" — an upload's trailing
+        // label, printed without brackets to hang it on. The unambiguous take
+        // markers get the same treatment ("Kizuna No Kiseki Instrumental"):
+        // they belong in versions, so the bracketed and unbracketed spellings
+        // of one take meet instead of missing each other. Only those —
+        // "Let Me Live" and "Take Cover" end in a version word that is the
+        // title, and moving it would make the live take the studio one.
+        // Never stripped down to nothing: a track really called "Song" keeps
+        // its name.
+        while (words.size > 1) {
+            val last = words.last()
+            if (last in TRAILING_NOISE) words = words.dropLast(1)
+            else if (last in TRAILING_TAKES) {
+                versions += last
+                words = words.dropLast(1)
+            } else break
+        }
+
+        val coreString = if (containsCJK) {
+            text.replace(Regex("""[\s\p{Punct}・～〜ー-]+"""), "")
+        } else {
+            words.joinToString("")
+        }
+
+        return TitleParts(
+            words = words,
+            core = coreString,
+            versions = versions,
+            context = context,
+        )
+    }
+
+    /**
+     * Files one dropped segment under [versions] or [context].
+     *
+     * A segment naming a take — `Remix`, `Live at Wembley`, `Slowed + Reverb` —
+     * is identity and is kept. Everything else is packaging: the film, the
+     * label, `Official Video`, the remaster note. The phrases in
+     * [NEUTRAL_SEGMENTS] are the exceptions that read like takes and aren't:
+     * `Album Version` and `Radio Edit` describe the ordinary release, and
+     * treating them as versions would stop a module ever matching the plain
+     * listing of the same track.
+     */
+    private fun classify(
+        segment: String,
+        versions: MutableSet<String>,
+        context: MutableSet<String>,
+    ) {
+        val words = segment.split(WORD_SPLIT)
+            .map { it.replace(NON_ALNUM, "") }
+            .filter { it.isNotEmpty() }
+            .map { VERSION_LANGUAGE_ALIASES[it] ?: it }
+        if (words.isEmpty()) return
+        if (words.joinToString("") in NEUTRAL_SEGMENTS) return
+        // Regional labels often append "Official Live Music" as an upload label,
+        // not a different live-performance take. Keep actual "(Live at ...)" strict.
+        val officialLiveMusicLabel = words.containsAll(listOf("official", "live", "music"))
+        val marks = words.filter { it in VERSION_WORDS && !(officialLiveMusicLabel && it == "live") }
+        val dj = words.indexOf("dj")
+        val carriesDjStyle = words.any { it in DJ_STYLE_WORDS } &&
+            (dj >= 0 || marks.any { it in MIX_LABEL_MARKERS })
+        // A language name is not a recording identity on its own: titles and
+        // packaging often contain words such as "Hindi" or "Japanese".
+        // Keep it only when Spotify/YouTube explicitly labels a version/take.
+        val languageMarks = words.filter { it in VERSION_DESCRIPTORS }
+        val hasLanguageVersion = languageMarks.isNotEmpty() && marks.isNotEmpty()
+        // "Speed Up" is a phrase, not the ordinary word "Speed".
+        val speedUp = "speed" in words && "up" in words
+        if (marks.isNotEmpty() || carriesDjStyle || hasLanguageVersion || speedUp) {
+            versions += marks
+            if (hasLanguageVersion) versions += languageMarks
+            if (speedUp) versions += "sped"
+            // "DJ" is often the credited artist ("DJ Snake - Title"), not a
+            // remix. Keep the DJ name only when the segment also signals a take.
+            if (dj >= 0 && (carriesDjStyle || marks.any { it in MIX_LABEL_MARKERS })) {
+                versions += words.drop(dj).filter { it !in NOISE_WORDS }
+            } else if (carriesDjStyle) {
+                versions += words.filter { it in DJ_STYLE_WORDS }
+            }
+            return
+        }
+        // A single CJK syllable is a whole title: the length gate exists
+        // for Latin glue words and must not drop it.
+        context += words.filter { (it.length > 2 || containsCJKChar(it)) && it !in NOISE_WORDS }
+    }
+
+    /**
+     * Whether a bracketed aside is the same title in another script rather
+     * than packaging around it.
+     *
+     * True when one core is CJK-only, the other is Latin, and the other's
+     * aside is that core in full (spaced CJK joins back to it). Same-script
+     * asides never qualify.
+     */
+    internal fun isTranslationMatch(wanted: TitleParts, got: TitleParts): Boolean {
+        val wantedCJK = containsCJKChar(wanted.core) && !hasFilingLatin(wanted.core)
+        val gotCJK = containsCJKChar(got.core) && !hasFilingLatin(got.core)
+        val wantedLatin = hasFilingLatin(wanted.core)
+        val gotLatin = hasFilingLatin(got.core)
+        // Checking both asides covers both orders: Latin in the CJK row's
+        // brackets, and CJK in the Latin row's brackets. The aside must be
+        // the whole title — one word of "(Racing Into The Night)" is not the
+        // song "Night".
+        if ((wantedCJK && gotLatin) || (gotCJK && wantedLatin)) {
+            if (wanted.context.joinToString("") == got.core) return true
+            if (got.context.joinToString("") == wanted.core) return true
+        }
+        return false
+    }
+
+    private fun containsCJKChar(text: String): Boolean = text.any {
+        Character.UnicodeBlock.of(it) in CJK_BLOCKS
+    }
+
+    /** Whether [text] is nothing but (part of) [artist] — the "Artist - Title" upload shape. */
+    private fun isArtistName(text: String, artist: String): Boolean {
+        if (artist.isBlank()) return false
+        // Some regional uploads put every performer before the title:
+        // "Artist feat. Collaborator - Song". Treat the credit marker as
+        // punctuation only for this prefix check; the rest of the title parser
+        // must retain feature words inside an actual song title.
+        val creditJoiners = setOf("feat", "ft", "featuring", "with")
+        val words =
+            text.split(WORD_SPLIT)
+                .map { it.replace(NON_ALNUM, "") }
+                .filter { it.isNotEmpty() && it !in creditJoiners }
+        if (words.isEmpty()) return false
+        val credited = normalize(artist).split(WORD_SPLIT)
+            .map { it.replace(NON_ALNUM, "") }
+            .filter { it.isNotEmpty() && it !in creditJoiners }
+            .toSet()
+        return words.all { it in credited }
+    }
+
+    /**
+     * NFKC + lowercase: full-width alphanumerics fold to ASCII (`Ｄａｉ` to
+     * `dai`, `０-９` to `0-9`, ideographic spaces to spaces) and CJK brackets
+     * fold to ASCII parens so the bracket pass handles `「title」` like
+     * `(title)`. CJK letters themselves survive — stripping them is what kept
+     * every non-Latin catalogue out of matching entirely.
+     */
+    internal fun normalize(text: String): String =
+        Normalizer.normalize(text, Normalizer.Form.NFKC)
+            .lowercase(Locale.ROOT)
+            .replace("&", " and ")
+            .replace(CJK_OPEN, "(")
+            .replace(CJK_CLOSE, ")")
+
+    /**
+     * Latin that actually files the track. A head holding nothing but a take
+     * marker ("絆ノ奇跡 -instrumental-") carries no filing — without this the
+     * marker alone would keep the unmatchable script as the identity.
+     */
+    internal fun hasFilingLatin(text: String): Boolean =
+        text.split(WORD_SPLIT)
+            .map { it.replace(NON_ALNUM, "") }
+            .filter { it.isNotEmpty() }
+            .any {
+                LATIN.containsMatchIn(it) && it !in VERSION_WORDS && it !in NOISE_WORDS &&
+                    it !in TRAILING_NOISE && it !in JOINING_WORDS
+            }
+
+    /**
+     * Both spellings when a dash joins the same word in two scripts
+     * ("コイコガレ - koikogare", either order). Empty unless the two sides
+     * transliterate to each other, so a film packaging ("Paniyon Sa -
+     * Satyamev Jayate") never qualifies.
+     */
+    internal fun scriptMates(raw: String): List<String> {
+        val text = normalize(raw)
+        val dash = DASH.find(text) ?: return emptyList()
+        val head = searchableTitle(text.substring(0, dash.range.first))
+        val tail = searchableTitle(text.substring(dash.range.last + 1))
+        if (head.isBlank() || tail.isBlank() || head == tail) return emptyList()
+        return if (romajiOf(head) == tail || romajiOf(tail) == head) listOf(head, tail)
+        else emptyList()
+    }
+
+    /**
+     * Hepburn transliteration for kana; anything else (kanji, Latin, digits)
+     * passes through untouched. Bridges コイコガレ/koikogare and
+     * アブナイキオク/abunaikioku — but deliberately not kanji (no algorithmic
+     * reading) nor English loans (ドア reads "doa", not "door").
+     */
+    fun romajiOf(text: String): String {
+        val out = StringBuilder()
+        var i = 0
+        var geminate = false
+        var lastVowel: Char? = null
+        fun emit(roma: String) {
+            var r = roma
+            if (geminate) {
+                geminate = false
+                r = when {
+                    r.startsWith("ch") -> "t$r"
+                    r.startsWith("sh") -> "s$r"
+                    r.startsWith("ts") -> "t$r"
+                    else -> "${r[0]}$r"
+                }
+            }
+            out.append(r)
+            lastVowel = r.lastOrNull { it in "aeiou" }
+        }
+        while (i < text.length) {
+            var c = text[i]
+            if (c in 'ァ'..'ヶ') c = (c.code - 0x60).toChar()
+            when (c) {
+                'っ' -> { geminate = true; i++ }
+                'ー' -> { lastVowel?.let(out::append); i++ }
+                'ん' -> {
+                    val peek = text.getOrNull(i + 1)?.let { nc ->
+                        val fc = if (nc in 'ァ'..'ヶ') (nc.code - 0x60).toChar() else nc
+                        KANA_ROMAJI[fc]?.firstOrNull()
+                    }
+                    // No "n'" before a vowel: catalogue romaji drops the
+                    // apostrophe ("Renai" for レンアイ) and identity strips
+                    // punctuation anyway, so writing it only ever misses.
+                    emit(if (peek == 'b' || peek == 'm' || peek == 'p') "m" else "n")
+                    i++
+                }
+                else -> {
+                    val base = KANA_ROMAJI[c]
+                    if (base == null) {
+                        out.append(c); lastVowel = null; geminate = false; i++
+                    } else {
+                        val n1 = text.getOrNull(i + 1)?.let { nc ->
+                            if (nc in 'ァ'..'ヶ') (nc.code - 0x60).toChar() else nc
+                        }
+                        val small = n1?.let { SMALL_Y[it] ?: SMALL_V[it] }
+                        if (small != null) {
+                            val cons = CONS_OVERRIDES.entries
+                                .firstOrNull { base.startsWith(it.key) }?.value
+                                ?: base.dropLast(1)
+                            // sh/ch/j already carry the glide: しゃ is "sha",
+                            // ジャ is "ja", not "shya"/"jya".
+                            val glide = if (cons == "sh" || cons == "ch" || cons == "j") small.removePrefix("y") else small
+                            emit(cons + glide)
+                            i += 2
+                        } else {
+                            emit(base); i++
+                        }
+                    }
+                }
+            }
+        }
+        return out.toString()
+    }
+
+    // ── Artist ──────────────────────────────────────────────────────────────
+
+    /**
+     * Points for the credit agreeing, or null when it disagrees.
+     *
+     * The disagreement that matters is a cover: same title, different singer.
+     * The agreement that has to survive is a *partial* credit, because which
+     * of a duet's singers reaches the title is a formatting choice — YouTube's
+     * "Atif Aslam" and a module's "Atif Aslam, Tulsi Kumar" are one recording
+     * with two spellings of its credit, and refusing that pairing is what kept
+     * the module out of the way of the very tracks it held.
+     *
+     * A side with no credit at all scores zero rather than failing: there is
+     * nothing to disagree with, and the title has already had to match exactly.
+     */
+    private fun artistScore(wanted: String, got: String): Int? {
+        val want = artistNames(wanted)
+        val have = artistNames(got)
+        if (want.isEmpty() || have.isEmpty()) return 0
+        val shared = sharesArtist(wanted, got)
+        if (!shared) return null
+        return if (want == have) ARTIST_EXACT else ARTIST_SHARED
+    }
+
+    /**
+     * The credited artists, each as its own list of words.
+     *
+     * Words rather than one run-together string, so that containment is
+     * checked on whole names: "Queen" is inside "Queensrÿche" as text and is
+     * not one of its artists, while "Atif Aslam" is genuinely one of
+     * "Atif Aslam, Tulsi Kumar". Single letters go — an initialled
+     * "A. R. Rahman" and a plain "AR Rahman" are the same person.
+     */
+    internal fun artistNames(value: String): Set<List<String>> = normalize(value)
+        .split(ARTIST_SEPARATORS)
+        .map { name ->
+            name.split(WORD_SPLIT)
+                .map { it.replace(NON_ALNUM, "") }
+                .filter { it.length > 1 }
+        }
+        .filter { it.isNotEmpty() }
+        .toSet()
+
+    /**
+     * A catalogue can flatten a performer alias across multiple Spotify
+     * credits, e.g. Spotify "Gasentra Pajampangan, Friska" vs YouTube
+     * "Friska Gasentra". A secondary artist alone is not enough: the
+     * candidate's one display name must combine meaningful tokens from at
+     * least two distinct Spotify credits.
+     */
+    private fun sharesCompositeSpotifyCredit(targetCredits: List<String>, candidateCredits: List<String>): Boolean {
+        val ignored = setOf("the", "and", "feat", "featuring", "ft", "with", "vs", "dj", "band", "music", "official")
+        fun tokens(name: String): Set<String> = normalize(name)
+            .split(WORD_SPLIT)
+            .map { it.replace(NON_ALNUM, "") }
+            .filter { it.length > 1 && it !in ignored }
+            .toSet()
+
+        // These are Spotify's original artist objects, not a comma-split
+        // reconstruction of the display line. "Earth, Wind & Fire" stays one
+        // credit even though its name contains the usual joiner characters.
+        val sourceGroups = targetCredits.map(::tokens).filter { it.isNotEmpty() }
+        if (sourceGroups.size < 2) return false
+        val sourceTokens = sourceGroups.flatten().toSet()
+        return candidateCredits.asSequence()
+            .map(::tokens)
+            .any { meaningful ->
+                meaningful.size >= 2 &&
+                    meaningful.all { it in sourceTokens } &&
+                    sourceGroups.count { group -> meaningful.any { it in group } } >= 2
+            }
+    }
+
+    /**
+     * Whether two catalogue credits are the same complete artist name.
+     *
+     * Exact punctuation/spacing normalization is preferred. A compact alias is
+     * also accepted for longer names because YouTube frequently drops spaces
+     * from channel and artist credits ("GUYONWATON" vs "Guyon Waton").
+     * Short names do not get compact matching: it is too easy for initials or
+     * unrelated short names to collide.
+     */
+    fun sameArtistIdentity(first: String, second: String): Boolean {
+        val firstSpaced = artistSpacedKey(first)
+        val secondSpaced = artistSpacedKey(second)
+        if (firstSpaced.isBlank() || secondSpaced.isBlank()) return false
+        if (firstSpaced == secondSpaced) return true
+
+        val firstCompact = artistIdentityKey(first)
+        val secondCompact = artistIdentityKey(second)
+        return firstCompact.length >= COMPACT_ARTIST_MIN_LENGTH &&
+            secondCompact.length >= COMPACT_ARTIST_MIN_LENGTH &&
+            firstCompact == secondCompact
+    }
+
+    /**
+     * A conservative title alias for catalogue spelling mistakes.
+     * Only one word may differ by one character; every other word and its
+     * position must be identical. The caller additionally requires an exact
+     * primary-artist credit and a runtime within three seconds.
+     */
+    private fun nearTitleSpelling(first: List<String>, second: List<String>): Boolean {
+        if (first.isEmpty() || first.size != second.size) return false
+        var differingWords = 0
+        for ((left, right) in first.zip(second)) {
+            if (left == right) continue
+            if (minOf(left.length, right.length) < 4 || !differsByOneCharacter(left, right)) {
+                return false
+            }
+            differingWords++
+            if (differingWords > 1) return false
+        }
+        return differingWords == 1
+    }
+
+    /**
+     * A conservative spelling alias for long, multi-word performer names.
+     * Only one token may differ by one character; every other word and its
+     * position must be identical. Callers must still require exact
+     * title/version identity and a known, close runtime before using it.
+     */
+    internal fun nearArtistSpelling(first: String, second: String): Boolean {
+        val a = artistSpacedKey(first).split(' ').filter { it.isNotBlank() }
+        val b = artistSpacedKey(second).split(' ').filter { it.isNotBlank() }
+        if (a.size < 2 || a.size != b.size) return false
+
+        var differingTokens = 0
+        for ((left, right) in a.zip(b)) {
+            if (left == right) continue
+            if (minOf(left.length, right.length) < 6 || !differsByOneCharacter(left, right)) {
+                return false
+            }
+            differingTokens++
+            if (differingTokens > 1) return false
+        }
+        return differingTokens == 1
+    }
+
+    /**
+     * Liner Desktop-style token-sorted Levenshtein ratio. The surrounding
+     * Spotify matcher still owns version, performer and runtime safeguards.
+     */
+    private fun linerTokenSortRatio(first: List<String>, second: List<String>): Int {
+        val left = first.map(::titleAccentKey).sorted().joinToString(" ")
+        val right = second.map(::titleAccentKey).sorted().joinToString(" ")
+        if (left.isBlank() || right.isBlank()) return 0
+        if (left == right) return 100
+        val distance = levenshteinDistance(left, right)
+        return ((1.0 - distance.toDouble() / maxOf(left.length, right.length)) * 100)
+            .toInt()
+            .coerceIn(0, 100)
+    }
+
+    private fun levenshteinDistance(first: String, second: String): Int {
+        if (first == second) return 0
+        if (first.isEmpty()) return second.length
+        if (second.isEmpty()) return first.length
+        var previous = IntArray(second.length + 1) { it }
+        var current = IntArray(second.length + 1)
+        for (i in first.indices) {
+            current[0] = i + 1
+            for (j in second.indices) {
+                val cost = if (first[i] == second[j]) 0 else 1
+                current[j + 1] = minOf(
+                    current[j] + 1,
+                    previous[j + 1] + 1,
+                    previous[j] + cost,
+                )
+            }
+            val swap = previous
+            previous = current
+            current = swap
+        }
+        return previous[second.length]
+    }
+
+    /** Full-title fuzzy match: no subset-title or one-token coincidence. */
+    private fun linerTitleSimilarity(first: List<String>, second: List<String>): Boolean {
+        if (first.isEmpty() || first.size != second.size) return false
+        val left = first.map(::titleAccentKey)
+        val right = second.map(::titleAccentKey)
+        val shared = left.toSet().intersect(right.toSet()).size
+        val ratio = linerTokenSortRatio(left, right)
+        return if (left.size == 1) {
+            left[0].length >= 7 && ratio >= 90
+        } else {
+            shared >= left.size - 1 && ratio >= 85
+        }
+    }
+
+    /** Fuzzy full-name artist match with at least one exact token in common. */
+    private fun linerArtistSimilarity(first: String, second: String): Boolean {
+        val left = artistSpacedKey(first).split(' ').filter(String::isNotBlank)
+        val right = artistSpacedKey(second).split(' ').filter(String::isNotBlank)
+        if (left.size < 2 || left.size != right.size) return false
+        val shared = left.toSet().intersect(right.toSet()).size
+        return shared >= left.size - 1 && linerTokenSortRatio(left, right) >= 85
+    }
+
+    /** True only when two strings differ by one insertion, deletion or substitution. */
+    private fun differsByOneCharacter(first: String, second: String): Boolean {
+        if (kotlin.math.abs(first.length - second.length) > 1) return false
+        var left = 0
+        var right = 0
+        var edits = 0
+        while (left < first.length && right < second.length) {
+            if (first[left] == second[right]) {
+                left++
+                right++
+                continue
+            }
+            edits++
+            if (edits > 1) return false
+            when {
+                first.length == second.length -> { left++; right++ }
+                first.length > second.length -> left++
+                else -> right++
+            }
+        }
+        if (left < first.length || right < second.length) edits++
+        return edits == 1
+    }
+
+    private fun titleAccentKey(value: String): String =
+        Normalizer.normalize(value, Normalizer.Form.NFKD)
+            .replace(Regex("\\p{M}+"), "")
+
+    private fun artistSpacedKey(value: String): String =
+        Normalizer.normalize(normalize(value), Normalizer.Form.NFKD)
+            .replace(Regex("\\p{M}+"), "")
+            .replace(NON_ALNUM, " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+
+    /** Normalize one complete artist name without splitting collaboration words. */
+    private fun artistIdentityKey(value: String): String =
+        artistSpacedKey(value).filter { it.isLetterOrDigit() }
+
+    private const val COMPACT_ARTIST_MIN_LENGTH = 6
+
+    private fun sameArtist(a: List<String>, b: List<String>) = runOf(a, b) || runOf(b, a)
+
+    /** Whether [outer] contains [inner] as a run of whole words. */
+    private fun runOf(outer: List<String>, inner: List<String>): Boolean {
+        if (inner.isEmpty() || inner.size > outer.size) return false
+        return (0..outer.size - inner.size).any { at ->
+            outer.subList(at, at + inner.size) == inner
+        }
+    }
+
+    // ── Duration ────────────────────────────────────────────────────────────
+
+    /**
+     * Points for the runtimes agreeing, or null when they are too far apart to
+     * be the same recording.
+     *
+     * The strongest signal available, and the one that catches what titles
+     * cannot: the ten-minute loop, the album-side upload, the snippet. Only
+     * consulted when both sides state a runtime — most module rows do, and a
+     * queue row usually does.
+     */
+    private fun durationScore(wanted: Int?, got: Int?, allowVideoDrift: Boolean = false): Int? {
+        if (wanted == null || got == null) return 0
+        val drift = abs(wanted - got)
+        return when {
+            drift > DURATION_LIMIT_SEC && allowVideoDrift && drift <= VIDEO_DURATION_LIMIT_SEC -> 0
+            drift > DURATION_LIMIT_SEC -> null
+            drift <= DURATION_TIGHT_SEC -> DURATION_TIGHT
+            else -> DURATION_LOOSE
+        }
+    }
+
+    // ── Album ───────────────────────────────────────────────────
+
+    /**
+     * Exact release agreement is deliberately stronger than the difference
+     * between a tight and a loose runtime. That lets the known album beat a
+     * different release whose duration happens to be one second closer.
+     * A disagreement is not a veto: compilations and reissues can contain the
+     * same master, and title/artist/runtime still have to do their usual work.
+     */
+    /**
+     * True only when both catalogue rows identify the same normalized release.
+     * This is a hard check only for the low-confidence Spotify composer/uploader
+     * fallback; trusted-artist matches can still be the same master on a
+     * compilation or reissue.
+     */
+    fun hasExactAlbumMatch(wanted: String?, got: String?): Boolean {
+        val want = albumKey(wanted) ?: return false
+        return want == albumKey(got)
+    }
+
+    private fun albumScore(wanted: String?, got: String?): Int =
+        if (hasExactAlbumMatch(wanted, got)) ALBUM_EXACT else 0
+
+    /**
+     * Clean and uncensored editions can be otherwise metadata-identical. When
+     * both catalogues state the flag they must agree; an unknown source is not
+     * rejected because it has made no contradictory claim.
+     */
+    private fun explicitScore(wanted: Boolean?, got: Boolean?): Int? = when {
+        wanted == null || got == null -> 0
+        wanted != got -> null
+        else -> EXPLICIT_EXACT
+    }
+
+    /**
+     * Take markers carried by the release rather than the row ("KALYANI
+     * (Remix)" as the album of a plain-titled "KALYANI"). Read with the same
+     * parser, so the same version vocabulary applies on both sides.
+     */
+    internal fun albumVersionMarkers(album: String?): Set<String> =
+        if (album.isNullOrBlank()) emptySet() else parseTitle(album).versions
+
+    /** Punctuation, spacing and a trailing edition label are catalogue formatting, not release identity. */
+    private fun albumKey(value: String?): String? {
+        var text = normalize(value.orEmpty()).trim()
+        if (text.isEmpty()) return null
+        repeat(BRACKET_PASSES) { text = BRACKETED.replace(text, " ") }
+        val words = text.split(WORD_SPLIT)
+            .map { it.replace(NON_ALNUM, "") }
+            .filter { it.isNotEmpty() && it !in ALBUM_NOISE_WORDS }
+        return words.joinToString("").takeIf { it.isNotEmpty() }
+    }
+
+    /** "3:45" or "1:02:03" as whole seconds; null for anything else. */
+    fun secondsOf(text: String?): Int? {
+        val parts = text?.trim()?.split(':')?.takeIf { it.size in 2..3 } ?: return null
+        val numbers = parts.map { it.trim().toIntOrNull() ?: return null }
+        return numbers.fold(0) { total, part -> total * 60 + part }.takeIf { it > 0 }
+    }
+
+    // ── Context ─────────────────────────────────────────────────────────────
+
+    /** A nudge when both listings mention the same film or album in their asides. */
+    private fun contextScore(wanted: TitleParts, got: TitleParts): Int =
+        if (wanted.context.any { it in got.context }) CONTEXT_SHARED else 0
+
+    // ── Weights ─────────────────────────────────────────────────────────────
+
+    /** Everything that reaches scoring has already matched on title and version. */
+    private const val BASE = 100
+    private const val ARTIST_EXACT = 25
+    private const val ARTIST_SHARED = 10
+    private const val ARTIST_NEAR_SPELLING = 5
+
+    /**
+     * Carried by a match the runtime vouched for rather than the credit. A
+     * penalty, not a pass: any candidate whose credit genuinely agrees beats
+     * it by at least 25, so this only ever decides what plays when nothing
+     * properly credited exists.
+     */
+    private const val CREDITS_DISAGREE = -30
+
+    /**
+     * How exactly two runtimes must agree before that is allowed to stand in
+     * for a shared credit. To the second, near enough — this is the only
+     * evidence there is in that case, so it has to be the strong kind.
+     */
+    private const val CREDIT_OVERRIDE_SEC = 2
+    private const val DURATION_TIGHT = 40
+    private const val DURATION_LOOSE = 15
+    private const val ALBUM_EXACT = 35
+    private const val EXPLICIT_EXACT = 20
+    private const val CONTEXT_SHARED = 20
+
+    /** Within this many seconds is the same master, allowing for trimmed silence. */
+    private const val DURATION_TIGHT_SEC = 3
+    /** A one-character artist spelling mismatch still needs a close runtime. */
+    private const val ARTIST_SPELLING_RUNTIME_SEC = 8
+    /** Liner-style fuzzy title/artist matches need a close known runtime. */
+    private const val LINER_FUZZY_RUNTIME_SEC = 10
+
+    /**
+     * Past this, two tracks sharing a title are not sharing a recording.
+     * Wide enough for a fade or an intro a service trims differently, narrow
+     * enough to rule out an extended cut or a full-album upload.
+     */
+    const val DURATION_LIMIT_SEC = 30
+
+    /**
+     * Whether two runtimes differ by more than [DURATION_LIMIT_SEC], meaning
+     * they cannot be the same recording. Used to detect when a cached or
+     * live stream is a different edit from the requested catalogue track.
+     */
+    fun isSevereMismatch(expectedSec: Int?, actualSec: Int?): Boolean {
+        if (expectedSec == null || actualSec == null) return false
+        return abs(actualSec - expectedSec) > DURATION_LIMIT_SEC
+    }
+
+    /** Visual intros/outros can make the video substantially longer than its audio master. */
+    private const val VIDEO_DURATION_LIMIT_SEC = 90
+
+    private const val BRACKET_PASSES = 3
+    private const val DASH_PASSES = 3
+
+    private val CJK_BLOCKS = setOf(
+        Character.UnicodeBlock.HIRAGANA,
+        Character.UnicodeBlock.KATAKANA,
+        Character.UnicodeBlock.CJK_UNIFIED_IDEOGRAPHS,
+        Character.UnicodeBlock.HANGUL_SYLLABLES,
+    )
+
+    private val BRACKETED = Regex("""[(\[]([^()\[\]]*)[)\]]""")
+    private val DASH = Regex("""\s+[-–—|]+\s+""")
+    private val CREDIT_MARKER = Regex("""\b(?:feat\.?|ft\.?|featuring|with)(?=\s|$)""", RegexOption.IGNORE_CASE)
+    /**
+     * The Portuguese spelling of the same credit, see [parseTitle]. Only the
+     * dotted form and an explicit `part esp.` count: an undotted `part` is
+     * English often enough ("Part of Me") to empty a real title. A numeral or
+     * roman numeral after the marker is still the title ("Part. 2", "Part II"),
+     * and `parte` is a different word.
+     */
+    private val PT_BR_FEATURING = Regex(
+        """\bpart\.\s+(?!(?:\d|[ivx]+\b))[^)\]]*[)\]]?|\bpart\s+(?:esp\.?|especial)\b[^)\]]*[)\]]?""",
+        RegexOption.IGNORE_CASE,
+    )
+    /** `~` and the wave dash `〜` join words in Japanese titles ("真夜中のドア〜stay"). */
+    private val WORD_SPLIT = Regex("""[\s.·~〜]+""")
+    /**
+     * What survives into identity: any language's letters and digits.
+     * ASCII-only (`[^a-z0-9]`) is what emptied every CJK/Devanagari title to
+     * `""` — and an empty core matches nothing and asks for nothing.
+     */
+    private val NON_ALNUM = Regex("""[^\p{L}\p{N}]""")
+    private val LATIN = Regex("[a-z0-9]")
+    private const val LATIN_QUERY_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789 "
+    private val KANA_ROMAJI: Map<Char, String> = run {
+        fun row(consonant: String, kana: String, vowels: String = "aiueo"): Map<Char, String> =
+            kana.toList().zip(vowels.toList()).associate { (k, v) -> k to "$consonant$v" }
+        buildMap {
+            putAll(row("", "あいうえお"))
+            putAll(row("k", "かきくけこ")); putAll(row("g", "がぎぐげご"))
+            putAll(row("s", "さしすせそ")); put('し', "shi")
+            putAll(row("z", "ざじずぜぞ")); put('じ', "ji")
+            putAll(row("t", "たちつてと")); put('ち', "chi"); put('つ', "tsu")
+            putAll(row("d", "だぢづでど")); put('ぢ', "ji"); put('づ', "zu")
+            putAll(row("n", "なにぬねの"))
+            putAll(row("h", "はひふへほ")); put('ふ', "fu")
+            putAll(row("b", "ばびぶべぼ")); putAll(row("p", "ぱぴぷぺぽ"))
+            putAll(row("m", "まみむめも"))
+            put('や', "ya"); put('ゆ', "yu"); put('よ', "yo")
+            putAll(row("r", "らりるれろ"))
+            put('わ', "wa"); put('を', "wo"); put('ん', "n")
+            put('ゔ', "vu")
+            put('ぁ', "a"); put('ぃ', "i"); put('ぅ', "u"); put('ぇ', "e"); put('ぉ', "o")
+            put('ゃ', "ya"); put('ゅ', "yu"); put('ょ', "yo"); put('ゎ', "wa")
+            put('ゕ', "ka"); put('ゖ', "ke")
+        }
+    }
+    private val SMALL_Y = mapOf('ゃ' to "ya", 'ゅ' to "yu", 'ょ' to "yo")
+    private val SMALL_V = mapOf('ぁ' to "a", 'ぃ' to "i", 'ぅ' to "u", 'ぇ' to "e", 'ぉ' to "o")
+    private val CONS_OVERRIDES = mapOf(
+        "shi" to "sh", "chi" to "ch", "tsu" to "ts", "fu" to "f", "ji" to "j", "zu" to "z",
+    )
+    private val CJK_OPEN = Regex("[「『【〈《〔［｛]")
+    private val CJK_CLOSE = Regex("[」』】〉》〕］｝]")
+    // Not the katakana middle dot `・`: it sits *inside* a transliterated
+    // name (ジョン・レノン), and splitting there makes two Johns one artist.
+    private val ARTIST_SEPARATORS =
+        Regex("""\s*(?:[,&/;·|、，×]|\band\b|\bx\b|\bvs\.?\b|\bfeat\.?\b|\bft\.?\b|\bfeaturing\b|\bwith\b)\s*""")
+
+    /**
+     * What makes a listing a different recording rather than a different
+     * listing of the same one. A title carrying one of these on one side only
+     * is refused outright.
+     */
+    private val VERSION_WORDS = setOf(
+        "remix", "remixes", "rmx", "refix", "flip", "bootleg", "mashup", "medley",
+        "live", "concert", "unplugged", "acoustic", "instrumental", "karaoke",
+        "vocals", "vocal", "acapella", "acappella", "backing", "stems", "stem",
+        "cover", "demo", "reprise", "remake", "rework", "extended", "edit",
+        "version", "mix", "dub", "vip", "session", "sessions",
+        "sped", "slowed", "reverb", "nightcore", "lofi", "orchestral", "symphonic",
+        // Indonesian DJ styles are only take markers when paired with an edit label.
+        "koplo", "kentrung", "funkot", "breakbeat", "dangdut",
+        "jedag", "jedug", "jedagjedug", "boosted",
+        "part", "pt", "chapter",
+        "カバー", "カラオケ", "リミックス", "ライブ", "アコースティック",
+        "インスト", "バージョン", "歌ってみた", "踊ってみた", "弾いてみた",
+        "翻唱", "现场", "混音",
+        "커버", "라이브", "리믹스",
+    )
+
+    private val DJ_STYLE_WORDS = setOf(
+        "koplo", "kentrung", "funkot", "breakbeat", "dangdut", "jedag", "jedug", "jedagjedug",
+        "bass", "boosted", "house", "techno", "trance", "dubstep", "reggae", "disco",
+        "club", "funky", "tiktok", "viral",
+    )
+
+    private val MIX_LABEL_MARKERS = setOf("remix", "remixes", "rmx", "mix", "edit", "version")
+
+    // Common regional shorthand and native-language labels should describe
+    // the same explicit language edition (e.g. "Indo Version" vs
+    // "Indonesian Version"). Applied only while classifying a labelled
+    // version segment, never to ordinary title words.
+    private val VERSION_LANGUAGE_ALIASES = mapOf(
+        "indo" to "indonesian",
+        "jawa" to "javanese",
+        "sunda" to "sundanese",
+    )
+
+    private val VERSION_DESCRIPTORS = setOf(
+        "english", "hindi", "bengali", "punjabi", "tamil", "telugu", "malayalam",
+        "kannada", "marathi", "gujarati", "bhojpuri", "urdu", "arabic", "japanese",
+        "korean", "mandarin", "cantonese", "chinese", "spanish", "french",
+        "portuguese", "italian", "german", "russian", "turkish", "thai",
+        "indonesian", "javanese", "sundanese", "jawa", "sunda",
+    )
+
+    private val TRAILING_MIX_LABEL = Regex(
+        """\s+(dj(?:\s+[\p{L}\p{N}]+){0,3}\s+(?:remix|mix|edit|version)|""" +
+            """dj\s+(?:koplo|kentrung|funkot|breakbeat|dangdut|jedag(?:[\s-]*jedug)?|bass|boosted|house|techno|trance|dubstep|reggae|disco|club|funky|tiktok|viral)(?:\s+(?:remix|mix|edit|version))?|""" +
+            """(?:koplo|kentrung|funkot|breakbeat|dangdut|jedag[\s-]*jedug|bass\s+boosted|""" +
+            """(?:house|techno|trance|dubstep|reggae|disco|club|funky|tiktok|viral)\s+(?:remix|mix|edit|version)|""" +
+            """sped\s+up|speed\s+up|slowed(?:\s*\+\s*|\s+)reverb|nightcore|""" +
+            """(?:english|hindi|bengali|punjabi|tamil|telugu|malayalam|kannada|marathi|gujarati|bhojpuri|""" +
+            """urdu|arabic|japanese|korean|mandarin|cantonese|chinese|spanish|french|portuguese|italian|""" +
+            """german|russian|turkish|thai|indonesian|javanese|sundanese|jawa|sunda)\s+(?:version|ver|dub|edition))""" +
+            """(?:\s+(?:remix|mix|edit|version))?)$""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    /**
+     * The [VERSION_WORDS] that are a take even printed bare at the end of a
+     * title ("Kizuna No Kiseki Instrumental"). The rest are real title words
+     * often enough ("Let Me Live", "Take Cover", "The Final Chapter") that
+     * reading them as a take would let the live or cover recording stand in
+     * for the original.
+     */
+    private val TRAILING_TAKES = setOf(
+        "instrumental", "karaoke", "acapella", "acappella", "remix", "rmx", "nightcore",
+        "koplo", "kentrung", "funkot", "breakbeat", "dangdut", "jedag", "jedug",
+        "sped", "slowed", "reverb",
+    )
+
+    /**
+     * Takes whose absence from the audio is the point: a row filed under an
+     * album declaring one of these *is* that take even when its own title
+     * says nothing ("Am I Dreaming" on "... (METROVERSE INSTRUMENTAL
+     * EDITION)"). Applied from the album in both directions, unlike the
+     * rescue above — which is what stops the 256s instrumental twin from
+     * standing in for the 256s vocal no duration check can separate.
+     */
+    private val NOVOCAL_TAKES = setOf(
+        "instrumental", "karaoke", "acapella", "acappella", "backing", "stems", "stem",
+    )
+
+    /**
+     * Asides that read like a version and describe the ordinary release. The
+     * exception list to [VERSION_WORDS] — without it, "Song (Album Version)"
+     * and "Song" would be two different recordings.
+     */
+    private val NEUTRAL_SEGMENTS = setOf(
+        "albumversion", "originalversion", "originalmix", "singleversion",
+        "radioversion", "radioedit", "stereoversion", "monoversion",
+        "studioversion", "fullversion", "standardversion", "explicitversion",
+        "deluxeversion", "originaltrack",
+    )
+
+    /** Where YouTube Music prints a type instead of an artist: "… — Música". */
+    private val YOUTUBE_TYPE_LABELS = setOf(
+        "música", "musica", "vídeo", "video", "song", "album", "álbum", "artista", "artist",
+    )
+
+    /** Packaging words, worth nothing as a tie-break because everything has them. */
+    private val NOISE_WORDS = setOf(
+        "official", "video", "audio", "lyrics", "lyric", "lyrical", "visualizer",
+        "song", "songs", "full", "music", "the", "and", "from", "feat", "ft",
+        "featuring", "with", "new", "latest", "free", "download", "remaster",
+        "remastered", "explicit", "clean", "bonus", "track", "deluxe", "original",
+        "album", "single", "hd", "hq", "4k", "mp3",
+    )
+
+    private val ALBUM_NOISE_WORDS = setOf(
+        "album", "deluxe", "edition", "expanded", "remaster", "remastered",
+        "version", "explicit", "clean", "bonus", "anniversary",
+    )
+
+    /** Trailing labels an upload hangs on a title with no brackets to hold them. */
+    private val TRAILING_NOISE = setOf(
+        "song", "songs", "video", "audio", "lyrics", "lyric", "lyrical",
+        "official", "full", "hd", "hq", "4k", "mp3", "ost", "soundtrack",
+    )
+
+    /** Dropped from the core so that "Jack and Jill" and "Jack & Jill" are one title. */
+    private val JOINING_WORDS = setOf("and")
+}

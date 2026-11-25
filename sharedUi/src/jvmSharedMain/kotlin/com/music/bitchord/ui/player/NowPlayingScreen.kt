@@ -1330,7 +1330,12 @@ fun NowPlayingScreen(
         lyricsOpen = true
         queueOpen = false
     }
+    val exitLyricsFullscreen: () -> Unit = {
+        lyricsFullscreen = false
+        screenOrientation.portrait()
+    }
     val closeLyrics: () -> Unit = {
+        if (lyricsFullscreen) screenOrientation.portrait()
         lyricsFullscreen = false
         lyricsControlsOpen = false
         lyricsOpen = false
@@ -1431,9 +1436,7 @@ fun NowPlayingScreen(
     // Controls being visible must not insert an extra navigation level. Back
     // always leaves lyrics in one step, whether it starts over the lyrics list
     // or over the half-player at the bottom.
-    PlayerBackHandler(enabled = lyricsFullscreen) {
-        lyricsFullscreen = false
-    }
+    PlayerBackHandler(enabled = lyricsFullscreen, onBack = exitLyricsFullscreen)
 
     PlayerBackHandler(enabled = lyricsOpen, onBack = closeLyrics)
 
@@ -2119,12 +2122,12 @@ fun NowPlayingScreen(
         }
     }
 
-    // Full-screen lyrics adapt to the actual window shape. Portrait keeps the
-    // reader as the main event; landscape gives the cover its own column and
-    // lets the words use the remaining width without fighting the artwork.
-    if (lyricsFullscreen && lyricsOpen) {
+    // Fullscreen is a landscape-only reading mode. In portrait the regular
+    // lyrics panel underneath remains the native experience; the button nudges
+    // the device sideways and this dialog appears once the window is wide.
+    if (lyricsFullscreen && lyricsOpen && sideways) {
         Dialog(
-            onDismissRequest = { lyricsFullscreen = false },
+            onDismissRequest = exitLyricsFullscreen,
             properties = DialogProperties(
                 usePlatformDefaultWidth = false,
                 dismissOnClickOutside = false,
@@ -2135,7 +2138,6 @@ fun NowPlayingScreen(
                     .fillMaxSize()
                     .background(Color.Black),
             ) {
-                val wideLyricsLayout = maxWidth > maxHeight
                 FullArtworkBlurBackdrop(
                     image = fullArtworkBlurImage,
                     modifier = Modifier.fillMaxSize(),
@@ -2153,177 +2155,79 @@ fun NowPlayingScreen(
                         ),
                 )
 
-                if (wideLyricsLayout) {
-                    val coverSize = (maxHeight - 112.dp).coerceIn(160.dp, 260.dp)
-                    Row(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 26.dp, vertical = 18.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .width(coverSize)
-                                .fillMaxHeight(),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                        ) {
-                            Spacer(Modifier.weight(1f))
-                            AsyncImage(
-                                model = art.request,
-                                contentDescription = null,
-                                contentScale = ContentScale.Crop,
-                                onState = art::onState,
-                                modifier = Modifier
-                                    .size(coverSize)
-                                    .clip(RoundedCornerShape(22.dp))
-                                    .border(
-                                        1.dp,
-                                        Color.White.copy(alpha = 0.16f),
-                                        RoundedCornerShape(22.dp),
-                                    ),
-                            )
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = 16.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                            ) {
-                                Text(
-                                    text = song.title,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = Color.White,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
-                                    textAlign = TextAlign.Center,
-                                )
-                                Text(
-                                    text = song.artist,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = Color.White.copy(alpha = 0.70f),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    textAlign = TextAlign.Center,
-                                    modifier = Modifier.padding(top = 4.dp),
-                                )
-                            }
-                            Spacer(Modifier.weight(1f))
-                        }
-
-                        Spacer(Modifier.width(28.dp))
-
-                        Column(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight(),
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(48.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Spacer(Modifier.weight(1f))
-                                CircleGlyph(
-                                    icon = Icons.Rounded.FullscreenExit,
-                                    contentDescription = stringResource(Res.string.lyrics_exit_fullscreen),
-                                    onClick = { lyricsFullscreen = false },
-                                    tint = Color.White,
-                                )
-                            }
-                            LyricsPanel(
-                                lines = lyrics.orEmpty(),
-                                subLines = lyricsTranslation.subLines,
-                                trackKey = song.videoId,
-                                playhead = lyricsPlayhead,
-                                looking = !lyricsUnavailable,
-                                isPlaying = isPlaying && position.advancing,
-                                active = true,
-                                onSeekToLine = seekToLyric,
-                                controlsOpen = lyricsControlsOpen,
-                                onRevealControls = { lyricsControlsOpen = true },
-                                onHideControls = { lyricsControlsOpen = false },
-                                onScrollingChange = { lyricsScrolling = it },
-                                canPick = lyricsShareEnabled,
-                                picking = lyricPicker.picking,
-                                picked = lyricPicker.picks,
-                                onPickLine = lyricPicker.pick,
-                                onTogglePick = lyricPicker.toggle,
-                                centerFocus = true,
-                                fontScale = 0.78f,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 4.dp),
-                            )
-                            if (lyricsControlsOpen) {
-                                if (lyricPicker.picking) {
-                                    LyricsPickBar(
-                                        shareEnabled = lyricPicker.picks.isNotEmpty() && !lyricPicker.overBudget,
-                                        onCancel = lyricPicker.cancel,
-                                        onShare = lyricPicker.share,
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(top = 8.dp, bottom = 4.dp),
-                                    )
-                                } else {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(top = 8.dp, bottom = 4.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                    ) {
-                                        RomanizationToggleButton(
-                                            state = lyricsTranslation.romanizationState,
-                                            showingRomanization = lyricsTranslation.showingRomanization,
-                                            enabled = !lyrics.isNullOrEmpty(),
-                                            onClick = lyricsTranslation.toggleRomanization,
-                                        )
-                                        Spacer(Modifier.weight(1f))
-                                        TranslationToggleButton(
-                                            state = lyricsTranslation.translationState,
-                                            showingTranslation = lyricsTranslation.showingTranslation,
-                                            enabled = !lyrics.isNullOrEmpty(),
-                                            onClick = lyricsTranslation.toggleTranslation,
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                } else {
+                val coverSize = (maxHeight - 140.dp).coerceIn(120.dp, 220.dp)
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 26.dp, vertical = 18.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     Column(
                         modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 20.dp, vertical = 16.dp),
+                            .width(coverSize)
+                            .fillMaxHeight(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Spacer(Modifier.weight(1f))
+                        AsyncImage(
+                            model = art.request,
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            onState = art::onState,
+                            modifier = Modifier
+                                .size(coverSize)
+                                .clip(RoundedCornerShape(22.dp))
+                                .border(
+                                    1.dp,
+                                    Color.White.copy(alpha = 0.16f),
+                                    RoundedCornerShape(22.dp),
+                                ),
+                        )
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 14.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Text(
+                                text = song.title,
+                                style = MaterialTheme.typography.titleMedium,
+                                color = Color.White,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                textAlign = TextAlign.Center,
+                            )
+                            Text(
+                                text = song.artist,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color.White.copy(alpha = 0.70f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(top = 4.dp),
+                            )
+                        }
+                        Spacer(Modifier.weight(1f))
+                    }
+
+                    Spacer(Modifier.width(28.dp))
+
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight(),
                     ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(56.dp),
+                                .height(48.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Column(
-                                modifier = Modifier.weight(1f),
-                            ) {
-                                Text(
-                                    text = song.title,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = Color.White,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                                Text(
-                                    text = song.artist,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = Color.White.copy(alpha = 0.68f),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
+                            Spacer(Modifier.weight(1f))
                             CircleGlyph(
                                 icon = Icons.Rounded.FullscreenExit,
                                 contentDescription = stringResource(Res.string.lyrics_exit_fullscreen),
-                                onClick = { lyricsFullscreen = false },
+                                onClick = exitLyricsFullscreen,
                                 tint = Color.White,
                             )
                         }
@@ -2345,12 +2249,12 @@ fun NowPlayingScreen(
                             picked = lyricPicker.picks,
                             onPickLine = lyricPicker.pick,
                             onTogglePick = lyricPicker.toggle,
-                            centerFocus = false,
-                            fontScale = 0.90f,
+                            centerFocus = true,
+                            fontScale = 0.78f,
                             modifier = Modifier
                                 .weight(1f)
                                 .fillMaxWidth()
-                                .padding(top = 8.dp, bottom = 8.dp),
+                                .padding(horizontal = 4.dp),
                         )
                         if (lyricsControlsOpen) {
                             if (lyricPicker.picking) {
@@ -2360,13 +2264,13 @@ fun NowPlayingScreen(
                                     onShare = lyricPicker.share,
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(bottom = 4.dp),
+                                        .padding(top = 8.dp, bottom = 4.dp),
                                 )
                             } else {
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(bottom = 4.dp),
+                                        .padding(top = 8.dp, bottom = 4.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
                                     RomanizationToggleButton(
@@ -4495,7 +4399,7 @@ fun NowPlayingScreen(
                                         playhead = lyricsPlayhead,
                                         looking = !lyricsUnavailable,
                                         isPlaying = isPlaying && position.advancing,
-                                        active = lyricsPanelVisible && !lyricsFullscreen,
+                                        active = lyricsPanelVisible && !(lyricsFullscreen && sideways),
                                         onSeekToLine = seekToLyric,
                                         controlsOpen = lyricsControlsOpen,
                                         onRevealControls = { lyricsControlsOpen = true },
@@ -4517,6 +4421,7 @@ fun NowPlayingScreen(
                                     onClick = {
                                         lyricsControlsOpen = true
                                         lyricsFullscreen = true
+                                        screenOrientation.landscape()
                                     },
                                     tint = Color.White,
                                     modifier = Modifier

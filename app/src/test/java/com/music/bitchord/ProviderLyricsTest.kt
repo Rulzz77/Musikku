@@ -21,7 +21,7 @@ class ProviderLyricsTest {
 
     @Test
     fun `the imported providers are exposed`() {
-        assertEquals(17, LyricsSource.entries.size)
+        assertEquals(18, LyricsSource.entries.size)
         assertTrue(LyricsSource.offered.containsAll(listOf(
             LyricsSource.BETTER_LYRICS_PORTATO,
             LyricsSource.PAXSENIX_SPOTIFY,
@@ -33,7 +33,7 @@ class ProviderLyricsTest {
 
     @Test
     fun `hidden providers are kept but never offered`() {
-        assertTrue(LyricsSource.entries.containsAll(listOf(LyricsSource.SIMP_MUSIC, LyricsSource.MEGALOBIZ)))
+        assertTrue(LyricsSource.entries.containsAll(listOf(LyricsSource.SIMP_MUSIC, LyricsSource.MEGALOBIZ, LyricsSource.COMMUNITY_TTML)))
         assertTrue(LyricsSource.offered.none { it.hidden })
         assertEquals(LyricsSource.LRC_RED, LyricsSource.offered.first())
     }

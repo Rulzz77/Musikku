@@ -1569,4 +1569,5 @@
     <string name="automix_art_transition_subtitle">AutoMix के दौरान ट्रैक बदलने पर कवर आर्ट को सहजता से मिलाता है।</string>
     <string name="automix_mini_art_transition">मिनी प्लेयर कवर ट्रांज़िशन</string>
     <string name="automix_mini_art_transition_subtitle">AutoMix के दौरान मिनी प्लेयर में कवर आर्ट ट्रांज़िशन दिखाता है।</string>
+    <string name="listen_together_invalid_qr">यह QR कोड साथ में सुनने का मान्य आमंत्रण नहीं है।</string>
 </resources>

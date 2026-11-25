@@ -1574,4 +1574,5 @@
     <string name="automix_art_transition_subtitle">Mistura suavemente as capas entre faixas durante o AutoMix.</string>
     <string name="automix_mini_art_transition">Transição de capa no minirreprodutor</string>
     <string name="automix_mini_art_transition_subtitle">Mostra transições de capas no minirreprodutor durante o AutoMix.</string>
+    <string name="listen_together_invalid_qr">Este código QR não é um convite válido para ouvir em conjunto.</string>
 </resources>

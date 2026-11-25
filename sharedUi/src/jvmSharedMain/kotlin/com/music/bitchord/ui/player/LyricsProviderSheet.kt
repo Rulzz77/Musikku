@@ -56,7 +56,10 @@ internal fun LyricsProviderSheet(
     hazeState: HazeState,
     currentSource: LyricsSource?,
     states: Map<LyricsSource, LyricsProviderState>,
+    trackId: String,
+    trackTitle: String,
     onSelect: (LyricsSource) -> Unit,
+    onImportedTtml: () -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -77,6 +80,14 @@ internal fun LyricsProviderSheet(
             modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
+            PlayerPlatform.host.LyricsTtmlImportAction(
+                trackId = trackId,
+                trackTitle = trackTitle,
+                onImported = {
+                    onImportedTtml()
+                    onDismiss()
+                },
+            )
             sources.forEach { source ->
                 LyricsProviderRow(
                     source = source,

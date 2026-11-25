@@ -15,10 +15,9 @@ enum class LyricsSource(
     /** Whether it can return per-word timings, or only whole lines. */
     val wordSynced: Boolean,
     /**
-     * Kept in code but off the list: not shown in Settings or the provider
-     * picker, and never asked — even by someone whose saved choices still name
-     * it. For a host that has stopped answering, where deleting the provider
-     * outright would only mean writing it again if it comes back.
+     * Kept in code but off the list: not shown in Settings or the remote
+     * provider picker, and never queried by the online repository. This also
+     * accommodates local-only sources which do not make network requests.
      */
     val hidden: Boolean = false,
     /** Providers that return lyrics without exposing the matched track identity. */
@@ -132,6 +131,12 @@ enum class LyricsSource(
         label = "Genius",
         detail = "Plain text fallback, massive web catalogue",
         wordSynced = false,
+    ),
+    COMMUNITY_TTML(
+        label = "Community TTML",
+        detail = "Imported from a local TTML file for this track",
+        wordSynced = true,
+        hidden = true,
     ),
     ;
 

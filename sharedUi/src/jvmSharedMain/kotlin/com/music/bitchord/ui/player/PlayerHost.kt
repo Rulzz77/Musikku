@@ -168,6 +168,17 @@ interface PlayerHost {
     fun rememberPlayerFrost(): PlayerFrost? = null
 
     /**
+     * Platform-owned action for importing a TTML file for the current track.
+     * Platforms without a local document picker simply render nothing.
+     */
+    @Composable
+    fun LyricsTtmlImportAction(
+        trackId: String,
+        trackTitle: String,
+        onImported: () -> Unit,
+    ) = Unit
+
+    /**
      * Whether lines can be put on a share card here. False hides the pick mode
      * altogether rather than offering a mode with nowhere to put its result.
      */

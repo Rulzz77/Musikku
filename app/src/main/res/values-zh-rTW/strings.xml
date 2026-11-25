@@ -1546,4 +1546,5 @@
     <string name="automix_art_transition_subtitle">在 AutoMix 期間平順銜接不同曲目的封面。</string>
     <string name="automix_mini_art_transition">迷你播放器封面轉場</string>
     <string name="automix_mini_art_transition_subtitle">在 AutoMix 期間於迷你播放器中顯示封面轉場效果。</string>
+    <string name="listen_together_invalid_qr">此 QR 碼不是有效的「一起聆聽」邀請。</string>
 </resources>

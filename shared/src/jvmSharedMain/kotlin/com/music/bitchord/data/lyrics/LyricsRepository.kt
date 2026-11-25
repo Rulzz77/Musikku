@@ -213,6 +213,8 @@ object LyricsRepository {
             LyricsSource.KUGOU -> KuGou.lyrics(title, artist, durationMs, album)
             LyricsSource.MEGALOBIZ -> Megalobiz.lyrics(title, artist)
             LyricsSource.GENIUS -> Genius.lyrics(title, artist, durationMs)
+            // Community TTML is a local per-track override, never an online provider.
+            LyricsSource.COMMUNITY_TTML -> null
         }
         return found
     }

@@ -286,4 +286,6 @@
     <string name="queue_download">Download</string>
     <string name="queue_selection_remove">Remove</string>
     <string name="queue_add_all_to_playlist">Add all to playlist</string>
+    <string name="lyrics_fullscreen">Full-screen lyrics</string>
+    <string name="lyrics_exit_fullscreen">Exit full-screen lyrics</string>
 </resources>

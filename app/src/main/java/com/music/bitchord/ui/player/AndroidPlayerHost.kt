@@ -2,22 +2,50 @@ package com.music.bitchord.ui.player
 
 import com.music.bitchord.wear.WearBridge
 import android.content.Context
+import android.net.Uri
 import android.database.ContentObserver
 import android.media.AudioManager
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.music.bitchord.data.canvas.CanvasArtwork
 import com.music.bitchord.data.canvas.CanvasRepository
 import com.music.bitchord.data.listentogether.ListenTogether
+import com.music.bitchord.data.lyrics.CommunityTtmlLyricsStore
 import com.music.bitchord.data.lyrics.LyricLine
 import com.music.bitchord.data.lyrics.LyricsTranslation
 import com.music.bitchord.data.model.Song
@@ -37,8 +65,11 @@ import com.music.bitchord.ui.components.isGlassSupported
 import com.music.bitchord.ui.components.menuBackdropFrost
 import dev.chrisbanes.haze.HazeState
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -46,6 +77,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import java.io.ByteArrayOutputStream
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -243,6 +275,131 @@ class AndroidPlayerHost(context: Context) : PlayerHost {
     }
 
     @Composable
+    override fun LyricsTtmlImportAction(
+        trackId: String,
+        trackTitle: String,
+        onImported: () -> Unit,
+    ) {
+        val context = LocalContext.current
+        val pickerScope = rememberCoroutineScope()
+        var importing by remember(trackId) { mutableStateOf(false) }
+        var hasImported by remember(trackId) {
+            mutableStateOf(CommunityTtmlLyricsStore.has(app.filesDir, trackId))
+        }
+
+        val documentPicker = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.OpenDocument(),
+        ) { uri ->
+            if (uri != null) {
+                pickerScope.launch {
+                    importing = true
+                    var saved = false
+                    try {
+                        saved = withContext(Dispatchers.IO) {
+                            val ttml = readCommunityTtml(context, uri) ?: return@withContext false
+                            CommunityTtmlLyricsStore.save(app.filesDir, trackId, ttml)
+                        }
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        saved = false
+                    } finally {
+                        importing = false
+                    }
+
+                    if (saved) {
+                        hasImported = true
+                        showMessage("Community TTML imported for $trackTitle")
+                        onImported()
+                    } else {
+                        showMessage("That file is not valid TTML lyrics or exceeds 1 MB.")
+                    }
+                }
+            }
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(Color.White.copy(alpha = 0.075f))
+                    .clickable(enabled = !importing) {
+                        documentPicker.launch(arrayOf("*/*"))
+                    }
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.10f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (importing) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            color = Color.White,
+                            strokeWidth = 2.dp,
+                        )
+                    } else {
+                        Text(
+                            text = "TTML",
+                            color = Color.White,
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        )
+                    }
+                }
+                Spacer(Modifier.width(13.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = "Import community TTML",
+                        color = Color.White,
+                        style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
+                    )
+                    Text(
+                        text = "Use a timed .ttml file for this track",
+                        color = Color.White.copy(alpha = 0.58f),
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                }
+            }
+
+            if (hasImported) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color.White.copy(alpha = 0.045f))
+                        .clickable(enabled = !importing) {
+                            pickerScope.launch {
+                                val removed = withContext(Dispatchers.IO) {
+                                    CommunityTtmlLyricsStore.remove(app.filesDir, trackId)
+                                }
+                                if (removed) {
+                                    hasImported = false
+                                    showMessage("Imported TTML removed for $trackTitle")
+                                    onImported()
+                                } else {
+                                    showMessage("Could not remove the imported TTML file.")
+                                }
+                            }
+                        }
+                        .padding(horizontal = 14.dp, vertical = 11.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "Remove imported TTML",
+                        color = Color(0xFFFFB4AB),
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                }
+            }
+        }
+    }
+
+    @Composable
     override fun CastDialog(hazeState: HazeState, onDismiss: () -> Unit) =
         com.music.bitchord.ui.components.CastDialog(hazeState = hazeState, onDismiss = onDismiss)
 
@@ -389,4 +546,21 @@ private class BackdropPlayerFrost(private val backdrop: SnapshotBackdrop) : Play
     override fun release() = backdrop.release()
 
     override fun Modifier.frostPanel(shape: Shape, fill: Color): Modifier = menuBackdropFrost(backdrop, shape, fill)
+}
+
+private fun readCommunityTtml(context: Context, uri: Uri): String? {
+    val input = context.contentResolver.openInputStream(uri) ?: return null
+    input.use { stream ->
+        val output = ByteArrayOutputStream()
+        val buffer = ByteArray(8 * 1024)
+        var total = 0
+        while (true) {
+            val count = stream.read(buffer)
+            if (count < 0) break
+            total += count
+            if (total > CommunityTtmlLyricsStore.MAX_TTML_BYTES) return null
+            output.write(buffer, 0, count)
+        }
+        return output.toString(Charsets.UTF_8.name()).takeIf { it.isNotBlank() }
+    }
 }

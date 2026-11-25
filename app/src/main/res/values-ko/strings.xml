@@ -1407,4 +1407,5 @@
     <string name="automix_art_transition_subtitle">AutoMix 중 트랙 사이의 커버 아트를 부드럽게 전환합니다.</string>
     <string name="automix_mini_art_transition">미니 플레이어 커버 아트 전환</string>
     <string name="automix_mini_art_transition_subtitle">AutoMix 중 미니 플레이어에서 커버 아트 전환 효과를 표시합니다.</string>
+    <string name="listen_together_invalid_qr">이 QR 코드는 함께 듣기에 유효한 초대 코드가 아닙니다.</string>
 </resources>

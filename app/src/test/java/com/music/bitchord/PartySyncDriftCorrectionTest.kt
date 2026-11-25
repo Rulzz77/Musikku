@@ -17,12 +17,14 @@ class PartySyncDriftCorrectionTest {
     @Test
     fun `a listener behind the party is gently sped up`() {
         assertEquals(1.01f, partySyncSpeedMultiplier(-100L)!!, 0.0001f)
-        assertEquals(1.04f, partySyncSpeedMultiplier(-1_200L)!!, 0.0001f)
+        assertEquals(1.02f, partySyncSpeedMultiplier(-300L)!!, 0.0001f)
+        assertEquals(1.05f, partySyncSpeedMultiplier(-1_200L)!!, 0.0001f)
     }
 
     @Test
     fun `a listener ahead of the party is gently slowed down`() {
         assertEquals(0.99f, partySyncSpeedMultiplier(100L)!!, 0.0001f)
-        assertEquals(0.96f, partySyncSpeedMultiplier(1_200L)!!, 0.0001f)
+        assertEquals(0.98f, partySyncSpeedMultiplier(300L)!!, 0.0001f)
+        assertEquals(0.95f, partySyncSpeedMultiplier(1_200L)!!, 0.0001f)
     }
 }

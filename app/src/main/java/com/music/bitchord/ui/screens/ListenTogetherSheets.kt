@@ -455,7 +455,7 @@ internal fun JoinPartySheet(
         Spacer(Modifier.height(8.dp))
         TextButton(
             onClick = onScanQr,
-            enabled = enabled && !busy,
+            enabled = !busy,
             modifier = Modifier.fillMaxWidth(),
         ) {
             Icon(

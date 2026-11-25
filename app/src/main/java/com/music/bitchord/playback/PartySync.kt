@@ -21,9 +21,9 @@ import kotlinx.coroutines.withContext
 import kotlin.math.abs
 
 private const val PARTY_SOFT_DRIFT_DEADZONE_MS = 80L
-private const val PARTY_SOFT_DRIFT_SCALE_MS = 30_000f
+private const val PARTY_SOFT_DRIFT_SCALE_MS = 15_000f
 private const val PARTY_MIN_SOFT_RATE_ADJUSTMENT = 0.01f
-private const val PARTY_MAX_SOFT_RATE_ADJUSTMENT = 0.04f
+private const val PARTY_MAX_SOFT_RATE_ADJUSTMENT = 0.05f
 
 /**
  * Returns a gentle speed multiplier for ordinary playback drift.
@@ -620,15 +620,22 @@ class PartySync(
         // never going false. The playhead is frozen meanwhile, so it reads as
         // drift that is not there and would be "corrected" by seeking a player
         // nobody can hear. It converges on its own the moment the audio returns.
-        if (exo.playbackSuppressionReason != Player.PLAYBACK_SUPPRESSION_REASON_NONE) return
+        if (exo.playbackSuppressionReason != Player.PLAYBACK_SUPPRESSION_REASON_NONE) {
+            restoreSoftDriftCorrection(exo)
+            return
+        }
 
         // Playing something off this device. The party cannot follow a
         // content:// URI and this device should not be yanked off the file
         // somebody deliberately chose, so the two are simply left uncoupled
         // until playback returns to something with a catalogue id.
-        if (exo.currentMediaItem?.toSong()?.isDeviceFile() == true) return
+        if (exo.currentMediaItem?.toSong()?.isDeviceFile() == true) {
+            restoreSoftDriftCorrection(exo)
+            return
+        }
 
         if (exo.currentMediaItem?.mediaId != track.videoId) {
+            restoreSoftDriftCorrection(exo)
             load(party)
             return
         }
@@ -1142,19 +1149,16 @@ class PartySync(
         /**
          * How often the playhead is checked against the party's.
          *
-         * Frequent enough that a device coming back from a stall is corrected
-         * within about a second, and cheap: in-process field reads off the
+         * Frequent enough to notice a small drift quickly, and cheap: in-process
+         * field reads off the
          * ExoPlayer, no binder call and no allocation on the quiet path.
          */
         const val TICK_MS = 350L
 
         /**
-         * How far out of step is worth an audible seek.
-         *
-         * Above the jitter of two decoders on different hardware, and at the
-         * level of a real desync. Tightening this does not make a party more
-         * synchronised — it makes it seek more often, which is what people
-         * actually hear.
+         * Maximum drift handled by a gentle rate correction before a guarded seek.
+         * Above this the gap is a real desync, not decoder jitter. Tightening the
+         * limit makes the player seek more often, which people hear as a hitch.
          */
         const val DRIFT_LIMIT_MS = 1_200L
 

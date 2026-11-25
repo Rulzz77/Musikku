@@ -1262,6 +1262,7 @@ fun NowPlayingScreen(
         mutableStateOf(restoredPlayerScreen == LastPlayerScreen.LYRICS)
     }
     var lyricsFullscreen by remember { mutableStateOf(false) }
+    var lyricsRequestedLandscape by remember { mutableStateOf(false) }
     val queueSlide = remember { mutableFloatStateOf(0f) }
     // Expensive, song-scoped preparation is deliberately staggered. The small
     // backdrop decode runs after the track hand-off has settled; lyrics and
@@ -1330,13 +1331,18 @@ fun NowPlayingScreen(
         lyricsOpen = true
         queueOpen = false
     }
+    val enterLyricsFullscreen: () -> Unit = {
+        lyricsRequestedLandscape = !sideways
+        lyricsFullscreen = true
+        if (lyricsRequestedLandscape) screenOrientation.landscape()
+    }
     val exitLyricsFullscreen: () -> Unit = {
         lyricsFullscreen = false
-        screenOrientation.portrait()
+        if (lyricsRequestedLandscape) screenOrientation.portrait()
+        lyricsRequestedLandscape = false
     }
     val closeLyrics: () -> Unit = {
-        if (lyricsFullscreen) screenOrientation.portrait()
-        lyricsFullscreen = false
+        exitLyricsFullscreen()
         lyricsControlsOpen = false
         lyricsOpen = false
     }
@@ -4420,8 +4426,7 @@ fun NowPlayingScreen(
                                     contentDescription = stringResource(Res.string.lyrics_fullscreen),
                                     onClick = {
                                         lyricsControlsOpen = true
-                                        lyricsFullscreen = true
-                                        screenOrientation.landscape()
+                                        enterLyricsFullscreen()
                                     },
                                     tint = Color.White,
                                     modifier = Modifier

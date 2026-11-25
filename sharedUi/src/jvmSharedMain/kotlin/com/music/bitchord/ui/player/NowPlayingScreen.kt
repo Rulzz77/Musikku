@@ -1262,6 +1262,7 @@ fun NowPlayingScreen(
         mutableStateOf(restoredPlayerScreen == LastPlayerScreen.LYRICS)
     }
     var lyricsFullscreen by remember { mutableStateOf(false) }
+    var lyricsRequestedLandscape by remember { mutableStateOf(false) }
     val queueSlide = remember { mutableFloatStateOf(0f) }
     // Expensive, song-scoped preparation is deliberately staggered. The small
     // backdrop decode runs after the track hand-off has settled; lyrics and
@@ -1330,8 +1331,18 @@ fun NowPlayingScreen(
         lyricsOpen = true
         queueOpen = false
     }
-    val closeLyrics: () -> Unit = {
+    val enterLyricsFullscreen: () -> Unit = {
+        lyricsRequestedLandscape = !sideways
+        lyricsFullscreen = true
+        if (lyricsRequestedLandscape) screenOrientation.landscape()
+    }
+    val exitLyricsFullscreen: () -> Unit = {
         lyricsFullscreen = false
+        if (lyricsRequestedLandscape) screenOrientation.portrait()
+        lyricsRequestedLandscape = false
+    }
+    val closeLyrics: () -> Unit = {
+        exitLyricsFullscreen()
         lyricsControlsOpen = false
         lyricsOpen = false
     }
@@ -1431,9 +1442,7 @@ fun NowPlayingScreen(
     // Controls being visible must not insert an extra navigation level. Back
     // always leaves lyrics in one step, whether it starts over the lyrics list
     // or over the half-player at the bottom.
-    PlayerBackHandler(enabled = lyricsFullscreen) {
-        lyricsFullscreen = false
-    }
+    PlayerBackHandler(enabled = lyricsFullscreen, onBack = exitLyricsFullscreen)
 
     PlayerBackHandler(enabled = lyricsOpen, onBack = closeLyrics)
 
@@ -2119,17 +2128,18 @@ fun NowPlayingScreen(
         }
     }
 
-    // Optional full-screen reader. It reuses the same karaoke playhead and
-    // lyric data as the half-player; the normal layout is left intact underneath.
-    if (lyricsFullscreen && lyricsOpen) {
+    // Fullscreen is a landscape-only reading mode. In portrait the regular
+    // lyrics panel underneath remains the native experience; the button nudges
+    // the device sideways and this dialog appears once the window is wide.
+    if (lyricsFullscreen && lyricsOpen && sideways) {
         Dialog(
-            onDismissRequest = { lyricsFullscreen = false },
+            onDismissRequest = exitLyricsFullscreen,
             properties = DialogProperties(
                 usePlatformDefaultWidth = false,
                 dismissOnClickOutside = false,
             ),
         ) {
-            Box(
+            BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(Color.Black),
@@ -2144,97 +2154,146 @@ fun NowPlayingScreen(
                         .background(
                             Brush.verticalGradient(
                                 listOf(
-                                    Color.Black.copy(alpha = 0.34f),
-                                    Color.Black.copy(alpha = 0.78f),
+                                    Color.Black.copy(alpha = 0.28f),
+                                    Color.Black.copy(alpha = 0.76f),
                                 ),
                             ),
                         ),
                 )
-                LyricsPanel(
-                    lines = lyrics.orEmpty(),
-                    subLines = lyricsTranslation.subLines,
-                    trackKey = song.videoId,
-                    playhead = lyricsPlayhead,
-                    looking = !lyricsUnavailable,
-                    isPlaying = isPlaying && position.advancing,
-                    active = true,
-                    onSeekToLine = seekToLyric,
-                    controlsOpen = lyricsControlsOpen,
-                    onRevealControls = { lyricsControlsOpen = true },
-                    onHideControls = { lyricsControlsOpen = false },
-                    onScrollingChange = { lyricsScrolling = it },
-                    canPick = lyricsShareEnabled,
-                    picking = lyricPicker.picking,
-                    picked = lyricPicker.picks,
-                    onPickLine = lyricPicker.pick,
-                    onTogglePick = lyricPicker.toggle,
-                    centerFocus = true,
+
+                val coverSize = (maxHeight - 140.dp).coerceIn(120.dp, 220.dp)
+                Row(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(top = 92.dp, bottom = 64.dp),
-                )
-                if (lyricsControlsOpen) {
-                    Row(
+                        .padding(horizontal = 26.dp, vertical = 18.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(
                         modifier = Modifier
-                            .align(Alignment.TopCenter)
-                            .fillMaxWidth()
-                            .padding(start = 22.dp, top = 22.dp, end = 18.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+                            .width(coverSize)
+                            .fillMaxHeight(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        Column(Modifier.weight(1f)) {
+                        Spacer(Modifier.weight(1f))
+                        AsyncImage(
+                            model = art.request,
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            onState = art::onState,
+                            modifier = Modifier
+                                .size(coverSize)
+                                .clip(RoundedCornerShape(22.dp))
+                                .border(
+                                    1.dp,
+                                    Color.White.copy(alpha = 0.16f),
+                                    RoundedCornerShape(22.dp),
+                                ),
+                        )
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 14.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
                             Text(
                                 text = song.title,
                                 style = MaterialTheme.typography.titleMedium,
                                 color = Color.White,
-                                maxLines = 1,
+                                maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
+                                textAlign = TextAlign.Center,
                             )
                             Text(
                                 text = song.artist,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color.White.copy(alpha = 0.68f),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color.White.copy(alpha = 0.70f),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(top = 4.dp),
                             )
                         }
-                        CircleGlyph(
-                            icon = Icons.Rounded.FullscreenExit,
-                            contentDescription = stringResource(Res.string.lyrics_exit_fullscreen),
-                            onClick = { lyricsFullscreen = false },
-                            tint = Color.White,
-                        )
+                        Spacer(Modifier.weight(1f))
                     }
-                    if (lyricPicker.picking) {
-                        LyricsPickBar(
-                            shareEnabled = lyricPicker.picks.isNotEmpty() && !lyricPicker.overBudget,
-                            onCancel = lyricPicker.cancel,
-                            onShare = lyricPicker.share,
-                            modifier = Modifier.align(Alignment.BottomCenter),
-                        )
-                    } else {
-                        Box(
+
+                    Spacer(Modifier.width(28.dp))
+
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight(),
+                    ) {
+                        Row(
                             modifier = Modifier
-                                .align(Alignment.BottomStart)
-                                .padding(start = 16.dp, bottom = 12.dp),
+                                .fillMaxWidth()
+                                .height(48.dp),
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            RomanizationToggleButton(
-                                state = lyricsTranslation.romanizationState,
-                                showingRomanization = lyricsTranslation.showingRomanization,
-                                enabled = !lyrics.isNullOrEmpty(),
-                                onClick = lyricsTranslation.toggleRomanization,
+                            Spacer(Modifier.weight(1f))
+                            CircleGlyph(
+                                icon = Icons.Rounded.FullscreenExit,
+                                contentDescription = stringResource(Res.string.lyrics_exit_fullscreen),
+                                onClick = exitLyricsFullscreen,
+                                tint = Color.White,
                             )
                         }
-                        Box(
+                        LyricsPanel(
+                            lines = lyrics.orEmpty(),
+                            subLines = lyricsTranslation.subLines,
+                            trackKey = song.videoId,
+                            playhead = lyricsPlayhead,
+                            looking = !lyricsUnavailable,
+                            isPlaying = isPlaying && position.advancing,
+                            active = true,
+                            onSeekToLine = seekToLyric,
+                            controlsOpen = lyricsControlsOpen,
+                            onRevealControls = { lyricsControlsOpen = true },
+                            onHideControls = { lyricsControlsOpen = false },
+                            onScrollingChange = { lyricsScrolling = it },
+                            canPick = lyricsShareEnabled,
+                            picking = lyricPicker.picking,
+                            picked = lyricPicker.picks,
+                            onPickLine = lyricPicker.pick,
+                            onTogglePick = lyricPicker.toggle,
+                            centerFocus = true,
+                            fontScale = 0.78f,
                             modifier = Modifier
-                                .align(Alignment.BottomEnd)
-                                .padding(end = 16.dp, bottom = 12.dp),
-                        ) {
-                            TranslationToggleButton(
-                                state = lyricsTranslation.translationState,
-                                showingTranslation = lyricsTranslation.showingTranslation,
-                                enabled = !lyrics.isNullOrEmpty(),
-                                onClick = lyricsTranslation.toggleTranslation,
-                            )
+                                .weight(1f)
+                                .fillMaxWidth()
+                                .padding(horizontal = 4.dp),
+                        )
+                        if (lyricsControlsOpen) {
+                            if (lyricPicker.picking) {
+                                LyricsPickBar(
+                                    shareEnabled = lyricPicker.picks.isNotEmpty() && !lyricPicker.overBudget,
+                                    onCancel = lyricPicker.cancel,
+                                    onShare = lyricPicker.share,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 8.dp, bottom = 4.dp),
+                                )
+                            } else {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 8.dp, bottom = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    RomanizationToggleButton(
+                                        state = lyricsTranslation.romanizationState,
+                                        showingRomanization = lyricsTranslation.showingRomanization,
+                                        enabled = !lyrics.isNullOrEmpty(),
+                                        onClick = lyricsTranslation.toggleRomanization,
+                                    )
+                                    Spacer(Modifier.weight(1f))
+                                    TranslationToggleButton(
+                                        state = lyricsTranslation.translationState,
+                                        showingTranslation = lyricsTranslation.showingTranslation,
+                                        enabled = !lyrics.isNullOrEmpty(),
+                                        onClick = lyricsTranslation.toggleTranslation,
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -4346,7 +4405,7 @@ fun NowPlayingScreen(
                                         playhead = lyricsPlayhead,
                                         looking = !lyricsUnavailable,
                                         isPlaying = isPlaying && position.advancing,
-                                        active = lyricsPanelVisible && !lyricsFullscreen,
+                                        active = lyricsPanelVisible && !(lyricsFullscreen && sideways),
                                         onSeekToLine = seekToLyric,
                                         controlsOpen = lyricsControlsOpen,
                                         onRevealControls = { lyricsControlsOpen = true },
@@ -4367,7 +4426,7 @@ fun NowPlayingScreen(
                                     contentDescription = stringResource(Res.string.lyrics_fullscreen),
                                     onClick = {
                                         lyricsControlsOpen = true
-                                        lyricsFullscreen = true
+                                        enterLyricsFullscreen()
                                     },
                                     tint = Color.White,
                                     modifier = Modifier

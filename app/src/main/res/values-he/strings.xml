@@ -1574,4 +1574,5 @@
     <string name="automix_art_transition_subtitle">ממזג בצורה חלקה את עטיפות האלבומים במעבר בין שירים במהלך AutoMix.</string>
     <string name="automix_mini_art_transition">מעבר עטיפות בנגן הממוזער</string>
     <string name="automix_mini_art_transition_subtitle">מציג מעברי עטיפות בנגן הממוזער במהלך AutoMix.</string>
+    <string name="listen_together_invalid_qr">קוד ה-QR הזה אינו הזמנה תקפה להאזנה משותפת.</string>
 </resources>

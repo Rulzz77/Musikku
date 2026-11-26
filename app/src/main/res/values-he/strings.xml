@@ -262,6 +262,11 @@
     <string name="performance">ביצועים</string>
     <string name="high_performance_mode">מצב ביצועים גבוהים</string>
     <string name="high_performance_subtitle">משתמש באנימציות מלאות וטשטוש, ומבקש קצב רענון מסך גבוה יותר</string>
+    <string name="device_visual_profile">פרופיל חזותי של המכשיר</string>
+    <string name="device_visual_profile_lite">אפקטים מופחתים</string>
+    <string name="device_visual_profile_normal">רגיל</string>
+    <string name="device_visual_profile_lite_subtitle">אוטומטי. Android מזהה זיכרון מוגבל, ולכן אפקטי טשטוש כבדים ואנימציות קישוטיות מצטמצמים.</string>
+    <string name="device_visual_profile_normal_subtitle">אוטומטי. המכשיר הזה אינו עומד בספים של פרופיל זיכרון מוגבל.</string>
     <string name="high_performance_active">%1$d הרץ התבקש. מערכת אנדרואיד עשויה להפחית זאת במידת הצורך.</string>
     <string name="beta">בטא</string>
     <string name="refresh_rate">קצב רענון</string>

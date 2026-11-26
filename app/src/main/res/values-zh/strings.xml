@@ -256,6 +256,11 @@
     <string name="performance">性能</string>
     <string name="high_performance_mode">高性能模式</string>
     <string name="high_performance_subtitle">使用完整动画和模糊效果，并请求更高的屏幕刷新率</string>
+    <string name="device_visual_profile">设备视觉配置</string>
+    <string name="device_visual_profile_lite">精简视觉效果</string>
+    <string name="device_visual_profile_normal">标准</string>
+    <string name="device_visual_profile_lite_subtitle">自动。Android 检测到可用内存有限，因此会减少高开销的模糊效果和装饰性动画。</string>
+    <string name="device_visual_profile_normal_subtitle">自动。此设备未达到低内存配置的触发条件。</string>
     <string name="high_performance_active">已请求 %1$d Hz。Android 可能会在需要时降低此数值。</string>
     <string name="beta">测试版</string>
     <string name="refresh_rate">刷新率</string>

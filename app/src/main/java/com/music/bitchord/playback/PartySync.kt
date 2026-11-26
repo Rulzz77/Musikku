@@ -69,6 +69,22 @@ internal data class PartyAutoAdvanceSnapshot(
     val queueSeq: Long,
 )
 
+/**
+ * A follower is still waiting only while the exact playback control it observed
+ * remains current. Track IDs alone are insufficient: a repeated song can have
+ * the same ID on both sides of a valid queue transition.
+ */
+internal fun partyAutoAdvanceLeaderStillPending(
+    waitingTrackId: String?,
+    waitingPlaybackSeq: Long,
+    currentTrackId: String?,
+    currentPlaybackSeq: Long,
+    isPlaying: Boolean,
+): Boolean = waitingTrackId != null &&
+    waitingTrackId == currentTrackId &&
+    waitingPlaybackSeq == currentPlaybackSeq &&
+    isPlaying
+
 /** Builds a publishable transition only when the next item is demonstrably forward. */
 internal fun partyAutoAdvanceSnapshot(
     currentTrackId: String?,
@@ -176,6 +192,7 @@ class PartySync(
      * advances, instead of playing it briefly and being pulled back.
      */
     private var waitingForLeaderTrackId: String? = null
+    private var waitingForLeaderPlaybackSeq = -1L
 
     /** Snapshot of the transition the leader is about to publish after debounce. */
     private var pendingAutomaticAdvanceFromTrackId: String? = null
@@ -333,6 +350,7 @@ class PartySync(
         loadJob = null
         loadingVideoId = null
         waitingForLeaderTrackId = null
+        waitingForLeaderPlaybackSeq = -1L
         clearPendingAutomaticAdvance()
     }
 
@@ -385,6 +403,7 @@ class PartySync(
                 // Keep the next item loaded but silent. The leader's own
                 // transition is the only one that advances the shared clock.
                 waitingForLeaderTrackId = currentTrackId
+                waitingForLeaderPlaybackSeq = party.playback.seq
                 // Keep the verified transition so a follower promoted to leader
                 // can publish it even after the consumed local queue row is pruned.
                 stageAutomaticAdvance(advance ?: return)
@@ -406,6 +425,7 @@ class PartySync(
         }
 
         waitingForLeaderTrackId = null
+        waitingForLeaderPlaybackSeq = -1L
         stageAutomaticAdvance(advance)
         requestLocalIntent(automaticAdvance = true)
     }
@@ -760,16 +780,30 @@ class PartySync(
 
         val waitingForLeader = waitingForLeaderTrackId
         if (waitingForLeader != null) {
-            if (target.track?.videoId != waitingForLeader || !target.isPlaying) {
-                // The room moved on (or was paused), so this held transition
-                // has either been accepted or cancelled by a real party control.
+            val stillWaiting = partyAutoAdvanceLeaderStillPending(
+                waitingForLeader,
+                waitingForLeaderPlaybackSeq,
+                target.track?.videoId,
+                target.seq,
+                target.isPlaying,
+            )
+            if (!stillWaiting) {
+                // The room advanced (including a repeated copy of the same song),
+                // or a real pause/control cancelled the held transition.
                 waitingForLeaderTrackId = null
+                waitingForLeaderPlaybackSeq = -1L
                 clearPendingAutomaticAdvance()
             } else {
+                val localTrackId = exo.currentMediaItem?.mediaId
+                val hasStagedTransition = pendingAutomaticAdvanceFromTrackId == target.track?.videoId &&
+                    pendingAutomaticAdvanceToTrackId == localTrackId &&
+                    pendingAutomaticAdvanceSeq == target.seq
                 // If the elected leader changed while this phone was waiting,
-                // it can take over from the already-loaded next item.
+                // it can take over from the already-loaded next item. Include a
+                // staged same-ID transition: a duplicate song looks unchanged
+                // by mediaId even though the queue occurrence has advanced.
                 if (partyPlaybackLeaderId(party) == party.you?.memberId &&
-                    exo.currentMediaItem?.mediaId != track.videoId
+                    (localTrackId != track.videoId || hasStagedTransition)
                 ) {
                     // A new leader may inherit a transition that a follower
                     // already reached locally. Stage the same guarded snapshot
@@ -807,6 +841,7 @@ class PartySync(
                         exo.currentMediaItemIndex,
                     )
                     waitingForLeaderTrackId = null
+        waitingForLeaderPlaybackSeq = -1L
                     if (advance != null) {
                         stageAutomaticAdvance(advance)
                         exo.play()
@@ -1293,6 +1328,7 @@ class PartySync(
         loadJob = null
         loadingVideoId = null
         waitingForLeaderTrackId = null
+        waitingForLeaderPlaybackSeq = -1L
         clearPendingAutomaticAdvance()
 
         // Keep the last song played in the room. The personal snapshot is only

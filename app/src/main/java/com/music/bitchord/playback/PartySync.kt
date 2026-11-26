@@ -1,7 +1,6 @@
 package com.music.bitchord.playback
 
 import android.os.SystemClock
-import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import com.music.bitchord.data.DebugLog as Log
 import com.music.bitchord.data.listentogether.ListenTogether
@@ -20,24 +19,17 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.abs
 
-private const val PARTY_SOFT_DRIFT_DEADZONE_MS = 80L
-private const val PARTY_SOFT_DRIFT_SCALE_MS = 15_000f
-private const val PARTY_MIN_SOFT_RATE_ADJUSTMENT = 0.01f
-private const val PARTY_MAX_SOFT_RATE_ADJUSTMENT = 0.05f
-
 /**
- * Returns a gentle speed multiplier for ordinary playback drift.
+ * Small party drift is tolerated rather than corrected by changing playback speed.
  *
- * A listener behind the party is sped up a little; one ahead is slowed down.
- * Larger gaps are handled by the existing guarded seek path instead.
+ * Media3 playback-parameter changes can cause buffering. Repeatedly changing
+ * them while audio is playing can therefore introduce audible glitches on
+ * some devices and output routes. Only a sustained, material drift is seeked.
  */
-internal fun partySyncSpeedMultiplier(driftMs: Long): Float? {
-    val magnitude = abs(driftMs)
-    if (magnitude <= PARTY_SOFT_DRIFT_DEADZONE_MS) return null
-    val adjustment = (magnitude.toFloat() / PARTY_SOFT_DRIFT_SCALE_MS)
-        .coerceIn(PARTY_MIN_SOFT_RATE_ADJUSTMENT, PARTY_MAX_SOFT_RATE_ADJUSTMENT)
-    return if (driftMs < 0L) 1f + adjustment else 1f - adjustment
-}
+private const val PARTY_SYNC_DRIFT_LIMIT_MS = 1_200L
+
+internal fun partySyncRequiresSeek(driftMs: Long): Boolean =
+    abs(driftMs) > PARTY_SYNC_DRIFT_LIMIT_MS
 
 /**
  * Makes the player obey the party, and the party obey this player.
@@ -97,7 +89,7 @@ internal fun partySyncSpeedMultiplier(driftMs: Long): Float? {
  *    being occasionally late, because it is below the drift limit and would
  *    never be corrected. So a resume waits out [ListenTogether.msUntilStart].
  *  - **Drift is corrected by seeking, and only when it is real.** A seek is
- *    audible, so [DRIFT_LIMIT_MS] is set well above the jitter of two decoders
+ *    audible, so the drift threshold is set well above the jitter of two decoders
  *    running independently and at the level of an actual desync — a buffering
  *    stall, a doze, a device that came back from a tunnel.
  *  - **Position is only trusted once the clock is.** Before the first
@@ -151,7 +143,7 @@ class PartySync(
      * A control is a discontinuity — everybody is meant to land on the same
      * instant, precisely — whereas the time between controls is a slow drift
      * worth tolerating. So a seq not yet aligned to is matched exactly, and
-     * after that [DRIFT_LIMIT_MS] applies. Without this the device that *issued*
+     * after that the drift threshold applies. Without this the device that *issued*
      * a control keeps whatever head start issuing it gave it: below the drift
      * limit, so never corrected, and permanent.
      */
@@ -201,61 +193,6 @@ class PartySync(
      */
     @Volatile
     private var rejoining = false
-
-    /** The user's playback parameters, kept while party sync nudges the speed. */
-    private var basePlaybackParameters: PlaybackParameters? = null
-    /** The exact parameters last applied by party sync, so user changes are not overwritten. */
-    private var partyPlaybackParameters: PlaybackParameters? = null
-
-    private fun applySoftDriftCorrection(exo: Player, driftMs: Long) {
-        val current = exo.playbackParameters
-        val lastApplied = partyPlaybackParameters
-        if (lastApplied != null &&
-            (abs(current.speed - lastApplied.speed) > RATE_EPSILON ||
-                abs(current.pitch - lastApplied.pitch) > RATE_EPSILON)
-        ) {
-            // Somebody changed playback speed or pitch while correction was active.
-            // Treat their new parameters as the user's base, then apply only the
-            // small party adjustment on top.
-            basePlaybackParameters = current
-            partyPlaybackParameters = null
-        }
-
-        val base = basePlaybackParameters ?: current.also { basePlaybackParameters = it }
-        val multiplier = partySyncSpeedMultiplier(driftMs)
-        if (multiplier == null) {
-            restoreSoftDriftCorrection(exo)
-            return
-        }
-
-        val corrected = PlaybackParameters(
-            (base.speed * multiplier).coerceIn(MIN_PLAYBACK_SPEED, MAX_PLAYBACK_SPEED),
-            base.pitch,
-        )
-        if (abs(current.speed - corrected.speed) > RATE_EPSILON ||
-            abs(current.pitch - corrected.pitch) > RATE_EPSILON
-        ) {
-            exo.setPlaybackParameters(corrected)
-        }
-        partyPlaybackParameters = corrected
-    }
-
-    private fun restoreSoftDriftCorrection(exo: Player? = player()) {
-        val base = basePlaybackParameters ?: return
-        val lastApplied = partyPlaybackParameters
-        if (exo != null && lastApplied != null) {
-            val current = exo.playbackParameters
-            // If the user changed the speed after our last adjustment, keep that
-            // change rather than restoring an older value over it.
-            if (abs(current.speed - lastApplied.speed) <= RATE_EPSILON &&
-                abs(current.pitch - lastApplied.pitch) <= RATE_EPSILON
-            ) {
-                exo.setPlaybackParameters(base)
-            }
-        }
-        basePlaybackParameters = null
-        partyPlaybackParameters = null
-    }
 
     /** Consecutive over-limit readings. See the drift branch of [reconcile]. */
     private var driftStrikes = 0
@@ -310,7 +247,7 @@ class PartySync(
     }
 
     fun stop() {
-        restoreSoftDriftCorrection()
+
         jobs.forEach(Job::cancel)
         jobs.clear()
         publishJob?.cancel()
@@ -581,7 +518,7 @@ class PartySync(
     private fun reconcile() {
         val party = ListenTogether.state.value
         if (!party.inParty) {
-            restoreSoftDriftCorrection()
+
             loadingVideoId = null
             focusLost = false
             rejoining = false
@@ -605,7 +542,7 @@ class PartySync(
         // off whatever the listener just started — so this device follows
         // nothing until its own user asks it to. See [focusLost].
         if (focusLost) {
-            restoreSoftDriftCorrection()
+
             return
         }
         val target = party.playback
@@ -621,7 +558,7 @@ class PartySync(
         // drift that is not there and would be "corrected" by seeking a player
         // nobody can hear. It converges on its own the moment the audio returns.
         if (exo.playbackSuppressionReason != Player.PLAYBACK_SUPPRESSION_REASON_NONE) {
-            restoreSoftDriftCorrection(exo)
+
             return
         }
 
@@ -630,12 +567,12 @@ class PartySync(
         // somebody deliberately chose, so the two are simply left uncoupled
         // until playback returns to something with a catalogue id.
         if (exo.currentMediaItem?.toSong()?.isDeviceFile() == true) {
-            restoreSoftDriftCorrection(exo)
+
             return
         }
 
         if (exo.currentMediaItem?.mediaId != track.videoId) {
-            restoreSoftDriftCorrection(exo)
+
             load(party)
             return
         }
@@ -647,7 +584,7 @@ class PartySync(
         // queue behind it is kept — and everything below it is sound: starting
         // the player, and chasing a playhead nobody here can hear.
         if (locallyPaused) {
-            restoreSoftDriftCorrection(exo)
+
             // Nothing below here will start this device while the pause holds,
             // so a resume still waiting on the party is never going to be
             // answered — and the transport would draw that wait for as long as
@@ -657,7 +594,7 @@ class PartySync(
         }
 
         if (!target.isPlaying) {
-            restoreSoftDriftCorrection(exo)
+
             deferredPlayPending = false
             if (exo.playWhenReady) exo.pause()
             // Held where the party paused it, so that everybody resumes from the
@@ -679,7 +616,7 @@ class PartySync(
         // until the first pong landed. Loading needs no clock; only the position
         // does — and [load] prepares without starting for exactly that reason.
         if (!party.clockSynced) {
-            restoreSoftDriftCorrection(exo)
+
             return
         }
 
@@ -687,7 +624,7 @@ class PartySync(
         // and the clock has been measured, both checked above.
         val want = ListenTogether.partyPositionMs()
         if (!exo.playWhenReady) {
-            restoreSoftDriftCorrection(exo)
+
             val wait = ListenTogether.msUntilStart()
             if (wait > 0) {
                 // The party's resume is scheduled, not immediate. Wake up for
@@ -721,7 +658,7 @@ class PartySync(
         // `currentPosition` is where it will resume rather than where it is, so
         // the party runs on and this reads as drift that is not there.
         if (exo.playbackState != Player.STATE_READY) {
-            restoreSoftDriftCorrection(exo)
+
             driftStrikes = 0
             return
         }
@@ -749,17 +686,17 @@ class PartySync(
 
             if (isPlaybackAnchorChanged && abs(drift) > ALIGN_TOLERANCE_MS) {
                 Log.i(TAG, "aligning ${drift}ms onto party control ${target.seq}")
-                restoreSoftDriftCorrection(exo)
+
                 exo.seekTo(want)
                 return
             }
         }
-        if (abs(drift) <= DRIFT_LIMIT_MS) {
+        if (!partySyncRequiresSeek(drift)) {
+            // Leave the audio pipeline untouched for normal decoder jitter.
             driftStrikes = 0
-            applySoftDriftCorrection(exo, drift)
             return
         }
-        restoreSoftDriftCorrection(exo)
+
         // Seeking is not free, and on a slow device it is not cheap either: the
         // re-buffer it costs can be longer than the gap being closed, so the
         // correction arrives already as far behind as the error it was fixing,
@@ -1045,7 +982,7 @@ class PartySync(
     }
 
     private fun onLeftParty() {
-        restoreSoftDriftCorrection()
+
         // Keep the last song played in the room. The personal snapshot is only
         // a safety net for a service restart while still in a party; it must
         // not replace the shared song when the user explicitly leaves.
@@ -1155,13 +1092,6 @@ class PartySync(
          */
         const val TICK_MS = 350L
 
-        /**
-         * Maximum drift handled by a gentle rate correction before a guarded seek.
-         * Above this the gap is a real desync, not decoder jitter. Tightening the
-         * limit makes the player seek more often, which people hear as a hitch.
-         */
-        const val DRIFT_LIMIT_MS = 1_200L
-
         /** Readings in a row above the limit before a correction is made. */
         const val DRIFT_STRIKES = 2
 
@@ -1186,9 +1116,6 @@ class PartySync(
          */
         const val ALIGN_TOLERANCE_MS = 120L
 
-        const val MIN_PLAYBACK_SPEED = 0.5f
-        const val MAX_PLAYBACK_SPEED = 2.0f
-        const val RATE_EPSILON = 0.001f
 
         /**
          * Below this, a difference from the party's playhead is not a seek

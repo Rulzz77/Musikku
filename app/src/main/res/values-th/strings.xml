@@ -280,6 +280,11 @@
     <string name="performance">ประสิทธิภาพ</string>
     <string name="high_performance_mode">โหมดประสิทธิภาพสูง</string>
     <string name="high_performance_subtitle">ใช้แอนิเมชันและเบลอเต็มรูปแบบ และขออัตรารีเฟรชหน้าจอที่สูงขึ้น</string>
+    <string name="device_visual_profile">โปรไฟล์ภาพของอุปกรณ์</string>
+    <string name="device_visual_profile_lite">ลดเอฟเฟกต์ภาพ</string>
+    <string name="device_visual_profile_normal">ปกติ</string>
+    <string name="device_visual_profile_lite_subtitle">อัตโนมัติ Android ตรวจพบหน่วยความจำจำกัด จึงลดเอฟเฟกต์เบลอที่ใช้ทรัพยากรมากและภาพเคลื่อนไหวตกแต่ง</string>
+    <string name="device_visual_profile_normal_subtitle">อัตโนมัติ อุปกรณ์นี้ไม่เข้าเกณฑ์โปรไฟล์หน่วยความจำต่ำ</string>
     <string name="high_performance_active">ขออัตรารีเฟรช %1$d Hz ระบบ Android อาจลดลงเมื่อจำเป็น</string>
     <string name="beta">เบต้า</string>
     <string name="refresh_rate">อัตรารีเฟรช</string>

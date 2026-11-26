@@ -261,6 +261,11 @@
     <string name="performance">परफ़ॉर्मेंस</string>
     <string name="high_performance_mode">हाई परफ़ॉर्मेंस मोड</string>
     <string name="high_performance_subtitle">पूरे एनिमेशन और ब्लर का उपयोग करता है, और डिस्प्ले का ज़्यादा रिफ़्रेश रेट मांगता है</string>
+    <string name="device_visual_profile">डिवाइस विज़ुअल प्रोफ़ाइल</string>
+    <string name="device_visual_profile_lite">कम विज़ुअल प्रभाव</string>
+    <string name="device_visual_profile_normal">सामान्य</string>
+    <string name="device_visual_profile_lite_subtitle">अपने आप। Android सीमित मेमोरी का पता लगाता है, इसलिए भारी ब्लर और सजावटी आर्टवर्क कम कर दिए जाते हैं।</string>
+    <string name="device_visual_profile_normal_subtitle">अपने आप। यह डिवाइस कम-मेमोरी प्रोफ़ाइल की सीमाओं में नहीं आता।</string>
     <string name="high_performance_active">%1$d Hz का अनुरोध किया गया। ज़रूरत पड़ने पर Android इसे कम कर सकता है।</string>
     <string name="beta">बीटा</string>
     <string name="refresh_rate">रिफ़्रेश रेट</string>

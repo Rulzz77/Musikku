@@ -1123,7 +1123,7 @@ class PlaybackService : MediaLibraryService() {
             // the session wrapper. A skip does pass through it, and is reported
             // there; publishing is debounced, so being told twice costs nothing.
             if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
-                partySync?.onLocalIntent()
+                partySync?.onAutomaticAdvance()
             }
             autoplayLoadJob?.cancel()
             autoplayLoadJob = null
@@ -4132,6 +4132,7 @@ class PlaybackService : MediaLibraryService() {
             reason = Player.MEDIA_ITEM_TRANSITION_REASON_AUTO,
             alreadyAudible = true,
         )
+        partySync?.onAutomaticAdvance()
 
         // A crossfade starts the incoming item on the player that was idle, so
         // it never delivers onMediaItemTransition to playbackListener. Keep

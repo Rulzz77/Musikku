@@ -145,7 +145,10 @@ internal fun AndroidCanvasArtworkPlayer(
     alignPortraitTop: Boolean = false,
     /** The decoded video's display aspect, or zero until Media3 knows it. */
     onAspectRatioChanged: (Float) -> Unit = {},
-    /** The full player bounds required before a portrait hero may reveal its first frame. */
+    /**
+     * Optional full-player bounds required before a portrait hero may reveal its first frame.
+     * Zero means this surface does not need an additional bounds gate (for example, fullscreen lyrics).
+     */
     portraitRevealBounds: IntSize = IntSize.Zero,
     /** Fades a full-player portrait clip away as the existing sleeve collapses. */
     presentationAlpha: () -> Float = { 1f },
@@ -276,8 +279,13 @@ internal fun AndroidCanvasArtworkPlayer(
         val transformed = view.applyContentTransform(clipAspect, currentContentMode, currentAlignPortraitTop)
         val portrait = currentContentMode == CanvasContentMode.FIT_PORTRAIT && clipAspect > 0f && clipAspect < 1f
         val expected = currentPortraitRevealBounds
-        val layoutReady = !portrait ||
-            (expected != IntSize.Zero && view.width == expected.width && view.height == expected.height)
+        // A caller that supplies bounds (the expanding phone hero) waits until
+        // the TextureView reaches them. A fullscreen surface has no separate
+        // hero-layout gate; IntSize.Zero must therefore mean "no gate", not
+        // "never reveal" — otherwise portrait Canvas can never appear in a
+        // landscape lyrics window.
+        val layoutReady = !portrait || expected == IntSize.Zero ||
+            (view.width == expected.width && view.height == expected.height)
         if (!layoutReady || (currentContentMode != CanvasContentMode.CROP && !transformed)) return false
         rendered = true
         frameTick++

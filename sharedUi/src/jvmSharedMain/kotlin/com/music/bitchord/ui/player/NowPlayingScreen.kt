@@ -1206,6 +1206,11 @@ fun NowPlayingScreen(
     // The dedicated fullscreen lyrics/Canvas presentation is landscape-only.
     // Portrait keeps the regular lyrics layout in the player.
     val lyricsFullscreenVisible = lyricsFullscreen && lyricsOpen && sideways
+    val canvasAnimationEnabled by PlayerSettings.animatedCanvas.collectAsStateWithLifecycle()
+    val canvasOverCellular by PlayerSettings.canvasOverCellular.collectAsStateWithLifecycle()
+    val meteredConnection by PlayerSettings.meteredConnection.collectAsStateWithLifecycle()
+    val canvasBlockedBySettings = !canvasAnimationEnabled ||
+        (meteredConnection == true && !canvasOverCellular)
 
     val canvas = rememberCanvasArtwork(
         song = song,
@@ -1233,9 +1238,25 @@ fun NowPlayingScreen(
     var canvasRendered by canvasRenderedState
     LaunchedEffect(lyricsFullscreenVisible) {
         // The fullscreen lyrics pane takes ownership of the single foreground
-        // decoder. Reveal the still cover behind the dialog while the landscape
+        // decoder. Reveal the blurred cover behind the dialog while the landscape
         // surface is unmounted; it will show video again once a fresh frame lands.
         if (lyricsFullscreenVisible) canvasRendered = false
+    }
+    var fullscreenCanvasLoadTimedOut by remember(canvas?.url) { mutableStateOf(false) }
+    LaunchedEffect(lyricsFullscreenVisible, canvas?.url) {
+        fullscreenCanvasLoadTimedOut = false
+        if (lyricsFullscreenVisible && canvas != null) {
+            delay(8_000)
+            if (!canvasRendered) fullscreenCanvasLoadTimedOut = true
+        }
+    }
+    val fullscreenCanvasStatus = when {
+        !canvasAnimationEnabled -> "Animated Cover Art sedang nonaktif di Pengaturan."
+        meteredConnection == true && !canvasOverCellular ->
+            "Canvas dibatasi di jaringan seluler. Aktifkan izin Canvas di data seluler pada Pengaturan."
+        canvas == null -> "Video Canvas belum tersedia untuk lagu ini."
+        fullscreenCanvasLoadTimedOut -> "Video Canvas belum berhasil dimuat. Periksa koneksi atau coba lagu lain."
+        else -> null
     }
     var canvasFrame by remember(canvas?.url) { mutableStateOf<ImageBitmap?>(null) }
     // Spotify's phone presentation starts with the full control deck over its
@@ -2162,43 +2183,40 @@ fun NowPlayingScreen(
                     .fillMaxSize()
                     .background(Color.Black),
             ) {
-                // Still artwork is the immediate fallback; the live Canvas takes
-                // over the same full-bleed bounds as soon as its first frame lands.
+                // Use the baked soft-cover backdrop only as the fallback. A sharp,
+                // stretched cover above it hid the blur and made the screen look
+                // unlike the moving, full-bleed Canvas treatment in Spicy Lyrics.
                 FullArtworkBlurBackdrop(
                     image = fullArtworkBlurImage,
                     modifier = Modifier.fillMaxSize(),
                 )
-                AsyncImage(
-                    model = art.request,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    onState = art::onState,
-                    modifier = Modifier.fillMaxSize(),
-                )
-                val fullscreenLyricsCanvas = canvas?.nowPlayingRendition(fullWindow = true)
+                // This screen is landscape-only: keep the provider's normal/raw
+                // rendition instead of forcing Apple's tall phone crop into a
+                // landscape window.
+                val fullscreenLyricsCanvas = canvas
                 fullscreenLyricsCanvas?.let { clip ->
                     CanvasArtworkPlayer(
                         canvas = clip,
                         isPlaying = isPlaying,
                         modifier = Modifier.fillMaxSize(),
                         contentMode = CanvasContentMode.CROP,
-                        // Keep the one foreground decoder alive while handing it
-                        // from the normal landscape artwork to this full-screen layer.
+                        onRenderedChanged = { canvasRendered = it },
                         nowPlaying = true,
                     )
                 }
 
-                // Keep the video visible but give the white lyrics enough contrast.
+                // Keep the moving artwork visible; use a restrained side fade
+                // for lyric contrast instead of darkening most of the Canvas.
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(
                             Brush.horizontalGradient(
                                 colorStops = arrayOf(
-                                    0f to Color.Black.copy(alpha = 0.22f),
-                                    0.34f to Color.Black.copy(alpha = 0.24f),
-                                    0.62f to Color.Black.copy(alpha = 0.46f),
-                                    1f to Color.Black.copy(alpha = 0.60f),
+                                    0f to Color.Transparent,
+                                    0.38f to Color.Black.copy(alpha = 0.05f),
+                                    0.68f to Color.Black.copy(alpha = 0.18f),
+                                    1f to Color.Black.copy(alpha = 0.30f),
                                 ),
                             ),
                         ),
@@ -2209,14 +2227,34 @@ fun NowPlayingScreen(
                         .background(
                             Brush.verticalGradient(
                                 colorStops = arrayOf(
-                                    0f to Color.Black.copy(alpha = 0.20f),
+                                    0f to Color.Black.copy(alpha = 0.04f),
                                     0.18f to Color.Transparent,
                                     0.72f to Color.Transparent,
-                                    1f to Color.Black.copy(alpha = 0.46f),
+                                    1f to Color.Black.copy(alpha = 0.24f),
                                 ),
                             ),
                         ),
                 )
+                if (canvas == null || fullscreenCanvasLoadTimedOut) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(horizontal = 20.dp, vertical = 14.dp)
+                            .background(
+                                Color.Black.copy(alpha = 0.38f),
+                                RoundedCornerShape(18.dp),
+                            )
+                            .padding(horizontal = 14.dp, vertical = 8.dp),
+                    ) {
+                        Text(
+                            text = fullscreenCanvasStatus.orEmpty(),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White.copy(alpha = 0.88f),
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
 
                 // A tap on the video / empty space brings back the small transport
                 // chrome. Lyrics and the scrubber keep their own gestures.

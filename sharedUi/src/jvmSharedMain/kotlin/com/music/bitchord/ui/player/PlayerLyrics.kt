@@ -1931,8 +1931,10 @@ internal fun LyricsPanel(
     // Animatable is sixty animations to start and stop on every handover.
     var run by remember(lines) { mutableStateOf(ScrollRun(0, 0f, LYRIC_SETTLE_MS)) }
     val since = remember(lines) { mutableFloatStateOf(0f) }
-    LaunchedEffect(run.id) {
-        if (run.id == 0) return@LaunchedEffect
+    LaunchedEffect(run.id, reduceAnimation) {
+        // The row-fan animation has no visible work in reduced-motion mode.
+        // Cancel its frame clock too, rather than writing an unused state every frame.
+        if (run.id == 0 || reduceAnimation) return@LaunchedEffect
         animate(
             initialValue = 0f,
             targetValue = run.spanMs,

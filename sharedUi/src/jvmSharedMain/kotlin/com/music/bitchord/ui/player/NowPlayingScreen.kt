@@ -1240,22 +1240,6 @@ fun NowPlayingScreen(
         // surface is unmounted; it will show video again once a fresh frame lands.
         if (lyricsFullscreenVisible) canvasRendered = false
     }
-    var fullscreenCanvasLoadTimedOut by remember(canvas?.url) { mutableStateOf(false) }
-    LaunchedEffect(lyricsFullscreenVisible, canvas?.url) {
-        fullscreenCanvasLoadTimedOut = false
-        if (lyricsFullscreenVisible && canvas != null) {
-            delay(8_000)
-            if (!canvasRendered) fullscreenCanvasLoadTimedOut = true
-        }
-    }
-    val fullscreenCanvasStatus = when {
-        !canvasAnimationEnabled -> "Animated Cover Art sedang nonaktif di Pengaturan."
-        meteredConnection == true && !canvasOverCellular ->
-            "Canvas dibatasi di jaringan seluler. Aktifkan izin Canvas di data seluler pada Pengaturan."
-        canvas == null -> "Video Canvas belum tersedia untuk lagu ini."
-        fullscreenCanvasLoadTimedOut -> "Video Canvas belum berhasil dimuat. Periksa koneksi atau coba lagu lain."
-        else -> null
-    }
     var canvasFrame by remember(canvas?.url) { mutableStateOf<ImageBitmap?>(null) }
     // Spotify's phone presentation starts with the full control deck over its
     // video. It leaves on a Canvas tap, or after the optional idle timeout.
@@ -2239,27 +2223,6 @@ fun NowPlayingScreen(
                             ),
                         ),
                 )
-                if (canvas == null || fullscreenCanvasLoadTimedOut) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .padding(horizontal = 20.dp, vertical = 14.dp)
-                            .background(
-                                Color.Black.copy(alpha = 0.38f),
-                                RoundedCornerShape(18.dp),
-                            )
-                            .padding(horizontal = 14.dp, vertical = 8.dp),
-                    ) {
-                        Text(
-                            text = fullscreenCanvasStatus.orEmpty(),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color.White.copy(alpha = 0.88f),
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                }
-
                 // A tap on the video / empty space brings back the small transport
                 // chrome. Lyrics and the scrubber keep their own gestures.
                 Box(

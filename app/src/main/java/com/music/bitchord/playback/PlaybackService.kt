@@ -1113,18 +1113,17 @@ class PlaybackService : MediaLibraryService() {
                     reason == Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT,
                 reason = reason,
             )
-            // Prune consumed USER_QUEUE entries when playback enters CONTEXT,
-            // keeping the timeline clean and ensuring REPEAT_MODE_ALL loops only CONTEXT items.
-            if (!isQueueUndoRestoring(exoPlayer)) QueueCoordinator.consumePlayedUserQueue(exoPlayer)
-
             // The queue moving on by itself. Nobody pressed anything, but it
-            // is still this device deciding what the party plays next, and no
-            // other path reports it: an automatic advance never passes through
-            // the session wrapper. A skip does pass through it, and is reported
-            // there; publishing is debounced, so being told twice costs nothing.
+            // is still this device deciding what the party plays next. Capture
+            // the transition before pruning the consumed item: PartySync may
+            // need the old item in the local timeline to verify queue direction.
             if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
                 partySync?.onAutomaticAdvance()
             }
+
+            // Prune consumed USER_QUEUE entries when playback enters CONTEXT,
+            // keeping the timeline clean and ensuring REPEAT_MODE_ALL loops only CONTEXT items.
+            if (!isQueueUndoRestoring(exoPlayer)) QueueCoordinator.consumePlayedUserQueue(exoPlayer)
             autoplayLoadJob?.cancel()
             autoplayLoadJob = null
             autoplaySeed = null

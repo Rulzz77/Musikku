@@ -2184,6 +2184,7 @@ fun NowPlayingScreen(
                         // FIT_PORTRAIT only contains portrait media; landscape clips
                         // still use the same cover/crop treatment as before.
                         contentMode = CanvasContentMode.FIT_PORTRAIT,
+                        onAspectRatioChanged = { canvasAspect = it },
                         onRenderedChanged = { canvasRendered = it },
                         nowPlaying = true,
                     )

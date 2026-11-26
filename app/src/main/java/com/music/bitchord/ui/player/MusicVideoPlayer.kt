@@ -555,7 +555,6 @@ object MusicVideoEngine {
  * landed here, so a caller keeps its still artwork underneath and the picture
  * fades in over it. Holds the picture only while the app is on screen.
  */
-@OptIn(UnstableApi::class)
 @Composable
 internal fun AndroidMusicVideo(
     videoId: String,
@@ -564,6 +563,25 @@ internal fun AndroidMusicVideo(
     modifier: Modifier,
     /** Which surface wins when two are mounted: the full player's, over the mini player's. */
     priority: Int = 1,
+) {
+    val disableDecorativeVideo = com.music.bitchord.ui.performance.LocalDevicePerformanceProfile.current
+        .disableDecorativeVideo
+    if (disableDecorativeVideo) {
+        val report by rememberUpdatedState(onRenderedChanged)
+        LaunchedEffect(videoId) { report(false) }
+    } else {
+        AndroidMusicVideoContent(videoId, fit, onRenderedChanged, modifier, priority)
+    }
+}
+
+@OptIn(UnstableApi::class)
+@Composable
+private fun AndroidMusicVideoContent(
+    videoId: String,
+    fit: Boolean,
+    onRenderedChanged: (Boolean) -> Unit,
+    modifier: Modifier,
+    priority: Int,
 ) {
     val foreground = rememberIsForeground()
     var view by remember { mutableStateOf<TextureView?>(null) }

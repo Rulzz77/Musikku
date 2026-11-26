@@ -58,6 +58,16 @@ interface PlayerHost {
     /** Looks a Canvas up for [song]; null is the normal answer. */
     suspend fun canvasFor(song: Song): CanvasArtwork?
 
+    /**
+     * Canvas requested by the visible fullscreen-lyrics artwork pane.
+     * Platforms may keep decorative Canvas off on low-memory devices while
+     * still allowing this explicit, foreground request.
+     */
+    fun cachedCanvasForFullscreenLyrics(song: Song): CanvasArtwork? = cachedCanvas(song)
+
+    /** Foreground counterpart to [canvasFor], used only while lyrics are fullscreen. */
+    suspend fun canvasForFullscreenLyrics(song: Song): CanvasArtwork? = canvasFor(song)
+
     /** A known high-interest section, when a source can identify one. */
     suspend fun bestPartMs(song: Song): Long? = null
 
@@ -504,6 +514,8 @@ fun CanvasArtworkPlayer(
     onStillCaptured: (ImageBitmap?, Long) -> Unit = { _, _ -> },
     /** The clip has moved on from the frame it was last captured or started at. */
     onResumed: () -> Unit = {},
+    /** This is the foreground Canvas occupying the fullscreen player, not decoration. */
+    nowPlaying: Boolean = false,
 ) {
     PlayerPlatform.host.CanvasVideo(
         CanvasVideoSpec(
@@ -528,6 +540,7 @@ fun CanvasArtworkPlayer(
             captureStill = captureStill,
             onStillCaptured = onStillCaptured,
             onResumed = onResumed,
+            nowPlaying = nowPlaying,
         ),
         modifier,
     )

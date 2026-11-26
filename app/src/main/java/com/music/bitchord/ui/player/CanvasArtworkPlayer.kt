@@ -1156,7 +1156,7 @@ private fun rememberNowPlayingDecoder(context: Context, teardown: Teardown): Now
 internal fun AndroidCanvasVideo(spec: CanvasVideoSpec, modifier: Modifier) {
     val disableDecorativeVideo = com.music.bitchord.ui.performance.LocalDevicePerformanceProfile.current
         .disableDecorativeVideo
-    if (disableDecorativeVideo) {
+    if (disableDecorativeVideo && !spec.nowPlaying) {
         val reportRendered by rememberUpdatedState(spec.onRenderedChanged)
         val reportCover by rememberUpdatedState(spec.onCoverChanged)
         LaunchedEffect(spec.canvas.url) {

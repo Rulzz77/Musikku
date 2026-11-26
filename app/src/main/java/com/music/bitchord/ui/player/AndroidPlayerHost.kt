@@ -164,6 +164,14 @@ class AndroidPlayerHost(context: Context) : PlayerHost {
     override suspend fun canvasFor(song: Song): CanvasArtwork? =
         if (devicePerformanceProfile.disableDecorativeVideo) null else CanvasRepository.canvasFor(song)
 
+    // Fullscreen lyrics is an intentional foreground video surface. Resolve
+    // on demand even on Lite devices; normal decorative Canvas stays disabled.
+    override fun cachedCanvasForFullscreenLyrics(song: Song): CanvasArtwork? =
+        CanvasRepository.cached(song)
+
+    override suspend fun canvasForFullscreenLyrics(song: Song): CanvasArtwork? =
+        CanvasRepository.canvasFor(song)
+
     override suspend fun bestPartMs(song: Song): Long? =
         com.music.bitchord.ui.replay.year.BestParts.startFor(app, song)
             .takeIf { it.source != com.music.bitchord.ui.replay.year.BestPartStart.Source.FALLBACK }

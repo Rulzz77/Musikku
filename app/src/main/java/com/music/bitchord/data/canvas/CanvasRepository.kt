@@ -5,12 +5,10 @@ import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.settings.AppSettings
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.async
-import kotlinx.coroutines.selects.onAwait
-import kotlinx.coroutines.selects.select
+import kotlinx.coroutines.launch
 
 /**
  * Finds the looping video that belongs behind a track's or a release's cover
@@ -231,22 +229,24 @@ object CanvasRepository {
         vararg sources: suspend () -> CanvasArtwork?,
         accept: (CanvasArtwork) -> Boolean,
     ): CanvasArtwork? {
+        if (sources.isEmpty()) return null
+        val results = Channel<CanvasArtwork?>(capacity = sources.size)
         val pending = sources.map { source ->
-            lookupScope.async { checkedHit(source, accept) }
-        }.toMutableSet()
+            lookupScope.launch {
+                results.send(checkedHit(source, accept))
+            }
+        }
         try {
-            while (pending.isNotEmpty()) {
-                val (completed, found) = select<Pair<Deferred<CanvasArtwork?>, CanvasArtwork?>> {
-                    pending.forEach { task ->
-                        task.onAwait { result -> task to result }
-                    }
-                }
-                pending.remove(completed)
+            repeat(sources.size) {
+                val found = results.receive()
                 if (found != null) return found
             }
             return null
         } finally {
+            // Stop outstanding provider work as soon as a match is found or
+            // the caller leaves. Closing the channel also frees suspended senders.
             pending.forEach { it.cancel() }
+            results.close()
         }
     }
 

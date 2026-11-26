@@ -32,6 +32,12 @@ class PartySyncAutoAdvanceTest {
     }
 
     @Test
+    fun `a repeated song id is accepted only when the local queue proves a second occurrence`() {
+        assertTrue(partyAutoAdvanceIsForward("same-track", "same-track", 4, 4, 2, 5))
+        assertFalse(partyAutoAdvanceIsForward("same-track", "same-track", 4, 4, 4, 4))
+    }
+
+    @Test
     fun `local queue order can verify a new item before the server queue echo`() {
         assertTrue(partyAutoAdvanceIsForward("track-a", "track-b", 0, -1, 2, 3))
         assertFalse(partyAutoAdvanceIsForward("track-c", "track-b", 2, -1, 4, 3))
@@ -47,13 +53,13 @@ class PartySyncAutoAdvanceTest {
         // A follower has already reached B and paused. When it becomes leader,
         // it must publish the same guarded transition rather than an empty one.
         assertEquals(
-            PartyAutoAdvanceSnapshot("track-a", "track-b", 27L),
-            partyAutoAdvanceSnapshot("track-a", "track-b", 27L, 0, 1, 2, 3),
+            PartyAutoAdvanceSnapshot("track-a", "track-b", 27L, 9L),
+            partyAutoAdvanceSnapshot("track-a", "track-b", 27L, 9L, 0, 1, 2, 3),
         )
     }
 
     @Test
     fun `leader failover cannot stage an item that is no longer next`() {
-        assertNull(partyAutoAdvanceSnapshot("track-c", "track-b", 28L, 2, 1, 4, 3))
+        assertNull(partyAutoAdvanceSnapshot("track-c", "track-b", 28L, 9L, 2, 1, 4, 3))
     }
 }

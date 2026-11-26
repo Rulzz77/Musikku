@@ -262,6 +262,11 @@
     <string name="performance">Performance</string>
     <string name="high_performance_mode">Mode haute performance</string>
     <string name="high_performance_subtitle">Utilise toutes les animations et le flou, et demande un taux de rafraîchissement plus élevé</string>
+    <string name="device_visual_profile">Profil visuel de l’appareil</string>
+    <string name="device_visual_profile_lite">Effets allégés</string>
+    <string name="device_visual_profile_normal">Normal</string>
+    <string name="device_visual_profile_lite_subtitle">Automatique. Android signale une mémoire limitée : les flous coûteux et les animations décoratives sont donc réduits.</string>
+    <string name="device_visual_profile_normal_subtitle">Automatique. Cet appareil ne répond pas aux seuils du profil à mémoire limitée.</string>
     <string name="high_performance_active">%1$d Hz demandés. Android peut le réduire si nécessaire.</string>
     <string name="beta">Bêta</string>
     <string name="refresh_rate">Taux de rafraîchissement</string>

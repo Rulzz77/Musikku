@@ -256,6 +256,11 @@
     <string name="performance">パフォーマンス</string>
     <string name="high_performance_mode">高パフォーマンスモード</string>
     <string name="high_performance_subtitle">フルアニメーションとぼかしを使用し、より高いディスプレイリフレッシュレートをリクエストします</string>
+    <string name="device_visual_profile">デバイスのビジュアルプロファイル</string>
+    <string name="device_visual_profile_lite">ビジュアル効果を軽減</string>
+    <string name="device_visual_profile_normal">標準</string>
+    <string name="device_visual_profile_lite_subtitle">自動。Android がメモリ不足を検知すると、負荷の高いぼかし効果や装飾的なアートワークを軽減します。</string>
+    <string name="device_visual_profile_normal_subtitle">自動。このデバイスは低メモリプロファイルのしきい値に該当しません。</string>
     <string name="high_performance_active">%1$d Hzをリクエスト中です。必要に応じてAndroidが下げることがあります。</string>
     <string name="beta">ベータ</string>
     <string name="refresh_rate">リフレッシュレート</string>

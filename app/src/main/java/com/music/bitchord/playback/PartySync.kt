@@ -788,8 +788,9 @@ class PartySync(
             try {
                 // Take the freshest queue available when the background build starts.
                 val latest = ListenTogether.state.value
-                if (!latest.inParty || latest.playback.track?.videoId != requestedTrackId) {
-                    retryLatestState = latest.inParty && latest.playback.track != null
+                val latestTrack = latest.playback.track
+                if (!latest.inParty || latestTrack?.videoId != requestedTrackId) {
+                    retryLatestState = latest.inParty && latestTrack != null
                     return@launch
                 }
 
@@ -800,7 +801,7 @@ class PartySync(
                 // back to position zero never is.
                 val partyQueue = latest.queue.items
                 val index = partyQueueIndexOf(latest.queue, latest.playback, requestedTrackId)
-                val queue = if (index >= 0) partyQueue else listOf(latest.playback.track)
+                val queue = if (index >= 0) partyQueue else listOf(latestTrack)
                 val startIndex = if (index >= 0) index else 0
 
                 // Off the main thread: building an item resolves artwork sizes and

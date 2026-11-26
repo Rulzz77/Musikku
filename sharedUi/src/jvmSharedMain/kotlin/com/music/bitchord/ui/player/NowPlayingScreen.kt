@@ -1202,7 +1202,10 @@ fun NowPlayingScreen(
     }
     var lyricsFullscreen by remember { mutableStateOf(false) }
     var lyricsRequestedLandscape by remember { mutableStateOf(false) }
-    val lyricsFullscreenVisible = lyricsFullscreen && lyricsOpen && sideways
+    // Fullscreen lyrics is a presentation mode, not an orientation lock. Keep
+    // it available in both portrait and landscape so the Canvas can use its
+    // native vertical rendition on phones held upright.
+    val lyricsFullscreenVisible = lyricsFullscreen && lyricsOpen
 
     val canvas = rememberCanvasArtwork(
         song = song,
@@ -1347,13 +1350,13 @@ fun NowPlayingScreen(
         queueOpen = false
     }
     val enterLyricsFullscreen: () -> Unit = {
-        lyricsRequestedLandscape = !sideways
+        // Preserve the user's current orientation. The fullscreen surface is
+        // responsive and should not rotate the phone just to show lyrics.
+        lyricsRequestedLandscape = false
         lyricsFullscreen = true
-        if (lyricsRequestedLandscape) screenOrientation.landscape()
     }
     val exitLyricsFullscreen: () -> Unit = {
         lyricsFullscreen = false
-        if (lyricsRequestedLandscape) screenOrientation.portrait()
         lyricsRequestedLandscape = false
     }
     val closeLyrics: () -> Unit = {

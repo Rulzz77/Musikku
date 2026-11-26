@@ -8,7 +8,7 @@ import org.junit.Test
 class PartySyncDriftCorrectionTest {
 
     @Test
-    fun `ordinary decoder jitter never changes playback rate or triggers a seek`() {
+    fun `ordinary decoder jitter is tolerated without corrective seeking`() {
         assertFalse(partySyncRequiresSeek(0L))
         assertFalse(partySyncRequiresSeek(80L))
         assertFalse(partySyncRequiresSeek(-80L))

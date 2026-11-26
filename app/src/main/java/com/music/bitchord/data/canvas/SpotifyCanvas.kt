@@ -325,7 +325,7 @@ object SpotifyCanvas {
             .header("Accept-Language", "en")
             .build()
         val (code, body) = runCatching {
-            Http.client.newCall(request).execute().use { response ->
+            canvasCall(request).execute().use { response ->
                 response.code to if (response.isSuccessful) response.body?.string() else null
             }
         }.getOrElse { return SpotifyCanvasQuery.Answer.Failed("request threw: ${it.message}") }
@@ -356,7 +356,7 @@ object SpotifyCanvas {
             .build()
 
         val bytes = runCatching {
-            Http.client.newCall(request).execute().use { response ->
+            canvasCall(request).execute().use { response ->
                 if (!response.isSuccessful) {
                     Log.w(TAG, "canvaz-cache http ${response.code} for $trackUri")
                 }

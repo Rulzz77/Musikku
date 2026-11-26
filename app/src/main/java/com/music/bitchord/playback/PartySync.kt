@@ -247,7 +247,7 @@ class PartySync(
     }
 
     fun stop() {
-        ()
+
         jobs.forEach(Job::cancel)
         jobs.clear()
         publishJob?.cancel()
@@ -518,7 +518,7 @@ class PartySync(
     private fun reconcile() {
         val party = ListenTogether.state.value
         if (!party.inParty) {
-            ()
+
             loadingVideoId = null
             focusLost = false
             rejoining = false
@@ -542,7 +542,7 @@ class PartySync(
         // off whatever the listener just started — so this device follows
         // nothing until its own user asks it to. See [focusLost].
         if (focusLost) {
-            ()
+
             return
         }
         val target = party.playback
@@ -558,7 +558,7 @@ class PartySync(
         // drift that is not there and would be "corrected" by seeking a player
         // nobody can hear. It converges on its own the moment the audio returns.
         if (exo.playbackSuppressionReason != Player.PLAYBACK_SUPPRESSION_REASON_NONE) {
-            
+
             return
         }
 
@@ -567,12 +567,12 @@ class PartySync(
         // somebody deliberately chose, so the two are simply left uncoupled
         // until playback returns to something with a catalogue id.
         if (exo.currentMediaItem?.toSong()?.isDeviceFile() == true) {
-            
+
             return
         }
 
         if (exo.currentMediaItem?.mediaId != track.videoId) {
-            
+
             load(party)
             return
         }
@@ -584,7 +584,7 @@ class PartySync(
         // queue behind it is kept — and everything below it is sound: starting
         // the player, and chasing a playhead nobody here can hear.
         if (locallyPaused) {
-            
+
             // Nothing below here will start this device while the pause holds,
             // so a resume still waiting on the party is never going to be
             // answered — and the transport would draw that wait for as long as
@@ -594,7 +594,7 @@ class PartySync(
         }
 
         if (!target.isPlaying) {
-            
+
             deferredPlayPending = false
             if (exo.playWhenReady) exo.pause()
             // Held where the party paused it, so that everybody resumes from the
@@ -616,7 +616,7 @@ class PartySync(
         // until the first pong landed. Loading needs no clock; only the position
         // does — and [load] prepares without starting for exactly that reason.
         if (!party.clockSynced) {
-            
+
             return
         }
 
@@ -624,7 +624,7 @@ class PartySync(
         // and the clock has been measured, both checked above.
         val want = ListenTogether.partyPositionMs()
         if (!exo.playWhenReady) {
-            
+
             val wait = ListenTogether.msUntilStart()
             if (wait > 0) {
                 // The party's resume is scheduled, not immediate. Wake up for
@@ -658,7 +658,7 @@ class PartySync(
         // `currentPosition` is where it will resume rather than where it is, so
         // the party runs on and this reads as drift that is not there.
         if (exo.playbackState != Player.STATE_READY) {
-            
+
             driftStrikes = 0
             return
         }
@@ -686,7 +686,7 @@ class PartySync(
 
             if (isPlaybackAnchorChanged && abs(drift) > ALIGN_TOLERANCE_MS) {
                 Log.i(TAG, "aligning ${drift}ms onto party control ${target.seq}")
-                
+
                 exo.seekTo(want)
                 return
             }
@@ -696,7 +696,7 @@ class PartySync(
             driftStrikes = 0
             return
         }
-        
+
         // Seeking is not free, and on a slow device it is not cheap either: the
         // re-buffer it costs can be longer than the gap being closed, so the
         // correction arrives already as far behind as the error it was fixing,
@@ -982,7 +982,7 @@ class PartySync(
     }
 
     private fun onLeftParty() {
-        ()
+
         // Keep the last song played in the room. The personal snapshot is only
         // a safety net for a service restart while still in a party; it must
         // not replace the shared song when the user explicitly leaves.
@@ -1091,11 +1091,6 @@ class PartySync(
          * ExoPlayer, no binder call and no allocation on the quiet path.
          */
         const val TICK_MS = 350L
-
-        /**
-         * Maximum drift tolerated before a guarded seek. Small clock and decoder
-         * differences are left alone so party sync never changes playback speed.
-         */
 
         /** Readings in a row above the limit before a correction is made. */
         const val DRIFT_STRIKES = 2

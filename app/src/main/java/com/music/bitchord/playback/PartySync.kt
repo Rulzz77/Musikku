@@ -128,6 +128,13 @@ class PartySync(
     private var loadGeneration = 0L
 
     /**
+     * Party track a follower reached the end of locally while waiting for the
+     * elected leader. The follower holds its next item until the shared state
+     * advances, instead of playing it briefly and being pulled back.
+     */
+    private var waitingForLeaderTrackId: String? = null
+
+    /**
      * Until when [reconcile] should keep its hands off.
      *
      * Set when this device's user does something. Between the action and the
@@ -276,6 +283,7 @@ class PartySync(
         loadJob?.cancel()
         loadJob = null
         loadingVideoId = null
+        waitingForLeaderTrackId = null
     }
 
     /**
@@ -301,9 +309,28 @@ class PartySync(
         if (!party.inParty) return
         val leaderId = partyPlaybackLeaderId(party)
         if (leaderId == null || party.you?.memberId != leaderId) {
-            Log.i(TAG, "ignoring automatic advance from a non-leader device")
+            val exo = player()
+            val nextTrackId = exo?.currentMediaItem?.mediaId
+            val currentTrackId = party.playback.track?.videoId
+            val currentIndex = partyQueueIndexOf(party.queue, party.playback, currentTrackId)
+            val nextIndex = partyQueueIndexOf(party.queue, party.playback, nextTrackId)
+            if (currentTrackId != null && nextTrackId != null &&
+                partyAutoAdvanceIsForward(currentTrackId, nextTrackId, currentIndex, nextIndex)
+            ) {
+                // Keep the next item loaded but silent. The leader's own
+                // transition is the only one that advances the shared clock.
+                waitingForLeaderTrackId = currentTrackId
+                exo.pause()
+                Log.i(TAG, "waiting for party leader to advance from $currentTrackId")
+            } else {
+                // The party is already ahead of this device, or the queue does
+                // not prove that this is a forward move. Catch up; never publish
+                // a transition whose place in the shared order is unknown.
+                reconcile()
+            }
             return
         }
+        waitingForLeaderTrackId = null
         requestLocalIntent(automaticAdvance = true)
     }
 
@@ -618,8 +645,27 @@ class PartySync(
             return
         }
 
-        if (exo.currentMediaItem?.mediaId != track.videoId) {
+        val waitingForLeader = waitingForLeaderTrackId
+        if (waitingForLeader != null) {
+            if (target.track?.videoId != waitingForLeader || !target.isPlaying) {
+                // The room moved on (or was paused), so this held transition
+                // has either been accepted or cancelled by a real party control.
+                waitingForLeaderTrackId = null
+            } else {
+                // If the elected leader changed while this phone was waiting,
+                // it can take over from the already-loaded next item.
+                if (partyPlaybackLeaderId(party) == party.you?.memberId &&
+                    exo.currentMediaItem?.mediaId != track.videoId
+                ) {
+                    waitingForLeaderTrackId = null
+                    exo.play()
+                    requestLocalIntent(automaticAdvance = true)
+                }
+                return
+            }
+        }
 
+        if (exo.currentMediaItem?.mediaId != track.videoId) {
             load(party)
             return
         }
@@ -1070,6 +1116,7 @@ class PartySync(
         loadJob?.cancel()
         loadJob = null
         loadingVideoId = null
+        waitingForLeaderTrackId = null
 
         // Keep the last song played in the room. The personal snapshot is only
         // a safety net for a service restart while still in a party; it must

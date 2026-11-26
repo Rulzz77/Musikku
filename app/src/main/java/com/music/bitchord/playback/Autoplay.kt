@@ -45,7 +45,7 @@ fun autoplayEnabledFor(party: ListenTogether.State, localPreference: Boolean): B
  * Returning null instead lets AutoPlay wait for the host, which is what the
  * party's own policy already says should happen.
  */
-fun autoplaySupplierId(party: ListenTogether.State): String? {
+fun partyPlaybackLeaderId(party: ListenTogether.State): String? {
     if (!party.inParty) return null
     val host = party.members.firstOrNull { it.isHost && it.connected }?.memberId
     if (party.hostOnlyControl) return host
@@ -54,6 +54,10 @@ fun autoplaySupplierId(party: ListenTogether.State): String? {
         .minByOrNull { it.memberId }
         ?.memberId
 }
+
+/** The elected playback leader is also the only device that fills AutoPlay. */
+fun autoplaySupplierId(party: ListenTogether.State): String? =
+    partyPlaybackLeaderId(party)
 
 /**
  * Whether AutoPlay should forget its last seed and try the current track again.

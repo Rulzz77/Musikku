@@ -2188,19 +2188,9 @@ fun NowPlayingScreen(
                     image = fullArtworkBlurImage,
                     modifier = Modifier.fillMaxSize(),
                 )
-                // Keep the track's actual cover visible until Canvas has painted
-                // a real frame. When a song has no Canvas (or video loading fails),
-                // fullscreen lyrics therefore falls back to the same cover artwork
-                // as the regular player instead of leaving only a blurred backdrop.
-                // Canvas is layered above it and takes over as soon as it renders.
-                if (!canvasRendered && !remoteArt.isNullOrBlank()) {
-                    AsyncImage(
-                        model = remoteArt,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                }
+                // Keep the soft artwork backdrop here. The actual cover is shown
+                // at the regular sleeve size beside the lyrics below; it must not
+                // stretch edge-to-edge when this song has no Canvas.
                 // This screen is landscape-only: keep the provider's normal/raw
                 // rendition instead of forcing Apple's tall phone crop into a
                 // landscape window.
@@ -2295,6 +2285,29 @@ fun NowPlayingScreen(
                             .fillMaxHeight(),
                         verticalArrangement = Arrangement.Bottom,
                     ) {
+                        // Without a rendered Canvas, show the track cover like a
+                        // normal player sleeve — a square card beside the lyrics,
+                        // not a full-window image. The space above it can breathe
+                        // with the landscape height and the usual controls below.
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth(),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            if (!canvasRendered && !remoteArt.isNullOrBlank()) {
+                                AsyncImage(
+                                    model = remoteArt,
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier
+                                        .sizeIn(maxWidth = 184.dp, maxHeight = 184.dp)
+                                        .fillMaxWidth(0.82f)
+                                        .aspectRatio(1f)
+                                        .clip(RoundedCornerShape(16.dp)),
+                                )
+                            }
+                        }
                         Text(
                             text = song.title,
                             style = MaterialTheme.typography.titleLarge.copy(

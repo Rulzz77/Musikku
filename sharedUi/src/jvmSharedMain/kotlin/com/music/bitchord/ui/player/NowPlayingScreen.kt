@@ -40,6 +40,7 @@ import androidx.compose.foundation.gestures.awaitVerticalTouchSlopOrCancellation
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.verticalDrag
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -2145,9 +2146,9 @@ fun NowPlayingScreen(
         }
     }
 
-    // Fullscreen is a landscape-only reading mode. In portrait the regular
-    // lyrics panel underneath remains the native experience; the button nudges
-    // the device sideways and this dialog appears once the window is wide.
+    // Fullscreen is a landscape-only, immersive reading mode. The moving Canvas
+    // is the background itself, not a framed cover beside the lyrics. Portrait
+    // keeps the regular player lyrics layout unchanged.
     if (lyricsFullscreenVisible) {
         Dialog(
             onDismissRequest = exitLyricsFullscreen,
@@ -2156,123 +2157,144 @@ fun NowPlayingScreen(
                 dismissOnClickOutside = false,
             ),
         ) {
-            BoxWithConstraints(
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(Color.Black),
             ) {
+                // Still artwork is the immediate fallback; the live Canvas takes
+                // over the same full-bleed bounds as soon as its first frame lands.
                 FullArtworkBlurBackdrop(
                     image = fullArtworkBlurImage,
                     modifier = Modifier.fillMaxSize(),
+                )
+                AsyncImage(
+                    model = art.request,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    onState = art::onState,
+                    modifier = Modifier.fillMaxSize(),
+                )
+                val fullscreenLyricsCanvas = canvas?.nowPlayingRendition(fullWindow = true)
+                fullscreenLyricsCanvas?.let { clip ->
+                    CanvasArtworkPlayer(
+                        canvas = clip,
+                        isPlaying = isPlaying,
+                        modifier = Modifier.fillMaxSize(),
+                        contentMode = CanvasContentMode.CROP,
+                        // Keep the one foreground decoder alive while handing it
+                        // from the normal landscape artwork to this full-screen layer.
+                        nowPlaying = true,
+                    )
+                }
+
+                // Keep the video visible but give the white lyrics enough contrast.
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.horizontalGradient(
+                                colorStops = arrayOf(
+                                    0f to Color.Black.copy(alpha = 0.22f),
+                                    0.34f to Color.Black.copy(alpha = 0.24f),
+                                    0.62f to Color.Black.copy(alpha = 0.46f),
+                                    1f to Color.Black.copy(alpha = 0.60f),
+                                ),
+                            ),
+                        ),
                 )
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(
                             Brush.verticalGradient(
-                                listOf(
-                                    Color.Black.copy(alpha = 0.28f),
-                                    Color.Black.copy(alpha = 0.76f),
+                                colorStops = arrayOf(
+                                    0f to Color.Black.copy(alpha = 0.20f),
+                                    0.18f to Color.Transparent,
+                                    0.72f to Color.Transparent,
+                                    1f to Color.Black.copy(alpha = 0.46f),
                                 ),
                             ),
                         ),
                 )
 
-                // Prefer the provider's portrait rendition in the tall fullscreen artwork pane.
-                val fullscreenLyricsCanvas = canvas?.nowPlayingRendition(fullWindow = true)
-                val coverColumnWidth = (maxWidth * 0.42f).coerceIn(188.dp, 360.dp)
+                // A tap on the video / empty space brings back the small transport
+                // chrome. Lyrics and the scrubber keep their own gestures.
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                        ) {
+                            lyricsControlsOpen = true
+                        },
+                )
+
                 Row(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(horizontal = 26.dp, vertical = 18.dp),
+                        .padding(horizontal = 34.dp, vertical = 22.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    // The left side deliberately stays mostly open so the Canvas
+                    // subject remains visible. Track identity and seek live low,
+                    // as in the Spicy Lyrics fullscreen reference.
                     Column(
                         modifier = Modifier
-                            .width(coverColumnWidth)
+                            .weight(0.40f)
                             .fillMaxHeight(),
-                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Bottom,
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(22.dp))
-                                .background(Color.Black)
-                                .border(
-                                    1.dp,
-                                    Color.White.copy(alpha = 0.16f),
-                                    RoundedCornerShape(22.dp),
-                                ),
-                        ) {
-                            // Keep the still cover underneath until Canvas paints its first frame.
-                            AsyncImage(
-                                model = art.request,
-                                contentDescription = null,
-                                contentScale = ContentScale.Crop,
-                                onState = art::onState,
-                                modifier = Modifier.fillMaxSize(),
-                            )
-                            fullscreenLyricsCanvas?.let { clip ->
-                                CanvasArtworkPlayer(
-                                    canvas = clip,
+                        Text(
+                            text = song.title,
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontWeight = FontWeight.Bold,
+                            ),
+                            color = Color.White,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = song.artist,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.White.copy(alpha = 0.78f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(top = 3.dp, bottom = 14.dp),
+                        )
+                        PlayerScrubber(
+                            shown = shown,
+                            durationMs = durationMs,
+                            loading = isLoading || audioVersionSwitching,
+                            mixing = mixing && !scrub.scrubbing,
+                            transitionWindow = null,
+                            onScrub = onScrub,
+                            onScrubFinished = onScrubFinished,
+                        )
+                        AnimatedVisibility(visible = lyricsControlsOpen) {
+                            Column {
+                                Spacer(Modifier.height(8.dp))
+                                TransportRow(
                                     isPlaying = isPlaying,
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentMode = CanvasContentMode.FIT_PORTRAIT,
-                                    // Reuse the single foreground Canvas decoder; don't start a
-                                    // second decorative player during the fullscreen hand-off.
-                                    nowPlaying = true,
+                                    isLoading = isLoading || audioVersionSwitching,
+                                    previousEnabled = !controlsLocked &&
+                                        (canSkipPrevious || pastRestartPoint),
+                                    nextEnabled = !controlsLocked && canSkipNext,
+                                    onPrevious = onPrevious,
+                                    onPlayPause = onPlayPause,
+                                    onNext = onNext,
+                                    compact = true,
                                 )
                             }
                         }
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 12.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                        ) {
-                            Text(
-                                text = song.title,
-                                style = MaterialTheme.typography.titleMedium,
-                                color = Color.White,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                                textAlign = TextAlign.Center,
-                            )
-                            Text(
-                                text = song.artist,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Color.White.copy(alpha = 0.70f),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.padding(top = 4.dp),
-                            )
-                        }
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 12.dp),
-                        ) {
-                            TransportRow(
-                                isPlaying = isPlaying,
-                                isLoading = isLoading || audioVersionSwitching,
-                                previousEnabled = !controlsLocked &&
-                                    (canSkipPrevious || pastRestartPoint),
-                                nextEnabled = !controlsLocked && canSkipNext,
-                                onPrevious = onPrevious,
-                                onPlayPause = onPlayPause,
-                                onNext = onNext,
-                                compact = true,
-                            )
-                        }
                     }
 
-                    Spacer(Modifier.width(28.dp))
+                    Spacer(Modifier.width(38.dp))
 
                     Column(
                         modifier = Modifier
-                            .weight(1f)
+                            .weight(0.60f)
                             .fillMaxHeight(),
                     ) {
                         Row(
@@ -2280,14 +2302,16 @@ fun NowPlayingScreen(
                                 .fillMaxWidth()
                                 .height(48.dp),
                             verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.End,
                         ) {
-                            Spacer(Modifier.weight(1f))
-                            CircleGlyph(
-                                icon = Icons.Rounded.FullscreenExit,
-                                contentDescription = stringResource(Res.string.lyrics_exit_fullscreen),
-                                onClick = exitLyricsFullscreen,
-                                tint = Color.White,
-                            )
+                            AnimatedVisibility(visible = lyricsControlsOpen) {
+                                CircleGlyph(
+                                    icon = Icons.Rounded.FullscreenExit,
+                                    contentDescription = stringResource(Res.string.lyrics_exit_fullscreen),
+                                    onClick = exitLyricsFullscreen,
+                                    tint = Color.White,
+                                )
+                            }
                         }
                         LyricsPanel(
                             lines = lyrics.orEmpty(),
@@ -2308,13 +2332,13 @@ fun NowPlayingScreen(
                             onPickLine = lyricPicker.pick,
                             onTogglePick = lyricPicker.toggle,
                             centerFocus = true,
-                            fontScale = 0.78f,
+                            fontScale = 0.90f,
                             modifier = Modifier
                                 .weight(1f)
                                 .fillMaxWidth()
                                 .padding(horizontal = 4.dp),
                         )
-                        if (lyricsControlsOpen) {
+                        AnimatedVisibility(visible = lyricsControlsOpen) {
                             if (lyricPicker.picking) {
                                 LyricsPickBar(
                                     shareEnabled = lyricPicker.picks.isNotEmpty() && !lyricPicker.overBudget,

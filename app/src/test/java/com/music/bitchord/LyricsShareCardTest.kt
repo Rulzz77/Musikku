@@ -1,7 +1,9 @@
 package com.music.bitchord
 
+import com.music.bitchord.ui.player.LYRICS_SHARE_BRAND
 import com.music.bitchord.ui.player.SHARE_CARD_CHAR_BUDGET
 import com.music.bitchord.ui.player.fitsOnCard
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -12,6 +14,10 @@ import org.junit.Test
  * pick is the one place a limit can sit.
  */
 class LyricsShareCardTest {
+    @Test fun shareCardUsesMusikKuBrand() {
+        assertEquals("MusikKu", LYRICS_SHARE_BRAND)
+    }
+
     /** At the length a line of a song usually has. */
     private val shortLine = "Nie dzwoń do mnie teraz, nie przeszkadzaj mi"
 

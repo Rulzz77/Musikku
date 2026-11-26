@@ -271,6 +271,11 @@
     <string name="performance">Производительность</string>
     <string name="high_performance_mode">Режим высокой производительности</string>
     <string name="high_performance_subtitle">Использует полную анимацию и размытие, а также запрашивает более высокую частоту обновления экрана</string>
+    <string name="device_visual_profile">Визуальный профиль устройства</string>
+    <string name="device_visual_profile_lite">Упрощённые эффекты</string>
+    <string name="device_visual_profile_normal">Обычный</string>
+    <string name="device_visual_profile_lite_subtitle">Автоматически. Android сообщает о нехватке памяти, поэтому ресурсоёмкое размытие и декоративная анимация отключаются.</string>
+    <string name="device_visual_profile_normal_subtitle">Автоматически. Это устройство не соответствует порогам профиля с ограниченной памятью.</string>
     <string name="high_performance_active">Запрошена частота %1$d Гц. Android может снизить её при необходимости.</string>
     <string name="beta">Бета</string>
     <string name="refresh_rate">Частота обновления</string>

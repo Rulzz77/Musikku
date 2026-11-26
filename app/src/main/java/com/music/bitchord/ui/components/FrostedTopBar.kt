@@ -74,6 +74,7 @@ import kotlinx.coroutines.launch
 import com.music.bitchord.R
 import com.music.bitchord.data.model.Account
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.ui.performance.LocalDevicePerformanceProfile
 import com.music.bitchord.ui.theme.stableStatusBarInsets
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
@@ -182,6 +183,8 @@ fun FrostedTopBar(
     actions: @Composable () -> Unit = {},
 ) {
     val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
+    val reduceExpensiveVisualEffects = LocalDevicePerformanceProfile.current.reduceExpensiveVisualEffects
+    val reduceDynamicBlurForDevice = reduceDynamicBlur || reduceExpensiveVisualEffects
     val useFloatingChrome = artworkPageChrome ||
         (LocalLiquidGlassEnabled.current && isGlassSupported())
     val titleAlpha by animateFloatAsState(
@@ -206,7 +209,7 @@ fun FrostedTopBar(
         modifier = modifier
             .fillMaxWidth()
             .then(
-                if (reduceDynamicBlur && !transparentBackdrop) {
+                if (reduceDynamicBlurForDevice && !transparentBackdrop) {
                     Modifier.background(MaterialTheme.colorScheme.surface)
                 } else Modifier,
             ),

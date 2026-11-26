@@ -51,6 +51,7 @@ import com.music.bitchord.data.lyrics.LyricsTranslation
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.settings.LastPlayerScreen
+import com.music.bitchord.ui.performance.DevicePerformanceProfile
 import com.music.bitchord.playback.MusicOnlyPlayback
 import com.music.bitchord.playback.AudioOutputStatus
 import com.music.bitchord.playback.AudioRouting
@@ -89,6 +90,7 @@ import kotlin.math.roundToInt
  */
 class AndroidPlayerHost(context: Context) : PlayerHost {
     private val app = context.applicationContext
+    private val devicePerformanceProfile by lazy { DevicePerformanceProfile.detect(app) }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val main = Handler(Looper.getMainLooper())
 
@@ -155,9 +157,12 @@ class AndroidPlayerHost(context: Context) : PlayerHost {
         }
     }
 
-    override fun cachedCanvas(song: Song): CanvasArtwork? = CanvasRepository.cached(song)
+    // Low-memory devices keep the still cover and never resolve or stream a decorative Canvas.
+    override fun cachedCanvas(song: Song): CanvasArtwork? =
+        if (devicePerformanceProfile.disableDecorativeVideo) null else CanvasRepository.cached(song)
 
-    override suspend fun canvasFor(song: Song): CanvasArtwork? = CanvasRepository.canvasFor(song)
+    override suspend fun canvasFor(song: Song): CanvasArtwork? =
+        if (devicePerformanceProfile.disableDecorativeVideo) null else CanvasRepository.canvasFor(song)
 
     override suspend fun bestPartMs(song: Song): Long? =
         com.music.bitchord.ui.replay.year.BestParts.startFor(app, song)

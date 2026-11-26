@@ -274,6 +274,11 @@
     <string name="performance">Rendimiento</string>
     <string name="high_performance_mode">Modo de alto rendimiento</string>
     <string name="high_performance_subtitle">Usa las animaciones y el desenfoque completos, y solicita una frecuencia de pantalla más alta</string>
+    <string name="device_visual_profile">Perfil visual del dispositivo</string>
+    <string name="device_visual_profile_lite">Efectos reducidos</string>
+    <string name="device_visual_profile_normal">Normal</string>
+    <string name="device_visual_profile_lite_subtitle">Automático. Android detecta memoria limitada, por lo que se reducen el desenfoque costoso y las ilustraciones decorativas.</string>
+    <string name="device_visual_profile_normal_subtitle">Automático. Este dispositivo no cumple los límites del perfil de memoria baja.</string>
     <string name="high_performance_active">Se solicitaron %1$d Hz. Android puede reducirlos cuando sea necesario.</string>
     <string name="beta">Beta</string>
     <string name="refresh_rate">Frecuencia de actualización</string>

@@ -256,6 +256,11 @@
     <string name="performance">效能</string>
     <string name="high_performance_mode">高效能模式</string>
     <string name="high_performance_subtitle">使用完整動畫和模糊效果，並請求更高的螢幕重新整理率</string>
+    <string name="device_visual_profile">裝置視覺設定檔</string>
+    <string name="device_visual_profile_lite">精簡視覺效果</string>
+    <string name="device_visual_profile_normal">一般</string>
+    <string name="device_visual_profile_lite_subtitle">自動。Android 偵測到記憶體有限，因此會減少高耗能的模糊效果和裝飾性動畫。</string>
+    <string name="device_visual_profile_normal_subtitle">自動。此裝置未達到低記憶體設定檔的啟用門檻。</string>
     <string name="high_performance_active">已請求 %1$d Hz。Android 可能會在需要時降低此數值。</string>
     <string name="beta">測試版</string>
     <string name="refresh_rate">重新整理率</string>

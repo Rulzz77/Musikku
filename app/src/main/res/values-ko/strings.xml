@@ -403,6 +403,11 @@
     <string name="performance">성능</string>
     <string name="high_performance_mode">고성능 모드</string>
     <string name="high_performance_subtitle">애니메이션과 흐림 효과를 모두 적용하고, 더 높은 화면 주사율을 요청합니다</string>
+    <string name="device_visual_profile">기기 시각 효과 프로필</string>
+    <string name="device_visual_profile_lite">시각 효과 줄이기</string>
+    <string name="device_visual_profile_normal">일반</string>
+    <string name="device_visual_profile_lite_subtitle">자동. Android가 메모리 부족을 감지하면 무거운 흐림 효과와 장식용 아트워크를 줄입니다.</string>
+    <string name="device_visual_profile_normal_subtitle">자동. 이 기기는 저메모리 프로필 기준에 해당하지 않습니다.</string>
     <string name="high_performance_active">%1$d Hz 요청됨. 필요한 경우 Android에서 더 낮게 둘 수 있습니다.</string>
     <string name="beta">베타</string>
     <string name="refresh_rate">주사율</string>

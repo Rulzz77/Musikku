@@ -1154,8 +1154,19 @@ private fun rememberNowPlayingDecoder(context: Context, teardown: Teardown): Now
 /** The phone's decoder behind [CanvasArtworkPlayer] — see [PlayerHost.CanvasVideo]. */
 @Composable
 internal fun AndroidCanvasVideo(spec: CanvasVideoSpec, modifier: Modifier) {
-    key(spec.canvas.url.takeIf { spec.nowPlaying }) {
-        AndroidCanvasVideoContents(spec, modifier)
+    val disableDecorativeVideo = com.music.bitchord.ui.performance.LocalDevicePerformanceProfile.current
+        .disableDecorativeVideo
+    if (disableDecorativeVideo) {
+        val reportRendered by rememberUpdatedState(spec.onRenderedChanged)
+        val reportCover by rememberUpdatedState(spec.onCoverChanged)
+        LaunchedEffect(spec.canvas.url) {
+            reportRendered(false)
+            reportCover(0f)
+        }
+    } else {
+        key(spec.canvas.url.takeIf { spec.nowPlaying }) {
+            AndroidCanvasVideoContents(spec, modifier)
+        }
     }
 }
 

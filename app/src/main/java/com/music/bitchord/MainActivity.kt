@@ -364,6 +364,8 @@ import com.music.bitchord.data.canvas.keyColors
 import com.music.bitchord.ui.theme.SystemBarIcons
 import com.music.bitchord.ui.utils.guardSheetFromContentTouches
 import com.music.bitchord.ui.utils.rememberIosOverscrollFactory
+import com.music.bitchord.ui.performance.DevicePerformanceProfile
+import com.music.bitchord.ui.performance.LocalDevicePerformanceProfile
 import com.music.bitchord.ui.performance.resolvePerformanceRefreshRate
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
@@ -433,7 +435,12 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
                 val appBackdrop = rememberLayerBackdrop(onDraw = paintBackdrop)
+                // Device capability is stable for this Activity. Probe once, not during scrolling.
+                val devicePerformanceProfile = remember {
+                    DevicePerformanceProfile.detect(applicationContext)
+                }
                 CompositionLocalProvider(
+                    LocalDevicePerformanceProfile provides devicePerformanceProfile,
                     LocalOverscrollFactory provides iosOverscrollFactory,
                     LocalLiquidGlassEnabled provides liquidGlassEnabled,
                     LocalAppBackdrop provides appBackdrop,
@@ -590,7 +597,9 @@ private fun BitChordApp(
     // below goes with them, which is the part that costs a draw pass.
     val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
     val progressiveBlur by AppSettings.progressiveBlur.collectAsStateWithLifecycle()
-    val glassSamplesBackdrop = glassActive && !reduceDynamicBlur
+    val reduceExpensiveVisualEffects =
+        LocalDevicePerformanceProfile.current.reduceExpensiveVisualEffects
+    val glassSamplesBackdrop = glassActive && !reduceDynamicBlur && !reduceExpensiveVisualEffects
     // What folds [GlassNavBar] between its expanded and inline shapes. Held here
     // rather than inside the bar because the page's scroll is what drives it,
     // and the page is a sibling of the bar rather than a child.
@@ -613,7 +622,7 @@ private fun BitChordApp(
     // The Top Picks and mood artwork loop forever; nobody sees it with the
     // app in the background or Now Playing pulled up over the page.
     val appForeground = com.music.bitchord.ui.rememberIsForeground()
-    val artworkMotion = appForeground && !showNowPlaying
+    val artworkMotion = appForeground && !showNowPlaying && !reduceExpensiveVisualEffects
     // Top Picks turns over each hour; coming back to the app after a
     // turn-over is an open too.
     LaunchedEffect(appForeground) {
@@ -904,15 +913,7 @@ private fun BitChordApp(
     val hideHomeMoods by AppSettings.hideHomeMoods.collectAsStateWithLifecycle()
     // Only what Home draws: Top Picks reads the unfiltered feed from the view model.
     val visibleHomeState = remember(homeState, hideHomeVideos, hideRecents) {
-        val loaded = homeState as? UiState.Success
-        if (loaded != null && (hideHomeVideos || hideRecents)) {
-            var shelves = loaded.data
-            if (hideRecents) shelves = shelves.filterNot { it.title == YtMusicRepository.RECENT_TITLE }
-            if (hideHomeVideos) shelves = shelves.withoutVideos()
-            UiState.Success(shelves)
-        } else {
-            homeState
-        }
+        visibleHomeShelves(homeState, hideHomeVideos, hideRecents)
     }
     val homeLoadingMore by viewModel.homeLoadingMore.collectAsStateWithLifecycle()
     val homeRecentlyPlayedLoading by viewModel.homeRecentlyPlayedLoading.collectAsStateWithLifecycle()
@@ -1109,65 +1110,39 @@ private fun BitChordApp(
     // Playlists imported without (or instead of) a YouTube Music account live
     // in the app's own store, and sit on the same shelf as the downloaded ones.
     val localPlaylists by com.music.bitchord.data.spotify.LocalPlaylistStore.playlists.collectAsStateWithLifecycle()
-    val localPlaylistItems = localPlaylists.map { playlist ->
-        ShelfItem(
-            title = playlist.title,
-            subtitle = stringResource(R.string.local_playlist_subtitle, playlist.songs.size),
-            thumbnailUrl = playlist.coverUrl ?: playlist.songs.firstOrNull { !it.thumbnailUrl.isNullOrBlank() }?.thumbnailUrl,
-            videoId = null,
-            browseId = playlist.browseId,
-        )
+    // These projections are used by several Library/Home surfaces. Keep them
+    // until their source playlists (or the active locale context) actually move;
+    // unrelated player, download, or navigation state should not rebuild every
+    // playlist card and rescan its songs for an artwork fallback.
+    val localPlaylistItems = remember(localPlaylists, context) {
+        localPlaylistShelfItems(localPlaylists, context)
     }
     // Playlists created from the Add to playlist menu are stored separately
     // from Spotify imports. Surface the same device-owned records on both tabs.
-    val offlinePlaylistItems = offlinePlaylists.map { playlist ->
-        ShelfItem(
-            title = playlist.title,
-            subtitle = stringResource(R.string.local_playlist_subtitle, playlist.songs.size),
-            thumbnailUrl = playlist.coverUrl ?: playlist.songs.firstOrNull { !it.thumbnailUrl.isNullOrBlank() }?.thumbnailUrl,
-            videoId = null,
-            browseId = playlist.browseId,
-        )
+    val offlinePlaylistItems = remember(offlinePlaylists, context) {
+        offlinePlaylistShelfItems(offlinePlaylists, context)
     }
     // Folders reference account playlists and both local playlist collections.
     // They store browse ids only, never copies of playlist contents.
-    val accountPlaylistItems = (libraryState as? UiState.Success)
-        ?.data?.shelves
-        ?.firstOrNull { it.title == YtMusicRepository.PLAYLISTS_SHELF }
-        ?.items.orEmpty()
-    val folderablePlaylistItems = (accountPlaylistItems + localPlaylistItems + offlinePlaylistItems)
-        .filter { it.browseId != null }
-        .distinctBy { it.browseId }
+    val accountPlaylistItems = remember(libraryState) {
+        accountPlaylistShelfItems(libraryState, YtMusicRepository.PLAYLISTS_SHELF)
+    }
+    val folderablePlaylistItems = remember(accountPlaylistItems, localPlaylistItems, offlinePlaylistItems) {
+        folderablePlaylistShelfItems(accountPlaylistItems, localPlaylistItems, offlinePlaylistItems)
+    }
     val folderedPlaylistBrowseIds = remember(playlistFolders) {
-        playlistFolders.flatMapTo(HashSet()) { it.playlistBrowseIds }
+        folderedPlaylistIds(playlistFolders)
     }
     // Once assigned, a playlist is shown from its folder rather than twice in
     // the same Library. Its underlying record and source page are untouched.
-    val libraryStateWithoutFolderedPlaylists = when (val current = libraryState) {
-        is UiState.Success -> current.copy(
-            data = current.data.copy(
-                shelves = current.data.shelves.mapNotNull { shelf ->
-                    if (shelf.title != YtMusicRepository.PLAYLISTS_SHELF) {
-                        shelf
-                    } else {
-                        shelf.copy(
-                            items = shelf.items.filter { item ->
-                                item.browseId == null || item.browseId !in folderedPlaylistBrowseIds
-                            },
-                        ).takeIf { it.items.isNotEmpty() }
-                    }
-                },
-            ),
-        )
-        else -> libraryState
+    val libraryStateWithoutFolderedPlaylists = remember(libraryState, folderedPlaylistBrowseIds) {
+        libraryWithoutFolderedPlaylists(libraryState, folderedPlaylistBrowseIds)
     }
-    val unfolderedHomePlaylistItems = offlinePlaylistItems.filter { item ->
-        item.browseId == null || item.browseId !in folderedPlaylistBrowseIds
+    val unfolderedHomePlaylistItems = remember(offlinePlaylistItems, folderedPlaylistBrowseIds) {
+        unfolderedHomePlaylistShelfItems(offlinePlaylistItems, folderedPlaylistBrowseIds)
     }
-    val homeLocalPlaylistShelves = remember(unfolderedHomePlaylistItems) {
-        if (unfolderedHomePlaylistItems.isEmpty()) emptyList() else listOf(
-            HomeShelf(context.getString(R.string.your_playlists), unfolderedHomePlaylistItems),
-        )
+    val homeLocalPlaylistShelves = remember(unfolderedHomePlaylistItems, context) {
+        homePlaylistShelves(context, unfolderedHomePlaylistItems)
     }
     // What a browse id is recorded under in Downloads.collections, when it names
     // a release downloaded whole — see BrowseTarget.downloadId. A downloaded
@@ -1434,8 +1409,9 @@ private fun BitChordApp(
     // A device folder's tab and selection, kept the same way and for the same
     // reason: an album opened from the folder replaces its page until Back.
     val localFolderStates = remember { mutableMapOf<String, LocalFolderState>() }
-    LaunchedEffect(detailStack.map { it.browseId }) {
-        val open = detailStack.mapTo(HashSet()) { it.browseId }
+    val detailStackBrowseIds = remember(detailStack) { detailStack.map { it.browseId } }
+    LaunchedEffect(detailStackBrowseIds) {
+        val open = detailStackBrowseIds.toHashSet()
         detailListStates.keys.retainAll(open)
         localFolderStates.keys.retainAll(open)
     }
@@ -1444,8 +1420,10 @@ private fun BitChordApp(
     // to the same route starts fresh.
     val pageStates = rememberSaveableStateHolder()
     val pageKeysSeen = remember { mutableSetOf<String>() }
-    val livePageKeys = navigator.entries.map { AppDestination.Route(it).key } +
-        detailStack.map { AppDestination.Release(it.browseId).key }
+    val livePageKeys = remember(navigator.entries, detailStack) {
+        navigator.entries.map { AppDestination.Route(it).key } +
+            detailStack.map { AppDestination.Release(it.browseId).key }
+    }
     LaunchedEffect(livePageKeys) {
         val gone = pageKeysSeen.filter { it !in livePageKeys }
         gone.forEach(pageStates::removeState)
@@ -4062,7 +4040,7 @@ private fun BitChordApp(
                             (header * fadeRamp)).coerceIn(0f, 1f)
                     }
                 }
-                if (reduceDynamicBlur || !glassActive || !progressiveBlur) {
+                if (reduceDynamicBlur || reduceExpensiveVisualEffects || !glassActive || !progressiveBlur) {
                     BottomFadeScrim(
                         pageColor = chromePageColor,
                         modifier = Modifier

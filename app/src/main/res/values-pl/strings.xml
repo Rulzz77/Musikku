@@ -259,6 +259,11 @@
     <string name="performance">Wydajność</string>
     <string name="high_performance_mode">Tryb wysokiej wydajności</string>
     <string name="high_performance_subtitle">Używa pełnych animacji i rozmycia oraz żąda wyższej częstotliwości odświeżania ekranu</string>
+    <string name="device_visual_profile">Profil wizualny urządzenia</string>
+    <string name="device_visual_profile_lite">Ograniczone efekty</string>
+    <string name="device_visual_profile_normal">Normalny</string>
+    <string name="device_visual_profile_lite_subtitle">Automatycznie. Android wykrywa ograniczoną pamięć, dlatego kosztowne rozmycia i dekoracyjne animacje są ograniczane.</string>
+    <string name="device_visual_profile_normal_subtitle">Automatycznie. To urządzenie nie spełnia progów profilu ograniczonej pamięci.</string>
     <string name="high_performance_active">Zażądano %1$d Hz. Android może ją obniżyć, jeśli to konieczne.</string>
     <string name="beta">Beta</string>
     <string name="refresh_rate">Częstotliwość odświeżania</string>

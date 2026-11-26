@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalDensity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.ui.performance.LocalDevicePerformanceProfile
 import com.music.bitchord.ui.components.backdrop.Backdrop
 import com.music.bitchord.ui.components.backdrop.backdrops.LayerBackdrop
 import com.music.bitchord.ui.components.backdrop.drawBackdrop
@@ -219,7 +220,9 @@ fun Modifier.liquidGlass(
 ): Modifier {
     if (!isGlassSupported()) return this
     val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
-    if (reduceDynamicBlur) {
+    // Avoid recording, blurring and refracting the whole page on low-memory devices.
+    val reduceExpensiveVisualEffects = LocalDevicePerformanceProfile.current.reduceExpensiveVisualEffects
+    if (reduceDynamicBlur || reduceExpensiveVisualEffects) {
         return background(MaterialTheme.colorScheme.surface, shape)
             .border(GLASS_EDGE_WIDTH, GLASS_EDGE_COLOR, shape)
     }

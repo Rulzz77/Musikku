@@ -286,6 +286,11 @@
     <string name="performance">Performans</string>
     <string name="high_performance_mode">Yüksek performans modu</string>
     <string name="high_performance_subtitle">Tam animasyonlar ve bulanıklık kullanır ve daha yüksek bir ekran yenileme hızı ister</string>
+    <string name="device_visual_profile">Cihaz görsel profili</string>
+    <string name="device_visual_profile_lite">Azaltılmış görsel efektler</string>
+    <string name="device_visual_profile_normal">Normal</string>
+    <string name="device_visual_profile_lite_subtitle">Otomatik. Android sınırlı bellek algıladığı için yoğun bulanıklaştırma ve dekoratif görseller azaltılır.</string>
+    <string name="device_visual_profile_normal_subtitle">Otomatik. Bu cihaz düşük bellek profili eşiklerini karşılamıyor.</string>
     <string name="high_performance_active">%1$d Hz istendi. Android gerektiğinde bunu düşürebilir.</string>
     <string name="beta">Beta</string>
     <string name="refresh_rate">Yenileme hızı</string>

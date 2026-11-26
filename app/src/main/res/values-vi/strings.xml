@@ -298,6 +298,11 @@
     <string name="performance">Hiệu năng</string>
     <string name="high_performance_mode">Chế độ hiệu năng cao</string>
     <string name="high_performance_subtitle">Sử dụng đầy đủ hiệu ứng chuyển động và làm mờ, đồng thời yêu cầu tần số quét màn hình cao hơn</string>
+    <string name="device_visual_profile">Hồ sơ hiển thị của thiết bị</string>
+    <string name="device_visual_profile_lite">Giảm hiệu ứng hình ảnh</string>
+    <string name="device_visual_profile_normal">Bình thường</string>
+    <string name="device_visual_profile_lite_subtitle">Tự động. Android phát hiện bộ nhớ hạn chế nên giảm hiệu ứng làm mờ nặng và hình ảnh trang trí.</string>
+    <string name="device_visual_profile_normal_subtitle">Tự động. Thiết bị này không đạt ngưỡng của hồ sơ bộ nhớ thấp.</string>
     <string name="high_performance_active">Đã yêu cầu %1$d Hz. Android có thể giảm tần số khi cần.</string>
     <string name="beta">Beta</string>
     <string name="refresh_rate">Tần số quét</string>

@@ -147,6 +147,7 @@ import com.music.bitchord.ui.components.MessageState
 import com.music.bitchord.ui.components.SearchField
 import com.music.bitchord.ui.components.thumbnailBorder
 import com.music.bitchord.ui.performance.resolvePerformanceRefreshRate
+import com.music.bitchord.ui.performance.LocalDevicePerformanceProfile
 import com.music.bitchord.ui.performance.supportedPerformanceRefreshRates
 import com.music.bitchord.data.model.Account
 import com.music.bitchord.data.LocalMediaRepository
@@ -226,6 +227,7 @@ fun SettingsScreen(
     onCheckForUpdates: suspend () -> Unit = {},
 ) {
     val context = LocalContext.current
+    val devicePerformanceProfile = LocalDevicePerformanceProfile.current
     val updateAvailable by AppUpdateChecker.available.collectAsStateWithLifecycle()
     var checkingForUpdates by remember { mutableStateOf(false) }
 
@@ -1474,6 +1476,22 @@ fun SettingsScreen(
         }
 
         if (shows(SettingsCategory.PERFORMANCE)) SearchableSettingsGroup(search, header = stringResource(R.string.performance)) {
+            val deviceVisualProfileTitle = stringResource(R.string.device_visual_profile)
+            val usesLiteVisualProfile = devicePerformanceProfile.isLowEnd
+            row(deviceVisualProfileTitle, "device", "ram", "memory", "low ram", "visual effects") {
+                SettingsRow(
+                    icon = SfIcons.Performance,
+                    title = deviceVisualProfileTitle,
+                    subtitle = stringResource(
+                        if (usesLiteVisualProfile) R.string.device_visual_profile_lite_subtitle
+                        else R.string.device_visual_profile_normal_subtitle,
+                    ),
+                    value = stringResource(
+                        if (usesLiteVisualProfile) R.string.device_visual_profile_lite
+                        else R.string.device_visual_profile_normal,
+                    ),
+                )
+            }
             val highPerformanceModeTitle = stringResource(R.string.high_performance_mode)
             row(highPerformanceModeTitle, "frame rate", "refresh rate", "hz", "battery", "smooth") {
                 SettingsRow(

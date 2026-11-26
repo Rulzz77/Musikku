@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.ui.performance.LocalDevicePerformanceProfile
 import dev.chrisbanes.haze.ExperimentalHazeApi
 import dev.chrisbanes.haze.HazeInputScale
 import dev.chrisbanes.haze.HazeProgressive
@@ -129,8 +130,9 @@ fun TopBarBlur(
     modifier: Modifier = Modifier,
 ) {
     val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
+    val reduceExpensiveVisualEffects = LocalDevicePerformanceProfile.current.reduceExpensiveVisualEffects
     // FrostedTopBar supplies the solid surface when dynamic blur is reduced.
-    if (reduceDynamicBlur) return
+    if (reduceDynamicBlur || reduceExpensiveVisualEffects) return
 
     Box(
         modifier = modifier

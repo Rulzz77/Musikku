@@ -304,6 +304,11 @@
     <string name="performance">Prestazioni</string>
     <string name="high_performance_mode">Modalità alte prestazioni</string>
     <string name="high_performance_subtitle">Usa animazioni e sfocatura complete e richiede una frequenza di aggiornamento più alta</string>
+    <string name="device_visual_profile">Profilo visivo del dispositivo</string>
+    <string name="device_visual_profile_lite">Effetti ridotti</string>
+    <string name="device_visual_profile_normal">Normale</string>
+    <string name="device_visual_profile_lite_subtitle">Automatico. Android rileva memoria limitata, quindi gli effetti di sfocatura più pesanti e le animazioni decorative vengono ridotti.</string>
+    <string name="device_visual_profile_normal_subtitle">Automatico. Questo dispositivo non rientra nelle soglie del profilo a memoria ridotta.</string>
     <string name="high_performance_active">%1$d Hz richiesti. Android potrebbe ridurli quando necessario.</string>
     <string name="beta">Beta</string>
     <string name="refresh_rate">Frequenza di aggiornamento</string>

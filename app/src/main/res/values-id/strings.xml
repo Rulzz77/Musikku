@@ -260,6 +260,11 @@
     <string name="performance">Performa</string>
     <string name="high_performance_mode">Mode performa tinggi</string>
     <string name="high_performance_subtitle">Menggunakan animasi dan blur penuh, serta meminta refresh rate layar yang lebih tinggi</string>
+    <string name="device_visual_profile">Profil visual perangkat</string>
+    <string name="device_visual_profile_lite">Hemat visual</string>
+    <string name="device_visual_profile_normal">Normal</string>
+    <string name="device_visual_profile_lite_subtitle">Otomatis. Android mendeteksi memori terbatas, sehingga blur berat dan artwork dekoratif dikurangi.</string>
+    <string name="device_visual_profile_normal_subtitle">Otomatis. Perangkat ini tidak memenuhi batas mode hemat memori.</string>
     <string name="high_performance_active">%1$d Hz diminta. Android dapat menurunkannya saat diperlukan.</string>
     <string name="beta">Beta</string>
     <string name="refresh_rate">Laju penyegaran</string>

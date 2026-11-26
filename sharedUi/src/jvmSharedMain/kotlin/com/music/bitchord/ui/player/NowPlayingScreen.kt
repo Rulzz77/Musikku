@@ -1228,6 +1228,12 @@ fun NowPlayingScreen(
     // snapping open mid-loop. A different clip resets them with itself.
     val canvasRenderedState = remember(canvas?.url) { mutableStateOf(false) }
     var canvasRendered by canvasRenderedState
+    LaunchedEffect(lyricsFullscreenVisible) {
+        // The fullscreen lyrics pane takes ownership of the single foreground
+        // decoder. Reveal the still cover behind the dialog while the landscape
+        // surface is unmounted; it will show video again once a fresh frame lands.
+        if (lyricsFullscreenVisible) canvasRendered = false
+    }
     var canvasFrame by remember(canvas?.url) { mutableStateOf<ImageBitmap?>(null) }
     // Spotify's phone presentation starts with the full control deck over its
     // video. It leaves on a Canvas tap, or after the optional idle timeout.
@@ -2651,7 +2657,9 @@ fun NowPlayingScreen(
                             artRequest = art.request,
                             artLoaded = art.loaded,
                             onArtState = art::onState,
-                            canvas = canvas,
+                            // Don't keep a second TextureView alive underneath the fullscreen
+                            // lyrics dialog; its dedicated artwork pane owns the Canvas decoder.
+                            canvas = canvas?.takeUnless { lyricsFullscreenVisible },
                             canvasRendered = canvasRendered,
                             isPlaying = isPlaying,
                             onCanvasRenderedChange = { canvasRendered = it },

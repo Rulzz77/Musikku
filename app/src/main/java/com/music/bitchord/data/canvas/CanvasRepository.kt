@@ -9,6 +9,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Finds the looping video that belongs behind a track's or a release's cover
@@ -186,7 +187,7 @@ object CanvasRepository {
         }
         // Do not serialize different tracks behind one slow lookup. Cache
         // access itself stays synchronized; provider IO is isolated below.
-        val found = lookUp()
+        val found = withContext(Dispatchers.IO) { lookUp() }
         synchronized(cache) { cache[key] = Entry(found, withAlbum) }
         return found
     }

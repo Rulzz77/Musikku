@@ -182,6 +182,8 @@ fun FrostedTopBar(
     actions: @Composable () -> Unit = {},
 ) {
     val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
+    val reduceExpensiveVisualEffects = LocalDevicePerformanceProfile.current.reduceExpensiveVisualEffects
+    val reduceDynamicBlurForDevice = reduceDynamicBlur || reduceExpensiveVisualEffects
     val useFloatingChrome = artworkPageChrome ||
         (LocalLiquidGlassEnabled.current && isGlassSupported())
     val titleAlpha by animateFloatAsState(
@@ -206,7 +208,7 @@ fun FrostedTopBar(
         modifier = modifier
             .fillMaxWidth()
             .then(
-                if (reduceDynamicBlur && !transparentBackdrop) {
+                if (reduceDynamicBlurForDevice && !transparentBackdrop) {
                     Modifier.background(MaterialTheme.colorScheme.surface)
                 } else Modifier,
             ),

@@ -2188,6 +2188,19 @@ fun NowPlayingScreen(
                     image = fullArtworkBlurImage,
                     modifier = Modifier.fillMaxSize(),
                 )
+                // Keep the track's actual cover visible until Canvas has painted
+                // a real frame. When a song has no Canvas (or video loading fails),
+                // fullscreen lyrics therefore falls back to the same cover artwork
+                // as the regular player instead of leaving only a blurred backdrop.
+                // Canvas is layered above it and takes over as soon as it renders.
+                if (!canvasRendered && !remoteArt.isNullOrBlank()) {
+                    AsyncImage(
+                        model = remoteArt,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
                 // This screen is landscape-only: keep the provider's normal/raw
                 // rendition instead of forcing Apple's tall phone crop into a
                 // landscape window.

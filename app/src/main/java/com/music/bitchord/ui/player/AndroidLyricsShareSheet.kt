@@ -45,6 +45,7 @@ import com.music.bitchord.ui.replay.cacheForSharing
 import com.music.bitchord.ui.replay.saveToGallery
 import com.music.bitchord.ui.replay.sendIntent
 import dev.chrisbanes.haze.HazeState
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 /**
@@ -81,9 +82,14 @@ internal fun AndroidLyricsShareSheet(
         image = null
         failed = false
         saved = false
-        image = runCatching { renderLyricsShareCard(context, request, story) }
-            .onFailure { failed = true }
-            .getOrNull()
+        image = try {
+            renderLyricsShareCard(context, request, story)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            failed = true
+            null
+        }
     }
 
     PlayerDrawer(
@@ -226,4 +232,4 @@ internal fun AndroidLyricsShareSheet(
  * prefix so a saved card in the pictures folder says which feature produced it.
  */
 private const val LYRICS_FILE_NAME = "lyrics.png"
-private const val LYRICS_FILE_PREFIX = "bitchord-lyrics"
+private const val LYRICS_FILE_PREFIX = "musikku-lyrics"

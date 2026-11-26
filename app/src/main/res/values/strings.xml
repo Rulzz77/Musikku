@@ -457,6 +457,11 @@
     <string name="performance">Performance</string>
     <string name="high_performance_mode">High performance mode</string>
     <string name="high_performance_subtitle">Uses full animations and blur, and requests a higher display refresh rate</string>
+    <string name="device_visual_profile">Device visual profile</string>
+    <string name="device_visual_profile_lite">Lite</string>
+    <string name="device_visual_profile_normal">Normal</string>
+    <string name="device_visual_profile_lite_subtitle">Automatic. Android reports limited memory, so expensive blur and decorative artwork are reduced.</string>
+    <string name="device_visual_profile_normal_subtitle">Automatic. This device does not meet the low-memory profile thresholds.</string>
     <string name="high_performance_active">%1$d Hz requested. Android may lower it when needed.</string>
     <string name="beta">Beta</string>
     <string name="refresh_rate">Refresh rate</string>

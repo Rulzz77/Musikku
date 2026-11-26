@@ -43,11 +43,17 @@ internal fun partyAutoAdvanceIsForward(
     nextTrackId: String,
     currentQueueIndex: Int,
     nextQueueIndex: Int,
+    localCurrentQueueIndex: Int = -1,
+    localNextQueueIndex: Int = -1,
 ): Boolean {
     if (currentTrackId == null) return true
     if (currentTrackId == nextTrackId) return false
-    if (currentQueueIndex < 0 || nextQueueIndex < 0) return false
-    return nextQueueIndex > currentQueueIndex
+    if (currentQueueIndex >= 0 && nextQueueIndex >= 0) {
+        return nextQueueIndex > currentQueueIndex
+    }
+    // A newly added AutoPlay or manually queued item may not have echoed into
+    // the shared queue yet. The local timeline can still prove its ordering.
+    return localCurrentQueueIndex >= 0 && localNextQueueIndex > localCurrentQueueIndex
 }
 
 /**
@@ -314,8 +320,20 @@ class PartySync(
             val currentTrackId = party.playback.track?.videoId
             val currentIndex = partyQueueIndexOf(party.queue, party.playback, currentTrackId)
             val nextIndex = partyQueueIndexOf(party.queue, party.playback, nextTrackId)
-            if (currentTrackId != null && nextTrackId != null &&
-                partyAutoAdvanceIsForward(currentTrackId, nextTrackId, currentIndex, nextIndex)
+            val localCurrentIndex = if (currentTrackId == null || exo == null) -1 else {
+                (0 until exo.mediaItemCount).firstOrNull {
+                    exo.getMediaItemAt(it).mediaId == currentTrackId
+                } ?: -1
+            }
+            if (currentTrackId != null && nextTrackId != null && exo != null &&
+                partyAutoAdvanceIsForward(
+                    currentTrackId,
+                    nextTrackId,
+                    currentIndex,
+                    nextIndex,
+                    localCurrentIndex,
+                    exo.currentMediaItemIndex,
+                )
             ) {
                 // Keep the next item loaded but silent. The leader's own
                 // transition is the only one that advances the shared clock.
@@ -924,11 +942,18 @@ class PartySync(
             val currentTrackId = party.playback.track?.videoId
             val currentQueueIndex = partyQueueIndexOf(party.queue, party.playback, currentTrackId)
             val nextQueueIndex = partyQueueIndexOf(party.queue, party.playback, track.videoId)
+            val localCurrentIndex = if (currentTrackId == null) -1 else {
+                (0 until exo.mediaItemCount).firstOrNull {
+                    exo.getMediaItemAt(it).mediaId == currentTrackId
+                } ?: -1
+            }
             if (!partyAutoAdvanceIsForward(
                     currentTrackId,
                     track.videoId,
                     currentQueueIndex,
                     nextQueueIndex,
+                    localCurrentIndex,
+                    exo.currentMediaItemIndex,
                 )
             ) {
                 Log.i(

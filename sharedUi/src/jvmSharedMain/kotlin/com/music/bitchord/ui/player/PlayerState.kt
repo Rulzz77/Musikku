@@ -58,8 +58,16 @@ internal fun rememberCanvasArtwork(
     // which is the flicker. A different song keys differently and starts
     // clean; the same-titled-impostor case is guarded where the clip is
     // adopted, by [CanvasArtwork.matches].
-    var canvas by remember(song.title, song.artist, allowFullscreenOnLowMemory) {
+    // Keep the resolved clip while moving into fullscreen. The fullscreen
+    // request may be allowed on Lite devices even though decorative Canvas is
+    // not; keying this state on that permission used to throw the visible clip
+    // away for a moment and made the artwork pane look like Canvas was missing
+    // while the foreground lookup ran. A different song still starts clean.
+    var canvas by remember(song.title, song.artist) {
         mutableStateOf<CanvasArtwork?>(null)
+    }
+    var lastFullscreenRequest by remember(song.title, song.artist) {
+        mutableStateOf(allowFullscreenOnLowMemory)
     }
     LaunchedEffect(
         song.videoId,
@@ -81,10 +89,23 @@ internal fun rememberCanvasArtwork(
         // what is playing: [CanvasArtwork.matches] is what stops a preserved
         // clip from being a different song's that happens to share a title.
         val host = PlayerPlatform.host
-        canvas = (
-            if (allowFullscreenOnLowMemory) host.cachedCanvasForFullscreenLyrics(song)
-            else host.cachedCanvas(song)
-        ) ?: canvas?.takeIf { it.matches(song.title, song.artist, song.albumName) }
+        val modeChanged = lastFullscreenRequest != allowFullscreenOnLowMemory
+        lastFullscreenRequest = allowFullscreenOnLowMemory
+        val cached = if (allowFullscreenOnLowMemory) {
+            host.cachedCanvasForFullscreenLyrics(song)
+        } else {
+            host.cachedCanvas(song)
+        }
+        val matchingCurrent = canvas?.takeIf {
+            it.matches(song.title, song.artist, song.albumName)
+        }
+        // Preserve the current clip when entering fullscreen, or when the
+        // request is still in the same mode (for example a video-version
+        // switch). When leaving fullscreen, only the normal cache may keep it:
+        // Lite devices intentionally return no decorative Canvas there.
+        canvas = cached ?: matchingCurrent?.takeIf {
+            allowFullscreenOnLowMemory || !modeChanged
+        }
 
         // The album name is looked up separately and lands a moment after the
         // player opens, and it is the field that makes the catalogue searches

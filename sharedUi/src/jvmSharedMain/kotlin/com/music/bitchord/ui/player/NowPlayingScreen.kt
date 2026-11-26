@@ -1206,10 +1206,6 @@ fun NowPlayingScreen(
     // The dedicated fullscreen lyrics/Canvas presentation is landscape-only.
     // Portrait keeps the regular lyrics layout in the player.
     val lyricsFullscreenVisible = lyricsFullscreen && lyricsOpen && sideways
-    val canvasAnimationEnabled by PlayerSettings.animatedCanvas.collectAsStateWithLifecycle()
-    val canvasOverCellular by PlayerSettings.canvasOverCellular.collectAsStateWithLifecycle()
-    val meteredConnection by PlayerSettings.meteredConnection.collectAsStateWithLifecycle()
-
     val canvas = rememberCanvasArtwork(
         song = song,
         allowFullscreenOnLowMemory = lyricsFullscreenVisible,

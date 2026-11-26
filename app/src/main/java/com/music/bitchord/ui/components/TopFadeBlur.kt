@@ -129,8 +129,9 @@ fun TopBarBlur(
     modifier: Modifier = Modifier,
 ) {
     val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
+    val reduceExpensiveVisualEffects = LocalDevicePerformanceProfile.current.reduceExpensiveVisualEffects
     // FrostedTopBar supplies the solid surface when dynamic blur is reduced.
-    if (reduceDynamicBlur) return
+    if (reduceDynamicBlur || reduceExpensiveVisualEffects) return
 
     Box(
         modifier = modifier

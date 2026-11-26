@@ -14,6 +14,13 @@ if grep -RInE '>([^<]*)(BitChord|flutter_application_5)' \
   fail "Legacy product branding remains in Android/Wear OS/TV string values."
 fi
 
+# The image-based lyric share card has its own Canvas wordmark, outside the
+# Android string catalogs above. Keep it tied to the current product name too.
+if ! grep -q 'LYRICS_SHARE_BRAND = "MusikKu"' \
+  app/src/main/java/com/music/bitchord/ui/player/LyricsShareCard.kt; then
+  fail "The lyric share card does not use the MusikKu wordmark."
+fi
+
 # Compose owns a separate, localized string catalog used by the shared player UI.
 if grep -RInE '>([^<]*)(BitChord|flutter_application_5)' \
   sharedUi/src/commonMain/composeResources/values* 2>/dev/null; then

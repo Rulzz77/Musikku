@@ -841,7 +841,7 @@ class PartySync(
                         exo.currentMediaItemIndex,
                     )
                     waitingForLeaderTrackId = null
-        waitingForLeaderPlaybackSeq = -1L
+                    waitingForLeaderPlaybackSeq = -1L
                     if (advance != null) {
                         stageAutomaticAdvance(advance)
                         exo.play()

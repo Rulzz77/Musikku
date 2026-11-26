@@ -219,7 +219,9 @@ fun Modifier.liquidGlass(
 ): Modifier {
     if (!isGlassSupported()) return this
     val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
-    if (reduceDynamicBlur) {
+    // Avoid recording, blurring and refracting the whole page on low-memory devices.
+    val reduceExpensiveVisualEffects = LocalDevicePerformanceProfile.current.reduceExpensiveVisualEffects
+    if (reduceDynamicBlur || reduceExpensiveVisualEffects) {
         return background(MaterialTheme.colorScheme.surface, shape)
             .border(GLASS_EDGE_WIDTH, GLASS_EDGE_COLOR, shape)
     }

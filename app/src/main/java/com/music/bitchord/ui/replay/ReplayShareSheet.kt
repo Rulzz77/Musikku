@@ -56,6 +56,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import com.music.bitchord.data.stats.ReplaySummary
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -86,14 +87,25 @@ fun ReplayShareSheet(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var poster by remember { mutableStateOf<Bitmap?>(null) }
-    var failed by remember { mutableStateOf(false) }
-    var saved by remember { mutableStateOf(false) }
+    // Key the visible state itself, not just the render effect: on a card
+    // switch the old poster and its enabled buttons disappear in the same
+    // composition, before the replacement bitmap starts rendering.
+    var poster by remember(summary, holder, memberSince, page) { mutableStateOf<Bitmap?>(null) }
+    var failed by remember(summary, holder, memberSince, page) { mutableStateOf(false) }
+    var saved by remember(summary, holder, memberSince, page) { mutableStateOf(false) }
 
-    LaunchedEffect(summary, page) {
-        poster = runCatching { renderReplayPoster(context, summary, holder, memberSince, page) }
-            .onFailure { failed = true }
-            .getOrNull()
+    LaunchedEffect(summary, holder, memberSince, page) {
+        poster = null
+        failed = false
+        saved = false
+        poster = try {
+            renderReplayPoster(context, summary, holder, memberSince, page)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            failed = true
+            null
+        }
     }
 
     Column(
@@ -284,14 +296,22 @@ internal suspend fun cacheForSharing(
     bitmap: Bitmap,
     fileName: String = "replay.png",
 ): Uri? = withContext(Dispatchers.IO) {
-    runCatching {
+    try {
         val folder = File(context.cacheDir, SHARE_FOLDER).apply { mkdirs() }
         // One name, overwritten: the folder is a hand-off point, not an album,
         // and a file per share would accumulate megabytes nobody ever looks at.
         val file = File(folder, fileName)
-        FileOutputStream(file).use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        FileOutputStream(file).use {
+            check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) {
+                "could not encode share image"
+            }
+        }
         FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-    }.getOrNull()
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (_: Exception) {
+        null
+    }
 }
 
 /**
@@ -310,7 +330,7 @@ internal suspend fun saveToGallery(
     prefix: String = "musikku-replay",
 ): Boolean = withContext(Dispatchers.IO) {
     val name = "$prefix-${label.replace(' ', '-').lowercase(Locale.ROOT)}.png"
-    runCatching {
+    try {
         val values = ContentValues().apply {
             put(MediaStore.Images.Media.DISPLAY_NAME, name)
             put(MediaStore.Images.Media.MIME_TYPE, MIME)
@@ -324,11 +344,22 @@ internal suspend fun saveToGallery(
         val uri = context.contentResolver
             .insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
             ?: error("no row")
-        context.contentResolver.openOutputStream(uri)?.use {
-            bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
-        } ?: error("no stream")
-        true
-    }.getOrDefault(false)
+        try {
+            context.contentResolver.openOutputStream(uri)?.use {
+                check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) {
+                    "could not encode gallery image"
+                }
+            } ?: error("no stream")
+            true
+        } catch (failure: Exception) {
+            context.contentResolver.delete(uri, null, null)
+            throw failure
+        }
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (_: Exception) {
+        false
+    }
 }
 
 private const val MIME = "image/png"

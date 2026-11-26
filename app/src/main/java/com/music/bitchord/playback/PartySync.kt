@@ -32,6 +32,84 @@ internal fun partySyncRequiresSeek(driftMs: Long): Boolean =
     abs(driftMs) > PARTY_SYNC_DRIFT_LIMIT_MS
 
 /**
+ * Automatic track advances must move forward in the shared queue.
+ *
+ * Several devices can reach the end of a song at different times. Once the
+ * party has moved past a late device's next item, that late report is stale
+ * and must never move the room backwards.
+ */
+internal fun partyAutoAdvanceIsForward(
+    currentTrackId: String?,
+    nextTrackId: String,
+    currentQueueIndex: Int,
+    nextQueueIndex: Int,
+    localCurrentQueueIndex: Int = -1,
+    localNextQueueIndex: Int = -1,
+): Boolean {
+    if (currentTrackId == null) return true
+    // The same song can legitimately appear twice in a queue. Shared queue
+    // lookup is id-only, so only a distinct local occurrence can prove this
+    // particular transition moved to the next copy.
+    if (currentTrackId == nextTrackId) {
+        return localCurrentQueueIndex >= 0 && localNextQueueIndex > localCurrentQueueIndex
+    }
+    if (currentQueueIndex >= 0 && nextQueueIndex >= 0) {
+        return nextQueueIndex > currentQueueIndex
+    }
+    // A newly added AutoPlay or manually queued item may not have echoed into
+    // the shared queue yet. The local timeline can still prove its ordering.
+    return localCurrentQueueIndex >= 0 && localNextQueueIndex > localCurrentQueueIndex
+}
+
+/** Snapshot needed to publish one natural transition without accepting a stale one. */
+internal data class PartyAutoAdvanceSnapshot(
+    val fromTrackId: String?,
+    val toTrackId: String,
+    val playbackSeq: Long,
+    val queueSeq: Long,
+)
+
+/**
+ * A follower is still waiting only while the exact playback control it observed
+ * remains current. Track IDs alone are insufficient: a repeated song can have
+ * the same ID on both sides of a valid queue transition.
+ */
+internal fun partyAutoAdvanceLeaderStillPending(
+    waitingTrackId: String?,
+    waitingPlaybackSeq: Long,
+    currentTrackId: String?,
+    currentPlaybackSeq: Long,
+    isPlaying: Boolean,
+): Boolean = waitingTrackId != null &&
+    waitingTrackId == currentTrackId &&
+    waitingPlaybackSeq == currentPlaybackSeq &&
+    isPlaying
+
+/** Builds a publishable transition only when the next item is demonstrably forward. */
+internal fun partyAutoAdvanceSnapshot(
+    currentTrackId: String?,
+    nextTrackId: String?,
+    playbackSeq: Long,
+    queueSeq: Long,
+    currentQueueIndex: Int,
+    nextQueueIndex: Int,
+    localCurrentQueueIndex: Int = -1,
+    localNextQueueIndex: Int = -1,
+): PartyAutoAdvanceSnapshot? {
+    val next = nextTrackId?.takeIf { it.isNotBlank() } ?: return null
+    if (!partyAutoAdvanceIsForward(
+            currentTrackId,
+            next,
+            currentQueueIndex,
+            nextQueueIndex,
+            localCurrentQueueIndex,
+            localNextQueueIndex,
+        )
+    ) return null
+    return PartyAutoAdvanceSnapshot(currentTrackId, next, playbackSeq, queueSeq)
+}
+
+/**
  * Makes the player obey the party, and the party obey this player.
  *
  * Lives in [PlaybackService] rather than in the UI on purpose: a party has to
@@ -105,6 +183,22 @@ class PartySync(
     private val jobs = mutableListOf<Job>()
     private var publishJob: Job? = null
     private var startJob: Job? = null
+    private var loadJob: Job? = null
+    private var loadGeneration = 0L
+
+    /**
+     * Party track a follower reached the end of locally while waiting for the
+     * elected leader. The follower holds its next item until the shared state
+     * advances, instead of playing it briefly and being pulled back.
+     */
+    private var waitingForLeaderTrackId: String? = null
+    private var waitingForLeaderPlaybackSeq = -1L
+
+    /** Snapshot of the transition the leader is about to publish after debounce. */
+    private var pendingAutomaticAdvanceFromTrackId: String? = null
+    private var pendingAutomaticAdvanceToTrackId: String? = null
+    private var pendingAutomaticAdvanceSeq = -1L
+    private var pendingAutomaticAdvanceQueueSeq = -1L
 
     /**
      * Until when [reconcile] should keep its hands off.
@@ -247,11 +341,17 @@ class PartySync(
     }
 
     fun stop() {
-
         jobs.forEach(Job::cancel)
         jobs.clear()
         publishJob?.cancel()
         startJob?.cancel()
+        loadGeneration++
+        loadJob?.cancel()
+        loadJob = null
+        loadingVideoId = null
+        waitingForLeaderTrackId = null
+        waitingForLeaderPlaybackSeq = -1L
+        clearPendingAutomaticAdvance()
     }
 
     /**
@@ -262,9 +362,106 @@ class PartySync(
      * app is `setMediaItems` then `prepare` then `play`, and publishing each
      * would put three controls on the wire for one tap.
      */
-    fun onLocalIntent() {
+    fun onLocalIntent() = requestLocalIntent(automaticAdvance = false)
+
+    /**
+     * An automatic end-of-track transition is not a local user command.
+     *
+     * Every phone has its own decoder and may reach the end at a different
+     * instant. Only the elected party leader may announce that transition;
+     * otherwise a lagging phone can report B after another phone has already
+     * moved the party to C, sending everyone backwards.
+     */
+    fun onAutomaticAdvance() {
         val party = ListenTogether.state.value
         if (!party.inParty) return
+
+        val exo = player() ?: return
+        val nextTrackId = exo.currentMediaItem?.mediaId ?: return
+        val currentTrackId = party.playback.track?.videoId
+
+        // The callback runs before QueueCoordinator prunes the consumed item,
+        // so the old track is still available for this local ordering check.
+        val currentIndex = partyQueueIndexOf(party.queue, party.playback, currentTrackId)
+        val nextIndex = partyQueueIndexOf(party.queue, party.playback, nextTrackId)
+        val localCurrentIndex = previousLocalQueueIndex(exo, currentTrackId)
+        val advance = partyAutoAdvanceSnapshot(
+            currentTrackId,
+            nextTrackId,
+            party.playback.seq,
+            party.queue.seq,
+            currentIndex,
+            nextIndex,
+            localCurrentIndex,
+            exo.currentMediaItemIndex,
+        )
+        val isForward = advance != null
+
+        val leaderId = partyPlaybackLeaderId(party)
+        if (leaderId == null || party.you?.memberId != leaderId) {
+            if (currentTrackId != null && isForward) {
+                // Keep the next item loaded but silent. The leader's own
+                // transition is the only one that advances the shared clock.
+                waitingForLeaderTrackId = currentTrackId
+                waitingForLeaderPlaybackSeq = party.playback.seq
+                // Keep the verified transition so a follower promoted to leader
+                // can publish it even after the consumed local queue row is pruned.
+                stageAutomaticAdvance(advance ?: return)
+                exo.pause()
+                Log.i(TAG, "waiting for party leader to advance from $currentTrackId")
+            } else {
+                // The party is already ahead of this device, or the queue does
+                // not prove that this is a forward move. Catch up rather than
+                // publishing a transition whose place in the shared order is unknown.
+                reconcile()
+            }
+            return
+        }
+
+        if (advance == null) {
+            Log.i(TAG, "ignoring automatic advance that is not forward in the party queue")
+            reconcile()
+            return
+        }
+
+        waitingForLeaderTrackId = null
+        waitingForLeaderPlaybackSeq = -1L
+        stageAutomaticAdvance(advance)
+        requestLocalIntent(automaticAdvance = true)
+    }
+
+    private fun stageAutomaticAdvance(advance: PartyAutoAdvanceSnapshot) {
+        pendingAutomaticAdvanceFromTrackId = advance.fromTrackId
+        pendingAutomaticAdvanceToTrackId = advance.toTrackId
+        pendingAutomaticAdvanceSeq = advance.playbackSeq
+        pendingAutomaticAdvanceQueueSeq = advance.queueSeq
+    }
+
+    private fun previousLocalQueueIndex(exo: Player, trackId: String?): Int {
+        if (trackId == null) return -1
+        // Use the player's actual previous item rather than the nearest matching
+        // timeline index: shuffle mode can make playback order differ from the
+        // order returned by getMediaItemAt().
+        val previousIndex = exo.previousMediaItemIndex
+        return previousIndex.takeIf {
+            it in 0 until exo.mediaItemCount && exo.getMediaItemAt(it).mediaId == trackId
+        } ?: -1
+    }
+
+    private fun clearPendingAutomaticAdvance() {
+        pendingAutomaticAdvanceFromTrackId = null
+        pendingAutomaticAdvanceToTrackId = null
+        pendingAutomaticAdvanceSeq = -1L
+        pendingAutomaticAdvanceQueueSeq = -1L
+    }
+
+    private fun requestLocalIntent(automaticAdvance: Boolean) {
+        val party = ListenTogether.state.value
+        if (!party.inParty) {
+            clearPendingAutomaticAdvance()
+            return
+        }
+        if (!automaticAdvance) clearPendingAutomaticAdvance()
         // Nothing this device does while the host holds control is the party's
         // business. [publish] works by diffing this player against the party's
         // state, so without this an unrelated intent arriving later would read
@@ -291,13 +488,14 @@ class PartySync(
         // so the party hears about the reorder once, when the row lands.
         if (queueDragActive) {
             queueDragDirty = true
+            queueDragAutomaticAdvance = automaticAdvance
             publishJob?.cancel()
             return
         }
         publishJob?.cancel()
         publishJob = scope.launch {
             delay(PUBLISH_DEBOUNCE_MS)
-            publish()
+            publish(automaticAdvance)
         }
     }
 
@@ -340,6 +538,9 @@ class PartySync(
     /** Whether a move landed while [queueDragActive] was true, awaiting [endQueueDrag]. */
     private var queueDragDirty = false
 
+    /** Preserve the origin of a parked transition through the queue-drag debounce. */
+    private var queueDragAutomaticAdvance = false
+
     fun beginQueueDrag() {
         queueDragActive = true
     }
@@ -349,7 +550,11 @@ class PartySync(
         queueDragActive = false
         if (queueDragDirty) {
             queueDragDirty = false
-            onLocalIntent()
+            val automaticAdvance = queueDragAutomaticAdvance
+            queueDragAutomaticAdvance = false
+            requestLocalIntent(automaticAdvance)
+        } else {
+            queueDragAutomaticAdvance = false
         }
     }
 
@@ -518,7 +723,9 @@ class PartySync(
     private fun reconcile() {
         val party = ListenTogether.state.value
         if (!party.inParty) {
-
+            loadGeneration++
+            loadJob?.cancel()
+            loadJob = null
             loadingVideoId = null
             focusLost = false
             rejoining = false
@@ -571,8 +778,86 @@ class PartySync(
             return
         }
 
-        if (exo.currentMediaItem?.mediaId != track.videoId) {
+        val waitingForLeader = waitingForLeaderTrackId
+        if (waitingForLeader != null) {
+            val stillWaiting = partyAutoAdvanceLeaderStillPending(
+                waitingForLeader,
+                waitingForLeaderPlaybackSeq,
+                target.track?.videoId,
+                target.seq,
+                target.isPlaying,
+            )
+            if (!stillWaiting) {
+                // The room advanced (including a repeated copy of the same song),
+                // or a real pause/control cancelled the held transition.
+                waitingForLeaderTrackId = null
+                waitingForLeaderPlaybackSeq = -1L
+                clearPendingAutomaticAdvance()
+            } else {
+                val localTrackId = exo.currentMediaItem?.mediaId
+                val hasStagedTransition = pendingAutomaticAdvanceFromTrackId == target.track?.videoId &&
+                    pendingAutomaticAdvanceToTrackId == localTrackId &&
+                    pendingAutomaticAdvanceSeq == target.seq
+                // If the elected leader changed while this phone was waiting,
+                // it can take over from the already-loaded next item. Include a
+                // staged same-ID transition: a duplicate song looks unchanged
+                // by mediaId even though the queue occurrence has advanced.
+                if (partyPlaybackLeaderId(party) == party.you?.memberId &&
+                    (localTrackId != track.videoId || hasStagedTransition)
+                ) {
+                    // A new leader may inherit a transition that a follower
+                    // already reached locally. Stage the same guarded snapshot
+                    // as the normal leader callback before asking the party to
+                    // accept it; otherwise publish() correctly rejects it as
+                    // an automatic advance with no origin/destination snapshot.
+                    val nextTrackId = exo.currentMediaItem?.mediaId
+                    val currentTrackId = target.track?.videoId
+                    val currentIndex = partyQueueIndexOf(party.queue, party.playback, currentTrackId)
+                    val nextIndex = partyQueueIndexOf(party.queue, party.playback, nextTrackId)
+                    val localCurrentIndex = previousLocalQueueIndex(exo, currentTrackId)
+                    val pendingAdvance = if (
+                        pendingAutomaticAdvanceFromTrackId == currentTrackId &&
+                        pendingAutomaticAdvanceToTrackId == nextTrackId &&
+                        pendingAutomaticAdvanceSeq == target.seq &&
+                        pendingAutomaticAdvanceQueueSeq == party.queue.seq
+                    ) {
+                        PartyAutoAdvanceSnapshot(
+                            currentTrackId,
+                            nextTrackId.orEmpty(),
+                            target.seq,
+                            party.queue.seq,
+                        )
+                    } else {
+                        null
+                    }
+                    val advance = pendingAdvance ?: partyAutoAdvanceSnapshot(
+                        currentTrackId,
+                        nextTrackId,
+                        target.seq,
+                        party.queue.seq,
+                        currentIndex,
+                        nextIndex,
+                        localCurrentIndex,
+                        exo.currentMediaItemIndex,
+                    )
+                    waitingForLeaderTrackId = null
+                    waitingForLeaderPlaybackSeq = -1L
+                    if (advance != null) {
+                        stageAutomaticAdvance(advance)
+                        exo.play()
+                        requestLocalIntent(automaticAdvance = true)
+                    } else {
+                        // The inherited item is no longer provably next. Reload
+                        // the party's authoritative track instead of publishing
+                        // or briefly playing an unknown/stale item.
+                        load(party)
+                    }
+                }
+                return
+            }
+        }
 
+        if (exo.currentMediaItem?.mediaId != track.videoId) {
             load(party)
             return
         }
@@ -727,65 +1012,81 @@ class PartySync(
      */
     private fun load(party: ListenTogether.State) {
         val track = party.playback.track ?: return
-        if (loadingVideoId == track.videoId) return
-        loadingVideoId = track.videoId
+        if (loadingVideoId == track.videoId && loadJob?.isActive == true) return
 
-        scope.launch {
-            // The queue is only usable if the track is actually in it. It may
-            // not be: the queue and the track are two controls, and between them
-            // the party holds a new running order with the old song still
-            // current. `indexOfFirst(...).coerceAtLeast(0)` turned that
-            // not-found into index 0 and played whatever happened to be first —
-            // a different song entirely, with nothing on screen to explain it.
-            // Falling back to the track alone is always right; falling back to
-            // position zero never is.
-            val partyQueue = party.queue.items
-            val index = partyQueueIndexOf(party.queue, party.playback, track.videoId)
-            val queue = if (index >= 0) partyQueue else listOf(track)
-            val startIndex = if (index >= 0) index else 0
-            // Off the main thread: building an item resolves artwork sizes and
-            // asks [com.music.bitchord.download.Downloads] whether each track is
-            // already on disk, which is a stat per downloaded song. See
-            // [MediaController.playSongs], which moves it for the same reason.
-            val items = withContext(Dispatchers.Default) { queue.map { it.toSong().toMediaItem() } }
-            val exo = player()
-            if (exo == null) {
-                // Nothing was applied, so the next tick has to be free to try
-                // again rather than believing this track is already on its way.
-                loadingVideoId = null
-                return@launch
+        // A previous load can be doing artwork/download checks on Dispatchers.Default.
+        // Advance the generation before cancelling it, so its finally block cannot
+        // clear the state belonging to this newer request.
+        val generation = ++loadGeneration
+        loadJob?.cancel()
+        val requestedTrackId = track.videoId
+        loadingVideoId = requestedTrackId
+        loadJob = scope.launch {
+            var retryLatestState = false
+            try {
+                // Take the freshest queue available when the background build starts.
+                val latest = ListenTogether.state.value
+                val latestTrack = latest.playback.track
+                if (!latest.inParty || latestTrack?.videoId != requestedTrackId) {
+                    retryLatestState = latest.inParty && latestTrack != null
+                    return@launch
+                }
+
+                // The queue is only usable if the track is actually in it. It may
+                // not be: the queue and the track are two controls, and between them
+                // the party holds a new running order with the old song still
+                // current. Falling back to the track alone is always right; falling
+                // back to position zero never is.
+                val partyQueue = latest.queue.items
+                val index = partyQueueIndexOf(latest.queue, latest.playback, requestedTrackId)
+                val queue = if (index >= 0) partyQueue else listOf(latestTrack)
+                val startIndex = if (index >= 0) index else 0
+
+                // Off the main thread: building an item resolves artwork sizes and
+                // checks whether each track is already downloaded, which is a stat
+                // per song. This is deliberately outside the player thread.
+                val items = withContext(Dispatchers.Default) {
+                    queue.map { it.toSong().toMediaItem() }
+                }
+                if (generation != loadGeneration) return@launch
+
+                // The party may have advanced again while the queue was being built.
+                // Never apply a snapshot whose track or queue has since gone stale.
+                val beforeApply = ListenTogether.state.value
+                if (!beforeApply.inParty ||
+                    beforeApply.playback.track?.videoId != requestedTrackId ||
+                    beforeApply.queue.seq != latest.queue.seq
+                ) {
+                    retryLatestState = beforeApply.inParty && beforeApply.playback.track != null
+                    return@launch
+                }
+
+                val exo = player() ?: return@launch
+                // Read position and play state from the state that is current at
+                // the point of application, not from the snapshot that started the job.
+                val startAt = ListenTogether.partyPositionMs() ?: beforeApply.playback.positionMs
+                exo.setMediaItems(items, startIndex, startAt)
+                exo.prepare()
+                if (beforeApply.playback.isPlaying &&
+                    beforeApply.clockSynced &&
+                    ListenTogether.msUntilStart() <= 0L
+                ) {
+                    exo.play()
+                }
+                reconcile()
+            } finally {
+                if (generation == loadGeneration) {
+                    loadJob = null
+                    loadingVideoId = null
+                    if (retryLatestState) reconcile()
+                }
             }
-            // Read after the build, not before: assembling a long queue takes
-            // real time, and the party's playhead has moved on by exactly that
-            // much. Taken beforehand, every track change would start this device
-            // a little behind and then be hauled forward by a correcting seek.
-            val startAt = ListenTogether.partyPositionMs() ?: party.playback.positionMs
-            exo.setMediaItems(items, startIndex, startAt)
-            exo.prepare()
-            // Not started here even when the party is playing: the resume may be
-            // scheduled a moment out, and [reconcile] owns that wait. Preparing
-            // now is what makes this device ready to hit that instant.
-            //
-            // Nor started on an unmeasured clock, which is the state a device
-            // joining a playing party is in: [ListenTogether.partyPositionMs]
-            // falls back to the server's reading at the moment it sent the frame
-            // and [ListenTogether.msUntilStart] answers 0, so starting here would
-            // begin at a position nobody has checked. The track is loaded and on
-            // screen either way; the pong is moments out, and the [reconcile]
-            // below starts it the instant the clock lands.
-            if (party.playback.isPlaying &&
-                party.clockSynced &&
-                ListenTogether.msUntilStart() <= 0L
-            ) {
-                exo.play()
-            }
-            reconcile()
         }
     }
 
     // ----------------------------------------------------------- outbound --
 
-    private fun publish() {
+    private fun publish(automaticAdvance: Boolean = false) {
         val party = ListenTogether.state.value
         if (!party.inParty) return
         // Coming back from having lost the audio. This device is behind, and
@@ -811,6 +1112,44 @@ class PartySync(
         if (song.isDeviceFile()) return
         val track = song.toPartyTrack(exo.duration)
         val position = exo.currentPosition.coerceAtLeast(0L)
+        if (automaticAdvance) {
+            val expectedFrom = pendingAutomaticAdvanceFromTrackId
+            val expectedTo = pendingAutomaticAdvanceToTrackId
+            val expectedSeq = pendingAutomaticAdvanceSeq
+            val expectedQueueSeq = pendingAutomaticAdvanceQueueSeq
+            clearPendingAutomaticAdvance()
+            val queueStillProvesAdvance = if (expectedQueueSeq == party.queue.seq) {
+                true
+            } else {
+                val currentIndex = partyQueueIndexOf(
+                    party.queue, party.playback, expectedFrom,
+                )
+                val nextIndex = partyQueueIndexOf(
+                    party.queue, party.playback, expectedTo,
+                )
+                partyAutoAdvanceIsForward(
+                    expectedFrom,
+                    expectedTo.orEmpty(),
+                    currentIndex,
+                    nextIndex,
+                    previousLocalQueueIndex(exo, expectedFrom),
+                    exo.currentMediaItemIndex,
+                )
+            }
+            if (expectedTo != track.videoId ||
+                expectedFrom != party.playback.track?.videoId ||
+                expectedSeq != party.playback.seq ||
+                !queueStillProvesAdvance ||
+                (expectedFrom != null && !party.playback.isPlaying)
+            ) {
+                Log.i(
+                    TAG,
+                    "ignoring stale automatic advance " + track.videoId + "; party playback changed before publish",
+                )
+                reconcile()
+                return
+            }
+        }
         // What the user asked for, which during a deferred resume is not what
         // the player is doing yet — that is the whole point of the deferral.
         val wantsPlaying = deferredPlayPending || exo.playWhenReady
@@ -982,12 +1321,20 @@ class PartySync(
     }
 
     private fun onLeftParty() {
+        // An in-flight party load must not finish after the user has left and
+        // replace the song they were listening to on their own.
+        loadGeneration++
+        loadJob?.cancel()
+        loadJob = null
+        loadingVideoId = null
+        waitingForLeaderTrackId = null
+        waitingForLeaderPlaybackSeq = -1L
+        clearPendingAutomaticAdvance()
 
         // Keep the last song played in the room. The personal snapshot is only
         // a safety net for a service restart while still in a party; it must
         // not replace the shared song when the user explicitly leaves.
         Log.i(TAG, "left party, keeping the last shared track and clearing personal snapshot")
-        loadingVideoId = null
         focusLost = false
         rejoining = false
         PartyPersonalQueueStash.clear()

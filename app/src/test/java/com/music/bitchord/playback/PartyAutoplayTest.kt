@@ -73,9 +73,10 @@ class PartyAutoplayTest {
     }
 
     @Test
-    fun `the host supplies while it is connected`() {
+    fun `the connected host is the shared playback leader`() {
         val state = party(listOf(member("zz", host = true), member("aa")))
-        assertEquals("zz", autoplaySupplierId(state))
+        assertEquals("zz", partyPlaybackLeaderId(state))
+        assertEquals(partyPlaybackLeaderId(state), autoplaySupplierId(state))
     }
 
     @Test

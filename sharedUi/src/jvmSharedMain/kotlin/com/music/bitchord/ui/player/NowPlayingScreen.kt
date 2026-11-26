@@ -2255,7 +2255,7 @@ fun NowPlayingScreen(
                                 .fillMaxWidth(),
                             contentAlignment = Alignment.Center,
                         ) {
-                            if (!remoteArt.isNullOrBlank()) {
+                            if (!canvasRendered && !remoteArt.isNullOrBlank()) {
                                 AsyncImage(
                                     model = remoteArt,
                                     contentDescription = null,

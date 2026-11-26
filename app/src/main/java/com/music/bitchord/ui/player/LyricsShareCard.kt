@@ -90,11 +90,11 @@ internal suspend fun renderLyricsShareCard(
     val brand = type.heading(46f, 0xE6FFFFFF.toInt()).apply {
         textAlign = Paint.Align.RIGHT
     }
-    canvas.drawText(BRAND, CARD_W - CARD_MARGIN, HEADER_BASELINE, brand)
+    canvas.drawText(LYRICS_SHARE_BRAND, CARD_W - CARD_MARGIN, HEADER_BASELINE, brand)
     drawLogo(
         canvas,
         context,
-        CARD_W - CARD_MARGIN - brand.measureText(BRAND) - LOGO_GAP,
+        CARD_W - CARD_MARGIN - brand.measureText(LYRICS_SHARE_BRAND) - LOGO_GAP,
         HEADER_BASELINE,
     )
 
@@ -267,7 +267,7 @@ private const val CARD_MARGIN = 72f
 private const val CARD_CONTENT_W = CARD_W - CARD_MARGIN * 2
 
 private const val LOGO_GAP = 20f
-private const val BRAND = "BitChord"
+internal const val LYRICS_SHARE_BRAND = "MusikKu"
 
 /** Baseline of the mark at the top right, and just under it where the gap starts. */
 private const val HEADER_BASELINE = 132f

@@ -2188,19 +2188,9 @@ fun NowPlayingScreen(
                     image = fullArtworkBlurImage,
                     modifier = Modifier.fillMaxSize(),
                 )
-                // Keep the track's actual cover visible until Canvas has painted
-                // a real frame. When a song has no Canvas (or video loading fails),
-                // fullscreen lyrics therefore falls back to the same cover artwork
-                // as the regular player instead of leaving only a blurred backdrop.
-                // Canvas is layered above it and takes over as soon as it renders.
-                if (!canvasRendered && !remoteArt.isNullOrBlank()) {
-                    AsyncImage(
-                        model = remoteArt,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                }
+                // Keep the soft artwork backdrop here. The actual cover is shown
+                // at the regular sleeve size beside the lyrics below; it must not
+                // stretch edge-to-edge when this song has no Canvas.
                 // This screen is landscape-only: keep the provider's normal/raw
                 // rendition instead of forcing Apple's tall phone crop into a
                 // landscape window.
@@ -2210,7 +2200,10 @@ fun NowPlayingScreen(
                         canvas = clip,
                         isPlaying = isPlaying,
                         modifier = Modifier.fillMaxSize(),
-                        contentMode = CanvasContentMode.CROP,
+                        // Preserve the full frame for portrait Spotify Canvas clips.
+                        // FIT_PORTRAIT only contains portrait media; landscape clips
+                        // still use the same cover/crop treatment as before.
+                        contentMode = CanvasContentMode.FIT_PORTRAIT,
                         onRenderedChanged = { canvasRendered = it },
                         nowPlaying = true,
                     )
@@ -2295,6 +2288,27 @@ fun NowPlayingScreen(
                             .fillMaxHeight(),
                         verticalArrangement = Arrangement.Bottom,
                     ) {
+                        // Without a rendered Canvas, show the track cover like a
+                        // normal player sleeve — a square card beside the lyrics,
+                        // not a full-window image. The space above it can breathe
+                        // with the landscape height and the usual controls below.
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth(),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            if (!canvasRendered && !remoteArt.isNullOrBlank()) {
+                                AsyncImage(
+                                    model = remoteArt,
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier
+                                        .size(160.dp)
+                                        .clip(RoundedCornerShape(16.dp)),
+                                )
+                            }
+                        }
                         Text(
                             text = song.title,
                             style = MaterialTheme.typography.titleLarge.copy(

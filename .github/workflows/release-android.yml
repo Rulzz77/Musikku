@@ -156,7 +156,7 @@ jobs:
       #  sama seperti workflow "Android Release APK".)
       # ==========================================
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
 
       # ==========================================
       # 5. LOCAL.PROPERTIES (API key dari secrets)

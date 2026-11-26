@@ -1,30 +1,28 @@
 package com.music.bitchord
 
-import com.music.bitchord.playback.partySyncSpeedMultiplier
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
+import com.music.bitchord.playback.partySyncRequiresSeek
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PartySyncDriftCorrectionTest {
 
     @Test
-    fun `small drift stays at the user playback speed`() {
-        assertNull(partySyncSpeedMultiplier(0L))
-        assertNull(partySyncSpeedMultiplier(80L))
-        assertNull(partySyncSpeedMultiplier(-80L))
+    fun `ordinary decoder jitter never changes playback rate or triggers a seek`() {
+        assertFalse(partySyncRequiresSeek(0L))
+        assertFalse(partySyncRequiresSeek(80L))
+        assertFalse(partySyncRequiresSeek(-80L))
+        assertFalse(partySyncRequiresSeek(500L))
+        assertFalse(partySyncRequiresSeek(-500L))
+        assertFalse(partySyncRequiresSeek(1_200L))
+        assertFalse(partySyncRequiresSeek(-1_200L))
     }
 
     @Test
-    fun `a listener behind the party is gently sped up`() {
-        assertEquals(1.01f, partySyncSpeedMultiplier(-100L)!!, 0.0001f)
-        assertEquals(1.02f, partySyncSpeedMultiplier(-300L)!!, 0.0001f)
-        assertEquals(1.05f, partySyncSpeedMultiplier(-1_200L)!!, 0.0001f)
-    }
-
-    @Test
-    fun `a listener ahead of the party is gently slowed down`() {
-        assertEquals(0.99f, partySyncSpeedMultiplier(100L)!!, 0.0001f)
-        assertEquals(0.98f, partySyncSpeedMultiplier(300L)!!, 0.0001f)
-        assertEquals(0.95f, partySyncSpeedMultiplier(1_200L)!!, 0.0001f)
+    fun `only drift beyond the guarded seek threshold is corrected`() {
+        assertTrue(partySyncRequiresSeek(1_201L))
+        assertTrue(partySyncRequiresSeek(-1_201L))
+        assertTrue(partySyncRequiresSeek(2_500L))
+        assertTrue(partySyncRequiresSeek(-2_500L))
     }
 }

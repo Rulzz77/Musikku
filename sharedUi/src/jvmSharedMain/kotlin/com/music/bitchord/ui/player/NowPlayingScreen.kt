@@ -1202,6 +1202,8 @@ fun NowPlayingScreen(
     }
     var lyricsFullscreen by remember { mutableStateOf(false) }
     var lyricsRequestedLandscape by remember { mutableStateOf(false) }
+    // The dedicated fullscreen lyrics/Canvas presentation is landscape-only.
+    // Portrait keeps the regular lyrics layout in the player.
     val lyricsFullscreenVisible = lyricsFullscreen && lyricsOpen && sideways
 
     val canvas = rememberCanvasArtwork(

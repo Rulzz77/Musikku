@@ -13,6 +13,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -227,14 +228,14 @@ private const val UNSUNG_ALPHA_STRIP = 0.55f
  * — so a line of quick syllables has no glow at all and a carried note lights
  * up letter by letter, which is where the light was always meant to come from.
  */
-private const val GLOW_ALPHA = 0.62f
+private const val GLOW_ALPHA = 0.70f
 
 /**
  * How far the bloom spreads off a letter. Tight, because it is a letter's worth
  * of light now rather than a word's: a wide radius on something this small is
  * a smudge behind the text instead of a glow coming off it.
  */
-private val GLOW_RADIUS = 6.dp
+private val GLOW_RADIUS = 7.dp
 
 /**
  * Room reserved inside each copy of a line for the halo to spread into.
@@ -315,7 +316,7 @@ private val WIPE_FEATHER = 30.dp
  * words moving under the sweep, little enough that nothing appears to come
  * loose from the line it belongs to.
  */
-private val WORD_RISE = 2.dp
+private val WORD_RISE = 2.5.dp
 
 /**
  * How much further up a row is opened when it holds a word being animated
@@ -402,7 +403,7 @@ private const val SKELETON_PERIOD_MS = 1_400
 private const val BROWSING_ALPHA = 0.8f
 
 /** The playing line sits at 1; the rest sit fractionally back from it. */
-private const val INACTIVE_SCALE = 0.98f
+private const val INACTIVE_SCALE = 0.97f
 
 /** A line under a finger dips, the way a button does. */
 private const val PRESSED_SCALE = 0.96f
@@ -450,7 +451,7 @@ private const val LYRIC_SETTLE_MS = 400
  * the rows being dragged rather than following.
  */
 private const val STAGGER_STEPS = 3
-private const val STAGGER_FRACTION = 0.06f
+private const val STAGGER_FRACTION = 0.075f
 
 /** One handover: how far the panel is going, and how long it is taking. */
 private class ScrollRun(val id: Int, val delta: Float, val durationMs: Int) {
@@ -1868,8 +1869,9 @@ internal fun LyricsPanel(
     val lyricsBlur by PlayerSettings.lyricsBlur.collectAsStateWithLifecycle()
     val reduceAnimation by PlayerSettings.reduceAnimation.collectAsStateWithLifecycle()
 
-    val glowing = !reduceAnimation && !reduceDynamicBlur && lyricsBlur &&
-        renderEffectBlurSupported
+    // The active-word bloom is a playback cue, not the optional blur on the
+    // surrounding lines. Keep it when readers disable only that background blur.
+    val glowing = !reduceAnimation && !reduceDynamicBlur && renderEffectBlurSupported
 
     LaunchedEffect(listState) {
         listState.interactionSource.interactions.collect { interaction ->
@@ -1929,8 +1931,10 @@ internal fun LyricsPanel(
     // Animatable is sixty animations to start and stop on every handover.
     var run by remember(lines) { mutableStateOf(ScrollRun(0, 0f, LYRIC_SETTLE_MS)) }
     val since = remember(lines) { mutableFloatStateOf(0f) }
-    LaunchedEffect(run.id) {
-        if (run.id == 0) return@LaunchedEffect
+    LaunchedEffect(run.id, reduceAnimation) {
+        // The row-fan animation has no visible work in reduced-motion mode.
+        // Cancel its frame clock too, rather than writing an unused state every frame.
+        if (run.id == 0 || reduceAnimation) return@LaunchedEffect
         animate(
             initialValue = 0f,
             targetValue = run.spanMs,
@@ -1963,7 +1967,7 @@ internal fun LyricsPanel(
     // browse on their own terms.
     // A newer line replaces an unfinished automatic scroll. Only a user's
     // browsing gesture should suspend following, not our own animation.
-    LaunchedEffect(focusLine, browsing, controlsOpen, active) {
+    LaunchedEffect(focusLine, browsing, controlsOpen, active, reduceAnimation) {
         if (active && isSynced && !browsing &&
             focusLine >= 0 && focusLine in lines.indices
         ) {
@@ -1994,31 +1998,45 @@ internal fun LyricsPanel(
                 visible != null -> {
                     val span = scrollLead(lines, clock.longValue).toInt()
                     val distance = (visible.offset - focusOffset(visible.size)).toFloat()
-                    run = ScrollRun(run.id + 1, distance, span)
-                    // The same curve the rows catch up on. Two different
-                    // curves and a row with no delay at all still trails the
-                    // list it is sitting in, which is most of the way to
-                    // looking like the panel cannot keep up with itself.
-                    listState.animateScrollBy(
-                        value = distance,
-                        animationSpec = tween(durationMillis = span, easing = LYRIC_EASING),
-                    )
+                    if (reduceAnimation) {
+                        run = ScrollRun(run.id + 1, 0f, LYRIC_SETTLE_MS)
+                        listState.scrollBy(distance)
+                    } else {
+                        run = ScrollRun(run.id + 1, distance, span)
+                        // The same curve the rows catch up on. Two different
+                        // curves and a row with no delay at all still trails the
+                        // list it is sitting in, which is most of the way to
+                        // looking like the panel cannot keep up with itself.
+                        listState.animateScrollBy(
+                            value = distance,
+                            animationSpec = tween(durationMillis = span, easing = LYRIC_EASING),
+                        )
+                    }
                 }
                 // Somewhere off screen — after a seek, or a long instrumental
                 // scrolled past. How far is not known without laying the rows
                 // out, so this hands back to the list's own staged scroll.
                 else -> {
-                    listState.animateScrollToItem(focusLine, scrollOffset = -focusOffset(0))
+                    if (reduceAnimation) {
+                        listState.scrollToItem(focusLine, scrollOffset = -focusOffset(0))
+                    } else {
+                        listState.animateScrollToItem(focusLine, scrollOffset = -focusOffset(0))
+                    }
                     // That lands the row's top on the middle; the last half
                     // line is settled once its height is known.
                     if (centered) {
                         listState.layoutInfo.visibleItemsInfo
                             .firstOrNull { it.index == focusLine }
                             ?.let {
-                                listState.animateScrollBy(
-                                    value = (it.offset - focusOffset(it.size)).toFloat(),
-                                    animationSpec = tween(LYRIC_SETTLE_MS, easing = LYRIC_EASING),
-                                )
+                                val correction = (it.offset - focusOffset(it.size)).toFloat()
+                                if (reduceAnimation) {
+                                    listState.scrollBy(correction)
+                                } else {
+                                    listState.animateScrollBy(
+                                        value = correction,
+                                        animationSpec = tween(LYRIC_SETTLE_MS, easing = LYRIC_EASING),
+                                    )
+                                }
                             }
                     }
                 }
@@ -2126,7 +2144,7 @@ internal fun LyricsPanel(
                     !isSynced || reduceDynamicBlur || !lyricsBlur || browsing || isActive -> 0.dp
                     else -> LINE_FALLOFF_BLUR[step.coerceAtMost(LINE_FALLOFF_BLUR.lastIndex)]
                 },
-                animationSpec = tween(LYRIC_SETTLE_MS, easing = LYRIC_EASING),
+                animationSpec = if (reduceAnimation) snap() else tween(LYRIC_SETTLE_MS, easing = LYRIC_EASING),
                 label = "lyricBlur",
             )
             val lineAlpha by animateFloatAsState(
@@ -2138,7 +2156,7 @@ internal fun LyricsPanel(
                     browsing -> BROWSING_ALPHA
                     else -> falloff[step]
                 },
-                animationSpec = tween(LYRIC_SETTLE_MS, easing = LYRIC_EASING),
+                animationSpec = if (reduceAnimation) snap() else tween(LYRIC_SETTLE_MS, easing = LYRIC_EASING),
                 label = "lyricAlpha",
             )
             if (line.isGap) {
@@ -2258,8 +2276,9 @@ internal fun LyricsPanel(
                 // Rows behind the one being scrolled to are the ones that
                 // fan out; the ones it is moving away from arrive together.
                 val behind = if (run.delta >= 0f) index - focusLine else focusLine - index
-                val staggerDelay = behind.coerceIn(0, STAGGER_STEPS) *
-                    STAGGER_FRACTION * run.durationMs
+                val staggerDelay = if (reduceAnimation) 0f else {
+                    behind.coerceIn(0, STAGGER_STEPS) * STAGGER_FRACTION * run.durationMs
+                }
                 val interaction = remember { MutableInteractionSource() }
                 val pressed by interaction.collectIsPressedAsState()
                 val scale by animateFloatAsState(
@@ -2268,10 +2287,13 @@ internal fun LyricsPanel(
                         isActive -> 1f
                         else -> INACTIVE_SCALE
                     },
-                    animationSpec = tween(
-                        durationMillis = if (pressed) 120 else LYRIC_SETTLE_MS,
-                        easing = LYRIC_EASING,
-                    ),
+                    animationSpec = when {
+                        reduceAnimation -> snap()
+                        pressed -> tween(durationMillis = 120, easing = LYRIC_EASING)
+                        // A short, restrained spring gives the active line the
+                        // same soft landing as the word-level Bloom animation.
+                        else -> spring(dampingRatio = 0.82f, stiffness = 520f)
+                    },
                     label = "lyricScale",
                 )
                 // Apple's bloom on the line being sung. Fades in and out with
@@ -2279,7 +2301,7 @@ internal fun LyricsPanel(
                 // light going down as the next one's comes up.
                 val glow by animateFloatAsState(
                     targetValue = if (isActive && glowing) GLOW_ALPHA else 0f,
-                    animationSpec = tween(durationMillis = 420),
+                    animationSpec = if (reduceAnimation) snap() else tween(durationMillis = 420),
                     label = "lyricGlow",
                 )
                 // No width held back for the swell any more: nothing draws past

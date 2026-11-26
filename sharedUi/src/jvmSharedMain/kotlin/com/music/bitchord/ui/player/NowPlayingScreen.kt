@@ -2171,20 +2171,17 @@ fun NowPlayingScreen(
                 // Keep the soft artwork backdrop here. The actual cover is shown
                 // at the regular sleeve size beside the lyrics below; it must not
                 // stretch edge-to-edge when this song has no Canvas.
-                // This screen is landscape-only: keep the provider's normal/raw
-                // rendition instead of forcing Apple's tall phone crop into a
-                // landscape window.
+                // Landscape lyrics is an immersive, full-bleed presentation:
+                // fill the entire display with the moving Canvas. Portrait clips
+                // are intentionally cropped to the screen rather than letterboxed
+                // as a narrow phone-shaped video in the middle of landscape.
                 val fullscreenLyricsCanvas = canvas
                 fullscreenLyricsCanvas?.let { clip ->
                     CanvasArtworkPlayer(
                         canvas = clip,
                         isPlaying = isPlaying,
                         modifier = Modifier.fillMaxSize(),
-                        // Preserve the full frame for portrait Spotify Canvas clips.
-                        // FIT_PORTRAIT only contains portrait media; landscape clips
-                        // still use the same cover/crop treatment as before.
-                        contentMode = CanvasContentMode.FIT_PORTRAIT,
-                        onAspectRatioChanged = { canvasAspect = it },
+                        contentMode = CanvasContentMode.CROP,
                         onRenderedChanged = { canvasRendered = it },
                         nowPlaying = true,
                     )
@@ -2258,7 +2255,7 @@ fun NowPlayingScreen(
                                 .fillMaxWidth(),
                             contentAlignment = Alignment.Center,
                         ) {
-                            if (!canvasRendered && !remoteArt.isNullOrBlank()) {
+                            if (!remoteArt.isNullOrBlank()) {
                                 AsyncImage(
                                     model = remoteArt,
                                     contentDescription = null,

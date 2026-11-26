@@ -56,6 +56,36 @@ internal fun partyAutoAdvanceIsForward(
     return localCurrentQueueIndex >= 0 && localNextQueueIndex > localCurrentQueueIndex
 }
 
+/** Snapshot needed to publish one natural transition without accepting a stale one. */
+internal data class PartyAutoAdvanceSnapshot(
+    val fromTrackId: String?,
+    val toTrackId: String,
+    val playbackSeq: Long,
+)
+
+/** Builds a publishable transition only when the next item is demonstrably forward. */
+internal fun partyAutoAdvanceSnapshot(
+    currentTrackId: String?,
+    nextTrackId: String?,
+    playbackSeq: Long,
+    currentQueueIndex: Int,
+    nextQueueIndex: Int,
+    localCurrentQueueIndex: Int = -1,
+    localNextQueueIndex: Int = -1,
+): PartyAutoAdvanceSnapshot? {
+    val next = nextTrackId?.takeIf { it.isNotBlank() } ?: return null
+    if (!partyAutoAdvanceIsForward(
+            currentTrackId,
+            next,
+            currentQueueIndex,
+            nextQueueIndex,
+            localCurrentQueueIndex,
+            localNextQueueIndex,
+        )
+    ) return null
+    return PartyAutoAdvanceSnapshot(currentTrackId, next, playbackSeq)
+}
+
 /**
  * Makes the player obey the party, and the party obey this player.
  *
@@ -337,14 +367,16 @@ class PartySync(
                 exo.getMediaItemAt(it).mediaId == currentTrackId
             } ?: -1
         }
-        val isForward = partyAutoAdvanceIsForward(
+        val advance = partyAutoAdvanceSnapshot(
             currentTrackId,
             nextTrackId,
+            party.playback.seq,
             currentIndex,
             nextIndex,
             localCurrentIndex,
             exo.currentMediaItemIndex,
         )
+        val isForward = advance != null
 
         val leaderId = partyPlaybackLeaderId(party)
         if (leaderId == null || party.you?.memberId != leaderId) {
@@ -370,10 +402,14 @@ class PartySync(
         }
 
         waitingForLeaderTrackId = null
-        pendingAutomaticAdvanceFromTrackId = currentTrackId
-        pendingAutomaticAdvanceToTrackId = nextTrackId
-        pendingAutomaticAdvanceSeq = party.playback.seq
+        stageAutomaticAdvance(advance ?: return)
         requestLocalIntent(automaticAdvance = true)
+    }
+
+    private fun stageAutomaticAdvance(advance: PartyAutoAdvanceSnapshot) {
+        pendingAutomaticAdvanceFromTrackId = advance.fromTrackId
+        pendingAutomaticAdvanceToTrackId = advance.toTrackId
+        pendingAutomaticAdvanceSeq = advance.playbackSeq
     }
 
     private fun clearPendingAutomaticAdvance() {
@@ -717,9 +753,40 @@ class PartySync(
                 if (partyPlaybackLeaderId(party) == party.you?.memberId &&
                     exo.currentMediaItem?.mediaId != track.videoId
                 ) {
+                    // A new leader may inherit a transition that a follower
+                    // already reached locally. Stage the same guarded snapshot
+                    // as the normal leader callback before asking the party to
+                    // accept it; otherwise publish() correctly rejects it as
+                    // an automatic advance with no origin/destination snapshot.
+                    val nextTrackId = exo.currentMediaItem?.mediaId
+                    val currentTrackId = target.track?.videoId
+                    val currentIndex = partyQueueIndexOf(party.queue, party.playback, currentTrackId)
+                    val nextIndex = partyQueueIndexOf(party.queue, party.playback, nextTrackId)
+                    val localCurrentIndex = if (currentTrackId == null) -1 else {
+                        (0 until exo.mediaItemCount).firstOrNull {
+                            exo.getMediaItemAt(it).mediaId == currentTrackId
+                        } ?: -1
+                    }
+                    val advance = partyAutoAdvanceSnapshot(
+                        currentTrackId,
+                        nextTrackId,
+                        target.seq,
+                        currentIndex,
+                        nextIndex,
+                        localCurrentIndex,
+                        exo.currentMediaItemIndex,
+                    )
                     waitingForLeaderTrackId = null
-                    exo.play()
-                    requestLocalIntent(automaticAdvance = true)
+                    if (advance != null) {
+                        stageAutomaticAdvance(advance)
+                        exo.play()
+                        requestLocalIntent(automaticAdvance = true)
+                    } else {
+                        // The inherited item is no longer provably next. Reload
+                        // the party's authoritative track instead of publishing
+                        // or briefly playing an unknown/stale item.
+                        load(party)
+                    }
                 }
                 return
             }

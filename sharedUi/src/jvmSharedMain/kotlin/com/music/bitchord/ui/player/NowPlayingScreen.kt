@@ -1174,14 +1174,6 @@ fun NowPlayingScreen(
     // Square video thumbnails: the picture takes the sleeve's own slot, cropped
     // to it, in place of the full-width box at the video's shape.
     val squareVideo = videoMode && VideoThumbnails.square
-    val canvas = rememberCanvasArtwork(song)?.takeUnless { videoMode }?.let {
-        // Apple's 3:4 rendition runs under the whole phone screen, the way its
-        // own player shows it; the square one stays the fallback.
-        val tall = it.portraitUrl
-        if (tall != null && playerFillsWindow(windowWidth)) {
-            it.copy(url = tall, fallbackUrl = it.url, portraitUrl = null)
-        } else it
-    }
     // Whether the picture has a frame on screen; the still frame shows until then.
     var videoRendered by remember(song.videoId) { mutableStateOf(false) }
     // The picture's shape, read only at layout (see the sleeve's card rect), so
@@ -1199,6 +1191,29 @@ fun NowPlayingScreen(
     val exitFullscreen = {
         fullscreenRequested = false
         screenOrientation.portrait()
+    }
+
+    // Lyrics fullscreen owns a foreground Canvas surface. On Lite devices,
+    // decorative clips stay off elsewhere; this explicit mode resolves one
+    // only while its landscape artwork pane is visible.
+    val restoredPlayerScreen = remember { PlayerSettings.lastPlayerScreen.value }
+    var lyricsOpen by remember {
+        mutableStateOf(restoredPlayerScreen == LastPlayerScreen.LYRICS)
+    }
+    var lyricsFullscreen by remember { mutableStateOf(false) }
+    var lyricsRequestedLandscape by remember { mutableStateOf(false) }
+    val lyricsFullscreenVisible = lyricsFullscreen && lyricsOpen && sideways
+
+    val canvas = rememberCanvasArtwork(
+        song = song,
+        allowFullscreenOnLowMemory = lyricsFullscreenVisible,
+    )?.takeUnless { videoMode }?.let {
+        // Apple's 3:4 rendition runs under the whole phone screen, the way its
+        // own player shows it; the square one stays the fallback.
+        val tall = it.portraitUrl
+        if (tall != null && playerFillsWindow(windowWidth)) {
+            it.copy(url = tall, fallbackUrl = it.url, portraitUrl = null)
+        } else it
     }
     var canvasAspect by remember(canvas) { mutableFloatStateOf(0f) }
     // Whether the clip actually has a frame on screen right now, and one of
@@ -1250,7 +1265,6 @@ fun NowPlayingScreen(
     // written below, so reopening the player (and a process restart) returns to
     // the same surface on phones and tablets without making this UI state a
     // continuously collected setting.
-    val restoredPlayerScreen = remember { PlayerSettings.lastPlayerScreen.value }
     var queueOpen by remember {
         mutableStateOf(restoredPlayerScreen == LastPlayerScreen.QUEUE)
     }
@@ -1258,11 +1272,6 @@ fun NowPlayingScreen(
     LaunchedEffect(queueOpen, controlsLocked) {
         if (!queueOpen || controlsLocked) queueSelection.clear()
     }
-    var lyricsOpen by remember {
-        mutableStateOf(restoredPlayerScreen == LastPlayerScreen.LYRICS)
-    }
-    var lyricsFullscreen by remember { mutableStateOf(false) }
-    var lyricsRequestedLandscape by remember { mutableStateOf(false) }
     val queueSlide = remember { mutableFloatStateOf(0f) }
     // Expensive, song-scoped preparation is deliberately staggered. The small
     // backdrop decode runs after the track hand-off has settled; lyrics and
@@ -2131,7 +2140,7 @@ fun NowPlayingScreen(
     // Fullscreen is a landscape-only reading mode. In portrait the regular
     // lyrics panel underneath remains the native experience; the button nudges
     // the device sideways and this dialog appears once the window is wide.
-    if (lyricsFullscreen && lyricsOpen && sideways) {
+    if (lyricsFullscreenVisible) {
         Dialog(
             onDismissRequest = exitLyricsFullscreen,
             properties = DialogProperties(
@@ -2161,9 +2170,9 @@ fun NowPlayingScreen(
                         ),
                 )
 
-                // Leave room for the always-available transport beneath the track details.
-                val coverSize = (maxHeight - 236.dp).coerceIn(104.dp, 176.dp)
-                val coverColumnWidth = maxOf(188.dp, coverSize)
+                // Prefer the provider's portrait rendition in the tall fullscreen artwork pane.
+                val fullscreenLyricsCanvas = canvas?.nowPlayingRendition(fullWindow = true)
+                val coverColumnWidth = (maxWidth * 0.42f).coerceIn(188.dp, 360.dp)
                 Row(
                     modifier = Modifier
                         .fillMaxSize()
@@ -2176,25 +2185,42 @@ fun NowPlayingScreen(
                             .fillMaxHeight(),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        Spacer(Modifier.weight(1f))
-                        AsyncImage(
-                            model = art.request,
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            onState = art::onState,
+                        Box(
                             modifier = Modifier
-                                .size(coverSize)
+                                .weight(1f)
+                                .fillMaxWidth()
                                 .clip(RoundedCornerShape(22.dp))
+                                .background(Color.Black)
                                 .border(
                                     1.dp,
                                     Color.White.copy(alpha = 0.16f),
                                     RoundedCornerShape(22.dp),
                                 ),
-                        )
+                        ) {
+                            // Keep the still cover underneath until Canvas paints its first frame.
+                            AsyncImage(
+                                model = art.request,
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                onState = art::onState,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                            fullscreenLyricsCanvas?.let { clip ->
+                                CanvasArtworkPlayer(
+                                    canvas = clip,
+                                    isPlaying = isPlaying,
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentMode = CanvasContentMode.FIT_PORTRAIT,
+                                    // Reuse the single foreground Canvas decoder; don't start a
+                                    // second decorative player during the fullscreen hand-off.
+                                    nowPlaying = true,
+                                )
+                            }
+                        }
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(top = 14.dp),
+                                .padding(top = 12.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
                             Text(
@@ -2232,7 +2258,6 @@ fun NowPlayingScreen(
                                 compact = true,
                             )
                         }
-                        Spacer(Modifier.weight(1f))
                     }
 
                     Spacer(Modifier.width(28.dp))
@@ -2978,7 +3003,7 @@ fun NowPlayingScreen(
 
                 // Mount once, behind the controls. A known portrait aspect changes the
                 // invisible view to full-player bounds before its first frame is shown.
-                if (heroMode && heroHeight > 0.dp) {
+                if (heroMode && heroHeight > 0.dp && !lyricsFullscreenVisible) {
                     heroClipMounted?.let { clip ->
                         val stillStart = remember(clip.url) { stillAtMount() }
                         CanvasArtworkPlayer(
@@ -3998,7 +4023,7 @@ fun NowPlayingScreen(
                             // Where the clip plays when it can't have the banner:
                             // inside the same clip as the still art, taking the
                             // sleeve's corners, shadow and paused shrink for free.
-                            if (!heroMode && canvas != null) {
+                            if (!heroMode && canvas != null && !lyricsFullscreenVisible) {
                                 WhileShown({ !collapsePastHalf }) {
                                     val stillStart = remember(canvas.url) { stillAtMount() }
                                     CanvasArtworkPlayer(

@@ -39,7 +39,10 @@ import kotlinx.coroutines.launch
  * null — a miss is the normal answer.
  */
 @Composable
-internal fun rememberCanvasArtwork(song: Song): CanvasArtwork? {
+internal fun rememberCanvasArtwork(
+    song: Song,
+    allowFullscreenOnLowMemory: Boolean = false,
+): CanvasArtwork? {
     val canvasEnabled by PlayerSettings.animatedCanvas.collectAsStateWithLifecycle()
     val canvasOverCellular by PlayerSettings.canvasOverCellular.collectAsStateWithLifecycle()
     val prioritizeSpotifyCanvas by PlayerSettings.prioritizeSpotifyCanvas.collectAsStateWithLifecycle()
@@ -55,8 +58,16 @@ internal fun rememberCanvasArtwork(song: Song): CanvasArtwork? {
     // which is the flicker. A different song keys differently and starts
     // clean; the same-titled-impostor case is guarded where the clip is
     // adopted, by [CanvasArtwork.matches].
-    var canvas by remember(song.title, song.artist) { mutableStateOf<CanvasArtwork?>(null) }
-    LaunchedEffect(song.videoId, song.albumName, canvasAllowedNow, prioritizeSpotifyCanvas) {
+    var canvas by remember(song.title, song.artist, allowFullscreenOnLowMemory) {
+        mutableStateOf<CanvasArtwork?>(null)
+    }
+    LaunchedEffect(
+        song.videoId,
+        song.albumName,
+        canvasAllowedNow,
+        prioritizeSpotifyCanvas,
+        allowFullscreenOnLowMemory,
+    ) {
         if (!canvasAllowedNow) {
             canvas = null
             return@LaunchedEffect
@@ -69,8 +80,11 @@ internal fun rememberCanvasArtwork(song: Song): CanvasArtwork? {
         // search, so the same clip — and only while it still *answers* to
         // what is playing: [CanvasArtwork.matches] is what stops a preserved
         // clip from being a different song's that happens to share a title.
-        canvas = PlayerPlatform.host.cachedCanvas(song)
-            ?: canvas?.takeIf { it.matches(song.title, song.artist, song.albumName) }
+        val host = PlayerPlatform.host
+        canvas = (
+            if (allowFullscreenOnLowMemory) host.cachedCanvasForFullscreenLyrics(song)
+            else host.cachedCanvas(song)
+        ) ?: canvas?.takeIf { it.matches(song.title, song.artist, song.albumName) }
 
         // The album name is looked up separately and lands a moment after the
         // player opens, and it is the field that makes the catalogue searches
@@ -81,7 +95,10 @@ internal fun rememberCanvasArtwork(song: Song): CanvasArtwork? {
         if (canvas == null && song.albumName == null) delay(ALBUM_SETTLE_MS)
         // Keep what an earlier pass found if this one comes back empty, rather
         // than pulling a playing clip out from under itself.
-        canvas = PlayerPlatform.host.canvasFor(song) ?: canvas
+        canvas = (
+            if (allowFullscreenOnLowMemory) host.canvasForFullscreenLyrics(song)
+            else host.canvasFor(song)
+        ) ?: canvas
     }
 
     return canvas

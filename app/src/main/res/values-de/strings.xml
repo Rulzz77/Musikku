@@ -261,6 +261,11 @@
     <string name="performance">Leistung</string>
     <string name="high_performance_mode">Hochleistungsmodus</string>
     <string name="high_performance_subtitle">Verwendet vollständige Animationen und Unschärfe und fordert eine höhere Bildwiederholrate an</string>
+    <string name="device_visual_profile">Visuelles Geräteprofil</string>
+    <string name="device_visual_profile_lite">Reduzierte Effekte</string>
+    <string name="device_visual_profile_normal">Normal</string>
+    <string name="device_visual_profile_lite_subtitle">Automatisch. Android meldet begrenzten Speicher; daher werden aufwendige Unschärfeeffekte und dekorative Grafiken reduziert.</string>
+    <string name="device_visual_profile_normal_subtitle">Automatisch. Dieses Gerät erfüllt die Grenzwerte für das Profil mit wenig Arbeitsspeicher nicht.</string>
     <string name="high_performance_active">%1$d Hz angefordert. Android kann die Rate bei Bedarf verringern.</string>
     <string name="beta">Beta</string>
     <string name="refresh_rate">Bildwiederholrate</string>

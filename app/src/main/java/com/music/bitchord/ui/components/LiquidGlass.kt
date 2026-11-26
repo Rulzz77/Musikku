@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalDensity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.ui.performance.LocalDevicePerformanceProfile
 import com.music.bitchord.ui.components.backdrop.Backdrop
 import com.music.bitchord.ui.components.backdrop.backdrops.LayerBackdrop
 import com.music.bitchord.ui.components.backdrop.drawBackdrop

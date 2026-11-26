@@ -777,10 +777,10 @@ class PartySync(
         if (loadingVideoId == track.videoId && loadJob?.isActive == true) return
 
         // A previous load can be doing artwork/download checks on Dispatchers.Default.
-        // Cancel it and give this request a generation so an older completion can
-        // never replace a newer party track after its state has already arrived.
-        loadJob?.cancel()
+        // Advance the generation before cancelling it, so its finally block cannot
+        // clear the state belonging to this newer request.
         val generation = ++loadGeneration
+        loadJob?.cancel()
         val requestedTrackId = track.videoId
         loadingVideoId = requestedTrackId
         loadJob = scope.launch {
@@ -1063,12 +1063,17 @@ class PartySync(
     }
 
     private fun onLeftParty() {
+        // An in-flight party load must not finish after the user has left and
+        // replace the song they were listening to on their own.
+        loadGeneration++
+        loadJob?.cancel()
+        loadJob = null
+        loadingVideoId = null
 
         // Keep the last song played in the room. The personal snapshot is only
         // a safety net for a service restart while still in a party; it must
         // not replace the shared song when the user explicitly leaves.
         Log.i(TAG, "left party, keeping the last shared track and clearing personal snapshot")
-        loadingVideoId = null
         focusLost = false
         rejoining = false
         PartyPersonalQueueStash.clear()

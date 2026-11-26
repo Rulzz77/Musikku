@@ -47,7 +47,12 @@ internal fun partyAutoAdvanceIsForward(
     localNextQueueIndex: Int = -1,
 ): Boolean {
     if (currentTrackId == null) return true
-    if (currentTrackId == nextTrackId) return false
+    // The same song can legitimately appear twice in a queue. Shared queue
+    // lookup is id-only, so only a distinct local occurrence can prove this
+    // particular transition moved to the next copy.
+    if (currentTrackId == nextTrackId) {
+        return localCurrentQueueIndex >= 0 && localNextQueueIndex > localCurrentQueueIndex
+    }
     if (currentQueueIndex >= 0 && nextQueueIndex >= 0) {
         return nextQueueIndex > currentQueueIndex
     }
@@ -61,6 +66,7 @@ internal data class PartyAutoAdvanceSnapshot(
     val fromTrackId: String?,
     val toTrackId: String,
     val playbackSeq: Long,
+    val queueSeq: Long,
 )
 
 /** Builds a publishable transition only when the next item is demonstrably forward. */
@@ -68,6 +74,7 @@ internal fun partyAutoAdvanceSnapshot(
     currentTrackId: String?,
     nextTrackId: String?,
     playbackSeq: Long,
+    queueSeq: Long,
     currentQueueIndex: Int,
     nextQueueIndex: Int,
     localCurrentQueueIndex: Int = -1,
@@ -83,7 +90,7 @@ internal fun partyAutoAdvanceSnapshot(
             localNextQueueIndex,
         )
     ) return null
-    return PartyAutoAdvanceSnapshot(currentTrackId, next, playbackSeq)
+    return PartyAutoAdvanceSnapshot(currentTrackId, next, playbackSeq, queueSeq)
 }
 
 /**
@@ -174,6 +181,7 @@ class PartySync(
     private var pendingAutomaticAdvanceFromTrackId: String? = null
     private var pendingAutomaticAdvanceToTrackId: String? = null
     private var pendingAutomaticAdvanceSeq = -1L
+    private var pendingAutomaticAdvanceQueueSeq = -1L
 
     /**
      * Until when [reconcile] should keep its hands off.
@@ -353,24 +361,17 @@ class PartySync(
         val exo = player() ?: return
         val nextTrackId = exo.currentMediaItem?.mediaId ?: return
         val currentTrackId = party.playback.track?.videoId
-        if (currentTrackId == nextTrackId) {
-            reconcile()
-            return
-        }
 
         // The callback runs before QueueCoordinator prunes the consumed item,
         // so the old track is still available for this local ordering check.
         val currentIndex = partyQueueIndexOf(party.queue, party.playback, currentTrackId)
         val nextIndex = partyQueueIndexOf(party.queue, party.playback, nextTrackId)
-        val localCurrentIndex = if (currentTrackId == null) -1 else {
-            (0 until exo.mediaItemCount).firstOrNull {
-                exo.getMediaItemAt(it).mediaId == currentTrackId
-            } ?: -1
-        }
+        val localCurrentIndex = previousLocalQueueIndex(exo, currentTrackId)
         val advance = partyAutoAdvanceSnapshot(
             currentTrackId,
             nextTrackId,
             party.playback.seq,
+            party.queue.seq,
             currentIndex,
             nextIndex,
             localCurrentIndex,
@@ -384,6 +385,9 @@ class PartySync(
                 // Keep the next item loaded but silent. The leader's own
                 // transition is the only one that advances the shared clock.
                 waitingForLeaderTrackId = currentTrackId
+                // Keep the verified transition so a follower promoted to leader
+                // can publish it even after the consumed local queue row is pruned.
+                stageAutomaticAdvance(advance ?: return)
                 exo.pause()
                 Log.i(TAG, "waiting for party leader to advance from $currentTrackId")
             } else {
@@ -395,14 +399,14 @@ class PartySync(
             return
         }
 
-        if (currentTrackId != null && !isForward) {
+        if (advance == null) {
             Log.i(TAG, "ignoring automatic advance that is not forward in the party queue")
             reconcile()
             return
         }
 
         waitingForLeaderTrackId = null
-        stageAutomaticAdvance(advance ?: return)
+        stageAutomaticAdvance(advance)
         requestLocalIntent(automaticAdvance = true)
     }
 
@@ -410,12 +414,24 @@ class PartySync(
         pendingAutomaticAdvanceFromTrackId = advance.fromTrackId
         pendingAutomaticAdvanceToTrackId = advance.toTrackId
         pendingAutomaticAdvanceSeq = advance.playbackSeq
+        pendingAutomaticAdvanceQueueSeq = advance.queueSeq
+    }
+
+    private fun previousLocalQueueIndex(exo: Player, trackId: String?): Int {
+        if (trackId == null) return -1
+        val currentIndex = exo.currentMediaItemIndex
+        return (0 until exo.mediaItemCount)
+            .asSequence()
+            .filter { it != currentIndex && exo.getMediaItemAt(it).mediaId == trackId }
+            .minByOrNull { kotlin.math.abs(it - currentIndex) }
+            ?: -1
     }
 
     private fun clearPendingAutomaticAdvance() {
         pendingAutomaticAdvanceFromTrackId = null
         pendingAutomaticAdvanceToTrackId = null
         pendingAutomaticAdvanceSeq = -1L
+        pendingAutomaticAdvanceQueueSeq = -1L
     }
 
     private fun requestLocalIntent(automaticAdvance: Boolean) {
@@ -747,6 +763,7 @@ class PartySync(
                 // The room moved on (or was paused), so this held transition
                 // has either been accepted or cancelled by a real party control.
                 waitingForLeaderTrackId = null
+                clearPendingAutomaticAdvance()
             } else {
                 // If the elected leader changed while this phone was waiting,
                 // it can take over from the already-loaded next item.
@@ -762,15 +779,27 @@ class PartySync(
                     val currentTrackId = target.track?.videoId
                     val currentIndex = partyQueueIndexOf(party.queue, party.playback, currentTrackId)
                     val nextIndex = partyQueueIndexOf(party.queue, party.playback, nextTrackId)
-                    val localCurrentIndex = if (currentTrackId == null) -1 else {
-                        (0 until exo.mediaItemCount).firstOrNull {
-                            exo.getMediaItemAt(it).mediaId == currentTrackId
-                        } ?: -1
+                    val localCurrentIndex = previousLocalQueueIndex(exo, currentTrackId)
+                    val pendingAdvance = if (
+                        pendingAutomaticAdvanceFromTrackId == currentTrackId &&
+                        pendingAutomaticAdvanceToTrackId == nextTrackId &&
+                        pendingAutomaticAdvanceSeq == target.seq &&
+                        pendingAutomaticAdvanceQueueSeq == party.queue.seq
+                    ) {
+                        PartyAutoAdvanceSnapshot(
+                            currentTrackId,
+                            nextTrackId.orEmpty(),
+                            target.seq,
+                            party.queue.seq,
+                        )
+                    } else {
+                        null
                     }
-                    val advance = partyAutoAdvanceSnapshot(
+                    val advance = pendingAdvance ?: partyAutoAdvanceSnapshot(
                         currentTrackId,
                         nextTrackId,
                         target.seq,
+                        party.queue.seq,
                         currentIndex,
                         nextIndex,
                         localCurrentIndex,
@@ -1051,10 +1080,30 @@ class PartySync(
             val expectedFrom = pendingAutomaticAdvanceFromTrackId
             val expectedTo = pendingAutomaticAdvanceToTrackId
             val expectedSeq = pendingAutomaticAdvanceSeq
+            val expectedQueueSeq = pendingAutomaticAdvanceQueueSeq
             clearPendingAutomaticAdvance()
+            val queueStillProvesAdvance = if (expectedQueueSeq == party.queue.seq) {
+                true
+            } else {
+                val currentIndex = partyQueueIndexOf(
+                    party.queue, party.playback, expectedFrom,
+                )
+                val nextIndex = partyQueueIndexOf(
+                    party.queue, party.playback, expectedTo,
+                )
+                partyAutoAdvanceIsForward(
+                    expectedFrom,
+                    expectedTo.orEmpty(),
+                    currentIndex,
+                    nextIndex,
+                    previousLocalQueueIndex(exo, expectedFrom),
+                    exo.currentMediaItemIndex,
+                )
+            }
             if (expectedTo != track.videoId ||
                 expectedFrom != party.playback.track?.videoId ||
                 expectedSeq != party.playback.seq ||
+                !queueStillProvesAdvance ||
                 (expectedFrom != null && !party.playback.isPlaying)
             ) {
                 Log.i(

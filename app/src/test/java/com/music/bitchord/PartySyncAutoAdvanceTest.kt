@@ -1,6 +1,7 @@
 package com.music.bitchord
 
 import com.music.bitchord.playback.partyAutoAdvanceIsForward
+import com.music.bitchord.playback.partyAutoAdvanceLeaderStillPending
 import com.music.bitchord.playback.partyAutoAdvanceSnapshot
 import com.music.bitchord.playback.PartyAutoAdvanceSnapshot
 import org.junit.Assert.assertEquals
@@ -46,6 +47,13 @@ class PartySyncAutoAdvanceTest {
     @Test
     fun `an empty party can be seeded with its first automatic track`() {
         assertTrue(partyAutoAdvanceIsForward(null, "track-a", -1, -1))
+    }
+
+    @Test
+    fun `a repeated track stops waiting when the shared playback sequence advances`() {
+        assertTrue(partyAutoAdvanceLeaderStillPending("same-track", 40L, "same-track", 40L, true))
+        assertFalse(partyAutoAdvanceLeaderStillPending("same-track", 40L, "same-track", 41L, true))
+        assertFalse(partyAutoAdvanceLeaderStillPending("same-track", 40L, "same-track", 40L, false))
     }
 
     @Test

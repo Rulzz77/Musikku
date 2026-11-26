@@ -16,7 +16,7 @@ import kotlinx.coroutines.selects.select
  * Finds the looping video that belongs behind a track's or a release's cover
  * art — Spotify's Canvas, Apple's motion artwork.
  *
- * Four sources, asked in turn until one answers. They cover genuinely
+ * Four independent sources that cover genuinely
  * different ground rather than being four routes to the same catalogue:
  * Apple has the most, Tidal has square covers on a lot of what Apple misses,
  * the community index is the only one that reaches back catalogue, and
@@ -253,19 +253,21 @@ object CanvasRepository {
     private suspend fun checkedHit(
         source: suspend () -> CanvasArtwork?,
         accept: (CanvasArtwork) -> Boolean,
-    ): CanvasArtwork? = try {
-        val found = source() ?: return null
-        if (!accept(found)) {
-            Log.d(TAG, "rejected '${found.title}' by '${found.artist}'")
+    ): CanvasArtwork? {
+        return try {
+            val found = source() ?: return null
+            if (!accept(found)) {
+                Log.d(TAG, "rejected '${found.title}' by '${found.artist}'")
+                null
+            } else {
+                found
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            Log.d(TAG, "source failed: ${failure.message}")
             null
-        } else {
-            found
         }
-    } catch (cancelled: CancellationException) {
-        throw cancelled
-    } catch (failure: Exception) {
-        Log.d(TAG, "source failed: ${failure.message}")
-        null
     }
 
     /**

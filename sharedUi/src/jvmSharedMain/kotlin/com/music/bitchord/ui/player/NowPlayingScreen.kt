@@ -2200,7 +2200,10 @@ fun NowPlayingScreen(
                         canvas = clip,
                         isPlaying = isPlaying,
                         modifier = Modifier.fillMaxSize(),
-                        contentMode = CanvasContentMode.CROP,
+                        // Preserve the full frame for portrait Spotify Canvas clips.
+                        // FIT_PORTRAIT only contains portrait media; landscape clips
+                        // still use the same cover/crop treatment as before.
+                        contentMode = CanvasContentMode.FIT_PORTRAIT,
                         onRenderedChanged = { canvasRendered = it },
                         nowPlaying = true,
                     )

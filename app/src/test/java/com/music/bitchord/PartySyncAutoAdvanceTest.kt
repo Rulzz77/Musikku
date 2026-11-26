@@ -28,6 +28,12 @@ class PartySyncAutoAdvanceTest {
     }
 
     @Test
+    fun `local queue order can verify a new item before the server queue echo`() {
+        assertTrue(partyAutoAdvanceIsForward("track-a", "track-b", 0, -1, 2, 3))
+        assertFalse(partyAutoAdvanceIsForward("track-c", "track-b", 2, -1, 4, 3))
+    }
+
+    @Test
     fun `an empty party can be seeded with its first automatic track`() {
         assertTrue(partyAutoAdvanceIsForward(null, "track-a", -1, -1))
     }

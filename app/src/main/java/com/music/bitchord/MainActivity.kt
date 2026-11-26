@@ -913,15 +913,7 @@ private fun BitChordApp(
     val hideHomeMoods by AppSettings.hideHomeMoods.collectAsStateWithLifecycle()
     // Only what Home draws: Top Picks reads the unfiltered feed from the view model.
     val visibleHomeState = remember(homeState, hideHomeVideos, hideRecents) {
-        val loaded = homeState as? UiState.Success
-        if (loaded != null && (hideHomeVideos || hideRecents)) {
-            var shelves = loaded.data
-            if (hideRecents) shelves = shelves.filterNot { it.title == YtMusicRepository.RECENT_TITLE }
-            if (hideHomeVideos) shelves = shelves.withoutVideos()
-            UiState.Success(shelves)
-        } else {
-            homeState
-        }
+        visibleHomeShelves(homeState, hideHomeVideos, hideRecents)
     }
     val homeLoadingMore by viewModel.homeLoadingMore.collectAsStateWithLifecycle()
     val homeRecentlyPlayedLoading by viewModel.homeRecentlyPlayedLoading.collectAsStateWithLifecycle()
@@ -1123,76 +1115,34 @@ private fun BitChordApp(
     // unrelated player, download, or navigation state should not rebuild every
     // playlist card and rescan its songs for an artwork fallback.
     val localPlaylistItems = remember(localPlaylists, context) {
-        localPlaylists.map { playlist ->
-            ShelfItem(
-                title = playlist.title,
-                subtitle = context.getString(R.string.local_playlist_subtitle, playlist.songs.size),
-                thumbnailUrl = playlist.coverUrl ?: playlist.songs.firstOrNull { !it.thumbnailUrl.isNullOrBlank() }?.thumbnailUrl,
-                videoId = null,
-                browseId = playlist.browseId,
-            )
-        }
+        localPlaylistShelfItems(localPlaylists, context)
     }
     // Playlists created from the Add to playlist menu are stored separately
     // from Spotify imports. Surface the same device-owned records on both tabs.
     val offlinePlaylistItems = remember(offlinePlaylists, context) {
-        offlinePlaylists.map { playlist ->
-            ShelfItem(
-                title = playlist.title,
-                subtitle = context.getString(R.string.local_playlist_subtitle, playlist.songs.size),
-                thumbnailUrl = playlist.coverUrl ?: playlist.songs.firstOrNull { !it.thumbnailUrl.isNullOrBlank() }?.thumbnailUrl,
-                videoId = null,
-                browseId = playlist.browseId,
-            )
-        }
+        offlinePlaylistShelfItems(offlinePlaylists, context)
     }
     // Folders reference account playlists and both local playlist collections.
     // They store browse ids only, never copies of playlist contents.
     val accountPlaylistItems = remember(libraryState) {
-        (libraryState as? UiState.Success)
-            ?.data?.shelves
-            ?.firstOrNull { it.title == YtMusicRepository.PLAYLISTS_SHELF }
-            ?.items.orEmpty()
+        accountPlaylistShelfItems(libraryState, YtMusicRepository.PLAYLISTS_SHELF)
     }
     val folderablePlaylistItems = remember(accountPlaylistItems, localPlaylistItems, offlinePlaylistItems) {
-        (accountPlaylistItems + localPlaylistItems + offlinePlaylistItems)
-            .filter { it.browseId != null }
-            .distinctBy { it.browseId }
+        folderablePlaylistShelfItems(accountPlaylistItems, localPlaylistItems, offlinePlaylistItems)
     }
     val folderedPlaylistBrowseIds = remember(playlistFolders) {
-        playlistFolders.flatMapTo(HashSet()) { it.playlistBrowseIds }
+        folderedPlaylistIds(playlistFolders)
     }
     // Once assigned, a playlist is shown from its folder rather than twice in
     // the same Library. Its underlying record and source page are untouched.
     val libraryStateWithoutFolderedPlaylists = remember(libraryState, folderedPlaylistBrowseIds) {
-        when (val current = libraryState) {
-            is UiState.Success -> current.copy(
-                data = current.data.copy(
-                    shelves = current.data.shelves.mapNotNull { shelf ->
-                        if (shelf.title != YtMusicRepository.PLAYLISTS_SHELF) {
-                            shelf
-                        } else {
-                            shelf.copy(
-                                items = shelf.items.filter { item ->
-                                    item.browseId == null || item.browseId !in folderedPlaylistBrowseIds
-                                },
-                            ).takeIf { it.items.isNotEmpty() }
-                        }
-                    },
-                ),
-            )
-            else -> libraryState
-        }
+        libraryWithoutFolderedPlaylists(libraryState, folderedPlaylistBrowseIds)
     }
     val unfolderedHomePlaylistItems = remember(offlinePlaylistItems, folderedPlaylistBrowseIds) {
-        offlinePlaylistItems.filter { item ->
-            item.browseId == null || item.browseId !in folderedPlaylistBrowseIds
-        }
+        unfolderedHomePlaylistShelfItems(offlinePlaylistItems, folderedPlaylistBrowseIds)
     }
-    val homeLocalPlaylistShelves = remember(unfolderedHomePlaylistItems) {
-        if (unfolderedHomePlaylistItems.isEmpty()) emptyList() else listOf(
-            HomeShelf(context.getString(R.string.your_playlists), unfolderedHomePlaylistItems),
-        )
+    val homeLocalPlaylistShelves = remember(unfolderedHomePlaylistItems, context) {
+        homePlaylistShelves(context, unfolderedHomePlaylistItems)
     }
     // What a browse id is recorded under in Downloads.collections, when it names
     // a release downloaded whole — see BrowseTarget.downloadId. A downloaded

@@ -3,16 +3,19 @@ package com.music.bitchord.data.canvas
 import com.music.bitchord.data.DebugLog as Log
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.settings.AppSettings
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
  * Finds the looping video that belongs behind a track's or a release's cover
  * art — Spotify's Canvas, Apple's motion artwork.
  *
- * Four sources, asked in turn until one answers. They cover genuinely
+ * Four independent sources that cover genuinely
  * different ground rather than being four routes to the same catalogue:
  * Apple has the most, Tidal has square covers on a lot of what Apple misses,
  * the community index is the only one that reaches back catalogue, and
@@ -56,11 +59,11 @@ object CanvasRepository {
             size > CACHE_SIZE
     }
 
-    // Skipping through a queue fires a lookup per track. Serialising them
-    // keeps three providers' worth of requests off the wire at once, and means
-    // a track that was already resolved by the time its turn comes up is
-    // answered from the cache instead of fetched again.
-    private val lock = Mutex()
+    // The catalogue providers are independent. Give the fast public sources
+    // their own IO workers so one stalled endpoint cannot hold up the others.
+    // This scope is process-local: cancelling a song lookup cancels its sibling
+    // jobs without tying network work to a transient Compose screen.
+    private val lookupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     /**
      * The canvas for [song], or null when there isn't one. Never throws.
@@ -89,20 +92,30 @@ object CanvasRepository {
         val key = cacheKey("song|${song.videoId}", spotifyFirst)
 
         return resolve(key, album != null) {
+            val matchesTrack: (CanvasArtwork) -> Boolean = { it.matches(title, artist, album) }
             if (spotifyFirst) {
+                // Respect an explicit Spotify-first preference. This path is
+                // intentionally sequential because Spotify needs a WebView token.
                 firstHit(
                     { SpotifyCanvas.search(title, artist, album) },
                     { AppleMusicCanvas.search(title, artist, album) },
                     { TidalCanvas.search(title, artist, album) },
                     { CommunityCanvas.search(title, artist, album) },
-                ) { it.matches(title, artist, album) }
+                    accept = matchesTrack,
+                )
             } else {
-                firstHit(
+                // Apple, Tidal and the community index do not depend on one
+                // another. Race these three; only fall back to Spotify when
+                // none returns a verified match.
+                firstHitParallel(
                     { AppleMusicCanvas.search(title, artist, album) },
                     { TidalCanvas.search(title, artist, album) },
                     { CommunityCanvas.search(title, artist, album) },
+                    accept = matchesTrack,
+                ) ?: firstHit(
                     { SpotifyCanvas.search(title, artist, album) },
-                ) { it.matches(title, artist, album) }
+                    accept = matchesTrack,
+                )
             }
         }
     }
@@ -137,20 +150,25 @@ object CanvasRepository {
 
         val spotifyFirst = AppSettings.prioritizeSpotifyCanvas.value
         return resolve(cacheKey("album|$name|$credit", spotifyFirst), withAlbum = true) {
+            val matchesAlbum: (CanvasArtwork) -> Boolean = { it.matches(name, credit, name) }
             if (spotifyFirst) {
                 firstHit(
                     { SpotifyCanvas.searchAlbum(name, credit) },
                     { AppleMusicCanvas.searchAlbum(name, credit) },
                     { TidalCanvas.searchAlbum(name, credit) },
                     { CommunityCanvas.searchAlbum(name, credit) },
-                ) { it.matches(name, credit, name) }
+                    accept = matchesAlbum,
+                )
             } else {
-                firstHit(
+                firstHitParallel(
                     { AppleMusicCanvas.searchAlbum(name, credit) },
                     { TidalCanvas.searchAlbum(name, credit) },
                     { CommunityCanvas.searchAlbum(name, credit) },
+                    accept = matchesAlbum,
+                ) ?: firstHit(
                     { SpotifyCanvas.searchAlbum(name, credit) },
-                ) { it.matches(name, credit, name) }
+                    accept = matchesAlbum,
+                )
             }
         }
     }
@@ -163,13 +181,15 @@ object CanvasRepository {
         key: String,
         withAlbum: Boolean,
         lookUp: suspend () -> CanvasArtwork?,
-    ): CanvasArtwork? = lock.withLock {
+    ): CanvasArtwork? {
         synchronized(cache) {
-            cache[key]?.let { if (it.reusable(withAlbum)) return@withLock it.artwork }
+            cache[key]?.let { if (it.reusable(withAlbum)) return it.artwork }
         }
+        // Do not serialize different tracks behind one slow lookup. Cache
+        // access itself stays synchronized; provider IO is isolated below.
         val found = withContext(Dispatchers.IO) { lookUp() }
         synchronized(cache) { cache[key] = Entry(found, withAlbum) }
-        found
+        return found
     }
 
     /**
@@ -195,17 +215,60 @@ object CanvasRepository {
         accept: (CanvasArtwork) -> Boolean,
     ): CanvasArtwork? {
         for (source in sources) {
-            val found = runCatching { source() }
-                .onFailure { Log.d(TAG, "source failed: ${it.message}") }
-                .getOrNull()
-                ?: continue
-            if (!accept(found)) {
-                Log.d(TAG, "rejected '${found.title}' by '${found.artist}'")
-                continue
-            }
-            return found
+            checkedHit(source, accept)?.let { return it }
         }
         return null
+    }
+
+    /**
+     * Searches independent public catalogues concurrently. The first verified
+     * result wins; unfinished siblings are cancelled so a slow provider does
+     * not delay the visible Canvas. Each HTTP call also has a short hard
+     * timeout, so a cancelled blocking provider cannot occupy an IO worker long.
+     */
+    private suspend fun firstHitParallel(
+        vararg sources: suspend () -> CanvasArtwork?,
+        accept: (CanvasArtwork) -> Boolean,
+    ): CanvasArtwork? {
+        if (sources.isEmpty()) return null
+        val results = Channel<CanvasArtwork?>(capacity = sources.size)
+        val pending = sources.map { source ->
+            lookupScope.launch {
+                results.send(checkedHit(source, accept))
+            }
+        }
+        try {
+            repeat(sources.size) {
+                val found = results.receive()
+                if (found != null) return found
+            }
+            return null
+        } finally {
+            // Stop outstanding provider work as soon as a match is found or
+            // the caller leaves. Closing the channel also frees suspended senders.
+            pending.forEach { it.cancel() }
+            results.close()
+        }
+    }
+
+    private suspend fun checkedHit(
+        source: suspend () -> CanvasArtwork?,
+        accept: (CanvasArtwork) -> Boolean,
+    ): CanvasArtwork? {
+        return try {
+            val found = source() ?: return null
+            if (!accept(found)) {
+                Log.d(TAG, "rejected '${found.title}' by '${found.artist}'")
+                null
+            } else {
+                found
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            Log.d(TAG, "source failed: ${failure.message}")
+            null
+        }
     }
 
     /**

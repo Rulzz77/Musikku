@@ -222,7 +222,7 @@ internal const val ART_RETRY_DELAY_MS = 1_500L
  * on it. Long enough to cover the album lookup on a normal connection, short
  * enough not to be noticed on a track that has no album to find.
  */
-internal const val ALBUM_SETTLE_MS = 700L
+internal const val ALBUM_SETTLE_MS = 300L
 
 /** Long enough for the post-upgrade rollback cue to be noticed without lingering. */
 private const val REVERT_CUE_MS = 2_600L
@@ -2171,20 +2171,17 @@ fun NowPlayingScreen(
                 // Keep the soft artwork backdrop here. The actual cover is shown
                 // at the regular sleeve size beside the lyrics below; it must not
                 // stretch edge-to-edge when this song has no Canvas.
-                // This screen is landscape-only: keep the provider's normal/raw
-                // rendition instead of forcing Apple's tall phone crop into a
-                // landscape window.
+                // Landscape lyrics is an immersive, full-bleed presentation:
+                // fill the entire display with the moving Canvas. Portrait clips
+                // are intentionally cropped to the screen rather than letterboxed
+                // as a narrow phone-shaped video in the middle of landscape.
                 val fullscreenLyricsCanvas = canvas
                 fullscreenLyricsCanvas?.let { clip ->
                     CanvasArtworkPlayer(
                         canvas = clip,
                         isPlaying = isPlaying,
                         modifier = Modifier.fillMaxSize(),
-                        // Preserve the full frame for portrait Spotify Canvas clips.
-                        // FIT_PORTRAIT only contains portrait media; landscape clips
-                        // still use the same cover/crop treatment as before.
-                        contentMode = CanvasContentMode.FIT_PORTRAIT,
-                        onAspectRatioChanged = { canvasAspect = it },
+                        contentMode = CanvasContentMode.CROP,
                         onRenderedChanged = { canvasRendered = it },
                         nowPlaying = true,
                     )

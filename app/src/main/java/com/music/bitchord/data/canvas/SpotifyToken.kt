@@ -43,7 +43,7 @@ internal object SpotifyToken {
 
     private const val TAG = "SpotifyToken"
     private const val BRIDGE_NAME = "BitChordSpotifyTokenBridge"
-    private const val HARVEST_TIMEOUT_MS = 20_000L
+    private const val HARVEST_TIMEOUT_MS = 12_000L
     private const val DEFAULT_TOKEN_LIFETIME_MS = 3_600_000L
 
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }

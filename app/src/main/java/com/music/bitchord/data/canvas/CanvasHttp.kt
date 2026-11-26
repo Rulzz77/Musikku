@@ -1,7 +1,18 @@
 package com.music.bitchord.data.canvas
 
 import com.music.bitchord.data.Http
+import okhttp3.Call
 import okhttp3.Request
+import java.util.concurrent.TimeUnit
+
+/** Keep a stalled catalogue endpoint from consuming the player's whole lookup window. */
+internal const val CANVAS_REQUEST_TIMEOUT_MS = 6_000L
+
+/** Per-call timeout: does not change networking timeouts for audio or other app features. */
+internal fun canvasCall(request: Request): Call =
+    Http.client.newCall(request).apply {
+        timeout().timeout(CANVAS_REQUEST_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+    }
 
 /**
  * A plain GET returning the body, or null for anything that isn't a 2xx or
@@ -16,7 +27,7 @@ internal fun canvasGet(url: String, headers: Map<String, String> = emptyMap()): 
         headers.forEach { (name, value) -> header(name, value) }
     }.build()
     return runCatching {
-        Http.client.newCall(request).execute().use { response ->
+        canvasCall(request).execute().use { response ->
             if (response.isSuccessful) response.body?.string() else null
         }
     }.getOrNull()

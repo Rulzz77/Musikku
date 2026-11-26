@@ -419,12 +419,13 @@ class PartySync(
 
     private fun previousLocalQueueIndex(exo: Player, trackId: String?): Int {
         if (trackId == null) return -1
-        val currentIndex = exo.currentMediaItemIndex
-        return (0 until exo.mediaItemCount)
-            .asSequence()
-            .filter { it != currentIndex && exo.getMediaItemAt(it).mediaId == trackId }
-            .minByOrNull { kotlin.math.abs(it - currentIndex) }
-            ?: -1
+        // Use the player's actual previous item rather than the nearest matching
+        // timeline index: shuffle mode can make playback order differ from the
+        // order returned by getMediaItemAt().
+        val previousIndex = exo.previousMediaItemIndex
+        return previousIndex.takeIf {
+            it in 0 until exo.mediaItemCount && exo.getMediaItemAt(it).mediaId == trackId
+        } ?: -1
     }
 
     private fun clearPendingAutomaticAdvance() {

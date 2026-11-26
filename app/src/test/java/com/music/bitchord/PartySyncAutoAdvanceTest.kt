@@ -1,7 +1,11 @@
 package com.music.bitchord
 
 import com.music.bitchord.playback.partyAutoAdvanceIsForward
+import com.music.bitchord.playback.partyAutoAdvanceSnapshot
+import com.music.bitchord.playback.PartyAutoAdvanceSnapshot
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -36,5 +40,20 @@ class PartySyncAutoAdvanceTest {
     @Test
     fun `an empty party can be seeded with its first automatic track`() {
         assertTrue(partyAutoAdvanceIsForward(null, "track-a", -1, -1))
+    }
+
+    @Test
+    fun `leader failover retains the origin destination and playback sequence`() {
+        // A follower has already reached B and paused. When it becomes leader,
+        // it must publish the same guarded transition rather than an empty one.
+        assertEquals(
+            PartyAutoAdvanceSnapshot("track-a", "track-b", 27L),
+            partyAutoAdvanceSnapshot("track-a", "track-b", 27L, 0, 1, 2, 3),
+        )
+    }
+
+    @Test
+    fun `leader failover cannot stage an item that is no longer next`() {
+        assertNull(partyAutoAdvanceSnapshot("track-c", "track-b", 28L, 2, 1, 4, 3))
     }
 }

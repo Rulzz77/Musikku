@@ -298,7 +298,11 @@ internal suspend fun cacheForSharing(
         // One name, overwritten: the folder is a hand-off point, not an album,
         // and a file per share would accumulate megabytes nobody ever looks at.
         val file = File(folder, fileName)
-        FileOutputStream(file).use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        FileOutputStream(file).use {
+            check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) {
+                "could not encode share image"
+            }
+        }
         FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
     }.getOrNull()
 }
@@ -333,10 +337,17 @@ internal suspend fun saveToGallery(
         val uri = context.contentResolver
             .insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
             ?: error("no row")
-        context.contentResolver.openOutputStream(uri)?.use {
-            bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
-        } ?: error("no stream")
-        true
+        try {
+            context.contentResolver.openOutputStream(uri)?.use {
+                check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) {
+                    "could not encode gallery image"
+                }
+            } ?: error("no stream")
+            true
+        } catch (failure: Exception) {
+            context.contentResolver.delete(uri, null, null)
+            throw failure
+        }
     }.getOrDefault(false)
 }
 

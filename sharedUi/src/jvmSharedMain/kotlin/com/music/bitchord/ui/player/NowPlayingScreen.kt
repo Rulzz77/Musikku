@@ -2301,9 +2301,7 @@ fun NowPlayingScreen(
                                     contentDescription = null,
                                     contentScale = ContentScale.Crop,
                                     modifier = Modifier
-                                        .sizeIn(maxWidth = 184.dp, maxHeight = 184.dp)
-                                        .fillMaxWidth(0.82f)
-                                        .aspectRatio(1f)
+                                        .size(160.dp)
                                         .clip(RoundedCornerShape(16.dp)),
                                 )
                             }

@@ -1209,8 +1209,6 @@ fun NowPlayingScreen(
     val canvasAnimationEnabled by PlayerSettings.animatedCanvas.collectAsStateWithLifecycle()
     val canvasOverCellular by PlayerSettings.canvasOverCellular.collectAsStateWithLifecycle()
     val meteredConnection by PlayerSettings.meteredConnection.collectAsStateWithLifecycle()
-    val canvasBlockedBySettings = !canvasAnimationEnabled ||
-        (meteredConnection == true && !canvasOverCellular)
 
     val canvas = rememberCanvasArtwork(
         song = song,

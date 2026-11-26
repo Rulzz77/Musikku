@@ -381,6 +381,7 @@ class PartySync(
         // so the party hears about the reorder once, when the row lands.
         if (queueDragActive) {
             queueDragDirty = true
+            queueDragAutomaticAdvance = queueDragAutomaticAdvance || automaticAdvance
             publishJob?.cancel()
             return
         }
@@ -430,6 +431,9 @@ class PartySync(
     /** Whether a move landed while [queueDragActive] was true, awaiting [endQueueDrag]. */
     private var queueDragDirty = false
 
+    /** Preserve the origin of a parked transition through the queue-drag debounce. */
+    private var queueDragAutomaticAdvance = false
+
     fun beginQueueDrag() {
         queueDragActive = true
     }
@@ -439,7 +443,11 @@ class PartySync(
         queueDragActive = false
         if (queueDragDirty) {
             queueDragDirty = false
-            onLocalIntent()
+            val automaticAdvance = queueDragAutomaticAdvance
+            queueDragAutomaticAdvance = false
+            requestLocalIntent(automaticAdvance)
+        } else {
+            queueDragAutomaticAdvance = false
         }
     }
 

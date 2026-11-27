@@ -2432,8 +2432,6 @@ fun NowPlayingScreen(
                                                 .padding(horizontal = 14.dp, vertical = 12.dp),
                                         ) {
                                             FullscreenCoverTransport(
-                                                likeStatus = likeStatus,
-                                                canLike = canLikeCurrentSong,
                                                 shuffleEnabled = shuffleEnabled,
                                                 repeatMode = repeatMode,
                                                 isPlaying = isPlaying,
@@ -2441,7 +2439,6 @@ fun NowPlayingScreen(
                                                 previousEnabled = !controlsLocked &&
                                                     (canSkipPrevious || pastRestartPoint),
                                                 nextEnabled = !controlsLocked && canSkipNext,
-                                                onToggleLike = { revealLyricsControls(); onToggleLike() },
                                                 onToggleShuffle = { revealLyricsControls(); onToggleShuffle() },
                                                 onCycleRepeat = { revealLyricsControls(); onCycleRepeat() },
                                                 onPrevious = { revealLyricsControls(); onPrevious() },

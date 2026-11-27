@@ -2168,55 +2168,10 @@ fun NowPlayingScreen(
                     image = fullArtworkBlurImage,
                     modifier = Modifier.fillMaxSize(),
                 )
-                // Keep the soft artwork backdrop here. The actual cover is shown
-                // at the regular sleeve size beside the lyrics below; it must not
-                // stretch edge-to-edge when this song has no Canvas.
-                // Landscape lyrics is an immersive, full-bleed presentation:
-                // fill the entire display with the moving Canvas. Portrait clips
-                // are intentionally cropped to the screen rather than letterboxed
-                // as a narrow phone-shaped video in the middle of landscape.
+                // The animated Canvas is deliberately not a screen-wide backdrop:
+                // it is mounted inside the left half below. The right half stays
+                // on the blurred artwork backdrop so lyrics have their own panel.
                 val fullscreenLyricsCanvas = canvas
-                fullscreenLyricsCanvas?.let { clip ->
-                    CanvasArtworkPlayer(
-                        canvas = clip,
-                        isPlaying = isPlaying,
-                        modifier = Modifier.fillMaxSize(),
-                        contentMode = CanvasContentMode.CROP,
-                        onRenderedChanged = { canvasRendered = it },
-                        nowPlaying = true,
-                    )
-                }
-
-                // Keep the moving artwork visible; use a restrained side fade
-                // for lyric contrast instead of darkening most of the Canvas.
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            Brush.horizontalGradient(
-                                colorStops = arrayOf(
-                                    0f to Color.Transparent,
-                                    0.38f to Color.Black.copy(alpha = 0.05f),
-                                    0.68f to Color.Black.copy(alpha = 0.18f),
-                                    1f to Color.Black.copy(alpha = 0.30f),
-                                ),
-                            ),
-                        ),
-                )
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            Brush.verticalGradient(
-                                colorStops = arrayOf(
-                                    0f to Color.Black.copy(alpha = 0.04f),
-                                    0.18f to Color.Transparent,
-                                    0.72f to Color.Transparent,
-                                    1f to Color.Black.copy(alpha = 0.24f),
-                                ),
-                            ),
-                        ),
-                )
                 // A tap on the video / empty space brings back the small transport
                 // chrome. Lyrics and the scrubber keep their own gestures.
                 Box(
@@ -2231,20 +2186,53 @@ fun NowPlayingScreen(
                 )
 
                 Row(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 24.dp, vertical = 22.dp),
+                    modifier = Modifier.fillMaxSize(),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    // The left side deliberately stays mostly open so the Canvas
-                    // subject remains visible. Track identity and seek live low,
-                    // as in the Spicy Lyrics fullscreen reference.
-                    Column(
+                    // The Canvas is clipped to this column only — it must never
+                    // paint beneath the lyrics on the right half of the display.
+                    Box(
                         modifier = Modifier
-                            .weight(0.46f)
+                            .weight(1f)
                             .fillMaxHeight(),
-                        verticalArrangement = Arrangement.Bottom,
                     ) {
+                        fullscreenLyricsCanvas?.let { clip ->
+                            CanvasArtworkPlayer(
+                                canvas = clip,
+                                isPlaying = isPlaying,
+                                modifier = Modifier.fillMaxSize(),
+                                contentMode = CanvasContentMode.CROP,
+                                onRenderedChanged = { canvasRendered = it },
+                                nowPlaying = true,
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(
+                                    Brush.verticalGradient(
+                                        colorStops = arrayOf(
+                                            0f to Color.Black.copy(alpha = 0.06f),
+                                            0.48f to Color.Transparent,
+                                            0.72f to Color.Black.copy(alpha = 0.22f),
+                                            1f to Color.Black.copy(alpha = 0.68f),
+                                        ),
+                                    ),
+                                ),
+                        )
+                        // Track identity and transport sit over the lower edge of
+                        // the left-side Canvas, like the supplied reference.
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(
+                                    start = 24.dp,
+                                    end = 24.dp,
+                                    top = 22.dp,
+                                    bottom = 22.dp,
+                                ),
+                            verticalArrangement = Arrangement.Bottom,
+                        ) {
                         // Without a rendered Canvas, show the track cover like a
                         // normal player sleeve — a square card beside the lyrics,
                         // not a full-window image. The space above it can breathe
@@ -2320,13 +2308,29 @@ fun NowPlayingScreen(
                             }
                         }
                     }
+                    }
 
-                    Spacer(Modifier.width(24.dp))
-
+                    // The lyric pane has its own tinted surface. The still artwork
+                    // backdrop can remain softly visible here, but the moving Canvas
+                    // is restricted to the left half.
                     Column(
                         modifier = Modifier
-                            .weight(0.54f)
-                            .fillMaxHeight(),
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .background(
+                                Brush.horizontalGradient(
+                                    colors = listOf(
+                                        Color(0xFF182B42).copy(alpha = 0.78f),
+                                        Color(0xFF071B32).copy(alpha = 0.88f),
+                                    ),
+                                ),
+                            )
+                            .padding(
+                                start = 24.dp,
+                                end = 24.dp,
+                                top = 22.dp,
+                                bottom = 22.dp,
+                            ),
                     ) {
                         LyricsPanel(
                             lines = lyrics.orEmpty(),

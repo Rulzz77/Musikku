@@ -2233,7 +2233,7 @@ fun NowPlayingScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(horizontal = 34.dp, vertical = 22.dp),
+                        .padding(horizontal = 24.dp, vertical = 22.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     // The left side deliberately stays mostly open so the Canvas
@@ -2241,7 +2241,7 @@ fun NowPlayingScreen(
                     // as in the Spicy Lyrics fullscreen reference.
                     Column(
                         modifier = Modifier
-                            .weight(0.40f)
+                            .weight(0.46f)
                             .fillMaxHeight(),
                         verticalArrangement = Arrangement.Bottom,
                     ) {
@@ -2295,44 +2295,39 @@ fun NowPlayingScreen(
                         AnimatedVisibility(visible = lyricsControlsOpen) {
                             Column {
                                 Spacer(Modifier.height(8.dp))
-                                TransportRow(
+                                FullscreenLyricsControls(
+                                    likeStatus = likeStatus,
+                                    canLike = canLikeCurrentSong,
+                                    shuffleEnabled = shuffleEnabled,
+                                    repeatMode = repeatMode,
                                     isPlaying = isPlaying,
                                     isLoading = isLoading || audioVersionSwitching,
                                     previousEnabled = !controlsLocked &&
                                         (canSkipPrevious || pastRestartPoint),
                                     nextEnabled = !controlsLocked && canSkipNext,
+                                    volumeVisible = !hideVolumeBar,
+                                    volumeValue = { volume.level.value },
+                                    onToggleLike = onToggleLike,
+                                    onToggleShuffle = onToggleShuffle,
+                                    onCycleRepeat = onCycleRepeat,
                                     onPrevious = onPrevious,
                                     onPlayPause = onPlayPause,
                                     onNext = onNext,
-                                    compact = true,
+                                    onVolumeChange = onVolumeChange,
+                                    onVolumeChangeFinished = onVolumeChangeFinished,
+                                    modifier = Modifier.fillMaxWidth(),
                                 )
                             }
                         }
                     }
 
-                    Spacer(Modifier.width(38.dp))
+                    Spacer(Modifier.width(24.dp))
 
                     Column(
                         modifier = Modifier
-                            .weight(0.60f)
+                            .weight(0.54f)
                             .fillMaxHeight(),
                     ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(48.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.End,
-                        ) {
-                            AnimatedVisibility(visible = lyricsControlsOpen) {
-                                CircleGlyph(
-                                    icon = Icons.Rounded.FullscreenExit,
-                                    contentDescription = stringResource(Res.string.lyrics_exit_fullscreen),
-                                    onClick = exitLyricsFullscreen,
-                                    tint = Color.White,
-                                )
-                            }
-                        }
                         LyricsPanel(
                             lines = lyrics.orEmpty(),
                             subLines = lyricsTranslation.subLines,
@@ -2392,6 +2387,22 @@ fun NowPlayingScreen(
                             }
                         }
                     }
+                }
+
+                AnimatedVisibility(
+                    visible = lyricsControlsOpen,
+                    enter = fadeIn(tween(180)),
+                    exit = fadeOut(tween(220)),
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(start = 18.dp, top = 12.dp),
+                ) {
+                    FullscreenLyricsToolbar(
+                        onOpenOutput = openAudioOutput,
+                        onOpenLyricsSources = { showLyricsProviders = true },
+                        onOpenMenu = onOpenMenu,
+                        onExitFullscreen = exitLyricsFullscreen,
+                    )
                 }
             }
         }

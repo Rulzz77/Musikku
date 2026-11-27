@@ -231,8 +231,8 @@ internal fun FullscreenCoverTransport(
     modifier: Modifier = Modifier,
 ) {
     BoxWithConstraints(modifier = modifier) {
-        val tight = maxWidth < 220.dp
-        val glyphModifier = Modifier.size(if (tight) 28.dp else 34.dp)
+        val tight = maxWidth < 280.dp
+        val glyphModifier = Modifier.size(if (tight) 26.dp else 34.dp)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(if (tight) 2.dp else 6.dp),

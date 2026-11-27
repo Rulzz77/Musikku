@@ -59,7 +59,6 @@ internal fun FullscreenLyricsControls(
     volumeVisible: Boolean,
     volumeValue: () -> Float,
     onToggleLike: () -> Unit,
-    onToggleLike: () -> Unit,
     onToggleShuffle: () -> Unit,
     onCycleRepeat: () -> Unit,
     onPrevious: () -> Unit,
@@ -218,8 +217,6 @@ internal fun FullscreenLyricsControls(
 /** Transport controls placed over the bottom of the album-cover fallback. */
 @Composable
 internal fun FullscreenCoverTransport(
-    likeStatus: LikeStatus,
-    canLike: Boolean,
     shuffleEnabled: Boolean,
     repeatMode: Int,
     isPlaying: Boolean,
@@ -233,55 +230,50 @@ internal fun FullscreenCoverTransport(
     onNext: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (canLike) {
-            val liked = likeStatus == LikeStatus.LIKE
+    BoxWithConstraints(modifier = modifier) {
+        val tight = maxWidth < 220.dp
+        val glyphModifier = Modifier.size(if (tight) 28.dp else 34.dp)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(if (tight) 2.dp else 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             CircleGlyph(
-                icon = if (liked) BitChordIcons.HeartFilled else BitChordIcons.Heart,
+                icon = BitChordIcons.Shuffle,
                 contentDescription = stringResource(
-                    if (liked) Res.string.remove_from_liked else Res.string.like,
+                    if (shuffleEnabled) Res.string.shuffle_on else Res.string.shuffle_off,
                 ),
-                onClick = onToggleLike,
-                active = liked,
+                onClick = onToggleShuffle,
+                active = shuffleEnabled,
+                modifier = glyphModifier,
+            )
+            Box(Modifier.weight(1f)) {
+                TransportRow(
+                    isPlaying = isPlaying,
+                    isLoading = isLoading,
+                    previousEnabled = previousEnabled,
+                    nextEnabled = nextEnabled,
+                    onPrevious = onPrevious,
+                    onPlayPause = onPlayPause,
+                    onNext = onNext,
+                    compact = true,
+                    tight = tight,
+                )
+            }
+            CircleGlyph(
+                icon = BitChordIcons.Repeat,
+                contentDescription = stringResource(
+                    when (repeatMode) {
+                        RepeatModes.ONE -> Res.string.repeat_one
+                        RepeatModes.ALL -> Res.string.repeat_all
+                        else -> Res.string.repeat_off
+                    },
+                ),
+                onClick = onCycleRepeat,
+                active = repeatMode != RepeatModes.OFF,
+                modifier = glyphModifier,
             )
         }
-        CircleGlyph(
-            icon = BitChordIcons.Shuffle,
-            contentDescription = stringResource(
-                if (shuffleEnabled) Res.string.shuffle_on else Res.string.shuffle_off,
-            ),
-            onClick = onToggleShuffle,
-            active = shuffleEnabled,
-        )
-        Box(Modifier.weight(1f)) {
-            TransportRow(
-                isPlaying = isPlaying,
-                isLoading = isLoading,
-                previousEnabled = previousEnabled,
-                nextEnabled = nextEnabled,
-                onPrevious = onPrevious,
-                onPlayPause = onPlayPause,
-                onNext = onNext,
-                compact = true,
-                tight = true,
-            )
-        }
-        CircleGlyph(
-            icon = BitChordIcons.Repeat,
-            contentDescription = stringResource(
-                when (repeatMode) {
-                    RepeatModes.ONE -> Res.string.repeat_one
-                    RepeatModes.ALL -> Res.string.repeat_all
-                    else -> Res.string.repeat_off
-                },
-            ),
-            onClick = onCycleRepeat,
-            active = repeatMode != RepeatModes.OFF,
-        )
     }
 }
 

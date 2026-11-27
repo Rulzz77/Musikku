@@ -301,7 +301,7 @@ internal object SpotifyToken {
 
         var lastCode = -1
         val body = runCatching {
-            Http.client.newCall(request).execute().use { response ->
+            canvasCall(request).execute().use { response ->
                 lastCode = response.code
                 if (response.isSuccessful) response.body?.string() else null
             }
@@ -351,7 +351,7 @@ internal object SpotifyToken {
             .header("User-Agent", CANVAS_UA)
             .build()
         val (html, deviceId) = runCatching {
-            Http.client.newCall(request).execute().use { response ->
+            canvasCall(request).execute().use { response ->
                 val body = response.body?.string()
                 val spT = response.headers("Set-Cookie").firstNotNullOfOrNull { header ->
                     Regex("""sp_t=([^;]+)""").find(header)?.groupValues?.get(1)

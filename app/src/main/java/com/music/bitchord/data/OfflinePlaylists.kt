@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.UUID
 
 /**
  * Playlists owned by this MusikKu installation, made in the Local Music
@@ -124,9 +125,12 @@ object OfflinePlaylists {
     }
 
     /** A new, empty playlist — or one holding [songs], when it was made to take them. */
+    /** Collision-resistant ID; two rapid creates must not share playlist identity. */
+    internal fun newPlaylistId(): String = "p" + UUID.randomUUID().toString().replace("-", "")
+
     fun create(title: String, songs: List<Song> = emptyList()): OfflinePlaylist {
         val playlist = OfflinePlaylist(
-            id = "p" + System.currentTimeMillis().toString(36),
+            id = newPlaylistId(),
             title = title.trim(),
             songs = songs.distinctBy { it.playlistKey() }.map { it.stored() },
         )
@@ -203,13 +207,17 @@ object OfflinePlaylists {
         check(this::prefs.isInitialized) { "Offline playlist storage is not initialized" }
 
         val normalized = normalizeBackupPlaylists(incoming)
-        val next = if (merge) mergeOfflinePlaylists(_playlists.value, normalized) else normalized
-        synchronized(lock) {
+        // Read the current snapshot only after taking the same lock used by
+        // every playlist mutation. Otherwise a Like/create operation between
+        // this read and the commit could be silently overwritten by a stale
+        // restore snapshot.
+        return synchronized(lock) {
+            val next = if (merge) mergeOfflinePlaylists(_playlists.value, normalized) else normalized
             val committed = prefs.edit().putString(KEY_PLAYLISTS, encodePlaylists(next)).commit()
             check(committed) { "Could not save restored device playlists" }
             publish(next)
+            next.size
         }
-        return next.size
     }
 
     private fun normalizeBackupPlaylists(playlists: List<OfflinePlaylist>): List<OfflinePlaylist> {

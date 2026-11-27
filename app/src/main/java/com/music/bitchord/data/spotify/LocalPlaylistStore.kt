@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.UUID
 
 const val IMPORTED_PLAYLIST_PREFIX = "local:playlist:"
 
@@ -31,6 +32,7 @@ object LocalPlaylistStore {
     val playlists = _playlists.asStateFlow()
     private val remoteSpotifyImports = MutableStateFlow<Map<String, Set<String>>>(emptyMap())
 
+    @Synchronized
     fun init(context: Context) {
         prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
         load()
@@ -116,6 +118,7 @@ object LocalPlaylistStore {
      * mappings. The write is committed before publishing the new state so a
      * successful import cannot report success while only memory was updated.
      */
+    @Synchronized
     fun restoreFromBackup(
         incomingPlaylists: List<LocalPlaylist>,
         incomingRemoteImports: Map<String, Set<String>>,
@@ -198,6 +201,7 @@ object LocalPlaylistStore {
         return root.toString()
     }
 
+    @Synchronized
     private fun persistRemoteSpotifyImports(value: Map<String, Set<String>>) {
         if (!this::prefs.isInitialized) return
         runCatching {
@@ -210,6 +214,7 @@ object LocalPlaylistStore {
     }
 
     /** Keep the Spotify-to-YouTube mapping for remote playlists, without creating a duplicate Library tile. */
+    @Synchronized
     fun recordRemoteSpotifyImport(playlistBrowseId: String, songs: List<Song>) {
         val id = playlistBrowseId.removePrefix("VL").removePrefix("local:playlist:")
         if (id.isBlank()) return
@@ -224,6 +229,7 @@ object LocalPlaylistStore {
         return song.videoId.isNotBlank() && song.videoId in remoteSpotifyImports.value[id].orEmpty()
     }
 
+    @Synchronized
     fun addRemoteSpotifySong(playlistBrowseId: String, song: Song) {
         val id = playlistBrowseId.removePrefix("VL")
         if (id.isBlank() || song.videoId.isBlank()) return
@@ -233,6 +239,7 @@ object LocalPlaylistStore {
         persistRemoteSpotifyImports(updated)
     }
 
+    @Synchronized
     fun removeRemoteSpotifySong(playlistBrowseId: String, song: Song) {
         val id = playlistBrowseId.removePrefix("VL")
         val current = remoteSpotifyImports.value[id] ?: return
@@ -253,6 +260,7 @@ object LocalPlaylistStore {
      * independently for each playlist, and new tracks keep their selection
      * order at the end of the existing list.
      */
+    @Synchronized
     fun addSongs(playlistIds: Collection<String>, songs: List<Song>): AddResult {
         val ids = playlistIds.mapNotNull { value ->
             when {
@@ -283,8 +291,13 @@ object LocalPlaylistStore {
         return AddResult(added, alreadyThere)
     }
 
+    /** Collision-resistant identity for locally saved Spotify playlists. */
+    internal fun newLocalPlaylistId(): String =
+        "sp_local_" + UUID.randomUUID().toString().replace("-", "")
+
+    @Synchronized
     fun savePlaylist(title: String, songs: List<Song>): LocalPlaylist {
-        val id = "sp_local_" + System.currentTimeMillis()
+        val id = newLocalPlaylistId()
         val playlist = LocalPlaylist(id = id, title = title.trim(), songs = dedupeSongs(songs))
         val updated = listOf(playlist) + _playlists.value.filterNot { it.id == id }
         _playlists.value = updated
@@ -292,12 +305,14 @@ object LocalPlaylistStore {
         return playlist
     }
 
+    @Synchronized
     fun deletePlaylist(id: String) {
         val updated = _playlists.value.filterNot { it.id == id || it.browseId == id || it.id == id.removePrefix("local:playlist:") }
         _playlists.value = updated
         persist(updated)
     }
 
+    @Synchronized
     fun removeSong(playlistId: String, song: Song) {
         val cleanId = playlistId.removePrefix(IMPORTED_PLAYLIST_PREFIX)
         val updated = _playlists.value.map { playlist ->
@@ -311,6 +326,7 @@ object LocalPlaylistStore {
         persist(updated)
     }
 
+    @Synchronized
     fun updateCover(playlistId: String, coverUrl: String?) {
         val cleanId = playlistId.removePrefix(IMPORTED_PLAYLIST_PREFIX)
         val updated = _playlists.value.map { playlist ->
@@ -322,6 +338,7 @@ object LocalPlaylistStore {
         persist(updated)
     }
 
+    @Synchronized
     fun renamePlaylist(id: String, newTitle: String) {
         val cleanId = id.removePrefix("local:playlist:").removePrefix("VL")
         val updated = _playlists.value.map {
@@ -393,6 +410,7 @@ object LocalPlaylistStore {
         return jsonArray.toString()
     }
 
+    @Synchronized
     private fun persist(list: List<LocalPlaylist>) {
         if (!this::prefs.isInitialized) return
         runCatching {

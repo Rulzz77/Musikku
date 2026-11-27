@@ -8,17 +8,21 @@ import android.provider.Settings
 import androidx.core.content.FileProvider
 import androidx.core.net.toUri
 import com.music.bitchord.BuildConfig
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonPrimitive
+import okhttp3.Call
 import okhttp3.Request
 import java.io.File
+import java.security.MessageDigest
 
 object AppUpdateChecker {
 
@@ -42,6 +46,8 @@ object AppUpdateChecker {
         val releaseUrl: String,
         val apkUrl: String?,
         val notes: String?,
+        /** SHA-256 published by GitHub for the selected APK asset. */
+        val apkSha256: String? = null,
     )
 
     private val _available = MutableStateFlow<UpdateInfo?>(null)
@@ -71,6 +77,12 @@ object AppUpdateChecker {
 
     @Volatile
     private var downloadCancelled = false
+
+    // Prevent two taps/retries from writing the same cache file concurrently.
+    private val downloadMutex = Mutex()
+
+    @Volatile
+    private var activeDownloadCall: Call? = null
 
     /**
      * Check the latest published GitHub release.
@@ -123,7 +135,7 @@ object AppUpdateChecker {
                 ?.jsonPrimitive
                 ?.contentOrNull
 
-            val apkUrl = apkAssetUrl(release)
+            val apkAsset = selectApkAsset(release, Build.SUPPORTED_ABIS.toList())
 
             _available.value = if (
                 isNewer(latestVersion, APP_VERSION)
@@ -131,88 +143,86 @@ object AppUpdateChecker {
                 UpdateInfo(
                     version = latestVersion,
                     releaseUrl = releaseUrl,
-                    apkUrl = apkUrl,
+                    apkUrl = apkAsset?.url,
                     notes = notes,
+                    apkSha256 = apkAsset?.sha256,
                 )
             } else {
                 null
             }
 
         }.onFailure {
+            if (it is CancellationException) throw it
             // Pertahankan state sebelumnya jika pengecekan gagal.
         }
     }
 
     /**
-     * Finds the APK matching the device ABI.
+     * Finds a signed-release APK for this device and keeps GitHub's published
+     * SHA-256 alongside the URL. Assets without a valid digest are deliberately
+     * excluded: the updater must never mark an unverified file as installable.
      *
      * Priority:
      * 1. APK matching device ABI.
      * 2. Universal APK as fallback.
      */
-    private fun apkAssetUrl(release: JsonObject): String? =
-        runCatching {
+    internal data class VerifiedApkAsset(
+        val variant: String,
+        val url: String,
+        val sha256: String,
+    )
 
-            val apks = release["assets"]
-                ?.jsonArray
-                ?.mapNotNull { it as? JsonObject }
-                ?.mapNotNull { asset ->
+    internal fun selectApkAsset(
+        release: JsonObject,
+        supportedAbis: List<String>,
+    ): VerifiedApkAsset? {
+        val assets = release["assets"]
+            ?.jsonArray
+            ?.mapNotNull { it as? JsonObject }
+            ?.mapNotNull { asset ->
+                val name = asset["name"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+                val url = asset["browser_download_url"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+                val digest = asset["digest"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+                val uploaded = asset["state"]?.jsonPrimitive?.contentOrNull == "uploaded"
 
-                    val name = asset["name"]
-                        ?.jsonPrimitive
-                        ?.contentOrNull
-                        ?: return@mapNotNull null
+                val sha256 = digest
+                    .takeIf { it.startsWith("sha256:", ignoreCase = true) }
+                    ?.substringAfter(':')
+                    ?.takeIf(::isValidSha256)
+                    ?: return@mapNotNull null
 
-                    val url = asset["browser_download_url"]
-                        ?.jsonPrimitive
-                        ?.contentOrNull
-                        ?: return@mapNotNull null
-
-                    val uploaded = asset["state"]
-                        ?.jsonPrimitive
-                        ?.contentOrNull == "uploaded"
-
-                    if (
-                        uploaded &&
-                        name.startsWith(
-                            APK_PREFIX,
-                            ignoreCase = true,
-                        ) &&
-                        name.endsWith(
-                            ".apk",
-                            ignoreCase = true,
-                        )
-                    ) {
-                        val variant = name
-                            .substring(APK_PREFIX.length)
-                            .substringBeforeLast(".")
-
-                        variant to url
-                    } else {
-                        null
-                    }
+                if (
+                    !uploaded ||
+                    !name.startsWith(APK_PREFIX, ignoreCase = true) ||
+                    !name.endsWith(".apk", ignoreCase = true) ||
+                    !url.startsWith("https://github.com/", ignoreCase = true)
+                ) {
+                    return@mapNotNull null
                 }
-                .orEmpty()
 
-            // Prioritaskan APK sesuai ABI perangkat.
-            Build.SUPPORTED_ABIS.firstNotNullOfOrNull { abi ->
-
-                apks.firstOrNull { (variant, _) ->
-                    variant.equals(
-                        abi,
-                        ignoreCase = true,
-                    )
-                }?.second
+                VerifiedApkAsset(
+                    variant = name.substring(APK_PREFIX.length).substringBeforeLast("."),
+                    url = url,
+                    sha256 = sha256.lowercase(),
+                )
             }
-            // Universal hanya digunakan sebagai fallback.
-                ?: apks.firstOrNull { (variant, _) ->
-                    variant.equals(
-                        "universal",
-                        ignoreCase = true,
-                    )
-                }?.second
+            .orEmpty()
 
-        }.getOrNull()
+        return supportedAbis.firstNotNullOfOrNull { abi ->
+            assets.firstOrNull { it.variant.equals(abi, ignoreCase = true) }
+        } ?: assets.firstOrNull { it.variant.equals("universal", ignoreCase = true) }
+    }
+
+    internal fun isValidSha256(value: String): Boolean =
+        value.length == 64 && value.all { it in '0'..'9' || it.lowercaseChar() in 'a'..'f' }
+
+    internal fun sha256Matches(expected: String, actual: String): Boolean =
+        isValidSha256(expected) &&
+            isValidSha256(actual) &&
+            MessageDigest.isEqual(
+                expected.lowercase().toByteArray(Charsets.US_ASCII),
+                actual.lowercase().toByteArray(Charsets.US_ASCII),
+            )
 
     /**
      * Clear cached update APK files.
@@ -237,17 +247,24 @@ object AppUpdateChecker {
     /**
      * Download APK and report progress.
      */
-    suspend fun downloadApk(context: Context) =
-        withContext(Dispatchers.IO) {
+    suspend fun downloadApk(context: Context) = withContext(Dispatchers.IO) {
+        if (!downloadMutex.tryLock()) return@withContext
 
-            val info = _available.value
-                ?: return@withContext
-
+        try {
+            val info = _available.value ?: return@withContext
             val url = info.apkUrl
+            val expectedSha256 = info.apkSha256
 
-            if (url.isNullOrBlank()) {
+            if (url.isNullOrBlank() || expectedSha256.isNullOrBlank()) {
                 _download.value = DownloadState.Failed(
-                    "APK untuk perangkat ini tidak ditemukan."
+                    "APK atau informasi integritasnya tidak tersedia. Buka halaman rilis GitHub untuk mengunduh manual."
+                )
+                return@withContext
+            }
+
+            if (!isValidSha256(expectedSha256)) {
+                _download.value = DownloadState.Failed(
+                    "Hash APK dari GitHub tidak valid. Instalasi otomatis dibatalkan."
                 )
                 return@withContext
             }
@@ -255,105 +272,111 @@ object AppUpdateChecker {
             downloadCancelled = false
             _download.value = DownloadState.Downloading(0f)
 
-            runCatching {
+            var partialFile: File? = null
+            var call: Call? = null
 
-                val directory = File(
-                    context.cacheDir,
-                    CACHE_SUBDIR,
-                )
-
+            try {
+                val directory = File(context.cacheDir, CACHE_SUBDIR)
                 if (!directory.exists() && !directory.mkdirs()) {
-                    throw IllegalStateException(
-                        "Tidak dapat membuat folder download."
-                    )
+                    throw IllegalStateException("Tidak dapat membuat folder download.")
                 }
 
-                // Hapus APK cache sebelumnya.
+                // Only one updater owns this directory at a time (downloadMutex).
                 directory.listFiles()?.forEach { file ->
-                    file.deleteRecursively()
+                    if (!file.deleteRecursively()) {
+                        throw IllegalStateException("Tidak dapat membersihkan cache APK lama.")
+                    }
                 }
 
-                val target = File(
-                    directory,
-                    "musikku-${info.version}.apk",
-                )
+                val target = File(directory, "musikku-${info.version}.apk")
+                val temporary = File(directory, "${target.name}.part")
+                partialFile = temporary
 
                 val request = Request.Builder()
                     .url(url)
                     .header("User-Agent", "MusikKu-Android")
                     .build()
 
-                Http.client
-                    .newCall(request)
-                    .execute()
-                    .use { response ->
-
-                        if (!response.isSuccessful) {
-                            throw IllegalStateException(
-                                "Download gagal: HTTP ${response.code}"
-                            )
-                        }
-
-                        val body = response.body
-                        val total = body.contentLength()
-
-                        body.byteStream().use { input ->
-                            target.outputStream().use { output ->
-
-                                val buffer = ByteArray(64 * 1024)
-                                var downloaded = 0L
-
-                                while (true) {
-
-                                    if (downloadCancelled) {
-                                        target.delete()
-                                        _download.value =
-                                            DownloadState.Idle
-
-                                        return@withContext
-                                    }
-
-                                    val count = input.read(buffer)
-
-                                    if (count == -1) break
-
-                                    output.write(buffer, 0, count)
-                                    downloaded += count
-
-                                    if (total > 0L) {
-                                        val progress =
-                                            downloaded.toFloat() /
-                                                    total.toFloat()
-
-                                        _download.value =
-                                            DownloadState.Downloading(
-                                                progress.coerceIn(0f, 1f)
-                                            )
-                                    }
-                                }
-
-                                output.flush()
-                            }
-                        }
-                    }
-
+                val activeCall = Http.client.newCall(request)
+                call = activeCall
+                activeDownloadCall = activeCall
+                // Cancellation can race with request creation. Check again
+                // after publishing the Call so a late-created request cannot
+                // continue after the user has already pressed Cancel.
                 if (downloadCancelled) {
-                    target.delete()
+                    activeCall.cancel()
+                    temporary.delete()
                     _download.value = DownloadState.Idle
                     return@withContext
                 }
 
-                check(
-                    target.exists() &&
-                            target.length() > 0L
-                ) {
+                val digest = MessageDigest.getInstance("SHA-256")
+                activeCall.execute().use { response ->
+                    if (!response.isSuccessful) {
+                        throw IllegalStateException("Download gagal: HTTP ${response.code}")
+                    }
+
+                    val body = response.body
+                    val total = body.contentLength()
+
+                    body.byteStream().use { input ->
+                        temporary.outputStream().use { output ->
+                            val buffer = ByteArray(64 * 1024)
+                            var downloaded = 0L
+
+                            while (true) {
+                                if (downloadCancelled) {
+                                    temporary.delete()
+                                    _download.value = DownloadState.Idle
+                                    return@withContext
+                                }
+
+                                val count = input.read(buffer)
+                                if (count == -1) break
+
+                                output.write(buffer, 0, count)
+                                digest.update(buffer, 0, count)
+                                downloaded += count
+
+                                if (total > 0L) {
+                                    val progress = downloaded.toFloat() / total.toFloat()
+                                    _download.value = DownloadState.Downloading(
+                                        progress.coerceIn(0f, 1f)
+                                    )
+                                }
+                            }
+
+                            output.flush()
+                        }
+                    }
+                }
+
+                if (downloadCancelled) {
+                    temporary.delete()
+                    _download.value = DownloadState.Idle
+                    return@withContext
+                }
+
+                check(temporary.exists() && temporary.length() > 0L) {
                     "File APK kosong atau tidak ditemukan."
                 }
 
+                val actualSha256 = digest.digest().joinToString("") { "%02x".format(it) }
+                check(sha256Matches(expectedSha256, actualSha256)) {
+                    "Verifikasi integritas APK gagal. File tidak cocok dengan rilis GitHub."
+                }
+
+                check(temporary.renameTo(target)) {
+                    "APK sudah diverifikasi, tetapi tidak dapat disiapkan untuk installer."
+                }
+
                 _download.value = DownloadState.Ready(target)
-
-            }.onFailure { error ->
-
+            } catch (cancelled: CancellationException) {
+                partialFile?.delete()
+                _download.value = DownloadState.Idle
+                throw cancelled
+            } catch (error: Exception) {
+                partialFile?.delete()
                 _download.value = if (downloadCancelled) {
                     DownloadState.Idle
                 } else {
@@ -361,21 +384,29 @@ object AppUpdateChecker {
                         error.message ?: "Download gagal."
                     )
                 }
+            } finally {
+                if (call != null && activeDownloadCall === call) {
+                    activeDownloadCall = null
+                }
             }
+        } finally {
+            downloadMutex.unlock()
         }
+    }
 
     /**
      * Cancel active download.
      */
     fun cancelDownload() {
         downloadCancelled = true
+        activeDownloadCall?.cancel()
     }
 
     /**
      * Reset download state.
      */
     fun resetDownload() {
-        downloadCancelled = false
+        cancelDownload()
         _download.value = DownloadState.Idle
     }
 

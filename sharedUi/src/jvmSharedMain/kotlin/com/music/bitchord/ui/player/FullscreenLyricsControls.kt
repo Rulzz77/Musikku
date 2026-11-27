@@ -324,7 +324,7 @@ internal fun FullscreenLyricsToolbar(
         )
         CircleGlyph(
             icon = Icons.Rounded.FullscreenExit,
-            contentDescription = stringResource(Res.string.lyrics_exit_fullscreen),
+            contentDescription = "Exit fullscreen lyrics",
             onClick = onExitFullscreen,
         )
     }

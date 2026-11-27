@@ -203,13 +203,17 @@ object OfflinePlaylists {
         check(this::prefs.isInitialized) { "Offline playlist storage is not initialized" }
 
         val normalized = normalizeBackupPlaylists(incoming)
-        val next = if (merge) mergeOfflinePlaylists(_playlists.value, normalized) else normalized
-        synchronized(lock) {
+        // Read the current snapshot only after taking the same lock used by
+        // every playlist mutation. Otherwise a Like/create operation between
+        // this read and the commit could be silently overwritten by a stale
+        // restore snapshot.
+        return synchronized(lock) {
+            val next = if (merge) mergeOfflinePlaylists(_playlists.value, normalized) else normalized
             val committed = prefs.edit().putString(KEY_PLAYLISTS, encodePlaylists(next)).commit()
             check(committed) { "Could not save restored device playlists" }
             publish(next)
+            next.size
         }
-        return next.size
     }
 
     private fun normalizeBackupPlaylists(playlists: List<OfflinePlaylist>): List<OfflinePlaylist> {

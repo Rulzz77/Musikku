@@ -300,6 +300,15 @@ object AppUpdateChecker {
                 val activeCall = Http.client.newCall(request)
                 call = activeCall
                 activeDownloadCall = activeCall
+                // Cancellation can race with request creation. Check again
+                // after publishing the Call so a late-created request cannot
+                // continue after the user has already pressed Cancel.
+                if (downloadCancelled) {
+                    activeCall.cancel()
+                    temporary.delete()
+                    _download.value = DownloadState.Idle
+                    return@withContext
+                }
 
                 val digest = MessageDigest.getInstance("SHA-256")
                 activeCall.execute().use { response ->

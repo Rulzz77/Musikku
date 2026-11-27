@@ -2189,7 +2189,11 @@ fun NowPlayingScreen(
                         Box(
                             modifier = Modifier
                                 .weight(0.46f)
-                                .fillMaxHeight(),
+                                .fillMaxHeight()
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null,
+                                ) { lyricsControlsOpen = true },
                         ) {
                             CanvasArtworkPlayer(
                                 canvas = fullscreenLyricsCanvas,
@@ -2316,6 +2320,10 @@ fun NowPlayingScreen(
                                         .shadow(18.dp, cardShape)
                                         .clip(cardShape)
                                         .background(Color.Black.copy(alpha = 0.16f))
+                                        .clickable(
+                                            interactionSource = remember { MutableInteractionSource() },
+                                            indication = null,
+                                        ) { lyricsControlsOpen = true }
                                         .then(artworkDoubleTapLike),
                                 ) {
                                     if (!remoteArt.isNullOrBlank()) {

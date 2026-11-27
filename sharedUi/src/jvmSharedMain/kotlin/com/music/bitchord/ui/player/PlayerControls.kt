@@ -478,11 +478,26 @@ internal fun TransportRow(
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
     compact: Boolean = false,
+    /** Further reduce the transport when it lives in a half-width phone pane. */
+    tight: Boolean = false,
     animationsActive: Boolean = true,
 ) {
-    val playSize = if (compact) 58.dp else 74.dp
-    val playTouch = if (compact) 76.dp else 92.dp
-    val skipSize = if (compact) 44.dp else PLAYER_SKIP_ICON_SIZE
+    val playSize = when {
+        tight -> 42.dp
+        compact -> 58.dp
+        else -> 74.dp
+    }
+    val playTouch = when {
+        tight -> 52.dp
+        compact -> 76.dp
+        else -> 92.dp
+    }
+    val skipSize = when {
+        tight -> 28.dp
+        compact -> 44.dp
+        else -> PLAYER_SKIP_ICON_SIZE
+    }
+    val skipTouch = if (tight) 38.dp else PLAYER_SKIP_TOUCH_SIZE
     val reduceAnimation by PlayerSettings.reduceAnimation.collectAsStateWithLifecycle()
     val previousMotion = rememberPlayerSkipMotion(active = animationsActive, reduceMotion = reduceAnimation)
     val nextMotion = rememberPlayerSkipMotion(active = animationsActive, reduceMotion = reduceAnimation)
@@ -504,7 +519,7 @@ internal fun TransportRow(
             icon = Res.drawable.ic_player_previous,
             contentDescription = stringResource(Res.string.widget_previous),
             size = skipSize,
-            touchSize = PLAYER_SKIP_TOUCH_SIZE,
+            touchSize = skipTouch,
             heightScale = PLAYER_SKIP_HEIGHT_SCALE,
             onClick = onPrevious,
             enabled = previousEnabled,

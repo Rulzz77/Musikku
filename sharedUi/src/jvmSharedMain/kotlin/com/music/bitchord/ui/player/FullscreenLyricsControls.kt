@@ -59,6 +59,7 @@ internal fun FullscreenLyricsControls(
     volumeVisible: Boolean,
     volumeValue: () -> Float,
     onToggleLike: () -> Unit,
+    onToggleLike: () -> Unit,
     onToggleShuffle: () -> Unit,
     onCycleRepeat: () -> Unit,
     onPrevious: () -> Unit,
@@ -70,6 +71,8 @@ internal fun FullscreenLyricsControls(
 ) {
     BoxWithConstraints(modifier = modifier) {
         val availableWidth = maxWidth
+        val tightControls = availableWidth < 220.dp
+        val glyphModifier = Modifier.size(if (tightControls) 30.dp else 34.dp)
         val liked = likeStatus == LikeStatus.LIKE
         val repeatDescription = stringResource(
             when (repeatMode) {
@@ -87,6 +90,7 @@ internal fun FullscreenLyricsControls(
                     ),
                     onClick = onToggleLike,
                     active = liked,
+                    modifier = glyphModifier,
                 )
             } else {
                 Spacer(Modifier.size(34.dp))
@@ -100,6 +104,7 @@ internal fun FullscreenLyricsControls(
                 ),
                 onClick = onToggleShuffle,
                 active = shuffleEnabled,
+                modifier = glyphModifier,
             )
         }
         val repeatButton: @Composable () -> Unit = {
@@ -108,6 +113,7 @@ internal fun FullscreenLyricsControls(
                 contentDescription = repeatDescription,
                 onClick = onCycleRepeat,
                 active = repeatMode != RepeatModes.OFF,
+                modifier = glyphModifier,
             )
         }
 
@@ -132,6 +138,7 @@ internal fun FullscreenLyricsControls(
                             onPlayPause = onPlayPause,
                             onNext = onNext,
                             compact = true,
+                            tight = tightControls,
                         )
                     }
                     repeatButton()
@@ -193,6 +200,7 @@ internal fun FullscreenLyricsControls(
                     onPlayPause = onPlayPause,
                     onNext = onNext,
                     compact = true,
+                    tight = tightControls,
                 )
                 if (volumeVisible) {
                     VolumeRow(
@@ -210,6 +218,8 @@ internal fun FullscreenLyricsControls(
 /** Transport controls placed over the bottom of the album-cover fallback. */
 @Composable
 internal fun FullscreenCoverTransport(
+    likeStatus: LikeStatus,
+    canLike: Boolean,
     shuffleEnabled: Boolean,
     repeatMode: Int,
     isPlaying: Boolean,
@@ -225,9 +235,20 @@ internal fun FullscreenCoverTransport(
 ) {
     Row(
         modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (canLike) {
+            val liked = likeStatus == LikeStatus.LIKE
+            CircleGlyph(
+                icon = if (liked) BitChordIcons.HeartFilled else BitChordIcons.Heart,
+                contentDescription = stringResource(
+                    if (liked) Res.string.remove_from_liked else Res.string.like,
+                ),
+                onClick = onToggleLike,
+                active = liked,
+            )
+        }
         CircleGlyph(
             icon = BitChordIcons.Shuffle,
             contentDescription = stringResource(
@@ -246,6 +267,7 @@ internal fun FullscreenCoverTransport(
                 onPlayPause = onPlayPause,
                 onNext = onNext,
                 compact = true,
+                tight = true,
             )
         }
         CircleGlyph(
@@ -291,6 +313,7 @@ internal fun FullscreenCoverVolume(
 /** Glass toolbar for actions that remain available while reading fullscreen lyrics. */
 @Composable
 internal fun FullscreenLyricsToolbar(
+    onOpenQueue: () -> Unit,
     onOpenOutput: () -> Unit,
     onOpenLyricsSources: () -> Unit,
     onOpenMenu: () -> Unit,
@@ -308,24 +331,34 @@ internal fun FullscreenLyricsToolbar(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         CircleGlyph(
+            icon = BitChordIcons.Queue,
+            contentDescription = "Open playback queue",
+            onClick = onOpenQueue,
+            modifier = Modifier.size(30.dp),
+        )
+        CircleGlyph(
             icon = Icons.Rounded.Headphones,
             contentDescription = stringResource(Res.string.audio_output),
             onClick = onOpenOutput,
+            modifier = Modifier.size(30.dp),
         )
         CircleGlyph(
             icon = BitChordIcons.LyricsQuote,
             contentDescription = "Lyrics sources",
             onClick = onOpenLyricsSources,
+            modifier = Modifier.size(30.dp),
         )
         CircleGlyph(
             icon = Icons.Rounded.MoreHoriz,
             contentDescription = stringResource(Res.string.more),
             onClick = onOpenMenu,
+            modifier = Modifier.size(30.dp),
         )
         CircleGlyph(
             icon = Icons.Rounded.FullscreenExit,
             contentDescription = "Exit fullscreen lyrics",
             onClick = onExitFullscreen,
+            modifier = Modifier.size(30.dp),
         )
     }
 }

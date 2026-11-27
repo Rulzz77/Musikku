@@ -560,10 +560,11 @@ internal fun VolumeRow(
     value: () -> Float,
     onValueChange: (Float) -> Unit,
     onValueChangeFinished: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val chrome = LocalPlayerChrome.current
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(

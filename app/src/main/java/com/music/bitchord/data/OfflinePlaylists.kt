@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.UUID
 
 /**
  * Playlists owned by this MusikKu installation, made in the Local Music
@@ -124,9 +125,12 @@ object OfflinePlaylists {
     }
 
     /** A new, empty playlist — or one holding [songs], when it was made to take them. */
+    /** Collision-resistant ID; two rapid creates must not share playlist identity. */
+    internal fun newPlaylistId(): String = "p" + UUID.randomUUID().toString().replace("-", "")
+
     fun create(title: String, songs: List<Song> = emptyList()): OfflinePlaylist {
         val playlist = OfflinePlaylist(
-            id = "p" + System.currentTimeMillis().toString(36),
+            id = newPlaylistId(),
             title = title.trim(),
             songs = songs.distinctBy { it.playlistKey() }.map { it.stored() },
         )

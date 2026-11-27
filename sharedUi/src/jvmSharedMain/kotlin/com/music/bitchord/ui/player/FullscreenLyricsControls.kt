@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.FullscreenExit
@@ -22,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import com.music.bitchord.data.model.LikeStatus
 import com.music.bitchord.sharedui.resources.Res
@@ -66,6 +68,7 @@ internal fun FullscreenLyricsControls(
     modifier: Modifier = Modifier,
 ) {
     BoxWithConstraints(modifier = modifier) {
+        val availableWidth = maxWidth
         val liked = likeStatus == LikeStatus.LIKE
         val repeatDescription = stringResource(
             when (repeatMode) {
@@ -108,7 +111,7 @@ internal fun FullscreenLyricsControls(
         }
 
         Column {
-            if (maxWidth >= 430.dp && volumeVisible) {
+            if (availableWidth >= 430.dp && volumeVisible) {
                 // Wide landscape windows keep every playback control on the
                 // same baseline, as in the reference player.
                 Row(
@@ -139,7 +142,7 @@ internal fun FullscreenLyricsControls(
                         )
                     }
                 }
-            } else if (maxWidth >= 300.dp) {
+            } else if (availableWidth >= 300.dp) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(2.dp),
@@ -202,6 +205,88 @@ internal fun FullscreenLyricsControls(
     }
 }
 
+
+/** Transport controls placed over the bottom of the album-cover fallback. */
+@Composable
+internal fun FullscreenCoverTransport(
+    shuffleEnabled: Boolean,
+    repeatMode: Int,
+    isPlaying: Boolean,
+    isLoading: Boolean,
+    previousEnabled: Boolean,
+    nextEnabled: Boolean,
+    onToggleShuffle: () -> Unit,
+    onCycleRepeat: () -> Unit,
+    onPrevious: () -> Unit,
+    onPlayPause: () -> Unit,
+    onNext: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        CircleGlyph(
+            icon = BitChordIcons.Shuffle,
+            contentDescription = stringResource(
+                if (shuffleEnabled) Res.string.shuffle_on else Res.string.shuffle_off,
+            ),
+            onClick = onToggleShuffle,
+            active = shuffleEnabled,
+        )
+        Box(Modifier.weight(1f)) {
+            TransportRow(
+                isPlaying = isPlaying,
+                isLoading = isLoading,
+                previousEnabled = previousEnabled,
+                nextEnabled = nextEnabled,
+                onPrevious = onPrevious,
+                onPlayPause = onPlayPause,
+                onNext = onNext,
+                compact = true,
+            )
+        }
+        CircleGlyph(
+            icon = BitChordIcons.Repeat,
+            contentDescription = stringResource(
+                when (repeatMode) {
+                    RepeatModes.ONE -> Res.string.repeat_one
+                    RepeatModes.ALL -> Res.string.repeat_all
+                    else -> Res.string.repeat_off
+                },
+            ),
+            onClick = onCycleRepeat,
+            active = repeatMode != RepeatModes.OFF,
+        )
+    }
+}
+
+/** Vertical volume capsule used on the right edge of the square cover card. */
+@Composable
+internal fun FullscreenCoverVolume(
+    value: () -> Float,
+    onValueChange: (Float) -> Unit,
+    onValueChangeFinished: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .width(44.dp)
+            .height(164.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        VolumeRow(
+            value = value,
+            onValueChange = onValueChange,
+            onValueChangeFinished = onValueChangeFinished,
+            modifier = Modifier
+                .width(150.dp)
+                .graphicsLayer { rotationZ = 90f },
+        )
+    }
+}
+
 /** Glass toolbar for actions that remain available while reading fullscreen lyrics. */
 @Composable
 internal fun FullscreenLyricsToolbar(
@@ -238,7 +323,7 @@ internal fun FullscreenLyricsToolbar(
         )
         CircleGlyph(
             icon = Icons.Rounded.FullscreenExit,
-            contentDescription = "Exit fullscreen lyrics",
+            contentDescription = stringResource(Res.string.lyrics_exit_fullscreen),
             onClick = onExitFullscreen,
         )
     }

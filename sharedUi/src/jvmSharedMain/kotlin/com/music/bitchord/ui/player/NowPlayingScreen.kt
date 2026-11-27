@@ -2161,19 +2161,12 @@ fun NowPlayingScreen(
                     .fillMaxSize()
                     .background(Color.Black),
             ) {
-                // Use the baked soft-cover backdrop only as the fallback. A sharp,
-                // stretched cover above it hid the blur and made the screen look
-                // unlike the moving, full-bleed Canvas treatment in Spicy Lyrics.
+                // The soft artwork blur is the shared background for both
+                // layouts. Canvas clips or the square cover sit above it.
                 FullArtworkBlurBackdrop(
                     image = fullArtworkBlurImage,
                     modifier = Modifier.fillMaxSize(),
                 )
-                // The animated Canvas is deliberately not a screen-wide backdrop:
-                // it is mounted inside the left half below. The right half stays
-                // on the blurred artwork backdrop so lyrics have their own panel.
-                val fullscreenLyricsCanvas = canvas
-                // A tap on the video / empty space brings back the small transport
-                // chrome. Lyrics and the scrubber keep their own gestures.
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -2185,148 +2178,283 @@ fun NowPlayingScreen(
                         },
                 )
 
+                val fullscreenLyricsCanvas = canvas
                 Row(
                     modifier = Modifier.fillMaxSize(),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    // The Canvas is clipped to this column only — it must never
-                    // paint beneath the lyrics on the right half of the display.
-                    Box(
-                        modifier = Modifier
-                            .weight(0.46f)
-                            .fillMaxHeight()
-                            .clip(RectangleShape),
-                    ) {
-                        // A normal cover is the exact fallback for tracks without
-                        // Canvas. It occupies the whole left pane, never a small
-                        // thumbnail and never the right-hand lyrics panel.
-                        if (!remoteArt.isNullOrBlank()) {
-                            AsyncImage(
-                                model = remoteArt,
-                                contentDescription = null,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxSize(),
-                            )
-                        }
-                        // When Canvas exists it is drawn over the cover. Until its
-                        // first frame appears, the cover remains visible underneath.
-                        fullscreenLyricsCanvas?.let { clip ->
+                    if (fullscreenLyricsCanvas != null) {
+                        // Canvas mode: moving artwork fills only the left pane;
+                        // the lyrics remain in their own column on the right.
+                        Box(
+                            modifier = Modifier
+                                .weight(0.46f)
+                                .fillMaxHeight(),
+                        ) {
                             CanvasArtworkPlayer(
-                                canvas = clip,
+                                canvas = fullscreenLyricsCanvas,
                                 isPlaying = isPlaying,
                                 modifier = Modifier.fillMaxSize(),
                                 contentMode = CanvasContentMode.CROP,
                                 onRenderedChanged = { canvasRendered = it },
                                 nowPlaying = true,
                             )
-                        }
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(
-                                    Brush.verticalGradient(
-                                        colorStops = arrayOf(
-                                            0f to Color.Black.copy(alpha = 0.06f),
-                                            0.48f to Color.Transparent,
-                                            0.72f to Color.Black.copy(alpha = 0.22f),
-                                            1f to Color.Black.copy(alpha = 0.68f),
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(
+                                        Brush.verticalGradient(
+                                            colorStops = arrayOf(
+                                                0f to Color.Black.copy(alpha = 0.06f),
+                                                0.48f to Color.Transparent,
+                                                0.72f to Color.Black.copy(alpha = 0.22f),
+                                                1f to Color.Black.copy(alpha = 0.68f),
+                                            ),
                                         ),
                                     ),
-                                ),
-                        )
-                        // Track identity and transport sit over the lower edge of
-                        // the left-side Canvas, like the supplied reference.
-                        Column(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(
-                                    start = 24.dp,
-                                    end = 24.dp,
-                                    top = 22.dp,
-                                    bottom = 22.dp,
-                                ),
-                            verticalArrangement = Arrangement.Bottom,
-                        ) {
-                        // Leave the upper part of the Canvas / cover clear so
-                        // its picture stays visible above the track information.
-                        Spacer(Modifier.weight(1f))
-                        Text(
-                            text = song.title,
-                            style = MaterialTheme.typography.titleLarge.copy(
-                                fontWeight = FontWeight.Bold,
-                            ),
-                            color = Color.White,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(
-                            text = song.artist,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color.White.copy(alpha = 0.78f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(top = 3.dp, bottom = 14.dp),
-                        )
-                        PlayerScrubber(
-                            shown = shown,
-                            durationMs = durationMs,
-                            loading = isLoading || audioVersionSwitching,
-                            mixing = mixing && !scrub.scrubbing,
-                            transitionWindow = null,
-                            onScrub = onScrub,
-                            onScrubFinished = onScrubFinished,
-                        )
-                        AnimatedVisibility(visible = lyricsControlsOpen) {
-                            Column {
-                                Spacer(Modifier.height(8.dp))
-                                FullscreenLyricsControls(
-                                    likeStatus = likeStatus,
-                                    canLike = canLikeCurrentSong,
-                                    shuffleEnabled = shuffleEnabled,
-                                    repeatMode = repeatMode,
-                                    isPlaying = isPlaying,
-                                    isLoading = isLoading || audioVersionSwitching,
-                                    previousEnabled = !controlsLocked &&
-                                        (canSkipPrevious || pastRestartPoint),
-                                    nextEnabled = !controlsLocked && canSkipNext,
-                                    volumeVisible = !hideVolumeBar,
-                                    volumeValue = { volume.level.value },
-                                    onToggleLike = onToggleLike,
-                                    onToggleShuffle = onToggleShuffle,
-                                    onCycleRepeat = onCycleRepeat,
-                                    onPrevious = onPrevious,
-                                    onPlayPause = onPlayPause,
-                                    onNext = onNext,
-                                    onVolumeChange = onVolumeChange,
-                                    onVolumeChangeFinished = onVolumeChangeFinished,
-                                    modifier = Modifier.fillMaxWidth(),
+                            )
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(horizontal = 24.dp, vertical = 22.dp),
+                                verticalArrangement = Arrangement.Bottom,
+                            ) {
+                                Spacer(Modifier.weight(1f))
+                                Text(
+                                    text = song.title,
+                                    style = MaterialTheme.typography.titleLarge.copy(
+                                        fontWeight = FontWeight.Bold,
+                                    ),
+                                    color = Color.White,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Text(
+                                    text = song.artist,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color.White.copy(alpha = 0.78f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.padding(top = 3.dp, bottom = 14.dp),
+                                )
+                                PlayerScrubber(
+                                    shown = shown,
+                                    durationMs = durationMs,
+                                    loading = isLoading || audioVersionSwitching,
+                                    mixing = mixing && !scrub.scrubbing,
+                                    transitionWindow = null,
+                                    onScrub = onScrub,
+                                    onScrubFinished = onScrubFinished,
+                                )
+                                AnimatedVisibility(visible = lyricsControlsOpen) {
+                                    Column {
+                                        Spacer(Modifier.height(8.dp))
+                                        FullscreenLyricsControls(
+                                            likeStatus = likeStatus,
+                                            canLike = canLikeCurrentSong,
+                                            shuffleEnabled = shuffleEnabled,
+                                            repeatMode = repeatMode,
+                                            isPlaying = isPlaying,
+                                            isLoading = isLoading || audioVersionSwitching,
+                                            previousEnabled = !controlsLocked &&
+                                                (canSkipPrevious || pastRestartPoint),
+                                            nextEnabled = !controlsLocked && canSkipNext,
+                                            volumeVisible = !hideVolumeBar,
+                                            volumeValue = { volume.level.value },
+                                            onToggleLike = onToggleLike,
+                                            onToggleShuffle = onToggleShuffle,
+                                            onCycleRepeat = onCycleRepeat,
+                                            onPrevious = onPrevious,
+                                            onPlayPause = onPlayPause,
+                                            onNext = onNext,
+                                            onVolumeChange = onVolumeChange,
+                                            onVolumeChangeFinished = onVolumeChangeFinished,
+                                            modifier = Modifier.fillMaxWidth(),
+                                        )
+                                    }
+                                }
+                            }
+                            AnimatedVisibility(
+                                visible = lyricsControlsOpen,
+                                enter = fadeIn(tween(180)),
+                                exit = fadeOut(tween(220)),
+                                modifier = Modifier
+                                    .align(Alignment.TopStart)
+                                    .padding(start = 18.dp, top = 12.dp),
+                            ) {
+                                FullscreenLyricsToolbar(
+                                    onOpenOutput = openAudioOutput,
+                                    onOpenLyricsSources = { showLyricsProviders = true },
+                                    onOpenMenu = onOpenMenu,
+                                    onExitFullscreen = exitLyricsFullscreen,
                                 )
                             }
                         }
-                    }
+                    } else {
+                        // No Canvas: keep the blurred background, but show the
+                        // album cover as a square card in the left column. This
+                        // matches the supplied fallback reference (not a full-
+                        // panel stretched image and not a tiny sleeve thumbnail).
+                        Column(
+                            modifier = Modifier
+                                .weight(0.46f)
+                                .fillMaxHeight()
+                                .padding(horizontal = 22.dp, vertical = 18.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            BoxWithConstraints(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxWidth(),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                val cardSide = minOf(maxWidth * 0.96f, maxHeight * 0.94f)
+                                val cardShape = RoundedCornerShape(16.dp)
+                                Box(
+                                    modifier = Modifier
+                                        .size(cardSide)
+                                        .shadow(18.dp, cardShape)
+                                        .clip(cardShape)
+                                        .background(Color.Black.copy(alpha = 0.16f))
+                                        .then(artworkDoubleTapLike),
+                                ) {
+                                    if (!remoteArt.isNullOrBlank()) {
+                                        AsyncImage(
+                                            model = remoteArt,
+                                            contentDescription = null,
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier.fillMaxSize(),
+                                        )
+                                    } else {
+                                        Box(
+                                            Modifier
+                                                .fillMaxSize()
+                                                .background(Color.Black.copy(alpha = 0.24f)),
+                                        )
+                                    }
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .background(
+                                                Brush.verticalGradient(
+                                                    colorStops = arrayOf(
+                                                        0f to Color.Black.copy(alpha = 0.18f),
+                                                        0.42f to Color.Transparent,
+                                                        0.68f to Color.Black.copy(alpha = 0.12f),
+                                                        1f to Color.Black.copy(alpha = 0.56f),
+                                                    ),
+                                                ),
+                                            ),
+                                    )
+                                    ArtworkLikeBurst(
+                                        trackKey = song.videoId,
+                                        trigger = artworkLikeBurstTrigger,
+                                        modifier = Modifier.align(Alignment.Center),
+                                    )
+                                    ArtworkUnlikeSplit(
+                                        trackKey = song.videoId,
+                                        trigger = artworkUnlikeSplitTrigger,
+                                        modifier = Modifier.align(Alignment.Center),
+                                    )
+                                    AnimatedVisibility(
+                                        visible = lyricsControlsOpen,
+                                        enter = fadeIn(tween(180)),
+                                        exit = fadeOut(tween(220)),
+                                        modifier = Modifier
+                                            .align(Alignment.TopCenter)
+                                            .padding(top = 12.dp),
+                                    ) {
+                                        FullscreenLyricsToolbar(
+                                            onOpenOutput = openAudioOutput,
+                                            onOpenLyricsSources = { showLyricsProviders = true },
+                                            onOpenMenu = onOpenMenu,
+                                            onExitFullscreen = exitLyricsFullscreen,
+                                        )
+                                    }
+                                    if (!hideVolumeBar) {
+                                        AnimatedVisibility(
+                                            visible = lyricsControlsOpen,
+                                            modifier = Modifier
+                                                .align(Alignment.CenterEnd)
+                                                .padding(end = 8.dp),
+                                        ) {
+                                            FullscreenCoverVolume(
+                                                value = { volume.level.value },
+                                                onValueChange = onVolumeChange,
+                                                onValueChangeFinished = onVolumeChangeFinished,
+                                            )
+                                        }
+                                    }
+                                    AnimatedVisibility(
+                                        visible = lyricsControlsOpen,
+                                        enter = fadeIn(tween(180)),
+                                        exit = fadeOut(tween(220)),
+                                        modifier = Modifier
+                                            .align(Alignment.BottomCenter)
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                                    ) {
+                                        FullscreenCoverTransport(
+                                            shuffleEnabled = shuffleEnabled,
+                                            repeatMode = repeatMode,
+                                            isPlaying = isPlaying,
+                                            isLoading = isLoading || audioVersionSwitching,
+                                            previousEnabled = !controlsLocked &&
+                                                (canSkipPrevious || pastRestartPoint),
+                                            nextEnabled = !controlsLocked && canSkipNext,
+                                            onToggleShuffle = onToggleShuffle,
+                                            onCycleRepeat = onCycleRepeat,
+                                            onPrevious = onPrevious,
+                                            onPlayPause = onPlayPause,
+                                            onNext = onNext,
+                                        )
+                                    }
+                                }
+                            }
+
+                            PlayerScrubber(
+                                shown = shown,
+                                durationMs = durationMs,
+                                loading = isLoading || audioVersionSwitching,
+                                mixing = mixing && !scrub.scrubbing,
+                                transitionWindow = null,
+                                onScrub = onScrub,
+                                onScrubFinished = onScrubFinished,
+                            )
+                            Text(
+                                text = song.title,
+                                style = MaterialTheme.typography.titleLarge.copy(
+                                    fontWeight = FontWeight.Bold,
+                                ),
+                                color = Color.White,
+                                textAlign = TextAlign.Center,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 8.dp),
+                            )
+                            Text(
+                                text = song.artist,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color.White.copy(alpha = 0.78f),
+                                textAlign = TextAlign.Center,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 2.dp),
+                            )
+                        }
                     }
 
-                    // The lyric pane has its own tinted surface. The still artwork
-                    // backdrop can remain softly visible here, but the moving Canvas
-                    // is restricted to the left half.
+                    // The lyric side stays transparent over the same blurred
+                    // artwork backdrop, instead of becoming another opaque card.
                     Column(
                         modifier = Modifier
                             .weight(0.54f)
                             .fillMaxHeight()
-                            .background(
-                                Brush.horizontalGradient(
-                                    colors = listOf(
-                                        Color(0xFF182B42).copy(alpha = 0.78f),
-                                        Color(0xFF071B32).copy(alpha = 0.88f),
-                                    ),
-                                ),
-                            )
-                            .padding(
-                                start = 24.dp,
-                                end = 24.dp,
-                                top = 22.dp,
-                                bottom = 22.dp,
-                            ),
+                            .padding(horizontal = 22.dp, vertical = 22.dp),
                     ) {
                         LyricsPanel(
                             lines = lyrics.orEmpty(),
@@ -2350,8 +2478,7 @@ fun NowPlayingScreen(
                             fontScale = 0.90f,
                             modifier = Modifier
                                 .weight(1f)
-                                .fillMaxWidth()
-                                .padding(horizontal = 4.dp),
+                                .fillMaxWidth(),
                         )
                         AnimatedVisibility(visible = lyricsControlsOpen) {
                             if (lyricPicker.picking) {
@@ -2387,22 +2514,6 @@ fun NowPlayingScreen(
                             }
                         }
                     }
-                }
-
-                AnimatedVisibility(
-                    visible = lyricsControlsOpen,
-                    enter = fadeIn(tween(180)),
-                    exit = fadeOut(tween(220)),
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(start = 18.dp, top = 12.dp),
-                ) {
-                    FullscreenLyricsToolbar(
-                        onOpenOutput = openAudioOutput,
-                        onOpenLyricsSources = { showLyricsProviders = true },
-                        onOpenMenu = onOpenMenu,
-                        onExitFullscreen = exitLyricsFullscreen,
-                    )
                 }
             }
         }

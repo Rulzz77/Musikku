@@ -2429,7 +2429,7 @@ fun NowPlayingScreen(
                                             modifier = Modifier
                                                 .align(Alignment.BottomCenter)
                                                 .fillMaxWidth()
-                                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                                                .padding(horizontal = 2.dp, vertical = 12.dp),
                                         ) {
                                             FullscreenCoverTransport(
                                                 shuffleEnabled = shuffleEnabled,
@@ -2494,21 +2494,23 @@ fun NowPlayingScreen(
                             .weight(0.54f)
                             .fillMaxHeight(),
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.CenterStart)
-                                .width(144.dp)
-                                .fillMaxHeight()
-                                .background(
-                                    Brush.horizontalGradient(
-                                        colorStops = arrayOf(
-                                            0f to Color(0xFF101B31).copy(alpha = 0.36f),
-                                            0.58f to Color(0xFF101B31).copy(alpha = 0.18f),
-                                            1f to Color.Transparent,
+                        if (fullscreenLyricsCanvas != null) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.CenterStart)
+                                    .width(144.dp)
+                                    .fillMaxHeight()
+                                    .background(
+                                        Brush.horizontalGradient(
+                                            colorStops = arrayOf(
+                                                0f to Color(0xFF101B31).copy(alpha = 0.36f),
+                                                0.58f to Color(0xFF101B31).copy(alpha = 0.18f),
+                                                1f to Color.Transparent,
+                                            ),
                                         ),
                                     ),
-                                ),
-                        )
+                            )
+                        }
                         Column(
                             modifier = Modifier
                                 .fillMaxSize()

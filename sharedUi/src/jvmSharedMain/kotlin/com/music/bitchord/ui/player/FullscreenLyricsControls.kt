@@ -238,7 +238,7 @@ internal fun FullscreenLyricsToolbar(
         )
         CircleGlyph(
             icon = Icons.Rounded.FullscreenExit,
-            contentDescription = stringResource(com.music.bitchord.sharedui.resources.lyrics_exit_fullscreen),
+            contentDescription = "Exit fullscreen lyrics",
             onClick = onExitFullscreen,
         )
     }

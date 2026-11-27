@@ -2524,7 +2524,7 @@ fun NowPlayingScreen(
                             looking = !lyricsUnavailable,
                             isPlaying = isPlaying && position.advancing,
                             active = true,
-                            onSeekToLine = seekToLyric,
+                            onSeekToLine = { revealLyricsControls(); seekToLyric(it) },
                             controlsOpen = lyricsControlsOpen,
                             onRevealControls = revealLyricsControls,
                             onHideControls = { lyricsControlsOpen = false },
@@ -2533,7 +2533,7 @@ fun NowPlayingScreen(
                             picking = lyricPicker.picking,
                             picked = lyricPicker.picks,
                             onPickLine = lyricPicker.pick,
-                            onTogglePick = lyricPicker.toggle,
+                            onTogglePick = { revealLyricsControls(); lyricPicker.toggle(it) },
                             centerFocus = true,
                             fontScale = 0.90f,
                             modifier = Modifier
@@ -2544,8 +2544,8 @@ fun NowPlayingScreen(
                             if (lyricPicker.picking) {
                                 LyricsPickBar(
                                     shareEnabled = lyricPicker.picks.isNotEmpty() && !lyricPicker.overBudget,
-                                    onCancel = lyricPicker.cancel,
-                                    onShare = lyricPicker.share,
+                                    onCancel = { revealLyricsControls(); lyricPicker.cancel() },
+                                    onShare = { revealLyricsControls(); lyricPicker.share() },
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(top = 8.dp, bottom = 4.dp),
@@ -2561,14 +2561,14 @@ fun NowPlayingScreen(
                                         state = lyricsTranslation.romanizationState,
                                         showingRomanization = lyricsTranslation.showingRomanization,
                                         enabled = !lyrics.isNullOrEmpty(),
-                                        onClick = lyricsTranslation.toggleRomanization,
+                                        onClick = { revealLyricsControls(); lyricsTranslation.toggleRomanization() },
                                     )
                                     Spacer(Modifier.weight(1f))
                                     TranslationToggleButton(
                                         state = lyricsTranslation.translationState,
                                         showingTranslation = lyricsTranslation.showingTranslation,
                                         enabled = !lyrics.isNullOrEmpty(),
-                                        onClick = lyricsTranslation.toggleTranslation,
+                                        onClick = { revealLyricsControls(); lyricsTranslation.toggleTranslation() },
                                     )
                                 }
                             }

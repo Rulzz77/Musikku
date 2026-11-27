@@ -1313,6 +1313,11 @@ fun NowPlayingScreen(
     var lyricsControlsOpen by remember {
         mutableStateOf(restoredPlayerScreen == LastPlayerScreen.LYRICS)
     }
+    var lyricsControlInteraction by remember { mutableIntStateOf(0) }
+    val revealLyricsControls: () -> Unit = {
+        lyricsControlsOpen = true
+        lyricsControlInteraction++
+    }
     var queueControlsOpen by remember { mutableStateOf(true) }
     var queuePaneMounted by remember { mutableStateOf(false) }
     LaunchedEffect(queueSelection.active) {
@@ -1344,11 +1349,12 @@ fun NowPlayingScreen(
     // open but the half-player was not, so every trip into lyrics briefly
     // started an exit animation and reversed it on the following frame.
     val openLyrics: () -> Unit = {
-        lyricsControlsOpen = true
+        revealLyricsControls()
         lyricsOpen = true
         queueOpen = false
     }
     val enterLyricsFullscreen: () -> Unit = {
+        revealLyricsControls()
         lyricsRequestedLandscape = !sideways
         lyricsFullscreen = true
         if (lyricsRequestedLandscape) screenOrientation.landscape()
@@ -1585,7 +1591,7 @@ fun NowPlayingScreen(
     // Never while a finger is on the scrubber or the volume bar: those are the
     // two controls that are *being used* while nothing else on screen moves,
     // and timing out underneath them would take the thing away mid-gesture.
-    LaunchedEffect(lyricsOpen, lyricsFullscreen, lyricsControlsOpen, scrub.scrubbing, volume.dragging) {
+    LaunchedEffect(lyricsOpen, lyricsFullscreen, lyricsControlsOpen, lyricsControlInteraction, scrub.scrubbing, volume.dragging) {
         if (lyricsOpen && lyricsControlsOpen && !scrub.scrubbing && !volume.dragging) {
             delay(LYRICS_CONTROLS_IDLE_MS)
             lyricsControlsOpen = false
@@ -2174,7 +2180,7 @@ fun NowPlayingScreen(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null,
                         ) {
-                            lyricsControlsOpen = true
+                            revealLyricsControls()
                         },
                 )
 
@@ -2193,7 +2199,7 @@ fun NowPlayingScreen(
                                 .clickable(
                                     interactionSource = remember { MutableInteractionSource() },
                                     indication = null,
-                                ) { lyricsControlsOpen = true },
+                                ) { revealLyricsControls() },
                         ) {
                             CanvasArtworkPlayer(
                                 canvas = fullscreenLyricsCanvas,
@@ -2213,6 +2219,24 @@ fun NowPlayingScreen(
                                                 0.48f to Color.Transparent,
                                                 0.72f to Color.Black.copy(alpha = 0.22f),
                                                 1f to Color.Black.copy(alpha = 0.68f),
+                                            ),
+                                        ),
+                                    ),
+                            )
+                            // Fade the moving Canvas into the blurred lyric backdrop.
+                            // The matching tint on the lyric side removes the hard
+                            // center seam without drawing a divider line.
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.CenterEnd)
+                                    .width(144.dp)
+                                    .fillMaxHeight()
+                                    .background(
+                                        Brush.horizontalGradient(
+                                            colorStops = arrayOf(
+                                                0f to Color.Transparent,
+                                                0.42f to Color(0xFF101B31).copy(alpha = 0.18f),
+                                                1f to Color(0xFF101B31).copy(alpha = 0.36f),
                                             ),
                                         ),
                                     ),
@@ -2265,12 +2289,12 @@ fun NowPlayingScreen(
                                             nextEnabled = !controlsLocked && canSkipNext,
                                             volumeVisible = !hideVolumeBar,
                                             volumeValue = { volume.level.value },
-                                            onToggleLike = onToggleLike,
-                                            onToggleShuffle = onToggleShuffle,
-                                            onCycleRepeat = onCycleRepeat,
-                                            onPrevious = onPrevious,
-                                            onPlayPause = onPlayPause,
-                                            onNext = onNext,
+                                            onToggleLike = { revealLyricsControls(); onToggleLike() },
+                                            onToggleShuffle = { revealLyricsControls(); onToggleShuffle() },
+                                            onCycleRepeat = { revealLyricsControls(); onCycleRepeat() },
+                                            onPrevious = { revealLyricsControls(); onPrevious() },
+                                            onPlayPause = { revealLyricsControls(); onPlayPause() },
+                                            onNext = { revealLyricsControls(); onNext() },
                                             onVolumeChange = onVolumeChange,
                                             onVolumeChangeFinished = onVolumeChangeFinished,
                                             modifier = Modifier.fillMaxWidth(),
@@ -2285,9 +2309,13 @@ fun NowPlayingScreen(
                                         .padding(start = 18.dp, top = 12.dp),
                                 ) {
                                     FullscreenLyricsToolbar(
-                                        onOpenOutput = openAudioOutput,
-                                        onOpenLyricsSources = { showLyricsProviders = true },
-                                        onOpenMenu = onOpenMenu,
+                                        onOpenQueue = { revealLyricsControls(); toggleQueue() },
+                                        onOpenOutput = { revealLyricsControls(); openAudioOutput() },
+                                        onOpenLyricsSources = {
+                                            revealLyricsControls()
+                                            showLyricsProviders = true
+                                        },
+                                        onOpenMenu = { revealLyricsControls(); onOpenMenu() },
                                         onExitFullscreen = exitLyricsFullscreen,
                                     )
                                 }
@@ -2322,7 +2350,7 @@ fun NowPlayingScreen(
                                         .clickable(
                                             interactionSource = remember { MutableInteractionSource() },
                                             indication = null,
-                                        ) { lyricsControlsOpen = true }
+                                        ) { revealLyricsControls() }
                                         .then(artworkDoubleTapLike),
                                 ) {
                                     if (!remoteArt.isNullOrBlank()) {
@@ -2370,9 +2398,13 @@ fun NowPlayingScreen(
                                                 .padding(top = 12.dp),
                                         ) {
                                             FullscreenLyricsToolbar(
-                                                onOpenOutput = openAudioOutput,
-                                                onOpenLyricsSources = { showLyricsProviders = true },
-                                                onOpenMenu = onOpenMenu,
+                                                onOpenQueue = { revealLyricsControls(); toggleQueue() },
+                                                onOpenOutput = { revealLyricsControls(); openAudioOutput() },
+                                                onOpenLyricsSources = {
+                                                    revealLyricsControls()
+                                                    showLyricsProviders = true
+                                                },
+                                                onOpenMenu = { revealLyricsControls(); onOpenMenu() },
                                                 onExitFullscreen = exitLyricsFullscreen,
                                             )
                                         }
@@ -2397,7 +2429,7 @@ fun NowPlayingScreen(
                                             modifier = Modifier
                                                 .align(Alignment.BottomCenter)
                                                 .fillMaxWidth()
-                                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                                                .padding(horizontal = 2.dp, vertical = 12.dp),
                                         ) {
                                             FullscreenCoverTransport(
                                                 shuffleEnabled = shuffleEnabled,
@@ -2407,11 +2439,11 @@ fun NowPlayingScreen(
                                                 previousEnabled = !controlsLocked &&
                                                     (canSkipPrevious || pastRestartPoint),
                                                 nextEnabled = !controlsLocked && canSkipNext,
-                                                onToggleShuffle = onToggleShuffle,
-                                                onCycleRepeat = onCycleRepeat,
-                                                onPrevious = onPrevious,
-                                                onPlayPause = onPlayPause,
-                                                onNext = onNext,
+                                                onToggleShuffle = { revealLyricsControls(); onToggleShuffle() },
+                                                onCycleRepeat = { revealLyricsControls(); onCycleRepeat() },
+                                                onPrevious = { revealLyricsControls(); onPrevious() },
+                                                onPlayPause = { revealLyricsControls(); onPlayPause() },
+                                                onNext = { revealLyricsControls(); onNext() },
                                             )
                                         }
                                     }
@@ -2455,13 +2487,35 @@ fun NowPlayingScreen(
                     }
 
                     // The lyric side stays transparent over the same blurred
-                    // artwork backdrop, instead of becoming another opaque card.
-                    Column(
+                    // artwork backdrop. A reverse gradient matches the Canvas
+                    // edge fade, so the two panes melt together without a divider.
+                    Box(
                         modifier = Modifier
                             .weight(0.54f)
-                            .fillMaxHeight()
-                            .padding(horizontal = 22.dp, vertical = 22.dp),
+                            .fillMaxHeight(),
                     ) {
+                        if (fullscreenLyricsCanvas != null) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.CenterStart)
+                                    .width(144.dp)
+                                    .fillMaxHeight()
+                                    .background(
+                                        Brush.horizontalGradient(
+                                            colorStops = arrayOf(
+                                                0f to Color(0xFF101B31).copy(alpha = 0.36f),
+                                                0.58f to Color(0xFF101B31).copy(alpha = 0.18f),
+                                                1f to Color.Transparent,
+                                            ),
+                                        ),
+                                    ),
+                            )
+                        }
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 22.dp, vertical = 22.dp),
+                        ) {
                         LyricsPanel(
                             lines = lyrics.orEmpty(),
                             subLines = lyricsTranslation.subLines,
@@ -2470,16 +2524,16 @@ fun NowPlayingScreen(
                             looking = !lyricsUnavailable,
                             isPlaying = isPlaying && position.advancing,
                             active = true,
-                            onSeekToLine = seekToLyric,
+                            onSeekToLine = { revealLyricsControls(); seekToLyric(it) },
                             controlsOpen = lyricsControlsOpen,
-                            onRevealControls = { lyricsControlsOpen = true },
+                            onRevealControls = revealLyricsControls,
                             onHideControls = { lyricsControlsOpen = false },
                             onScrollingChange = { lyricsScrolling = it },
                             canPick = lyricsShareEnabled,
                             picking = lyricPicker.picking,
                             picked = lyricPicker.picks,
                             onPickLine = lyricPicker.pick,
-                            onTogglePick = lyricPicker.toggle,
+                            onTogglePick = { revealLyricsControls(); lyricPicker.toggle(it) },
                             centerFocus = true,
                             fontScale = 0.90f,
                             modifier = Modifier
@@ -2490,8 +2544,8 @@ fun NowPlayingScreen(
                             if (lyricPicker.picking) {
                                 LyricsPickBar(
                                     shareEnabled = lyricPicker.picks.isNotEmpty() && !lyricPicker.overBudget,
-                                    onCancel = lyricPicker.cancel,
-                                    onShare = lyricPicker.share,
+                                    onCancel = { revealLyricsControls(); lyricPicker.cancel() },
+                                    onShare = { revealLyricsControls(); lyricPicker.share() },
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(top = 8.dp, bottom = 4.dp),
@@ -2507,19 +2561,24 @@ fun NowPlayingScreen(
                                         state = lyricsTranslation.romanizationState,
                                         showingRomanization = lyricsTranslation.showingRomanization,
                                         enabled = !lyrics.isNullOrEmpty(),
-                                        onClick = lyricsTranslation.toggleRomanization,
+                                        onClick = { revealLyricsControls(); lyricsTranslation.toggleRomanization() },
                                     )
                                     Spacer(Modifier.weight(1f))
                                     TranslationToggleButton(
                                         state = lyricsTranslation.translationState,
                                         showingTranslation = lyricsTranslation.showingTranslation,
                                         enabled = !lyrics.isNullOrEmpty(),
-                                        onClick = lyricsTranslation.toggleTranslation,
+                                        onClick = { revealLyricsControls(); lyricsTranslation.toggleTranslation() },
                                     )
                                 }
                             }
                         }
+                        }
                     }
+                    // Draw the player drawers in this Dialog window. The normal
+                    // player overlays sit in the Activity window underneath it,
+                    // which made Audio Output and Lyrics Sources look unresponsive.
+                    playerOverlays()
                 }
             }
         }
@@ -2700,7 +2759,9 @@ fun NowPlayingScreen(
         live = spotifyCanvasPresentation,
         // Not the host's ⋯ menu: that takes its own still, of everything.
         overlayOpen = { overlayOpen.value && !currentMenuOpen() },
-        overlays = playerOverlays,
+        overlays = {
+            if (!lyricsFullscreenVisible) playerOverlays()
+        },
     ) {
         if (landscape && videoMode) {
             val versionAligning by PlayerSettings.versionAlignmentInProgress.collectAsStateWithLifecycle()

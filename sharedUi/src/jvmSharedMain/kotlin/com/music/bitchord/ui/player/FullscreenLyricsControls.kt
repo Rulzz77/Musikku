@@ -70,6 +70,8 @@ internal fun FullscreenLyricsControls(
 ) {
     BoxWithConstraints(modifier = modifier) {
         val availableWidth = maxWidth
+        val tightControls = availableWidth < 360.dp
+        val glyphModifier = Modifier.size(if (tightControls) 30.dp else 34.dp)
         val liked = likeStatus == LikeStatus.LIKE
         val repeatDescription = stringResource(
             when (repeatMode) {
@@ -87,6 +89,7 @@ internal fun FullscreenLyricsControls(
                     ),
                     onClick = onToggleLike,
                     active = liked,
+                    modifier = glyphModifier,
                 )
             } else {
                 Spacer(Modifier.size(34.dp))
@@ -100,6 +103,7 @@ internal fun FullscreenLyricsControls(
                 ),
                 onClick = onToggleShuffle,
                 active = shuffleEnabled,
+                modifier = glyphModifier,
             )
         }
         val repeatButton: @Composable () -> Unit = {
@@ -108,6 +112,7 @@ internal fun FullscreenLyricsControls(
                 contentDescription = repeatDescription,
                 onClick = onCycleRepeat,
                 active = repeatMode != RepeatModes.OFF,
+                modifier = glyphModifier,
             )
         }
 
@@ -132,6 +137,7 @@ internal fun FullscreenLyricsControls(
                             onPlayPause = onPlayPause,
                             onNext = onNext,
                             compact = true,
+                            tight = tightControls,
                         )
                     }
                     repeatButton()
@@ -193,6 +199,7 @@ internal fun FullscreenLyricsControls(
                     onPlayPause = onPlayPause,
                     onNext = onNext,
                     compact = true,
+                    tight = tightControls,
                 )
                 if (volumeVisible) {
                     VolumeRow(
@@ -223,43 +230,50 @@ internal fun FullscreenCoverTransport(
     onNext: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        CircleGlyph(
-            icon = BitChordIcons.Shuffle,
-            contentDescription = stringResource(
-                if (shuffleEnabled) Res.string.shuffle_on else Res.string.shuffle_off,
-            ),
-            onClick = onToggleShuffle,
-            active = shuffleEnabled,
-        )
-        Box(Modifier.weight(1f)) {
-            TransportRow(
-                isPlaying = isPlaying,
-                isLoading = isLoading,
-                previousEnabled = previousEnabled,
-                nextEnabled = nextEnabled,
-                onPrevious = onPrevious,
-                onPlayPause = onPlayPause,
-                onNext = onNext,
-                compact = true,
+    BoxWithConstraints(modifier = modifier) {
+        val tight = maxWidth < 280.dp
+        val glyphModifier = Modifier.size(if (tight) 26.dp else 34.dp)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(if (tight) 2.dp else 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            CircleGlyph(
+                icon = BitChordIcons.Shuffle,
+                contentDescription = stringResource(
+                    if (shuffleEnabled) Res.string.shuffle_on else Res.string.shuffle_off,
+                ),
+                onClick = onToggleShuffle,
+                active = shuffleEnabled,
+                modifier = glyphModifier,
+            )
+            Box(Modifier.weight(1f)) {
+                TransportRow(
+                    isPlaying = isPlaying,
+                    isLoading = isLoading,
+                    previousEnabled = previousEnabled,
+                    nextEnabled = nextEnabled,
+                    onPrevious = onPrevious,
+                    onPlayPause = onPlayPause,
+                    onNext = onNext,
+                    compact = true,
+                    tight = tight,
+                )
+            }
+            CircleGlyph(
+                icon = BitChordIcons.Repeat,
+                contentDescription = stringResource(
+                    when (repeatMode) {
+                        RepeatModes.ONE -> Res.string.repeat_one
+                        RepeatModes.ALL -> Res.string.repeat_all
+                        else -> Res.string.repeat_off
+                    },
+                ),
+                onClick = onCycleRepeat,
+                active = repeatMode != RepeatModes.OFF,
+                modifier = glyphModifier,
             )
         }
-        CircleGlyph(
-            icon = BitChordIcons.Repeat,
-            contentDescription = stringResource(
-                when (repeatMode) {
-                    RepeatModes.ONE -> Res.string.repeat_one
-                    RepeatModes.ALL -> Res.string.repeat_all
-                    else -> Res.string.repeat_off
-                },
-            ),
-            onClick = onCycleRepeat,
-            active = repeatMode != RepeatModes.OFF,
-        )
     }
 }
 
@@ -291,6 +305,7 @@ internal fun FullscreenCoverVolume(
 /** Glass toolbar for actions that remain available while reading fullscreen lyrics. */
 @Composable
 internal fun FullscreenLyricsToolbar(
+    onOpenQueue: () -> Unit,
     onOpenOutput: () -> Unit,
     onOpenLyricsSources: () -> Unit,
     onOpenMenu: () -> Unit,
@@ -308,24 +323,34 @@ internal fun FullscreenLyricsToolbar(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         CircleGlyph(
+            icon = BitChordIcons.Queue,
+            contentDescription = "Open playback queue",
+            onClick = onOpenQueue,
+            modifier = Modifier.size(30.dp),
+        )
+        CircleGlyph(
             icon = Icons.Rounded.Headphones,
             contentDescription = stringResource(Res.string.audio_output),
             onClick = onOpenOutput,
+            modifier = Modifier.size(30.dp),
         )
         CircleGlyph(
             icon = BitChordIcons.LyricsQuote,
             contentDescription = "Lyrics sources",
             onClick = onOpenLyricsSources,
+            modifier = Modifier.size(30.dp),
         )
         CircleGlyph(
             icon = Icons.Rounded.MoreHoriz,
             contentDescription = stringResource(Res.string.more),
             onClick = onOpenMenu,
+            modifier = Modifier.size(30.dp),
         )
         CircleGlyph(
             icon = Icons.Rounded.FullscreenExit,
             contentDescription = "Exit fullscreen lyrics",
             onClick = onExitFullscreen,
+            modifier = Modifier.size(30.dp),
         )
     }
 }

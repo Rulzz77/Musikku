@@ -70,7 +70,7 @@ internal fun FullscreenLyricsControls(
 ) {
     BoxWithConstraints(modifier = modifier) {
         val availableWidth = maxWidth
-        val tightControls = availableWidth < 220.dp
+        val tightControls = availableWidth < 360.dp
         val glyphModifier = Modifier.size(if (tightControls) 30.dp else 34.dp)
         val liked = likeStatus == LikeStatus.LIKE
         val repeatDescription = stringResource(

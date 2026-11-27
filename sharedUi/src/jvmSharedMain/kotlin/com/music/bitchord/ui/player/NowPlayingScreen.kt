@@ -2193,9 +2193,23 @@ fun NowPlayingScreen(
                     // paint beneath the lyrics on the right half of the display.
                     Box(
                         modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight(),
+                            .weight(0.46f)
+                            .fillMaxHeight()
+                            .clip(RectangleShape),
                     ) {
+                        // A normal cover is the exact fallback for tracks without
+                        // Canvas. It occupies the whole left pane, never a small
+                        // thumbnail and never the right-hand lyrics panel.
+                        if (!remoteArt.isNullOrBlank()) {
+                            AsyncImage(
+                                model = remoteArt,
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        }
+                        // When Canvas exists it is drawn over the cover. Until its
+                        // first frame appears, the cover remains visible underneath.
                         fullscreenLyricsCanvas?.let { clip ->
                             CanvasArtworkPlayer(
                                 canvas = clip,
@@ -2233,27 +2247,9 @@ fun NowPlayingScreen(
                                 ),
                             verticalArrangement = Arrangement.Bottom,
                         ) {
-                        // Without a rendered Canvas, show the track cover like a
-                        // normal player sleeve — a square card beside the lyrics,
-                        // not a full-window image. The space above it can breathe
-                        // with the landscape height and the usual controls below.
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxWidth(),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            if (!canvasRendered && !remoteArt.isNullOrBlank()) {
-                                AsyncImage(
-                                    model = remoteArt,
-                                    contentDescription = null,
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier
-                                        .size(160.dp)
-                                        .clip(RoundedCornerShape(16.dp)),
-                                )
-                            }
-                        }
+                        // Leave the upper part of the Canvas / cover clear so
+                        // its picture stays visible above the track information.
+                        Spacer(Modifier.weight(1f))
                         Text(
                             text = song.title,
                             style = MaterialTheme.typography.titleLarge.copy(
@@ -2315,7 +2311,7 @@ fun NowPlayingScreen(
                     // is restricted to the left half.
                     Column(
                         modifier = Modifier
-                            .weight(1f)
+                            .weight(0.54f)
                             .fillMaxHeight()
                             .background(
                                 Brush.horizontalGradient(

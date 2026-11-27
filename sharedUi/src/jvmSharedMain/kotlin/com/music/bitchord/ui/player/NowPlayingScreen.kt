@@ -2278,20 +2278,19 @@ fun NowPlayingScreen(
                                     }
                                 }
                             }
-                            AnimatedVisibility(
-                                visible = lyricsControlsOpen,
-                                enter = fadeIn(tween(180)),
-                                exit = fadeOut(tween(220)),
-                                modifier = Modifier
-                                    .align(Alignment.TopStart)
-                                    .padding(start = 18.dp, top = 12.dp),
-                            ) {
-                                FullscreenLyricsToolbar(
-                                    onOpenOutput = openAudioOutput,
-                                    onOpenLyricsSources = { showLyricsProviders = true },
-                                    onOpenMenu = onOpenMenu,
-                                    onExitFullscreen = exitLyricsFullscreen,
-                                )
+                            if (lyricsControlsOpen) {
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.TopStart)
+                                        .padding(start = 18.dp, top = 12.dp),
+                                ) {
+                                    FullscreenLyricsToolbar(
+                                        onOpenOutput = openAudioOutput,
+                                        onOpenLyricsSources = { showLyricsProviders = true },
+                                        onOpenMenu = onOpenMenu,
+                                        onExitFullscreen = exitLyricsFullscreen,
+                                    )
+                                }
                             }
                         }
                     } else {
@@ -2364,58 +2363,57 @@ fun NowPlayingScreen(
                                         trigger = artworkUnlikeSplitTrigger,
                                         modifier = Modifier.align(Alignment.Center),
                                     )
-                                    AnimatedVisibility(
-                                        visible = lyricsControlsOpen,
-                                        enter = fadeIn(tween(180)),
-                                        exit = fadeOut(tween(220)),
-                                        modifier = Modifier
-                                            .align(Alignment.TopCenter)
-                                            .padding(top = 12.dp),
-                                    ) {
-                                        FullscreenLyricsToolbar(
-                                            onOpenOutput = openAudioOutput,
-                                            onOpenLyricsSources = { showLyricsProviders = true },
-                                            onOpenMenu = onOpenMenu,
-                                            onExitFullscreen = exitLyricsFullscreen,
-                                        )
-                                    }
-                                    if (!hideVolumeBar) {
-                                        AnimatedVisibility(
-                                            visible = lyricsControlsOpen,
+                                    if (lyricsControlsOpen) {
+                                        Box(
                                             modifier = Modifier
-                                                .align(Alignment.CenterEnd)
-                                                .padding(end = 8.dp),
+                                                .align(Alignment.TopCenter)
+                                                .padding(top = 12.dp),
                                         ) {
-                                            FullscreenCoverVolume(
-                                                value = { volume.level.value },
-                                                onValueChange = onVolumeChange,
-                                                onValueChangeFinished = onVolumeChangeFinished,
+                                            FullscreenLyricsToolbar(
+                                                onOpenOutput = openAudioOutput,
+                                                onOpenLyricsSources = { showLyricsProviders = true },
+                                                onOpenMenu = onOpenMenu,
+                                                onExitFullscreen = exitLyricsFullscreen,
                                             )
                                         }
                                     }
-                                    AnimatedVisibility(
-                                        visible = lyricsControlsOpen,
-                                        enter = fadeIn(tween(180)),
-                                        exit = fadeOut(tween(220)),
-                                        modifier = Modifier
-                                            .align(Alignment.BottomCenter)
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 14.dp, vertical = 12.dp),
-                                    ) {
-                                        FullscreenCoverTransport(
-                                            shuffleEnabled = shuffleEnabled,
-                                            repeatMode = repeatMode,
-                                            isPlaying = isPlaying,
-                                            isLoading = isLoading || audioVersionSwitching,
-                                            previousEnabled = !controlsLocked &&
-                                                (canSkipPrevious || pastRestartPoint),
-                                            nextEnabled = !controlsLocked && canSkipNext,
-                                            onToggleShuffle = onToggleShuffle,
-                                            onCycleRepeat = onCycleRepeat,
-                                            onPrevious = onPrevious,
-                                            onPlayPause = onPlayPause,
-                                            onNext = onNext,
-                                        )
+                                    if (!hideVolumeBar) {
+                                        if (lyricsControlsOpen) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .align(Alignment.CenterEnd)
+                                                    .padding(end = 8.dp),
+                                            ) {
+                                                FullscreenCoverVolume(
+                                                    value = { volume.level.value },
+                                                    onValueChange = onVolumeChange,
+                                                    onValueChangeFinished = onVolumeChangeFinished,
+                                                )
+                                            }
+                                        }
+                                    }
+                                    if (lyricsControlsOpen) {
+                                        Box(
+                                            modifier = Modifier
+                                                .align(Alignment.BottomCenter)
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                                        ) {
+                                            FullscreenCoverTransport(
+                                                shuffleEnabled = shuffleEnabled,
+                                                repeatMode = repeatMode,
+                                                isPlaying = isPlaying,
+                                                isLoading = isLoading || audioVersionSwitching,
+                                                previousEnabled = !controlsLocked &&
+                                                    (canSkipPrevious || pastRestartPoint),
+                                                nextEnabled = !controlsLocked && canSkipNext,
+                                                onToggleShuffle = onToggleShuffle,
+                                                onCycleRepeat = onCycleRepeat,
+                                                onPrevious = onPrevious,
+                                                onPlayPause = onPlayPause,
+                                                onNext = onNext,
+                                            )
+                                        }
                                     }
                                 }
                             }

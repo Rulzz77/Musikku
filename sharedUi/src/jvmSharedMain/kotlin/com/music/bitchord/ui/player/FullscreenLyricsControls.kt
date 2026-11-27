@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.FullscreenExit
@@ -281,7 +282,7 @@ internal fun FullscreenCoverVolume(
             onValueChange = onValueChange,
             onValueChangeFinished = onValueChangeFinished,
             modifier = Modifier
-                .width(150.dp)
+                .requiredWidth(150.dp)
                 .graphicsLayer { rotationZ = 90f },
         )
     }

@@ -4,12 +4,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.FullscreenExit
@@ -63,7 +65,7 @@ internal fun FullscreenLyricsControls(
     onVolumeChangeFinished: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    BoxWithConstraintsCompat(modifier) {
+    BoxWithConstraints(modifier = modifier) {
         val liked = likeStatus == LikeStatus.LIKE
         val repeatDescription = stringResource(
             when (repeatMode) {
@@ -106,7 +108,9 @@ internal fun FullscreenLyricsControls(
         }
 
         Column {
-            if (maxWidth >= 300.dp) {
+            if (maxWidth >= 430.dp && volumeVisible) {
+                // Wide landscape windows keep every playback control on the
+                // same baseline, as in the reference player.
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(2.dp),
@@ -127,6 +131,42 @@ internal fun FullscreenLyricsControls(
                         )
                     }
                     repeatButton()
+                    Box(Modifier.width(132.dp)) {
+                        VolumeRow(
+                            value = volumeValue,
+                            onValueChange = onVolumeChange,
+                            onValueChangeFinished = onVolumeChangeFinished,
+                        )
+                    }
+                }
+            } else if (maxWidth >= 300.dp) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    likeButton()
+                    shuffleButton()
+                    Box(Modifier.weight(1f)) {
+                        TransportRow(
+                            isPlaying = isPlaying,
+                            isLoading = isLoading,
+                            previousEnabled = previousEnabled,
+                            nextEnabled = nextEnabled,
+                            onPrevious = onPrevious,
+                            onPlayPause = onPlayPause,
+                            onNext = onNext,
+                            compact = true,
+                        )
+                    }
+                    repeatButton()
+                }
+                if (volumeVisible) {
+                    VolumeRow(
+                        value = volumeValue,
+                        onValueChange = onVolumeChange,
+                        onValueChangeFinished = onVolumeChangeFinished,
+                    )
                 }
             } else {
                 // The small-screen arrangement avoids squeezing the play target
@@ -150,14 +190,13 @@ internal fun FullscreenLyricsControls(
                     onNext = onNext,
                     compact = true,
                 )
-            }
-
-            if (volumeVisible) {
-                VolumeRow(
-                    value = volumeValue,
-                    onValueChange = onVolumeChange,
-                    onValueChangeFinished = onVolumeChangeFinished,
-                )
+                if (volumeVisible) {
+                    VolumeRow(
+                        value = volumeValue,
+                        onValueChange = onVolumeChange,
+                        onValueChangeFinished = onVolumeChangeFinished,
+                    )
+                }
             }
         }
     }
@@ -205,17 +244,3 @@ internal fun FullscreenLyricsToolbar(
     }
 }
 
-/**
- * A tiny wrapper so the control deck can measure itself without exposing
- * BoxWithConstraints' scope in its public call signature.
- */
-@Composable
-private fun BoxWithConstraintsCompat(
-    modifier: Modifier,
-    content: @Composable androidx.compose.foundation.layout.BoxWithConstraintsScope.() -> Unit,
-) {
-    androidx.compose.foundation.layout.BoxWithConstraints(
-        modifier = modifier,
-        content = content,
-    )
-}

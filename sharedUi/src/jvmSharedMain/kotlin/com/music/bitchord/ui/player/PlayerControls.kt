@@ -483,12 +483,12 @@ internal fun TransportRow(
     animationsActive: Boolean = true,
 ) {
     val playSize = when {
-        tight -> 38.dp
+        tight -> 36.dp
         compact -> 58.dp
         else -> 74.dp
     }
     val playTouch = when {
-        tight -> 46.dp
+        tight -> 42.dp
         compact -> 76.dp
         else -> 92.dp
     }

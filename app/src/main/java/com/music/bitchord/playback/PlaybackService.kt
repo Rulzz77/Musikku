@@ -9318,33 +9318,39 @@ class PlaybackService : MediaLibraryService() {
     /**
      * Handles browsing and content resolution for Android Auto and other MediaBrowser clients.
      */
+    @androidx.annotation.OptIn(UnstableApi::class)
     private inner class MediaLibraryCallback : MediaLibrarySession.Callback {
 
         override fun onConnect(
             session: MediaSession,
             controller: MediaSession.ControllerInfo,
         ): MediaSession.ConnectionResult {
-            val sessionCommands = MediaSession.ConnectionResult.DEFAULT_SESSION_AND_LIBRARY_COMMANDS
-                .buildUpon()
-                .add(favoriteCommand)
-                .add(boundedContextCommand)
-                .add(clearBoundedContextCommand)
-                .add(autoplayCommand)
-                .add(shuffleCommand)
-                .add(startStationCommand)
-                .add(revertToOriginalCommand)
-                .add(swapToVersionCommand)
-                .add(beginRadioQueueCommand)
-                .add(commitRadioQueueCommand)
-                .add(upgradeQualityCommand)
-                .add(swapVersionCommand)
-                .add(queueDragCommand)
-                .add(queueMoveToUserCommand)
-                .add(queueRemoveUndoCommand)
-                .add(queueRemoveEntriesUndoCommand)
-                .add(queueClearUndoCommand)
-                .add(queueUndoCommand)
-                .build()
+            // Standard media controls and library browsing remain available to
+            // all controllers. Mutating app-specific commands are exposed only
+            // to controllers Android marks as trusted by the user.
+            val commands = MediaSession.ConnectionResult.DEFAULT_SESSION_AND_LIBRARY_COMMANDS.buildUpon()
+            if (controller.isTrusted) {
+                commands
+                    .add(favoriteCommand)
+                    .add(boundedContextCommand)
+                    .add(clearBoundedContextCommand)
+                    .add(autoplayCommand)
+                    .add(shuffleCommand)
+                    .add(startStationCommand)
+                    .add(revertToOriginalCommand)
+                    .add(swapToVersionCommand)
+                    .add(beginRadioQueueCommand)
+                    .add(commitRadioQueueCommand)
+                    .add(upgradeQualityCommand)
+                    .add(swapVersionCommand)
+                    .add(queueDragCommand)
+                    .add(queueMoveToUserCommand)
+                    .add(queueRemoveUndoCommand)
+                    .add(queueRemoveEntriesUndoCommand)
+                    .add(queueClearUndoCommand)
+                    .add(queueUndoCommand)
+            }
+            val sessionCommands = commands.build()
             return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
                 .setAvailablePlayerCommands(MediaSession.ConnectionResult.DEFAULT_PLAYER_COMMANDS)
                 .setAvailableSessionCommands(sessionCommands)
@@ -9368,6 +9374,11 @@ class PlaybackService : MediaLibraryService() {
             customCommand: SessionCommand,
             args: Bundle,
         ): ListenableFuture<SessionResult> {
+            if (!controller.isTrusted) {
+                return Futures.immediateFuture(
+                    SessionResult(SessionError.ERROR_PERMISSION_DENIED),
+                )
+            }
             when (customCommand.customAction) {
                 ACTION_QUEUE_REMOVE_WITH_UNDO, ACTION_QUEUE_REMOVE_ENTRIES_WITH_UNDO,
                 ACTION_QUEUE_CLEAR_WITH_UNDO, ACTION_QUEUE_UNDO -> {

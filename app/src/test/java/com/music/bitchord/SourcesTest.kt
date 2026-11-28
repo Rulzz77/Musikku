@@ -21,6 +21,7 @@ import com.music.bitchord.data.sources.TrackMatcher
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.yield
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -1144,6 +1145,7 @@ class SourcesTest {
         private val format: StreamFormat?,
         override val kind: SourceKind = SourceKind.JIOSAAVN,
         private val candidates: List<Song>? = null,
+        private val yieldAfterAnswer: Boolean = false,
     ) : MusicSource {
         override val configId = displayName
         var asked = false
@@ -1162,6 +1164,10 @@ class SourcesTest {
             asked = true
             try {
                 delay(answerAfterMs)
+                // Let other fake sources with the same configured delay reach
+                // their answer before this one completes. A fixed 5ms delay
+                // alone is not a deterministic simultaneous-arrival barrier.
+                if (yieldAfterAnswer) yield()
             } catch (e: CancellationException) {
                 cancelled = true
                 throw e
@@ -1343,8 +1349,18 @@ class SourcesTest {
      */
     @Test
     fun `prefers the better of two answers that arrive together`() = runBlocking {
-        val worse = FakeSource("Ricky's Addon", answerAfterMs = 5, format = StreamFormat("mp3", kbps = 128))
-        val better = FakeSource("JioSaavn", answerAfterMs = 5, format = StreamFormat("mp4", kbps = 320))
+        val worse = FakeSource(
+            "Ricky's Addon",
+            answerAfterMs = 5,
+            format = StreamFormat("mp3", kbps = 128),
+            yieldAfterAnswer = true,
+        )
+        val better = FakeSource(
+            "JioSaavn",
+            answerAfterMs = 5,
+            format = StreamFormat("mp4", kbps = 320),
+            yieldAfterAnswer = true,
+        )
         val (source, stream) = SourceResolver.bestAcross(
             listOf(worse, better), raceTarget(), StreamRequest.Lossless,
         )!!

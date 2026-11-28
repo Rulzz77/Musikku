@@ -127,11 +127,8 @@ object Backup {
             var settingsAttempted = false
             var collectionsAttempted = false
             try {
-                listeningAttempted = true
                 ListeningStats.importAll(file.listening)
-
-                settingsAttempted = true
-                AppSettings.importPrefs(settings)
+                listeningAttempted = true
 
                 if (file.version >= 2) {
                     collectionsAttempted = true
@@ -141,6 +138,8 @@ object Backup {
                     if (file.version >= 4) SmartPlaylists.restoreFromBackup(smartPlaylistRules, mergePlaylists)
                 }
 
+                settingsAttempted = true
+                AppSettings.importPrefs(settings)
                 SearchHistory.reload()
             } catch (failure: Throwable) {
                 val rollbackFailures = mutableListOf<Throwable>()

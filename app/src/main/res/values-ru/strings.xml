@@ -1607,4 +1607,8 @@
     <string name="automix_mini_art_transition">Переход обложек в мини-плеере</string>
     <string name="automix_mini_art_transition_subtitle">Показывает переходы обложек в мини-плеере во время AutoMix.</string>
     <string name="listen_together_invalid_qr">Этот QR-код не является действительным приглашением для совместного прослушивания.</string>
+    <string name="player_more_playback_lyrics">Воспроизведение и тексты</string>
+    <string name="player_more_queue_actions">Действия с очередью</string>
+    <string name="player_more_library_downloads">Медиатека и загрузки</string>
+    <string name="player_more_song_details">Сведения о треке</string>
 </resources>

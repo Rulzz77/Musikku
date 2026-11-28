@@ -530,13 +530,6 @@ object ListeningStats {
     }
 
     /**
-     * Replaces everything held with [buckets].
-     *
-     * A replace rather than a merge, and deliberately so: an import is a restore
-     * onto a new device, and two copies of the same month added together would
-     * silently double every number on the page with no way to tell afterwards.
-     */
-    /**
      * Replaces history only after every incoming month has been written to a
      * sibling staging directory. The old directory is renamed aside, then the
      * staged directory is swapped in. A failed stage never touches existing

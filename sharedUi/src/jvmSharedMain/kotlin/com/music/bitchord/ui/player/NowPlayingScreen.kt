@@ -2415,7 +2415,7 @@ fun NowPlayingScreen(
                         .fillMaxSize()
                         // The dialog draws its backdrop edge-to-edge, but all interactive
                         // player content stays inside the same safe area as LandscapePlayer.
-                        .windowInsetsPadding(WindowInsets.safeDrawing.union(stableStatusBarInsets())),
+                        .windowInsetsPadding(WindowInsets.safeDrawing).windowInsetsPadding(stableStatusBarInsets()),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     if (fullscreenLyricsCanvas != null) {
@@ -2821,7 +2821,7 @@ fun NowPlayingScreen(
                             Box(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .windowInsetsPadding(WindowInsets.safeDrawing.union(stableStatusBarInsets())),
+                                    .windowInsetsPadding(WindowInsets.safeDrawing).windowInsetsPadding(stableStatusBarInsets()),
                                 contentAlignment = Alignment.CenterEnd,
                             ) {
                                 Box(

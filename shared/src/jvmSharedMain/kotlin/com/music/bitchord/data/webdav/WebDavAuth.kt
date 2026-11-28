@@ -20,8 +20,9 @@ object WebDavAuth {
     fun update(serverUrl: String?, header: String?) {
         val uri = serverUrl?.let(::parseUrl)
         origin = uri?.let(::originOf)
-        pathPrefix = uri?.rawPath?.trimEnd('/')?.ifEmpty { "/" }
-        authHeader = header?.takeIf { it.isNotBlank() && origin != null }
+        pathPrefix = uri?.let { decodedNormalizedPath(it.rawPath) }
+            ?.trimEnd('/')?.ifEmpty { "/" }
+        authHeader = header?.takeIf { it.isNotBlank() && origin != null && pathPrefix != null }
     }
 
     fun shouldAuthorize(requestUrl: String): Boolean {
@@ -31,7 +32,7 @@ object WebDavAuth {
         if (header.isBlank()) return false
         val request = parseUrl(requestUrl) ?: return false
         if (originOf(request) != expectedOrigin) return false
-        val path = request.rawPath.orEmpty().ifEmpty { "/" }
+        val path = decodedNormalizedPath(request.rawPath) ?: return false
         return expectedPath == "/" || path == expectedPath || path.startsWith(expectedPath + "/")
     }
 
@@ -51,4 +52,25 @@ object WebDavAuth {
         val effectivePort = if (port >= 0) port else if (scheme == "https") 443 else 80
         return scheme + "://" + uri.host.lowercase(java.util.Locale.ROOT) + ":" + effectivePort
     }
+
+    private fun decodedNormalizedPath(rawPath: String?): String? = runCatching {
+        val raw = rawPath.orEmpty().ifEmpty { "/" }
+        val decoded = java.net.URLDecoder.decode(
+            raw.replace("+", "%2B"),
+            Charsets.UTF_8.name(),
+        )
+        require(decoded.none { it == '\\\\' || it.code < 0x20 || it.code == 0x7f })
+        val segments = ArrayDeque<String>()
+        decoded.split('/').forEach { segment ->
+            when (segment) {
+                "", "." -> Unit
+                ".." -> {
+                    require(segments.isNotEmpty())
+                    segments.removeLast()
+                }
+                else -> segments.addLast(segment)
+            }
+        }
+        "/" + segments.joinToString("/")
+    }.getOrNull()
 }

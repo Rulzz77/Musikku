@@ -289,13 +289,17 @@ private fun VideoQualityBox(onClick: () -> Unit) {
  * now on — for the next video too, where that video has it.
  */
 @Composable
-internal fun VideoQualitySheet(hazeState: HazeState, onDismiss: () -> Unit) {
+internal fun VideoQualitySheet(hazeState: HazeState, onDismiss: () -> Unit, fullscreen: Boolean = false) {
     val quality by PlayerPlatform.host.musicVideoQuality.collectAsStateWithLifecycle()
     val selected = quality.selected()
     PlayerDrawer(
         hazeState = hazeState,
         title = stringResource(Res.string.video_quality),
         onDismiss = onDismiss,
+        alignment = if (fullscreen) Alignment.CenterEnd else Alignment.BottomCenter,
+        panelMaxWidth = if (fullscreen) FULLSCREEN_PLAYER_PANEL_MAX_WIDTH else DRAWER_MAX_WIDTH,
+        panelShape = if (fullscreen) FULLSCREEN_PLAYER_PANEL_SHAPE else DRAWER_SHAPE,
+        slideFromEnd = fullscreen,
     ) {
         Column(
             modifier = Modifier.fillMaxWidth(),

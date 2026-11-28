@@ -11,14 +11,17 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -26,6 +29,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -85,7 +89,18 @@ internal val DRAWER_SHAPE = RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp)
  */
 internal val DRAWER_MAX_WIDTH = 640.dp
 internal val ROW_SHAPE = RoundedCornerShape(16.dp)
+internal val FULLSCREEN_PLAYER_PANEL_SHAPE = RoundedCornerShape(22.dp)
+val FULLSCREEN_PLAYER_PANEL_MAX_WIDTH = 520.dp
+internal val FULLSCREEN_PLAYER_PANEL_BACKGROUND = Color(0xF51A1720)
+internal val FULLSCREEN_PLAYER_PANEL_BORDER = Color.White.copy(alpha = 0.10f)
+const val FULLSCREEN_PLAYER_PANEL_WIDTH_FRACTION = 0.54f
 internal val SCRIM_COLOR = Color.Black.copy(alpha = 0.5f)
+
+/** Shared surface used by the fullscreen queue and every fullscreen player drawer. */
+fun Modifier.fullscreenPlayerPanelSurface(): Modifier = this
+    .clip(FULLSCREEN_PLAYER_PANEL_SHAPE)
+    .background(FULLSCREEN_PLAYER_PANEL_BACKGROUND)
+    .border(1.dp, FULLSCREEN_PLAYER_PANEL_BORDER, FULLSCREEN_PLAYER_PANEL_SHAPE)
 
 /**
  * How much of its own height the drawer has to be dragged before letting go
@@ -194,7 +209,7 @@ fun PlayerDrawer(
         }
     }
 
-    Box(
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
             .containSheetGestures()
@@ -206,6 +221,10 @@ fun PlayerDrawer(
             ),
         contentAlignment = alignment,
     ) {
+        val fullscreenWidth = minOf(
+            maxWidth * FULLSCREEN_PLAYER_PANEL_WIDTH_FRACTION,
+            minOf(panelMaxWidth, FULLSCREEN_PLAYER_PANEL_MAX_WIDTH),
+        )
         AnimatedVisibility(
             visible = shown,
             enter = if (slideFromEnd) {
@@ -220,41 +239,48 @@ fun PlayerDrawer(
             },
         ) {
         Column(
-            modifier = Modifier
-                // Capped so a phone full of rows scrolls inside the drawer
-                // rather than growing one into a full-screen page.
-                .heightIn(max = 560.dp)
-                // Capped before the fill, so [Modifier.fillMaxWidth] fills to
-                // the cap rather than to the window. The parent's alignment
-                // then anchors a bottom drawer or a fullscreen side panel.
-                .widthIn(max = panelMaxWidth)
-                .fillMaxWidth()
-                .onSizeChanged { height = it.height }
-                .offset { IntOffset(0, offset.roundToInt()) }
-                .clip(panelShape)
-                .then(
-                    // The ⋯ menu's frost, so the drawers and the menu read as one
-                    // material over the player — its own where the player is
-                    // recorded for it, else the same look through the haze.
-                    when {
-                        reduceDynamicBlur -> Modifier.background(MenuFrostDark)
-                        frost != null -> with(frost) {
-                            Modifier.frostPanel(panelShape, MenuFrostDark.copy(alpha = MENU_FROST_ALPHA))
+            modifier = if (slideFromEnd) {
+                // Fullscreen drawers share the exact side-panel footprint of
+                // the queue: 54% width, a 10dp inset, full available height,
+                // the same dark surface, border and 22dp corner radius.
+                Modifier
+                    .width(fullscreenWidth)
+                    .fillMaxHeight()
+                    .padding(10.dp)
+                    .fullscreenPlayerPanelSurface()
+                    .clickable(
+                        indication = null,
+                        interactionSource = remember { MutableInteractionSource() },
+                        onClick = {},
+                    )
+                    .onSizeChanged { height = it.height }
+                    .padding(horizontal = 18.dp)
+                    .padding(top = 16.dp, bottom = 12.dp)
+                    .verticalScroll(rememberScrollState())
+            } else {
+                Modifier
+                    .heightIn(max = 560.dp)
+                    .widthIn(max = panelMaxWidth)
+                    .fillMaxWidth()
+                    .onSizeChanged { height = it.height }
+                    .offset { IntOffset(0, offset.roundToInt()) }
+                    .clip(panelShape)
+                    .then(
+                        when {
+                            reduceDynamicBlur -> Modifier.background(MenuFrostDark)
+                            frost != null -> with(frost) {
+                                Modifier.frostPanel(panelShape, MenuFrostDark.copy(alpha = MENU_FROST_ALPHA))
+                            }
+                            else -> Modifier.liveMenuFrost(hazeState, MenuFrostDark)
                         }
-                        else -> Modifier.liveMenuFrost(hazeState, MenuFrostDark)
-                    }
-                )
-                .clickable(
-                    indication = null,
-                    interactionSource = remember { MutableInteractionSource() },
-                    onClick = {},
-                )
-                // Dragged down to dismiss, like every other sheet in the app.
-                // Upward drag is clamped to zero rather than followed: there is
-                // nothing above the drawer to reveal.
-                .then(if (drawerFollowsListScroll && !slideFromEnd) Modifier.nestedScroll(drawerScroll) else Modifier)
-                .then(
-                    if (slideFromEnd) Modifier else Modifier.pointerInput(height) {
+                    )
+                    .clickable(
+                        indication = null,
+                        interactionSource = remember { MutableInteractionSource() },
+                        onClick = {},
+                    )
+                    .then(if (drawerFollowsListScroll) Modifier.nestedScroll(drawerScroll) else Modifier)
+                    .pointerInput(height) {
                         detectVerticalDragGestures(
                             onDragEnd = dismissOnRelease,
                             onDragCancel = { drag = 0f },
@@ -262,11 +288,11 @@ fun PlayerDrawer(
                             drag = (drag + delta).coerceAtLeast(0f)
                         }
                     }
-                )
-                .navigationBarsPadding()
-                .padding(horizontal = 16.dp)
-                .padding(top = 10.dp, bottom = 20.dp)
-                .verticalScroll(rememberScrollState()),
+                    .navigationBarsPadding()
+                    .padding(horizontal = 16.dp)
+                    .padding(top = 10.dp, bottom = 20.dp)
+                    .verticalScroll(rememberScrollState())
+            },
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             if (!slideFromEnd) {

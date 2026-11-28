@@ -2277,6 +2277,7 @@ fun NowPlayingScreen(
             VideoQualitySheet(
                 hazeState = overlayHaze,
                 onDismiss = { showVideoQuality = false },
+                fullscreen = lyricsFullscreenVisible,
             )
         }
         if (showAudioOutput) {
@@ -2313,18 +2314,21 @@ fun NowPlayingScreen(
                 hazeState = overlayHaze,
                 isPlaying = isPlaying,
                 onDismiss = { showAudioPipeline = false },
+                fullscreen = lyricsFullscreenVisible,
             )
         }
         if (showCast) {
             PlayerPlatform.host.CastDialog(
                 hazeState = overlayHaze,
                 onDismiss = { showCast = false },
+                fullscreen = lyricsFullscreenVisible,
             )
         }
         if (showListenTogetherMembers) {
             ListenTogetherMembersSheet(
                 hazeState = overlayHaze,
                 onDismiss = { showListenTogetherMembers = false },
+                fullscreen = lyricsFullscreenVisible,
                 onManage = {
                     showListenTogetherMembers = false
                     onListenTogether()
@@ -2335,6 +2339,7 @@ fun NowPlayingScreen(
             LyricsOffsetSheet(
                 hazeState = overlayHaze,
                 onDismiss = onDismissLyricsOffset,
+                fullscreen = lyricsFullscreenVisible,
             )
         }
         lyricsShare?.let { request ->
@@ -2344,7 +2349,7 @@ fun NowPlayingScreen(
                 onDismiss = { lyricsShare = null },
             )
         }
-        MixViewOverlay(hazeState = overlayHaze)
+        MixViewOverlay(hazeState = overlayHaze, fullscreen = lyricsFullscreenVisible)
     }
 
     // A landscape window — a tablet, or a phone on its side — takes an entirely
@@ -2847,24 +2852,21 @@ fun NowPlayingScreen(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.CenterEnd,
                     ) {
-                        val panelWidth = minOf(maxWidth * 0.54f, 520.dp)
+                        val panelWidth = minOf(
+                            maxWidth * FULLSCREEN_PLAYER_PANEL_WIDTH_FRACTION,
+                            FULLSCREEN_PLAYER_PANEL_MAX_WIDTH,
+                        )
                         Box(
                             modifier = Modifier
                                 .width(panelWidth)
                                 .fillMaxHeight()
                                 .padding(10.dp)
-                                .clip(RoundedCornerShape(22.dp))
-                                .background(Color(0xF51A1720))
+                                .fullscreenPlayerPanelSurface()
                                 // Keep taps inside the panel from dismissing the scrim.
                                 .clickable(
                                     interactionSource = remember { MutableInteractionSource() },
                                     indication = null,
-                                ) {}
-                                .border(
-                                    1.dp,
-                                    Color.White.copy(alpha = 0.10f),
-                                    RoundedCornerShape(22.dp),
-                                ),
+                                ) {},
                         ) {
                             InlineQueue(
                                 queue = queue,

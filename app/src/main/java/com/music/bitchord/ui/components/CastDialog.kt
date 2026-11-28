@@ -57,6 +57,7 @@ fun CastDialog(
     hazeState: HazeState,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
+    fullscreen: Boolean = false,
 ) {
     val cast by CastController.state.collectAsStateWithLifecycle()
     val haptics = rememberHaptics()
@@ -79,6 +80,7 @@ fun CastDialog(
         doneLabel = stringResource(R.string.done),
         onDismiss = onDismiss,
         modifier = modifier,
+        fullscreen = fullscreen,
     ) {
         Column(Modifier.fillMaxWidth()) {
             PipelineRule(Modifier)

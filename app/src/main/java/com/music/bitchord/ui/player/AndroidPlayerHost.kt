@@ -418,15 +418,16 @@ class AndroidPlayerHost(context: Context) : PlayerHost {
     }
 
     @Composable
-    override fun CastDialog(hazeState: HazeState, onDismiss: () -> Unit) =
-        com.music.bitchord.ui.components.CastDialog(hazeState = hazeState, onDismiss = onDismiss)
+    override fun CastDialog(hazeState: HazeState, onDismiss: () -> Unit, fullscreen: Boolean) =
+        com.music.bitchord.ui.components.CastDialog(hazeState = hazeState, onDismiss = onDismiss, fullscreen = fullscreen)
 
     @Composable
-    override fun AudioPipelineDialog(hazeState: HazeState, isPlaying: Boolean, onDismiss: () -> Unit) =
+    override fun AudioPipelineDialog(hazeState: HazeState, isPlaying: Boolean, onDismiss: () -> Unit, fullscreen: Boolean) =
         com.music.bitchord.ui.components.AudioPipelineDialog(
             hazeState = hazeState,
             onDismiss = onDismiss,
             isPlaying = isPlaying,
+            fullscreen = fullscreen,
         )
 
     // The ⋯ menu's own material: a still of the player, blurred under each

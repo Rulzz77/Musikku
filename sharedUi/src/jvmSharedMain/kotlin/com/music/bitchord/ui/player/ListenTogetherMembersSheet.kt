@@ -55,6 +55,7 @@ internal fun ListenTogetherMembersSheet(
     onDismiss: () -> Unit,
     onManage: () -> Unit,
     modifier: Modifier = Modifier,
+    fullscreen: Boolean = false,
 ) {
     val state by PlayerPlatform.host.party.collectAsStateWithLifecycle()
 
@@ -63,6 +64,10 @@ internal fun ListenTogetherMembersSheet(
         title = stringResource(Res.string.listen_together),
         onDismiss = onDismiss,
         modifier = modifier,
+        alignment = if (fullscreen) Alignment.CenterEnd else Alignment.BottomCenter,
+        panelMaxWidth = if (fullscreen) FULLSCREEN_PLAYER_PANEL_MAX_WIDTH else DRAWER_MAX_WIDTH,
+        panelShape = if (fullscreen) FULLSCREEN_PLAYER_PANEL_SHAPE else DRAWER_SHAPE,
+        slideFromEnd = fullscreen,
     ) {
         Column(
             modifier = Modifier.fillMaxWidth(),

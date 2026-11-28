@@ -148,6 +148,7 @@ fun AudioPipelineDialog(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
     isPlaying: Boolean = false,
+    fullscreen: Boolean = false,
 ) {
     val nerdStats by NerdStats.current.collectAsStateWithLifecycle()
     val outputStatus by AudioOutputStatus.current.collectAsStateWithLifecycle()
@@ -227,6 +228,7 @@ fun AudioPipelineDialog(
         doneLabel = stringResource(R.string.done),
         onDismiss = onDismiss,
         modifier = modifier,
+        fullscreen = fullscreen,
     ) {
         // The signal flow redraws every frame while playing. On its own
         // layer, each frame re-records just these lines rather than every

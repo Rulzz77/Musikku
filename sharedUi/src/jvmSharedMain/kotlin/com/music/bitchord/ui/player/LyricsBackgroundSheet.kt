@@ -48,8 +48,8 @@ internal fun LyricsBackgroundSheet(
         title = "Lyrics background",
         onDismiss = onDismiss,
         alignment = Alignment.CenterEnd,
-        panelMaxWidth = 420.dp,
-        panelShape = RoundedCornerShape(24.dp),
+        panelMaxWidth = FULLSCREEN_PLAYER_PANEL_MAX_WIDTH,
+        panelShape = FULLSCREEN_PLAYER_PANEL_SHAPE,
         slideFromEnd = true,
         titleGap = 10.dp,
     ) {

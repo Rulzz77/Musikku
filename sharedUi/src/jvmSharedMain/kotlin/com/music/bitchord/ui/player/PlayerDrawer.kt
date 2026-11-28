@@ -18,6 +18,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -66,6 +69,7 @@ import com.music.bitchord.ui.components.MENU_FROST_ALPHA
 import com.music.bitchord.ui.components.MenuFrostDark
 import com.music.bitchord.ui.components.liveMenuFrost
 import com.music.bitchord.ui.utils.containSheetGestures
+import com.music.bitchord.ui.theme.stableStatusBarInsets
 import dev.chrisbanes.haze.HazeState
 import kotlin.math.roundToInt
 
@@ -208,6 +212,11 @@ fun PlayerDrawer(
     ) {
         AnimatedVisibility(
             visible = shown,
+            modifier = if (slideFromEnd) {
+                // Side drawers in Full Screen use the same cutout/system-bar-safe
+                // viewport as the player beneath them; the dimmed backdrop remains full-bleed.
+                Modifier.windowInsetsPadding(WindowInsets.safeDrawing.union(stableStatusBarInsets()))
+            } else Modifier,
             enter = if (slideFromEnd) {
                 slideInHorizontally(tween(260, easing = FastOutSlowInEasing)) { it }
             } else {

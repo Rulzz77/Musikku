@@ -57,9 +57,17 @@ class AppSettingsValidationTest {
     fun `WebDAV password remains bound to the same origin and username`() {
         assertFalse(
             webDavCredentialBindingChanged(
+                "https://cloud.example.com/remote.php/dav/",
+                "alice",
                 "https://cloud.example.com/remote.php/dav",
                 "alice",
-                "https://cloud.example.com/Music",
+            ),
+        )
+        assertTrue(
+            webDavCredentialBindingChanged(
+                "https://cloud.example.com/remote.php/dav",
+                "alice",
+                "https://cloud.example.com/api/other-app",
                 "alice",
             ),
         )

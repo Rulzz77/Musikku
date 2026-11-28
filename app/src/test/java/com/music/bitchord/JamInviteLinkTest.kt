@@ -121,6 +121,61 @@ class JamInviteLinkTest {
     }
 
     @Test
+    fun `rejects invalid explicit server parameters rather than silently using the default`() {
+        assertNull(
+            JamInviteLink.parseInvite(
+                "https://bitchord.kushagrasingh.in/invite/ABC123?server=ftp%3A%2F%2Fparty.example.com",
+            ),
+        )
+        assertNull(
+            JamInviteLink.parseInvite(
+                "https://bitchord.kushagrasingh.in/invite/ABC123?server=https%3A%2F%2Fuser%3Apass%40party.example.com",
+            ),
+        )
+        assertNull(JamInviteLink.parseInvite("bitchord://user@party/ABC123"))
+    }
+
+    @Test
+    fun `production invite targets reject loopback LAN and special use hosts`() {
+        listOf(
+            "https://localhost",
+            "https://127.0.0.1",
+            "https://10.0.0.8",
+            "https://172.20.0.2",
+            "https://192.168.1.8",
+            "https://[::1]",
+            "https://[fc00::1]",
+            "https://[fe80::1]",
+            "https://[ff02::1]",
+            "https://[2001:db8::1]",
+            "https://party.local",
+        ).forEach { target ->
+            assertNull(
+                "$target must not be used as a production invite destination",
+                JamInviteLink.sanitizeServerUrl(target, allowLocal = false),
+            )
+        }
+        assertEquals(
+            "https://party.example.com",
+            JamInviteLink.sanitizeServerUrl("https://party.example.com", allowLocal = false),
+        )
+    }
+
+    @Test
+    fun `development invite targets allow local servers but never multicast or invalid schemes`() {
+        assertEquals(
+            "http://127.0.0.1:8080",
+            JamInviteLink.sanitizeServerUrl("http://127.0.0.1:8080", allowLocal = true),
+        )
+        assertEquals(
+            "https://192.168.1.8:8443",
+            JamInviteLink.sanitizeServerUrl("https://192.168.1.8:8443", allowLocal = true),
+        )
+        assertNull(JamInviteLink.sanitizeServerUrl("https://[ff02::1]", allowLocal = true))
+        assertNull(JamInviteLink.sanitizeServerUrl("ftp://party.example.com", allowLocal = true))
+    }
+
+    @Test
     fun `switch party result sealed hierarchy holds expected properties`() {
         val success: com.music.bitchord.data.listentogether.ListenTogether.SwitchPartyResult =
             com.music.bitchord.data.listentogether.ListenTogether.SwitchPartyResult.Success("ABC123")

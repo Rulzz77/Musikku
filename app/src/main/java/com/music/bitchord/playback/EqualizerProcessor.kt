@@ -116,7 +116,11 @@ class EqualizerProcessor : BaseAudioProcessor() {
      * playing track.
      */
     fun setTuning(enabled: Boolean, curve: EqCurve, balance: Float) {
-        target = if (enabled) Tuning(curve, balance.coerceIn(-1f, 1f)) else Tuning.OFF
+        val safeBalance = balance.takeIf(Float::isFinite)?.coerceIn(-1f, 1f) ?: 0f
+        // Rebuild through EqCurve.of as a final trust boundary: every filter
+        // gain/Q must be finite before a coefficient reaches the audio thread.
+        val safeCurve = EqCurve.of(curve.gainsDb, curve.qs)
+        target = if (enabled) Tuning(safeCurve, safeBalance) else Tuning.OFF
     }
 
     val isEnabled: Boolean

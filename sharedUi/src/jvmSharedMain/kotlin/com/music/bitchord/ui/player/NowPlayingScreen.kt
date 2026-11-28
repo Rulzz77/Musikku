@@ -2640,7 +2640,7 @@ fun NowPlayingScreen(
                                                     showLyricsProviders = true
                                                 },
                                                 onOpenBackground = { revealLyricsControls(); showLyricsBackground = true },
-                                        onOpenMenu = { revealLyricsControls(); onOpenMenu() },
+                                                onOpenMenu = { revealLyricsControls(); onOpenMenu() },
                                                 onExitFullscreen = exitLyricsFullscreen,
                                             )
                                         }

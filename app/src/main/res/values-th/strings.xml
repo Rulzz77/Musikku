@@ -1558,4 +1558,8 @@
     <string name="automix_mini_art_transition">การเปลี่ยนภาพปกในมินิเพลเยอร์</string>
     <string name="automix_mini_art_transition_subtitle">แสดงการเปลี่ยนภาพปกในมินิเพลเยอร์ระหว่างใช้ AutoMix</string>
     <string name="listen_together_invalid_qr">QR นี้ไม่ใช่คำเชิญเข้าร่วมฟังเพลงด้วยกันที่ถูกต้อง</string>
+    <string name="player_more_playback_lyrics">การเล่นและเนื้อเพลง</string>
+    <string name="player_more_queue_actions">การจัดการคิว</string>
+    <string name="player_more_library_downloads">คลังเพลงและการดาวน์โหลด</string>
+    <string name="player_more_song_details">รายละเอียดเพลง</string>
 </resources>

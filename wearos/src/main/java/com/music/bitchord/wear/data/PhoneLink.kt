@@ -93,6 +93,7 @@ class PhoneLink(context: Context, private val scope: CoroutineScope) :
     private val phoneSelectionLock = Any()
     private val phoneSelectionGeneration = AtomicLong()
     private var artId: String? = null
+    private val artworkGeneration = AtomicLong()
     private var artJob: Job? = null
     private val queueSnapshotLock = Any()
     private var lastQueueRevision = 0L
@@ -366,6 +367,7 @@ class PhoneLink(context: Context, private val scope: CoroutineScope) :
             artJob?.cancel()
             artJob = null
             artId = null
+            artworkGeneration.incrementAndGet()
             _artwork.value = null
             _queue.value = null
             _nowPlaying.value = null
@@ -399,7 +401,7 @@ class PhoneLink(context: Context, private val scope: CoroutineScope) :
 
     private suspend fun sendNow(command: String, arg: String = ""): Boolean {
         repeat(2) { attempt ->
-            val node = phoneNode ?: findPhone()?.also { phoneNode = it }
+            val node = phoneNode ?: findPhone()?.also { selectPhoneNode(it) }
             if (node == null) {
                 _link.value = Link.NoPhone
                 return false
@@ -428,6 +430,7 @@ class PhoneLink(context: Context, private val scope: CoroutineScope) :
         val id = map.getString(P.KEY_ART_ID)
         if (id == artId) return
         artId = id
+        val generation = artworkGeneration.incrementAndGet()
         artJob?.cancel()
         val asset = map.getAsset(P.KEY_ART)
         if (asset == null) {
@@ -436,7 +439,7 @@ class PhoneLink(context: Context, private val scope: CoroutineScope) :
         }
         artJob = scope.launch {
             val bitmap = decode(asset)
-            if (artId == id) _artwork.value = bitmap
+            if (artworkGeneration.get() == generation) _artwork.value = bitmap
         }
     }
 

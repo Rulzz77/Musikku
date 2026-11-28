@@ -30,17 +30,21 @@ object WebDavConfig {
         }
     }
 
-    fun isConfigured(url: String): Boolean {
-        val normalized = normalizeUrl(url)
-        if (!normalized.startsWith("http://", ignoreCase = true) &&
-            !normalized.startsWith("https://", ignoreCase = true)
-        ) {
-            return false
-        }
-        // "not a url" normalizes to "https://not a url" — only a parseable
-        // host counts as configured.
-        return hostOf(normalized) != null
-    }
+    fun isConfigured(url: String): Boolean = originOf(url) != null
+
+    /** Canonical URL origin, used to fence credentials and server-provided hrefs. */
+    fun originOf(raw: String): String? = runCatching {
+        val uri = java.net.URI(normalizeUrl(raw))
+        val scheme = uri.scheme?.lowercase(Locale.ROOT) ?: return null
+        if (scheme != "http" && scheme != "https") return null
+        if (uri.isOpaque || uri.userInfo != null || uri.host.isNullOrBlank()) return null
+        if (uri.port !in -1..65535) return null
+        val port = uri.port.takeIf { it >= 0 } ?: if (scheme == "https") 443 else 80
+        scheme + "://" + uri.host.lowercase(Locale.ROOT) + ":" + port
+    }.getOrNull()
+
+    fun sameOrigin(first: String, second: String): Boolean =
+        originOf(first) != null && originOf(first) == originOf(second)
 
     fun basicAuthHeader(username: String, password: String): String? {
         if (username.isBlank() && password.isBlank()) return null
@@ -52,7 +56,7 @@ object WebDavConfig {
 
     fun hostOf(url: String): String? = runCatching {
         java.net.URI(normalizeUrl(url)).host?.lowercase(Locale.ROOT)
-    }.getOrNull()?.takeIf { it.isNotBlank() }
+    }.getOrNull()?.takeIf { it.isNotBlank() && originOf(url) != null }
 
     fun isAudioFile(name: String): Boolean {
         val ext = name.substringAfterLast('.', "").lowercase(Locale.ROOT)
@@ -92,4 +96,4 @@ object WebDavConfig {
 
 /** Publishes the saved server's credentials to the shared HTTP client. */
 fun WebDavAuth.update(url: String, username: String, password: String) =
-    update(WebDavConfig.hostOf(url), WebDavConfig.basicAuthHeader(username, password))
+    update(url.takeIf { WebDavConfig.isConfigured(it) }, WebDavConfig.basicAuthHeader(username, password))

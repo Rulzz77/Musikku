@@ -44,6 +44,14 @@ buildscript {
 extra["musikkuVersionCode"] = 109
 extra["musikkuVersionName"] = "0.2.7"
 extra["musikkuBetaSuffix"] = ""
+
+/*
+ * The phone and watch variants must have matching application IDs for the
+ * Wearable Data Layer to authenticate the companion pair. Keep both variants
+ * here so :app and :wearos cannot silently drift apart again.
+ */
+extra["musikkuApplicationId"] = "id.musikku.player"
+extra["musikkuDevApplicationId"] = "id.musikku.dev"
 /*
  * Bump this by hand before cutting each sideloaded test build ("beta2",
  * "beta3", ...) and blank it out before cutting the real release. Marks the

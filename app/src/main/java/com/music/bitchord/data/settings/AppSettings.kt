@@ -209,8 +209,8 @@ internal fun webDavCredentialBindingChanged(
     newUrl: String?,
     newUsername: String?,
 ): Boolean =
-    com.music.bitchord.data.webdav.WebDavConfig.originOf(oldUrl.orEmpty()) !=
-        com.music.bitchord.data.webdav.WebDavConfig.originOf(newUrl.orEmpty()) ||
+    com.music.bitchord.data.webdav.WebDavConfig.credentialBindingKey(oldUrl.orEmpty()) !=
+        com.music.bitchord.data.webdav.WebDavConfig.credentialBindingKey(newUrl.orEmpty()) ||
         oldUsername.orEmpty().trim() != newUsername.orEmpty().trim()
 
 internal fun smbCredentialBindingChanged(

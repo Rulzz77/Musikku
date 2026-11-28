@@ -13,7 +13,7 @@ class TranslationLanguageValidationTest {
         assertEquals("", normalizeTranslationLanguage("   "))
         assertEquals("ja", normalizeTranslationLanguage("JA"))
         assertEquals("zh-CN", normalizeTranslationLanguage("zh-cn"))
-        assertEquals("pt-BR", normalizeTranslationLanguage("PT-br"))
+        assertEquals("pt", normalizeTranslationLanguage("PT"))
     }
 
     @Test

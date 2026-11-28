@@ -2830,8 +2830,7 @@ fun NowPlayingScreen(
                                         // occupies that same right-hand pane instead of
                                         // overlapping the Canvas side with a wider 62% sheet.
                                         .fillMaxHeight()
-                                        .fillMaxWidth(0.54f)
-                                        .widthIn(max = 480.dp)
+.fillMaxWidth(0.54f)
                                         .padding(10.dp)
                                         .clip(RoundedCornerShape(22.dp))
                                         .background(Color(0xF51A1720))

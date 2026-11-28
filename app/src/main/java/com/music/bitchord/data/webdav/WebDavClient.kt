@@ -13,6 +13,7 @@ import okio.Source
 import okio.buffer
 import okio.source
 import org.w3c.dom.Element
+import org.xml.sax.SAXException
 import java.io.IOException
 import java.io.InputStream
 import java.net.URLDecoder
@@ -30,6 +31,9 @@ import javax.xml.parsers.DocumentBuilderFactory
  * Android.
  */
 object WebDavClient {
+
+    private const val MAX_MULTISTATUS_BYTES = 8L * 1024L * 1024L
+    private const val MAX_MULTISTATUS_ENTRIES = 10_000
 
     data class Entry(
         val url: String,
@@ -220,9 +224,16 @@ object WebDavClient {
                 if (response.code != 207 && response.code !in 200..299) {
                     throw WebDavException("Listing failed with ${response.code}")
                 }
-                val body = response.body?.string().orEmpty()
-                if (body.isBlank()) return@runCatching emptyList()
-                parseMultistatus(body, dirUrl)
+                val responseBody = response.body ?: return@use emptyList()
+                if (responseBody.contentLength() > MAX_MULTISTATUS_BYTES) {
+                    throw WebDavException("WebDAV listing response is too large")
+                }
+                val xml = responseBody.source().readUtf8(MAX_MULTISTATUS_BYTES + 1L)
+                if (xml.toByteArray(Charsets.UTF_8).size > MAX_MULTISTATUS_BYTES) {
+                    throw WebDavException("WebDAV listing response is too large")
+                }
+                if (xml.isBlank()) return@use emptyList()
+                parseMultistatus(xml, dirUrl)
             }
         }
     }
@@ -233,12 +244,30 @@ object WebDavClient {
      * directory itself is dropped.
      */
     fun parseMultistatus(xml: String, dirUrl: String): List<Entry> {
-        if (xml.isBlank()) return emptyList()
+        if (xml.isBlank() || xml.toByteArray(Charsets.UTF_8).size > MAX_MULTISTATUS_BYTES) {
+            return emptyList()
+        }
         val doc = runCatching {
-            val factory = DocumentBuilderFactory.newInstance().apply { isNamespaceAware = true }
-            factory.newDocumentBuilder().parse(xml.byteInputStream(Charsets.UTF_8))
+            val factory = DocumentBuilderFactory.newInstance().apply {
+                isNamespaceAware = true
+                setFeature(javax.xml.XMLConstants.FEATURE_SECURE_PROCESSING, true)
+                setFeature("http://apache.org/xml/features/disallow-doctype-decl", true)
+                setFeature("http://xml.org/sax/features/external-general-entities", false)
+                setFeature("http://xml.org/sax/features/external-parameter-entities", false)
+                setXIncludeAware(false)
+                isExpandEntityReferences = false
+                // JAXP 1.5 properties are not implemented by every Android
+                // parser version; the entity features above are the hard guard.
+                runCatching { setAttribute(javax.xml.XMLConstants.ACCESS_EXTERNAL_DTD, "") }
+                runCatching { setAttribute(javax.xml.XMLConstants.ACCESS_EXTERNAL_SCHEMA, "") }
+            }
+            val builder = factory.newDocumentBuilder().apply {
+                setEntityResolver { _, _ -> throw SAXException("External XML entities are disabled") }
+            }
+            builder.parse(xml.byteInputStream(Charsets.UTF_8))
         }.getOrNull() ?: return emptyList()
         val responses = doc.getElementsByTagNameNS("*", "response")
+        if (responses.length > MAX_MULTISTATUS_ENTRIES) return emptyList()
         val out = ArrayList<Entry>(responses.length)
         for (i in 0 until responses.length) {
             val node = responses.item(i) as? Element ?: continue

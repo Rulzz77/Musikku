@@ -41,7 +41,8 @@ function isPrivateHost(hostname: string): boolean {
   }
   if (host.includes(':')) {
     return host === '::' || host.startsWith('fc') || host.startsWith('fd') ||
-      /^fe[89ab]/.test(host) || host.startsWith('::ffff:');
+      /^fe[89abc]/.test(host) || host.startsWith('::ffff:') ||
+      host.startsWith('2001:db8:');
   }
   return false;
 }

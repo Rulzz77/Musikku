@@ -2389,7 +2389,7 @@ fun NowPlayingScreen(
                     canvasFrame = fullscreenCanvasFrame,
                     isPlaying = isPlaying,
                     fullArtworkBlurImage = fullArtworkBlurImage,
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxSize().hazeSource(queueHaze),
                 )
                 Box(
                     modifier = Modifier
@@ -2808,6 +2808,12 @@ fun NowPlayingScreen(
                                     .padding(10.dp)
                                     .clip(RoundedCornerShape(22.dp))
                                     .background(Color(0xF51A1720))
+                                    // Consume taps on empty panel space so they do not
+                                    // fall through to the scrim and dismiss the queue.
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                    ) {}
                                     .border(
                                         1.dp,
                                         Color.White.copy(alpha = 0.10f),

@@ -19,6 +19,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.io.ByteArrayOutputStream
 import java.time.Instant
+import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -265,13 +266,94 @@ object Backup {
             }
         }
         require(file.listening.size <= MAX_LISTENING_MONTHS) { "Backup contains too much listening history" }
-        val months = HashSet<String>()
-        file.listening.forEach { bucket ->
-            val month = runCatching { YearMonth.parse(bucket.month).toString() }.getOrNull()
-                ?: error("Backup contains an invalid listening-history month")
-            require(months.add(month)) { "Backup contains duplicate listening-history months" }
-        }
+        validateListeningBuckets(file.listening)
         return file
+    }
+
+    /**
+     * History buckets are consumed by Replay as trusted aggregates. Reject
+     * malformed dates, duplicate IDs, oversized maps, and negative counters
+     * here rather than letting corrupt values leak into chart arithmetic.
+     */
+    private fun validateListeningBuckets(buckets: List<StoredBucket>) {
+        val months = HashSet<String>()
+        buckets.forEach { bucket ->
+            val month = runCatching { YearMonth.parse(bucket.month) }.getOrNull()
+                ?: error("Backup contains an invalid listening-history month")
+            require(bucket.month == month.toString() && months.add(bucket.month)) {
+                "Backup contains a non-canonical or duplicate listening-history month"
+            }
+            val daysInMonth = month.lengthOfMonth()
+            val monthMs = daysInMonth * 86_400_000L
+            fun validDate(dateKey: String): Boolean =
+                runCatching { LocalDate.parse(dateKey) }.getOrNull()?.let {
+                    YearMonth.from(it) == month
+                } == true
+            fun validDailyStats(stats: DayStats): Boolean =
+                stats.ms in 0L..86_400_000L && stats.plays >= 0
+            fun validDays(days: Map<String, DayStats>): Boolean =
+                days.size <= daysInMonth && days.all { (date, stats) ->
+                    validDate(date) && validDailyStats(stats)
+                }
+
+            require(bucket.tracks.size <= 600 && bucket.artists.size <= 400 && bucket.albums.size <= 400) {
+                "Backup contains too many listening-history entries in $month"
+            }
+            require(bucket.hours.size <= 24 && bucket.hours.all { it in 0L..86_400_000L }) {
+                "Backup contains invalid hourly listening totals in $month"
+            }
+            require(bucket.days.size <= daysInMonth && bucket.days.all { (day, ms) ->
+                day in 1..daysInMonth && ms in 0L..86_400_000L
+            }) {
+                "Backup contains invalid daily listening totals in $month"
+            }
+            require(bucket.tracks.map { it.id }.distinct().size == bucket.tracks.size) {
+                "Backup contains duplicate listening-history track IDs in $month"
+            }
+            bucket.tracks.forEach { track ->
+                require(track.id.isNotBlank() && track.id.length <= 4_096 &&
+                    track.title.length <= 4_096 && track.artist.length <= 4_096 &&
+                    (track.album?.length ?: 0) <= 4_096 &&
+                    (track.art?.length ?: 0) <= 4_096 &&
+                    (track.localUri?.length ?: 0) <= 4_096 &&
+                    (track.localPath?.length ?: 0) <= 4_096 &&
+                    (track.durationText?.length ?: 0) <= 256 &&
+                    track.ms in 0L..monthMs && track.plays >= 0 && track.last >= 0L &&
+                    track.days.size <= daysInMonth && validDays(track.days)) {
+                    "Backup contains an invalid listening-history track in $month"
+                }
+            }
+            bucket.artists.forEach { artist ->
+                require(artist.name.isNotBlank() && artist.name.length <= 4_096 &&
+                    (artist.sub?.length ?: 0) <= 4_096 &&
+                    (artist.art?.length ?: 0) <= 4_096 &&
+                    (artist.id?.length ?: 0) <= 4_096 &&
+                    (artist.key?.length ?: 0) <= 8_192 &&
+                    artist.ms in 0L..monthMs && artist.plays >= 0 &&
+                    artist.days.size <= daysInMonth && validDays(artist.days)) {
+                    "Backup contains an invalid listening-history artist in $month"
+                }
+            }
+            bucket.albums.forEach { album ->
+                require(album.name.isNotBlank() && album.name.length <= 4_096 &&
+                    (album.sub?.length ?: 0) <= 4_096 &&
+                    (album.art?.length ?: 0) <= 4_096 &&
+                    (album.id?.length ?: 0) <= 4_096 &&
+                    (album.key?.length ?: 0) <= 8_192 &&
+                    album.ms in 0L..monthMs && album.plays >= 0 &&
+                    album.days.size <= daysInMonth && validDays(album.days)) {
+                    "Backup contains an invalid listening-history album in $month"
+                }
+            }
+
+            listOfNotNull(bucket.trackDays, bucket.artistDays, bucket.albumDays).forEach { daily ->
+                require(daily.size <= daysInMonth && daily.all { (date, stats) ->
+                    validDate(date) && validDailyStats(stats)
+                }) {
+                    "Backup contains invalid per-day history in $month"
+                }
+            }
+        }
     }
 
     private fun validatePlaylists(playlists: List<BackupPlaylist>, label: String) {

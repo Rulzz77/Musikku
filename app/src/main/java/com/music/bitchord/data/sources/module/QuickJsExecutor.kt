@@ -12,8 +12,14 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.Dns
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import java.io.ByteArrayOutputStream
+import java.io.IOException
+import java.net.InetAddress
+import java.net.UnknownHostException
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
@@ -106,8 +112,72 @@ internal object QuickJsExecutor {
         OkHttpClient.Builder()
             .connectTimeout(20, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)
+            .callTimeout(30, TimeUnit.SECONDS)
+            // Add-on code can call fetch(). Resolve each destination through a
+            // checked DNS policy so it cannot reach loopback, LAN or link-local
+            // services (including the cloud metadata endpoint).
+            .dns { hostname ->
+                val host = hostname.trimEnd('.').lowercase(Locale.ROOT)
+                if (
+                    host == "localhost" || host.endsWith(".localhost") ||
+                    host.endsWith(".local") || host.endsWith(".lan") ||
+                    host.endsWith(".internal") || host.endsWith(".home")
+                ) {
+                    throw UnknownHostException("Local network hosts are not available to modules")
+                }
+                val addresses = Dns.SYSTEM.lookup(hostname)
+                if (addresses.isEmpty() || addresses.any(::isBlockedModuleAddress)) {
+                    throw UnknownHostException("Private or special-use network addresses are not available to modules")
+                }
+                addresses
+            }
             .build()
     }
+
+    private fun isBlockedModuleAddress(address: InetAddress): Boolean {
+        if (
+            address.isAnyLocalAddress || address.isLoopbackAddress ||
+            address.isLinkLocalAddress || address.isSiteLocalAddress ||
+            address.isMulticastAddress
+        ) return true
+
+        val bytes = address.address.map { it.toInt() and 0xff }
+        if (bytes.size == 16) {
+            // IPv6 unique-local fc00::/7.
+            return (bytes[0] and 0xfe) == 0xfc
+        }
+        if (bytes.size != 4) return true
+        val (a, b, c, _) = bytes
+        return a == 0 || a == 10 || a == 127 || a >= 224 ||
+            (a == 100 && b in 64..127) ||
+            (a == 169 && b == 254) ||
+            (a == 172 && b in 16..31) ||
+            (a == 192 && b == 0) ||
+            (a == 192 && b == 168) ||
+            (a == 198 && b in 18..19) ||
+            (a == 198 && b == 51 && c == 100) ||
+            (a == 203 && b == 0 && c == 113)
+    }
+
+    private fun validateModuleFetchUrl(rawUrl: String): String {
+        require(rawUrl.length <= MAX_FETCH_URL_LENGTH) { "Module URL is too long" }
+        val parsed = rawUrl.toHttpUrlOrNull()
+            ?: throw IllegalArgumentException("Module fetch only supports HTTP(S) URLs")
+        require(parsed.username.isEmpty() && parsed.password.isEmpty()) {
+            "Credentials embedded in module URLs are not allowed"
+        }
+        val host = parsed.host.lowercase(Locale.ROOT)
+        require(
+            host != "localhost" && !host.endsWith(".localhost") &&
+                !host.endsWith(".local") && !host.endsWith(".lan") &&
+                !host.endsWith(".internal") && !host.endsWith(".home")
+        ) { "Local network hosts are not available to modules" }
+        return parsed.toString()
+    }
+
+    private const val MAX_FETCH_URL_LENGTH = 4_096
+    private const val MAX_FETCH_REQUEST_BYTES = 512 * 1024
+    private const val MAX_FETCH_RESPONSE_BYTES = 2 * 1024 * 1024
 
     private val engineLock = Any()
 
@@ -259,7 +329,8 @@ internal object QuickJsExecutor {
     ): Result<String> =
         run {
             runCatching {
-                val hasFn = qjs.evaluate<String>("typeof __spine_mod['$functionName']")
+                val functionNameLiteral = JSONObject.quote(functionName)
+                val hasFn = qjs.evaluate<String>("typeof __spine_mod[$functionNameLiteral]")
                 if (hasFn != "function") {
                     throw IllegalStateException("$functionName is not a function on module $moduleId")
                 }
@@ -273,9 +344,9 @@ internal object QuickJsExecutor {
                     """
                     var __spine_resolved_json = undefined;
                     (async function() {
-                        var __fn = __spine_mod['$functionName'];
+                        var __fn = __spine_mod[$functionNameLiteral];
                         if (!__fn) {
-                            __spine_resolved_json = JSON.stringify({ error: '$functionName not found' });
+                            __spine_resolved_json = JSON.stringify({ error: $functionNameLiteral + ' not found' });
                             return;
                         }
                         try {
@@ -386,7 +457,7 @@ internal object QuickJsExecutor {
                     val method = args[1]?.toString() ?: "GET"
                     val headersJson = args[2]?.toString() ?: "{}"
                     val body = args[3]?.toString()
-                    val url = resolveUrl(rawUrl, fetchBase)
+                    val url = validateModuleFetchUrl(resolveUrl(rawUrl, fetchBase))
 
                     TrackLog.d(TAG, "  → fetch $method ${redactModuleUrl(url)}")
                     val (statusCode, responseBody) = fetchUrlSync(url, method, headersJson, body)
@@ -479,7 +550,14 @@ internal object QuickJsExecutor {
         headersJson: String,
         body: String?,
     ): Pair<Int, String> {
-        val builder = Request.Builder().url(url)
+        val builder = Request.Builder().url(validateModuleFetchUrl(url))
+
+        if (body != null) {
+            require(body.toByteArray(Charsets.UTF_8).size <= MAX_FETCH_REQUEST_BYTES) {
+                "Module request body is too large"
+            }
+        }
+        require(headersJson.length <= 32 * 1024) { "Module request headers are too large" }
 
         var hasUserAgent = false
         try {
@@ -509,7 +587,26 @@ internal object QuickJsExecutor {
         }
 
         syncHttpClient.newCall(builder.build()).execute().use { response ->
-            val responseBody = response.body?.string() ?: ""
+            val responseBody = response.body?.let { responseBody ->
+                if (responseBody.contentLength() > MAX_FETCH_RESPONSE_BYTES) {
+                    throw IOException("Module response is too large")
+                }
+                val output = ByteArrayOutputStream()
+                responseBody.byteStream().use { input ->
+                    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                    var total = 0
+                    while (true) {
+                        val count = input.read(buffer)
+                        if (count < 0) break
+                        total += count
+                        if (total > MAX_FETCH_RESPONSE_BYTES) {
+                            throw IOException("Module response is too large")
+                        }
+                        output.write(buffer, 0, count)
+                    }
+                }
+                output.toString(Charsets.UTF_8.name())
+            }.orEmpty()
             return response.code to responseBody
         }
     }

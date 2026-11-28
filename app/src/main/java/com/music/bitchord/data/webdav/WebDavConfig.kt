@@ -57,7 +57,7 @@ object WebDavConfig {
             raw.replace("+", "%2B"),
             Charsets.UTF_8.name(),
         )
-        require(decoded.none { it == '\\\\' || it.code < 0x20 || it.code == 0x7f })
+        require(decoded.none { it == '\\' || it.code < 0x20 || it.code == 0x7f })
         val stack = ArrayDeque<String>()
         decoded.split('/').forEach { segment ->
             when (segment) {

@@ -9318,7 +9318,7 @@ class PlaybackService : MediaLibraryService() {
     /**
      * Handles browsing and content resolution for Android Auto and other MediaBrowser clients.
      */
-    @androidx.annotation.OptIn(UnstableApi::class)
+    @OptIn(UnstableApi::class)
     private inner class MediaLibraryCallback : MediaLibrarySession.Callback {
 
         override fun onConnect(

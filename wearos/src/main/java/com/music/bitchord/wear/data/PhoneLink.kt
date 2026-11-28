@@ -379,6 +379,11 @@ class PhoneLink(context: Context, private val scope: CoroutineScope) :
             holdLiked = null
             holdShuffle = null
             holdRepeat = null
+            synchronized(volumeBatchLock) {
+                volumeJob?.cancel()
+                volumeJob = null
+                pendingSteps = 0
+            }
             holdVolumeUntil = 0L
             synchronized(queueSnapshotLock) {
                 lastQueueRevision = 0L

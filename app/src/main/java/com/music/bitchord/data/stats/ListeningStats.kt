@@ -536,25 +536,89 @@ object ListeningStats {
      * onto a new device, and two copies of the same month added together would
      * silently double every number on the page with no way to tell afterwards.
      */
-    fun importAll(buckets: List<StoredBucket>) {
-        if (!ready) return
-        synchronized(lock) {
-            open = null
-            dirty = false
-            directory.listFiles()?.forEach { it.delete() }
-            directory.mkdirs()
-            version++
-            _revision.value = version
-            cached = null
-            buckets.forEach { bucket ->
-                val key = runCatching { YearMonth.parse(bucket.month).toString() }.getOrNull()
-                    ?: return@forEach
-                runCatching {
-                    File(directory, "$key.json")
-                        .writeText(json.encodeToString(StoredBucket.serializer(), bucket))
-                }.onFailure { Log.w(TAG, "Could not import bucket $key", it) }
-            }
+    /**
+     * Replaces history only after every incoming month has been written to a
+     * sibling staging directory. The old directory is renamed aside, then the
+     * staged directory is swapped in. A failed stage never touches existing
+     * history; an interrupted swap is recovered on the next [init].
+     *
+     * The write mutex waits for in-flight flushes, while [writeGeneration]
+     * invalidates snapshots that were queued before the restore but had not
+     * acquired the mutex yet.
+     */
+    suspend fun importAll(buckets: List<StoredBucket>) = withContext(Dispatchers.IO) {
+        if (!ready) return@withContext
+
+        val parent = directory.parentFile ?: error("Listening history has no parent directory")
+        check(parent.exists() || parent.mkdirs()) { "Couldn't prepare listening history storage" }
+        val staging = File(parent, "$DIRECTORY.importing")
+        val previous = File(parent, "$DIRECTORY.previous")
+        if (staging.exists()) check(staging.deleteRecursively()) {
+            "Couldn't clear a previous listening-history staging directory"
         }
+        check(staging.mkdirs()) { "Couldn't create listening-history staging directory" }
+
+        try {
+            val months = HashSet<String>()
+            buckets.forEach { bucket ->
+                val key = YearMonth.parse(bucket.month).toString()
+                require(months.add(key)) { "Backup contains duplicate listening months" }
+                File(staging, "$key.json").writeText(
+                    json.encodeToString(StoredBucket.serializer(), bucket),
+                )
+            }
+
+            writeLock.withLock {
+                synchronized(lock) {
+                    if (previous.exists()) check(previous.deleteRecursively()) {
+                        "Couldn't clear the previous listening-history rollback directory"
+                    }
+                    val hadCurrent = directory.exists()
+                    if (hadCurrent && !directory.renameTo(previous)) {
+                        error("Couldn't move the current listening history aside")
+                    }
+                    if (!staging.renameTo(directory)) {
+                        val restored = !hadCurrent || previous.renameTo(directory)
+                        if (!restored) {
+                            error("Couldn't install imported history or restore the previous history")
+                        }
+                        error("Couldn't install imported listening history; previous history was restored")
+                    }
+
+                    // Commit memory only after the new files are in place.
+                    writeGeneration++
+                    open = null
+                    dirty = false
+                    version++
+                    _revision.value = version
+                    cached = null
+                }
+            }
+            // If cleanup fails, init() removes the stale rollback directory once
+            // it sees that the new history directory is present.
+            runCatching { previous.deleteRecursively() }
+        } finally {
+            if (staging.exists()) runCatching { staging.deleteRecursively() }
+        }
+    }
+
+    /**
+     * Finishes or rolls back a directory swap interrupted by process death.
+     * If the new directory is present it won; otherwise restore the previous
+     * one before the playback sampler can open a month.
+     */
+    private fun recoverInterruptedImport() {
+        val parent = directory.parentFile ?: return
+        val previous = File(parent, "$DIRECTORY.previous")
+        val staging = File(parent, "$DIRECTORY.importing")
+        if (!directory.exists() && previous.exists()) {
+            if (!previous.renameTo(directory)) {
+                Log.e(TAG, "Could not recover previous listening history after interrupted import")
+            }
+        } else if (previous.exists()) {
+            runCatching { previous.deleteRecursively() }
+        }
+        if (staging.exists()) runCatching { staging.deleteRecursively() }
     }
 
     // ── Shapes ──────────────────────────────────────────────────────────────

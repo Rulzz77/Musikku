@@ -103,8 +103,8 @@ internal fun AudioOutputSheet(
         onDismiss = onDismiss,
         modifier = modifier,
         alignment = if (fullscreen) Alignment.CenterEnd else Alignment.BottomCenter,
-        panelMaxWidth = if (fullscreen) 420.dp else DRAWER_MAX_WIDTH,
-        panelShape = if (fullscreen) RoundedCornerShape(24.dp) else DRAWER_SHAPE,
+        panelMaxWidth = if (fullscreen) FULLSCREEN_PLAYER_PANEL_MAX_WIDTH else DRAWER_MAX_WIDTH,
+        panelShape = if (fullscreen) FULLSCREEN_PLAYER_PANEL_SHAPE else DRAWER_SHAPE,
         slideFromEnd = fullscreen,
     ) {
         // Flat, with the playing one marked, rather than folded behind a

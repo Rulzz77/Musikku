@@ -1,6 +1,7 @@
 package com.music.bitchord.data.stats
 
 import android.content.Context
+import android.system.Os
 import android.util.Log
 import com.music.bitchord.data.model.Song
 import kotlinx.coroutines.CoroutineScope
@@ -97,6 +98,10 @@ object ListeningStats {
     @Volatile
     private var version = 0L
 
+    /** Invalidates flush jobs captured before a full-history restore. */
+    @Volatile
+    private var writeGeneration = 0L
+
     /** Changes only after a listening snapshot reaches disk, not on every sample. */
     private val _revision = MutableStateFlow(0L)
     val revision = _revision.asStateFlow()
@@ -114,6 +119,7 @@ object ListeningStats {
 
     fun init(context: Context) {
         directory = File(context.filesDir, DIRECTORY)
+        recoverInterruptedImport()
         // Opening a month means reading and parsing it, and the first thing to
         // ask for one is the playback sampler — on the main thread, a few
         // seconds into the first track. Done here instead, it has happened long

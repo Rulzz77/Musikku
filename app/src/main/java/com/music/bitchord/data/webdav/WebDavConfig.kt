@@ -46,23 +46,49 @@ object WebDavConfig {
     fun sameOrigin(first: String, second: String): Boolean =
         originOf(first) != null && originOf(first) == originOf(second)
 
+    /**
+     * Decode path separators/dot-segments before binding credentials. Some
+     * servers decode %2F and %2E%2E before filesystem lookup; comparing only
+     * raw URI paths would let a crafted href escape the configured folder.
+     */
+    private fun decodedNormalizedPath(rawPath: String?): String? = runCatching {
+        val raw = rawPath.orEmpty().ifEmpty { "/" }
+        val decoded = java.net.URLDecoder.decode(
+            raw.replace("+", "%2B"),
+            Charsets.UTF_8.name(),
+        )
+        require(decoded.none { it == '\\\\' || it.code < 0x20 || it.code == 0x7f })
+        val stack = ArrayDeque<String>()
+        decoded.split('/').forEach { segment ->
+            when (segment) {
+                "", "." -> Unit
+                ".." -> {
+                    require(stack.isNotEmpty()) { "WebDAV path escapes its root" }
+                    stack.removeLast()
+                }
+                else -> stack.addLast(segment)
+            }
+        }
+        "/" + stack.joinToString("/")
+    }.getOrNull()
+
     /** The credential binding includes the selected WebDAV folder, not just its domain. */
     fun credentialBindingKey(raw: String): String? {
         val normalized = normalizeUrl(raw)
         val origin = originOf(normalized) ?: return null
         val uri = runCatching { java.net.URI(normalized) }.getOrNull() ?: return null
-        val path = uri.rawPath.orEmpty().trimEnd('/').ifEmpty { "/" }
-        return origin + path
+        val path = decodedNormalizedPath(uri.rawPath) ?: return null
+        return origin + path.trimEnd('/').ifEmpty { "/" }
     }
 
     /** True when [target] is the configured root folder or a descendant of it. */
     fun isWithinBasePath(baseUrl: String, targetUrl: String): Boolean {
         if (!sameOrigin(baseUrl, targetUrl)) return false
-        val basePath = runCatching { java.net.URI(normalizeUrl(baseUrl)).rawPath.orEmpty() }
-            .getOrNull()?.trimEnd('/').orEmpty()
-        val targetPath = runCatching { java.net.URI(targetUrl).rawPath.orEmpty() }
-            .getOrNull().orEmpty().ifEmpty { "/" }
-        return basePath.isEmpty() || targetPath == basePath || targetPath.startsWith(basePath + "/")
+        val baseUri = runCatching { java.net.URI(normalizeUrl(baseUrl)) }.getOrNull() ?: return false
+        val targetUri = runCatching { java.net.URI(targetUrl) }.getOrNull() ?: return false
+        val basePath = decodedNormalizedPath(baseUri.rawPath) ?: return false
+        val targetPath = decodedNormalizedPath(targetUri.rawPath) ?: return false
+        return basePath == "/" || targetPath == basePath || targetPath.startsWith(basePath.trimEnd('/') + "/")
     }
 
     fun basicAuthHeader(username: String, password: String): String? {

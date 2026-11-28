@@ -2277,6 +2277,7 @@ fun NowPlayingScreen(
             VideoQualitySheet(
                 hazeState = overlayHaze,
                 onDismiss = { showVideoQuality = false },
+                fullscreen = lyricsFullscreenVisible,
             )
         }
         if (showAudioOutput) {

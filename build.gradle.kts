@@ -63,7 +63,6 @@ extra["musikkuBetaSuffix"] = ""
  * the phone compares the watch's installed APK with the one it carries, so a
  * beta watch app shows "Update available" as soon as the phone has the release.
  */
-extra["musikkuBetaSuffix"] = ""
 plugins {
     id("com.android.application") version "8.10.1" apply false
     id("com.android.library") version "8.10.1" apply false

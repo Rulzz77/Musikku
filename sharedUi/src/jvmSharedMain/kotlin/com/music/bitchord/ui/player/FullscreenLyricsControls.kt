@@ -38,6 +38,7 @@ import com.music.bitchord.sharedui.resources.repeat_one
 import com.music.bitchord.sharedui.resources.shuffle_off
 import com.music.bitchord.sharedui.resources.shuffle_on
 import com.music.bitchord.ui.icons.BitChordIcons
+import com.music.bitchord.ui.components.menuAnchor
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -344,7 +345,7 @@ internal fun FullscreenLyricsToolbar(
             icon = Icons.Rounded.MoreHoriz,
             contentDescription = stringResource(Res.string.more),
             onClick = onOpenMenu,
-            modifier = Modifier.size(30.dp),
+            modifier = Modifier.size(30.dp).menuAnchor(),
         )
         CircleGlyph(
             icon = Icons.Rounded.FullscreenExit,

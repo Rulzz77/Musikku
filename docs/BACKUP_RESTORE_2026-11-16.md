@@ -2,9 +2,9 @@
 
 ## Backup schema
 
-The JSON backup schema is version 2. Version 1 exports made by the earlier
-BitChord-branded build remain readable; their playlist sections default to
-empty.
+The current JSON backup schema is version 5. Backups from schema versions 1
+through 4 remain readable; fields introduced in later versions use safe
+defaults when they are absent from an older file.
 
 ## Included
 
@@ -62,7 +62,7 @@ not portable and are not included in either Android or in-app backups.
 - Import validates the app marker, schema version, file size, setting value types, playback speed and repeat mode ranges, playlist identities, track identities and listening month keys before writing.
 - Exported settings continue to use AppSettings.exportPrefs(), which excludes credentials and device-local preferences.
 - Playlist store writes commit before their restored state is published.
-- The v2 codec has unit coverage for v1 compatibility, playlist sections, remote playlist mappings and typed preferences.
+- The current codec has unit coverage for legacy v1 compatibility, playlist sections, remote playlist mappings and typed preferences.
 
 Run the Android unit tests and build from the repository root:
 

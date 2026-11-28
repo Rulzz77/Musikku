@@ -31,6 +31,7 @@ var (
 	store    = party.NewPartyStore()
 	hubInst  = hub.NewHub()
 	createLimiter = newIPRateLimiter(time.Minute, config.CreateRatePerMinute, config.RateLimitMaxEntries)
+	joinLimiter = newIPRateLimiter(time.Minute, config.JoinRatePerMinute, config.RateLimitMaxEntries)
 	presenceTracker = presence.NewTracker(
 		time.Duration(config.PresenceIntervalSec+config.PresenceGraceSec)*time.Second,
 		config.PresenceMaxEntries,
@@ -401,6 +402,10 @@ func handleCreateParty(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleJoinParty(w http.ResponseWriter, r *http.Request) {
+	if !joinLimiter.Allow(clientIP(r)) {
+		jsonError(w, http.StatusTooManyRequests, "join_rate_limited", "Too many join attempts. Please wait before trying again.")
+		return
+	}
 	code := r.PathValue("code")
 	var req protocol.JoinRequest
 	if !decodeJSONBody(w, r, &req) {

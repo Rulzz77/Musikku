@@ -1093,6 +1093,8 @@ fun NowPlayingScreen(
      * rather than a still of it.
      */
     onLiveCanvasChanged: (Boolean) -> Unit = {},
+    /** Mirrors fullscreen-lyrics visibility so the player menu can use the top Dialog window. */
+    onLyricsFullscreenChanged: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
@@ -1206,6 +1208,7 @@ fun NowPlayingScreen(
     // The dedicated fullscreen lyrics/Canvas presentation is landscape-only.
     // Portrait keeps the regular lyrics layout in the player.
     val lyricsFullscreenVisible = lyricsFullscreen && lyricsOpen && sideways
+    val reportLyricsFullscreen by rememberUpdatedState(onLyricsFullscreenChanged)
     val canvas = rememberCanvasArtwork(
         song = song,
         allowFullscreenOnLowMemory = lyricsFullscreenVisible,
@@ -1235,6 +1238,10 @@ fun NowPlayingScreen(
         // decoder. Reveal the blurred cover behind the dialog while the landscape
         // surface is unmounted; it will show video again once a fresh frame lands.
         if (lyricsFullscreenVisible) canvasRendered = false
+        reportLyricsFullscreen(lyricsFullscreenVisible)
+    }
+    DisposableEffect(Unit) {
+        onDispose { reportLyricsFullscreen(false) }
     }
     var canvasFrame by remember(canvas?.url) { mutableStateOf<ImageBitmap?>(null) }
     // Spotify's phone presentation starts with the full control deck over its
@@ -1591,10 +1598,22 @@ fun NowPlayingScreen(
     // Never while a finger is on the scrubber or the volume bar: those are the
     // two controls that are *being used* while nothing else on screen moves,
     // and timing out underneath them would take the thing away mid-gesture.
-    LaunchedEffect(lyricsOpen, lyricsFullscreen, lyricsControlsOpen, lyricsControlInteraction, scrub.scrubbing, volume.dragging) {
-        if (lyricsOpen && lyricsControlsOpen && !scrub.scrubbing && !volume.dragging) {
+    LaunchedEffect(
+        lyricsOpen,
+        lyricsFullscreen,
+        lyricsControlsOpen,
+        lyricsControlInteraction,
+        scrub.scrubbing,
+        volume.dragging,
+        lyricPicker.picking,
+    ) {
+        // A share-card pick owns the lyrics panel: do not time its Cancel/Share
+        // bar away while the reader is still choosing lines.
+        if (lyricsOpen && lyricsControlsOpen && !lyricPicker.picking &&
+            !scrub.scrubbing && !volume.dragging
+        ) {
             delay(LYRICS_CONTROLS_IDLE_MS)
-            lyricsControlsOpen = false
+            if (!lyricPicker.picking) lyricsControlsOpen = false
         }
     }
     // How collapsed the sleeve is, whichever surface asked for it — one 420ms
@@ -2207,11 +2226,16 @@ fun NowPlayingScreen(
                                 modifier = Modifier.fillMaxSize(),
                                 contentMode = CanvasContentMode.CROP,
                                 onRenderedChanged = { canvasRendered = it },
+                                rightEdgeFade = 0.28f,
                                 nowPlaying = true,
                             )
+                            // Keep the lower Canvas area legible, but fade this
+                            // scrim with the video so it cannot leave its own hard
+                            // vertical edge at the Canvas/lyrics boundary.
                             Box(
                                 modifier = Modifier
                                     .fillMaxSize()
+                                    .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
                                     .background(
                                         Brush.verticalGradient(
                                             colorStops = arrayOf(
@@ -2221,25 +2245,20 @@ fun NowPlayingScreen(
                                                 1f to Color.Black.copy(alpha = 0.68f),
                                             ),
                                         ),
-                                    ),
-                            )
-                            // Fade the moving Canvas into the blurred lyric backdrop.
-                            // The matching tint on the lyric side removes the hard
-                            // center seam without drawing a divider line.
-                            Box(
-                                modifier = Modifier
-                                    .align(Alignment.CenterEnd)
-                                    .width(144.dp)
-                                    .fillMaxHeight()
-                                    .background(
-                                        Brush.horizontalGradient(
-                                            colorStops = arrayOf(
-                                                0f to Color.Transparent,
-                                                0.42f to Color(0xFF101B31).copy(alpha = 0.18f),
-                                                1f to Color(0xFF101B31).copy(alpha = 0.36f),
+                                    )
+                                    .drawWithContent {
+                                        drawContent()
+                                        drawRect(
+                                            brush = Brush.horizontalGradient(
+                                                colorStops = arrayOf(
+                                                    0f to Color.Black,
+                                                    0.72f to Color.Black,
+                                                    1f to Color.Transparent,
+                                                ),
                                             ),
-                                        ),
-                                    ),
+                                            blendMode = BlendMode.DstIn,
+                                        )
+                                    },
                             )
                             Column(
                                 modifier = Modifier
@@ -2494,23 +2513,6 @@ fun NowPlayingScreen(
                             .weight(0.54f)
                             .fillMaxHeight(),
                     ) {
-                        if (fullscreenLyricsCanvas != null) {
-                            Box(
-                                modifier = Modifier
-                                    .align(Alignment.CenterStart)
-                                    .width(144.dp)
-                                    .fillMaxHeight()
-                                    .background(
-                                        Brush.horizontalGradient(
-                                            colorStops = arrayOf(
-                                                0f to Color(0xFF101B31).copy(alpha = 0.36f),
-                                                0.58f to Color(0xFF101B31).copy(alpha = 0.18f),
-                                                1f to Color.Transparent,
-                                            ),
-                                        ),
-                                    ),
-                            )
-                        }
                         Column(
                             modifier = Modifier
                                 .fillMaxSize()
@@ -2532,7 +2534,7 @@ fun NowPlayingScreen(
                             canPick = lyricsShareEnabled,
                             picking = lyricPicker.picking,
                             picked = lyricPicker.picks,
-                            onPickLine = lyricPicker.pick,
+                            onPickLine = { revealLyricsControls(); lyricPicker.pick(it) },
                             onTogglePick = { revealLyricsControls(); lyricPicker.toggle(it) },
                             centerFocus = true,
                             fontScale = 0.90f,

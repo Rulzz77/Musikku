@@ -328,6 +328,56 @@ private val PortraitClipScrim = Brush.verticalGradient(
 )
 
 /**
+ * The fullscreen lyrics' ambient surface. It uses the same low-resolution,
+ * pre-blurred artwork mesh as the regular player, but lets that mesh drift
+ * slowly while the fullscreen reader is open. Canvas frame samples replace the
+ * cover-derived mesh as they arrive, so the ambient colours follow the video
+ * without keeping a full-resolution blur or a live GPU readback running.
+ */
+private const val FULLSCREEN_AMBIENT_DRIFT_MS = 32_000
+
+@Composable
+private fun FullscreenLyricsAmbientBackdrop(
+    trackKey: String,
+    imageUrl: String?,
+    canvasFrame: ImageBitmap?,
+    modifier: Modifier = Modifier,
+) {
+    val mesh = rememberArtworkMesh(imageUrl, canvasFrame, ART_PX, seed = null, clipKey = trackKey)
+    val reduceAnimation by PlayerSettings.reduceAnimation.collectAsStateWithLifecycle()
+    val drift = remember(trackKey) { Animatable(0f) }
+
+    LaunchedEffect(trackKey, reduceAnimation) {
+        if (reduceAnimation) {
+            drift.snapTo(0f)
+        } else {
+            while (true) {
+                drift.animateTo(
+                    targetValue = drift.value + (2f * kotlin.math.PI.toFloat()),
+                    animationSpec = tween(FULLSCREEN_AMBIENT_DRIFT_MS, easing = LinearEasing),
+                )
+            }
+        }
+    }
+
+    if (mesh != null) {
+        ArtworkMeshBackdrop(
+            mesh = mesh,
+            modifier = modifier.graphicsLayer {
+                // Overscan keeps the slow pan from exposing an edge. The
+                // translation is a transform of a tiny pre-blurred texture,
+                // not another full-screen blur at display refresh rate.
+                scaleX = 1.12f
+                scaleY = 1.12f
+                val phase = drift.value
+                translationX = kotlin.math.sin(phase) * size.width * 0.018f
+                translationY = kotlin.math.cos(phase * 0.86f) * size.height * 0.018f
+            },
+        )
+    }
+}
+
+/**
  * The default theme's backdrop — see [ArtworkMeshBackdrop] — in a scope of its
  * own: a clip's new frame every few seconds, and the seam moving, reach only
  * this rather than the whole of the player.
@@ -1244,6 +1294,8 @@ fun NowPlayingScreen(
         onDispose { reportLyricsFullscreen(false) }
     }
     var canvasFrame by remember(canvas?.url) { mutableStateOf<ImageBitmap?>(null) }
+    // The fullscreen Canvas owns its own decoder and samples a tiny frame for the ambient mesh.
+    var fullscreenCanvasFrame by remember(canvas?.url) { mutableStateOf<ImageBitmap?>(null) }
     // Spotify's phone presentation starts with the full control deck over its
     // video. It leaves on a Canvas tap, or after the optional idle timeout.
     var spotifyCanvasControlsOpen by remember(canvas?.url) { mutableStateOf(true) }
@@ -1382,6 +1434,12 @@ fun NowPlayingScreen(
     val toggleQueue: () -> Unit = {
         val opening = !queueOpen
         if (opening && lyricsOpen) queueSlide.floatValue = 1f
+        // The fullscreen lyrics dialog already asked for landscape. Hand that
+        // request to the landscape player's queue instead of letting
+        // closeLyrics() restore portrait as the dialog disappears.
+        if (opening && lyricsFullscreen && lyricsRequestedLandscape) {
+            lyricsRequestedLandscape = false
+        }
         // With the queue rather than after it, for the reason [openLyrics]
         // gives: left to the effect above, it was a second recomposition of
         // the whole player on the sleeve's first frame of moving.
@@ -2192,6 +2250,12 @@ fun NowPlayingScreen(
                     image = fullArtworkBlurImage,
                     modifier = Modifier.fillMaxSize(),
                 )
+                FullscreenLyricsAmbientBackdrop(
+                    trackKey = song.videoId,
+                    imageUrl = remoteArt,
+                    canvasFrame = fullscreenCanvasFrame,
+                    modifier = Modifier.fillMaxSize(),
+                )
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -2226,6 +2290,9 @@ fun NowPlayingScreen(
                                 modifier = Modifier.fillMaxSize(),
                                 contentMode = CanvasContentMode.CROP,
                                 onRenderedChanged = { canvasRendered = it },
+                                onFrameCaptured = { fullscreenCanvasFrame = it },
+                                refreshFrameEveryMs = if (isPlaying) MESH_REFRESH_MS else null,
+                                frameCapturePx = CANVAS_FRAME_CAPTURE_PX,
                                 rightEdgeFade = 0.28f,
                                 nowPlaying = true,
                             )

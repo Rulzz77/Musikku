@@ -51,6 +51,7 @@ import com.music.bitchord.data.lyrics.LyricsTranslation
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.settings.LastPlayerScreen
+import com.music.bitchord.data.settings.LyricsBackgroundMode
 import com.music.bitchord.ui.performance.DevicePerformanceProfile
 import com.music.bitchord.playback.MusicOnlyPlayback
 import com.music.bitchord.playback.AudioOutputStatus
@@ -154,6 +155,8 @@ class AndroidPlayerHost(context: Context) : PlayerHost {
 
         override fun setLastPlayerScreen(value: LastPlayerScreen) = AppSettings.setLastPlayerScreen(value)
         override fun setLyricsOffsetMs(value: Int) = AppSettings.setLyricsOffsetMs(value)
+        override fun setLyricsBackgroundMode(value: LyricsBackgroundMode) = AppSettings.setLyricsBackgroundMode(value)
+        override fun setLyricsBackgroundBlurPx(value: Int) = AppSettings.setLyricsBackgroundBlurPx(value)
         override fun setMixViewOpen(open: Boolean) {
             AppSettings.mixViewOpen.value = open
         }

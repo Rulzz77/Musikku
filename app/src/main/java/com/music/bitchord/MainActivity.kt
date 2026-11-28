@@ -4746,6 +4746,7 @@ private fun BitChordApp(
             }
             SongActionsMenu(
                 song = song,
+                compactPopup = fromPlayer && playerLyricsFullscreen,
                 fromQueue = fromQueue,
                 signedIn = signedIn,
                 likeStatus = likeStatusOf(song),

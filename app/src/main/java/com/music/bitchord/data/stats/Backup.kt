@@ -111,22 +111,40 @@ object Backup {
             val smartPlaylistRules = file.smartPlaylistRules.map { it.toSmartPlaylistRule() }
             val remoteImports = file.remoteSpotifyImports.mapValues { (_, ids) -> ids.toSet() }
 
-            // All parsing and structural validation happens before the first
-            // write. Commit the collection stores together and roll each one
-            // back if any playlist, folder, or Smart Playlist write fails.
-            if (file.version >= 2) {
-                val previousSpotifyPlaylists = LocalPlaylistStore.playlists.value.toList()
-                val previousRemoteImports = LocalPlaylistStore.remoteSpotifyImportsSnapshot()
-                val previousDevicePlaylists = OfflinePlaylists.playlists.value.toList()
-                val previousPlaylistFolders = PlaylistFolders.folders.value.toList()
-                val previousSmartPlaylistRules = SmartPlaylists.rules.value.toList()
-                try {
+            // Snapshot every store that this restore can replace. All file
+            // parsing and validation has already completed in readBackup().
+            // Keep the cross-store commit ordered and roll all stores back if
+            // any later persistence step fails.
+            val previousListening = ListeningStats.exportAll()
+            val previousSettings = AppSettings.exportPrefs()
+            val previousSpotifyPlaylists = LocalPlaylistStore.playlists.value.toList()
+            val previousRemoteImports = LocalPlaylistStore.remoteSpotifyImportsSnapshot()
+            val previousDevicePlaylists = OfflinePlaylists.playlists.value.toList()
+            val previousPlaylistFolders = PlaylistFolders.folders.value.toList()
+            val previousSmartPlaylistRules = SmartPlaylists.rules.value.toList()
+
+            var listeningAttempted = false
+            var settingsAttempted = false
+            var collectionsAttempted = false
+            try {
+                listeningAttempted = true
+                ListeningStats.importAll(file.listening)
+
+                settingsAttempted = true
+                AppSettings.importPrefs(settings)
+
+                if (file.version >= 2) {
+                    collectionsAttempted = true
                     LocalPlaylistStore.restoreFromBackup(spotifyPlaylists, remoteImports, mergePlaylists)
                     OfflinePlaylists.restoreFromBackup(devicePlaylists, mergePlaylists)
                     if (file.version >= 3) PlaylistFolders.restoreFromBackup(playlistFolders, mergePlaylists)
                     if (file.version >= 4) SmartPlaylists.restoreFromBackup(smartPlaylistRules, mergePlaylists)
-                } catch (failure: Throwable) {
-                    val rollbackFailures = mutableListOf<Throwable>()
+                }
+
+                SearchHistory.reload()
+            } catch (failure: Throwable) {
+                val rollbackFailures = mutableListOf<Throwable>()
+                if (collectionsAttempted) {
                     runCatching {
                         LocalPlaylistStore.restoreFromBackup(
                             previousSpotifyPlaylists,
@@ -143,22 +161,23 @@ object Backup {
                     runCatching {
                         SmartPlaylists.restoreFromBackup(previousSmartPlaylistRules, merge = false)
                     }.exceptionOrNull()?.let(rollbackFailures::add)
-                    if (rollbackFailures.isNotEmpty()) {
-                        throw IllegalStateException(
-                            "Playlist restore failed and the previous collections could not be fully restored",
-                            failure,
-                        ).also { error -> rollbackFailures.forEach(error::addSuppressed) }
-                    }
-                    throw failure
                 }
+                if (listeningAttempted) {
+                    runCatching { ListeningStats.importAll(previousListening) }
+                        .exceptionOrNull()?.let(rollbackFailures::add)
+                }
+                if (settingsAttempted) {
+                    runCatching { AppSettings.importPrefs(previousSettings) }
+                        .exceptionOrNull()?.let(rollbackFailures::add)
+                }
+                if (rollbackFailures.isNotEmpty()) {
+                    throw IllegalStateException(
+                        "Backup restore failed and one or more previous stores could not be fully restored",
+                        failure,
+                    ).also { error -> rollbackFailures.forEach(error::addSuppressed) }
+                }
+                throw failure
             }
-
-            // These existing APIs replace their own stores. Playlist commits
-            // above happen first so a failed playlist write cannot leave the
-            // app with new settings/history but old collections.
-            ListeningStats.importAll(file.listening)
-            AppSettings.importPrefs(settings)
-            SearchHistory.reload()
 
             val restoredSpotifyPlaylists = if (file.version >= 2) {
                 LocalPlaylistStore.playlists.value

@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
@@ -62,6 +63,7 @@ internal fun LyricsProviderSheet(
     onImportedTtml: () -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
+    fullscreen: Boolean = false,
 ) {
     val savedOrder by PlayerSettings.lyricsSourceOrder.collectAsStateWithLifecycle()
     val sources = remember(savedOrder) { LyricsSource.ordered(savedOrder) }
@@ -75,6 +77,10 @@ internal fun LyricsProviderSheet(
         title = stringResource(Res.string.choose_lyrics_provider),
         onDismiss = onDismiss,
         modifier = modifier,
+        alignment = if (fullscreen) Alignment.CenterEnd else Alignment.BottomCenter,
+        panelMaxWidth = if (fullscreen) 420.dp else DRAWER_MAX_WIDTH,
+        panelShape = if (fullscreen) RoundedCornerShape(24.dp) else DRAWER_SHAPE,
+        slideFromEnd = fullscreen,
     ) {
         Column(
             modifier = Modifier.fillMaxWidth(),

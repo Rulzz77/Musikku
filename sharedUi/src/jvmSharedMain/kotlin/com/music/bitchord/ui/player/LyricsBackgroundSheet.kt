@@ -75,8 +75,6 @@ internal fun LyricsBackgroundSheet(
                         "Use the current album cover"
                     LyricsBackgroundMode.COVER_COLORS ->
                         "Blend colours sampled from the cover"
-                    LyricsBackgroundMode.TRANSPARENT ->
-                        "Keep the lyrics surface clear"
                 }
                 Row(
                     modifier = Modifier

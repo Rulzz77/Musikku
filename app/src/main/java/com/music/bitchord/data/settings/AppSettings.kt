@@ -539,7 +539,7 @@ object AppSettings {
     val lyricsBackgroundMode = MutableStateFlow(LyricsBackgroundMode.DYNAMIC_KAWARP)
 
     /** Image blur in px; used only by Artist Image and Cover Art. */
-    val lyricsBackgroundBlurPx = MutableStateFlow(0)
+    val lyricsBackgroundBlurPx = MutableStateFlow(DEFAULT_LYRICS_BACKGROUND_BLUR_PX)
 
     /** Positive values delay synced lyrics; negative values bring them forward. */
     val lyricsOffsetMs = MutableStateFlow(0)
@@ -1084,12 +1084,20 @@ object AppSettings {
         glassPerformance.value = prefs.getBoolean(KEY_GLASS_PERFORMANCE, false)
         progressiveBlur.value = prefs.getBoolean(KEY_PROGRESSIVE_BLUR, false)
         lyricsBlur.value = prefs.getBoolean(KEY_LYRICS_BLUR, true)
-        lyricsBackgroundMode.value = runCatching {
-            LyricsBackgroundMode.valueOf(
-                prefs.getString(KEY_LYRICS_BACKGROUND_MODE, null).orEmpty(),
-            )
-        }.getOrDefault(LyricsBackgroundMode.DYNAMIC_KAWARP)
-        lyricsBackgroundBlurPx.value = prefs.getInt(KEY_LYRICS_BACKGROUND_BLUR_PX, 0).coerceIn(0, 40)
+        val storedLyricsBackgroundMode = prefs.getString(KEY_LYRICS_BACKGROUND_MODE, null)
+        lyricsBackgroundMode.value = lyricsBackgroundModeFromStoredName(storedLyricsBackgroundMode)
+        if (storedLyricsBackgroundMode == REMOVED_LYRICS_BACKGROUND_TRANSPARENT) {
+            // One-time migration: the retired option now uses the default backdrop.
+            prefs.edit()
+                .putString(KEY_LYRICS_BACKGROUND_MODE, LyricsBackgroundMode.DYNAMIC_KAWARP.name)
+                .apply()
+        }
+        // Keep a user's explicit value (including 0); only a fresh install needs
+        // the soft default that visually separates a cover backdrop from its card.
+        lyricsBackgroundBlurPx.value = prefs.getInt(
+            KEY_LYRICS_BACKGROUND_BLUR_PX,
+            DEFAULT_LYRICS_BACKGROUND_BLUR_PX,
+        ).coerceIn(0, 40)
         lyricsOffsetMs.value = prefs.getInt(KEY_LYRICS_OFFSET_MS, 0)
             .coerceIn(MIN_LYRICS_OFFSET_MS, MAX_LYRICS_OFFSET_MS)
         translationLanguage.value = prefs.getString(KEY_TRANSLATION_LANGUAGE, "").orEmpty()
@@ -2424,6 +2432,8 @@ object AppSettings {
     private const val KEY_LYRICS_BLUR = "lyrics_blur"
     private const val KEY_LYRICS_BACKGROUND_MODE = "lyrics_background_mode"
     private const val KEY_LYRICS_BACKGROUND_BLUR_PX = "lyrics_background_blur_px"
+    private const val DEFAULT_LYRICS_BACKGROUND_BLUR_PX = 16
+    private const val REMOVED_LYRICS_BACKGROUND_TRANSPARENT = "TRANSPARENT"
     private const val KEY_LYRICS_OFFSET_MS = "lyrics_offset_ms"
     private const val KEY_TRANSLATION_LANGUAGE = "translation_language"
     private const val KEY_ANIMATED_CANVAS = "animated_canvas"

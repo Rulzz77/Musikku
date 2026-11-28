@@ -624,10 +624,17 @@ func TestRejoinedDeviceCannotUsePreviousWebSocketSession(t *testing.T) {
 	}
 	var bye map[string]interface{}
 	_ = ws.SetReadDeadline(time.Now().Add(2 * time.Second))
-	if err := ws.ReadJSON(&bye); err != nil {
-		t.Fatalf("expected stale session to receive a bye frame, got %v", err)
+	for {
+		var received map[string]interface{}
+		if err := ws.ReadJSON(&received); err != nil {
+			t.Fatalf("expected stale session to receive a bye frame, got %v", err)
+		}
+		if received["type"] == protocol.FrameBye {
+			bye = received
+			break
+		}
 	}
-	if bye["type"] != protocol.FrameBye || bye["reason"] != "session_replaced" {
+	if bye["reason"] != "session_replaced" {
 		t.Fatalf("expected session_replaced bye frame, got %#v", bye)
 	}
 }

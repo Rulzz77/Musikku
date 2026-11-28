@@ -6,6 +6,7 @@ import android.content.SharedPreferences
 import android.net.ConnectivityManager
 import android.net.Network
 import com.music.bitchord.BuildConfig
+import com.music.bitchord.auth.EncryptedPrefs
 import com.music.bitchord.data.DebugLog as Log
 import com.music.bitchord.data.settings.AppSettings
 import io.ktor.client.HttpClient
@@ -669,7 +670,13 @@ object ListenTogether {
     private var socketJob: Job? = null
 
     fun init(context: Context) {
-        prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        // Party tokens and installation identity are credentials. Migrate the
+        // legacy settings, token and device ID before using them.
+        prefs = EncryptedPrefs.open(
+            context.applicationContext,
+            ENCRYPTED_PREFS,
+            PREFS,
+        )
         val rawSaved = prefs.getString(KEY_SERVER, null)?.trim().orEmpty()
         val normalizedSaved = when (val res = parseAndNormalizeServerUrl(rawSaved)) {
             is ServerUrlValidationResult.Valid -> res.normalizedUrl
@@ -1681,6 +1688,7 @@ object ListenTogether {
 
     private const val TAG = "ListenTogether"
     private const val PREFS = "bitchord_listen_together"
+    private const val ENCRYPTED_PREFS = "bitchord_listen_together_secure"
     private const val KEY_SERVER = "server_url"
 
     /** What a redacted address reads as. Not a hostname, so it cannot be resolved back. */

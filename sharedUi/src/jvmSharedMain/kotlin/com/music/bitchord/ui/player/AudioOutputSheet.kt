@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.rounded.VolumeOff
@@ -88,6 +89,7 @@ internal fun AudioOutputSheet(
     onOpenPipeline: () -> Unit,
     onOpenCast: () -> Unit,
     modifier: Modifier = Modifier,
+    fullscreen: Boolean = false,
 ) {
     val outputs = rememberAudioOutputs()
     val cast by PlayerPlatform.host.castState.collectAsStateWithLifecycle()
@@ -100,6 +102,10 @@ internal fun AudioOutputSheet(
         title = stringResource(Res.string.audio_output),
         onDismiss = onDismiss,
         modifier = modifier,
+        alignment = if (fullscreen) Alignment.CenterEnd else Alignment.BottomCenter,
+        panelMaxWidth = if (fullscreen) 420.dp else DRAWER_MAX_WIDTH,
+        panelShape = if (fullscreen) RoundedCornerShape(24.dp) else DRAWER_SHAPE,
+        slideFromEnd = fullscreen,
     ) {
         // Flat, with the playing one marked, rather than folded behind a
         // chevron. There are two outputs on a phone most of the time; one

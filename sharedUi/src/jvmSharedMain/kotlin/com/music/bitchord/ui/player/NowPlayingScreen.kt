@@ -339,24 +339,25 @@ private val PortraitClipScrim = Brush.verticalGradient(
  * cover-derived mesh as they arrive, so the ambient colours follow the video
  * without keeping a full-resolution blur or a live GPU readback running.
  */
-private const val FULLSCREEN_AMBIENT_DRIFT_MS = 32_000
+private const val FULLSCREEN_AMBIENT_DRIFT_MS = 22_000
 
 @Composable
 private fun FullscreenLyricsAmbientBackdrop(
     trackKey: String,
     imageUrl: String?,
     canvasFrame: ImageBitmap?,
-    isPlaying: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val mesh = rememberArtworkMesh(imageUrl, canvasFrame, ART_PX, seed = null, clipKey = trackKey)
     val reduceAnimation by PlayerSettings.reduceAnimation.collectAsStateWithLifecycle()
     val drift = remember(trackKey) { Animatable(0f) }
 
-    LaunchedEffect(trackKey, reduceAnimation, isPlaying) {
+    LaunchedEffect(trackKey, reduceAnimation) {
         if (reduceAnimation) {
             drift.snapTo(0f)
-        } else if (isPlaying) {
+        } else {
+            // This is an ambient reading surface, not a playback visualiser:
+            // keep the movement alive while paused as well as while playing.
             while (true) {
                 drift.animateTo(
                     targetValue = drift.value + (2f * kotlin.math.PI.toFloat()),
@@ -370,20 +371,21 @@ private fun FullscreenLyricsAmbientBackdrop(
         ArtworkMeshBackdrop(
             mesh = mesh,
             modifier = modifier.graphicsLayer {
-                // Overscan keeps the slow pan from exposing an edge. The
-                // translation is a transform of a tiny pre-blurred texture,
-                // not another full-screen blur at display refresh rate.
-                scaleX = 1.12f
-                scaleY = 1.12f
+                // Overscan keeps the clearly visible pan from exposing an edge.
+                // Translation and subtle rotation transform the small,
+                // pre-blurred mesh rather than blurring the full screen per frame.
+                scaleX = 1.20f
+                scaleY = 1.20f
                 val phase = drift.value
-                translationX = kotlin.math.sin(phase) * size.width * 0.018f
-                translationY = kotlin.math.cos(phase * 0.86f) * size.height * 0.018f
+                translationX = kotlin.math.sin(phase) * size.width * 0.036f
+                translationY = kotlin.math.cos(phase * 0.86f) * size.height * 0.032f
+                rotationZ = kotlin.math.sin(phase * 0.53f) * 1.15f
             },
         )
     }
 }
 
-/** One Lyrics View backdrop shared by the ordinary landscape pane and fullscreen. */
+/** The configurable backdrop used only by the dedicated fullscreen lyrics reader. */
 @Composable
 private fun LyricsViewBackdrop(
     trackKey: String,
@@ -392,7 +394,6 @@ private fun LyricsViewBackdrop(
     artistImageUrl: String?,
     blurPx: Int,
     canvasFrame: ImageBitmap?,
-    isPlaying: Boolean,
     fullArtworkBlurImage: ImageBitmap?,
     modifier: Modifier = Modifier,
 ) {
@@ -406,7 +407,6 @@ private fun LyricsViewBackdrop(
                 trackKey = trackKey,
                 imageUrl = imageUrl,
                 canvasFrame = canvasFrame,
-                isPlaying = isPlaying,
                 modifier = modifier,
             )
         }
@@ -1278,6 +1278,7 @@ fun NowPlayingScreen(
     var showAudioOutput by remember { mutableStateOf(false) }
     var showVideoQuality by remember { mutableStateOf(false) }
     var showLyricsProviders by remember { mutableStateOf(false) }
+    var showLyricsBackground by remember { mutableStateOf(false) }
     // Gated on the Bluetooth permission the first time — see [rememberOutputPicker].
     val openAudioOutput = rememberOutputPicker { showAudioOutput = true }
     // Listening in a party whose host has taken the controls: the transport
@@ -1600,7 +1601,7 @@ fun NowPlayingScreen(
     val overlayOpen = remember {
         derivedStateOf {
             currentMenuOpen() || showAudioPipeline || showCast || showAudioOutput || showVideoQuality ||
-                showLyricsProviders || showListenTogetherMembers || lyricsShare != null || currentLyricsOffsetOpen
+                showLyricsProviders || showLyricsBackground || showListenTogetherMembers || lyricsShare != null || currentLyricsOffsetOpen
         }
     }
     val lyricsShareEnabled = lyricsShareAvailable
@@ -1656,13 +1657,15 @@ fun NowPlayingScreen(
     // Controls being visible must not insert an extra navigation level. Back
     // always leaves lyrics in one step, whether it starts over the lyrics list
     // or over the half-player at the bottom.
-    PlayerBackHandler(enabled = fullscreenQueueOpen) {
-        if (queueSelection.active) queueSelection.clear() else fullscreenQueueOpen = false
-    }
-
     PlayerBackHandler(enabled = lyricsFullscreen, onBack = exitLyricsFullscreen)
 
     PlayerBackHandler(enabled = lyricsOpen, onBack = closeLyrics)
+
+    // Higher priority than leaving the ordinary lyrics panel, but lower than
+    // the drawers opened over fullscreen. Back closes the overlay first.
+    PlayerBackHandler(enabled = fullscreenQueueOpen) {
+        if (queueSelection.active) queueSelection.clear() else fullscreenQueueOpen = false
+    }
 
     // Back out of the queue to the player.
     PlayerBackHandler(enabled = queueOpen) {
@@ -1679,6 +1682,8 @@ fun NowPlayingScreen(
     PlayerBackHandler(enabled = showVideoQuality) { showVideoQuality = false }
 
     PlayerBackHandler(enabled = showLyricsProviders) { showLyricsProviders = false }
+
+    PlayerBackHandler(enabled = showLyricsBackground) { showLyricsBackground = false }
 
     PlayerBackHandler(enabled = showListenTogetherMembers) { showListenTogetherMembers = false }
 
@@ -2253,24 +2258,26 @@ fun NowPlayingScreen(
     // whichever layout is on screen, by [FrostedPlayerFrame] — they are
     // overlays over the player, not part of any shape of it.
     val playerOverlays: @Composable () -> Unit = {
+        val overlayHaze = if (lyricsFullscreenVisible) queueHaze else playerHaze
         if (showVideoQuality) {
             VideoQualitySheet(
-                hazeState = playerHaze,
+                hazeState = overlayHaze,
                 onDismiss = { showVideoQuality = false },
             )
         }
         if (showAudioOutput) {
             AudioOutputSheet(
-                hazeState = playerHaze,
+                hazeState = overlayHaze,
                 accountName = accountName,
                 onDismiss = { showAudioOutput = false },
                 onOpenPipeline = { showAudioPipeline = true },
                 onOpenCast = { showCast = true },
+                fullscreen = lyricsFullscreenVisible,
             )
         }
         if (showLyricsProviders) {
             LyricsProviderSheet(
-                hazeState = playerHaze,
+                hazeState = overlayHaze,
                 currentSource = lyricsSource,
                 states = lyricsProviderStates,
                 trackId = song.videoId,
@@ -2278,24 +2285,31 @@ fun NowPlayingScreen(
                 onSelect = onSelectLyricsProvider,
                 onImportedTtml = onReloadLyrics,
                 onDismiss = { showLyricsProviders = false },
+                fullscreen = lyricsFullscreenVisible,
+            )
+        }
+        if (showLyricsBackground) {
+            LyricsBackgroundSheet(
+                hazeState = overlayHaze,
+                onDismiss = { showLyricsBackground = false },
             )
         }
         if (showAudioPipeline) {
             AudioPipelineDialog(
-                hazeState = playerHaze,
+                hazeState = overlayHaze,
                 isPlaying = isPlaying,
                 onDismiss = { showAudioPipeline = false },
             )
         }
         if (showCast) {
             PlayerPlatform.host.CastDialog(
-                hazeState = playerHaze,
+                hazeState = overlayHaze,
                 onDismiss = { showCast = false },
             )
         }
         if (showListenTogetherMembers) {
             ListenTogetherMembersSheet(
-                hazeState = playerHaze,
+                hazeState = overlayHaze,
                 onDismiss = { showListenTogetherMembers = false },
                 onManage = {
                     showListenTogetherMembers = false
@@ -2305,18 +2319,18 @@ fun NowPlayingScreen(
         }
         if (lyricsOffsetOpen) {
             LyricsOffsetSheet(
-                hazeState = playerHaze,
+                hazeState = overlayHaze,
                 onDismiss = onDismissLyricsOffset,
             )
         }
         lyricsShare?.let { request ->
             PlayerPlatform.host.LyricsShareSheet(
-                hazeState = playerHaze,
+                hazeState = overlayHaze,
                 request = request,
                 onDismiss = { lyricsShare = null },
             )
         }
-        MixViewOverlay(hazeState = playerHaze)
+        MixViewOverlay(hazeState = overlayHaze)
     }
 
     // A landscape window — a tablet, or a phone on its side — takes an entirely
@@ -2387,7 +2401,6 @@ fun NowPlayingScreen(
                     artistImageUrl = artistImageUrl,
                     blurPx = lyricsBackgroundBlurPx,
                     canvasFrame = fullscreenCanvasFrame,
-                    isPlaying = isPlaying,
                     fullArtworkBlurImage = fullArtworkBlurImage,
                     modifier = Modifier.fillMaxSize().hazeSource(queueHaze),
                 )
@@ -2536,6 +2549,7 @@ fun NowPlayingScreen(
                                             revealLyricsControls()
                                             showLyricsProviders = true
                                         },
+                                        onOpenBackground = { revealLyricsControls(); showLyricsBackground = true },
                                         onOpenMenu = { revealLyricsControls(); onOpenMenu() },
                                         onExitFullscreen = exitLyricsFullscreen,
                                     )
@@ -2625,6 +2639,7 @@ fun NowPlayingScreen(
                                                     revealLyricsControls()
                                                     showLyricsProviders = true
                                                 },
+                                                onOpenBackground = { revealLyricsControls(); showLyricsBackground = true },
                                                 onOpenMenu = { revealLyricsControls(); onOpenMenu() },
                                                 onExitFullscreen = exitLyricsFullscreen,
                                             )
@@ -2803,7 +2818,7 @@ fun NowPlayingScreen(
                                 modifier = Modifier
                                     .align(Alignment.CenterEnd)
                                     .fillMaxHeight()
-                                    .fillMaxWidth(0.60f)
+                                    .fillMaxWidth(0.62f)
                                     .widthIn(max = 480.dp)
                                     .padding(10.dp)
                                     .clip(RoundedCornerShape(22.dp))
@@ -2834,12 +2849,12 @@ fun NowPlayingScreen(
                                     onScrollingChange = { queueScrolling = it },
                                     onDragActiveChange = onQueueDragActiveChange,
                                     onSwipeToQueue = onQueueSwipeToQueue,
-                                    gesturesEnabled = fullscreenQueueOpen && !queueDragging,
+                                    gesturesEnabled = fullscreenQueueOpen,
                                     undoNotice = queueUndoNotice,
                                     selection = queueSelection,
                                     onBulkAction = onQueueBulkAction,
                                     onRemoveSelected = onQueueRemoveEntries,
-                                    modifier = Modifier.fillMaxSize(),
+                                    modifier = Modifier.fillMaxSize().padding(top = 44.dp),
                                     onAddAllToPlaylist = onQueueAddAllToPlaylist,
                                 )
                                 Box(
@@ -3384,17 +3399,6 @@ fun NowPlayingScreen(
                             },
                         ) { panelModifier ->
                             Box(Modifier.fillMaxSize()) {
-                                LyricsViewBackdrop(
-                                    trackKey = song.videoId,
-                                    mode = lyricsBackgroundMode,
-                                    imageUrl = remoteArt,
-                                    artistImageUrl = artistImageUrl,
-                                    blurPx = lyricsBackgroundBlurPx,
-                                    canvasFrame = canvasFrame,
-                                    isPlaying = isPlaying,
-                                    fullArtworkBlurImage = fullArtworkBlurImage,
-                                    modifier = Modifier.fillMaxSize(),
-                                )
                                 LyricsTranslationMotion(
                                     trigger = lyricsTranslation.transition,
                                     reduceMotion = lyricsTranslation.reduceMotion,
@@ -4993,17 +4997,6 @@ fun NowPlayingScreen(
                                     // into the header rather than during — see [collapseDone].
                                     .graphicsLayer { alpha = if (lyricsPanelVisible) panelFade.value else 0f },
                             ) {
-                                LyricsViewBackdrop(
-                                    trackKey = song.videoId,
-                                    mode = lyricsBackgroundMode,
-                                    imageUrl = remoteArt,
-                                    artistImageUrl = artistImageUrl,
-                                    blurPx = lyricsBackgroundBlurPx,
-                                    canvasFrame = canvasFrame,
-                                    isPlaying = isPlaying,
-                                    fullArtworkBlurImage = fullArtworkBlurImage,
-                                    modifier = Modifier.fillMaxSize(),
-                                )
                                 LyricsTranslationMotion(
                                     trigger = lyricsTranslation.transition,
                                     reduceMotion = lyricsTranslation.reduceMotion,

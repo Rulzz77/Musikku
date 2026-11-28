@@ -8,6 +8,8 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -15,6 +17,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -27,6 +30,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -41,6 +48,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
@@ -105,6 +113,14 @@ fun PlayerDrawer(
     modifier: Modifier = Modifier,
     /** Air between the title and whatever the drawer opens with. */
     titleGap: Dp = 14.dp,
+    /** Where the panel is anchored; fullscreen player sheets use the right edge. */
+    alignment: Alignment = Alignment.BottomCenter,
+    /** Width cap for a side panel; the phone's bottom drawer keeps its wider default. */
+    panelMaxWidth: Dp = DRAWER_MAX_WIDTH,
+    /** Rounded on all sides for fullscreen side panels. */
+    panelShape: Shape = DRAWER_SHAPE,
+    /** Enters and exits horizontally when this is a side panel. */
+    slideFromEnd: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val reduceDynamicBlur by PlayerSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
@@ -188,12 +204,20 @@ fun PlayerDrawer(
                 interactionSource = remember { MutableInteractionSource() },
                 onClick = onDismiss,
             ),
-        contentAlignment = Alignment.BottomCenter,
+        contentAlignment = alignment,
     ) {
         AnimatedVisibility(
             visible = shown,
-            enter = slideInVertically(tween(260, easing = FastOutSlowInEasing)) { it },
-            exit = slideOutVertically(tween(180)) { it },
+            enter = if (slideFromEnd) {
+                slideInHorizontally(tween(260, easing = FastOutSlowInEasing)) { it }
+            } else {
+                slideInVertically(tween(260, easing = FastOutSlowInEasing)) { it }
+            },
+            exit = if (slideFromEnd) {
+                slideOutHorizontally(tween(180)) { it }
+            } else {
+                slideOutVertically(tween(180)) { it }
+            },
         ) {
         Column(
             modifier = Modifier
@@ -201,13 +225,13 @@ fun PlayerDrawer(
                 // rather than growing one into a full-screen page.
                 .heightIn(max = 560.dp)
                 // Capped before the fill, so [Modifier.fillMaxWidth] fills to
-                // the cap rather than to the window. Centred by the parent's
-                // own BottomCenter alignment once it is narrower.
-                .widthIn(max = DRAWER_MAX_WIDTH)
+                // the cap rather than to the window. The parent's alignment
+                // then anchors a bottom drawer or a fullscreen side panel.
+                .widthIn(max = panelMaxWidth)
                 .fillMaxWidth()
                 .onSizeChanged { height = it.height }
                 .offset { IntOffset(0, offset.roundToInt()) }
-                .clip(DRAWER_SHAPE)
+                .clip(panelShape)
                 .then(
                     // The ⋯ menu's frost, so the drawers and the menu read as one
                     // material over the player — its own where the player is
@@ -215,7 +239,7 @@ fun PlayerDrawer(
                     when {
                         reduceDynamicBlur -> Modifier.background(MenuFrostDark)
                         frost != null -> with(frost) {
-                            Modifier.frostPanel(DRAWER_SHAPE, MenuFrostDark.copy(alpha = MENU_FROST_ALPHA))
+                            Modifier.frostPanel(panelShape, MenuFrostDark.copy(alpha = MENU_FROST_ALPHA))
                         }
                         else -> Modifier.liveMenuFrost(hazeState, MenuFrostDark)
                     }
@@ -228,41 +252,66 @@ fun PlayerDrawer(
                 // Dragged down to dismiss, like every other sheet in the app.
                 // Upward drag is clamped to zero rather than followed: there is
                 // nothing above the drawer to reveal.
-                .then(if (drawerFollowsListScroll) Modifier.nestedScroll(drawerScroll) else Modifier)
-                .pointerInput(height) {
-                    detectVerticalDragGestures(
-                        onDragEnd = dismissOnRelease,
-                        onDragCancel = { drag = 0f },
-                    ) { _, delta ->
-                        drag = (drag + delta).coerceAtLeast(0f)
+                .then(if (drawerFollowsListScroll && !slideFromEnd) Modifier.nestedScroll(drawerScroll) else Modifier)
+                .then(
+                    if (slideFromEnd) Modifier else Modifier.pointerInput(height) {
+                        detectVerticalDragGestures(
+                            onDragEnd = dismissOnRelease,
+                            onDragCancel = { drag = 0f },
+                        ) { _, delta ->
+                            drag = (drag + delta).coerceAtLeast(0f)
+                        }
                     }
-                }
+                )
                 .navigationBarsPadding()
                 .padding(horizontal = 16.dp)
                 .padding(top = 10.dp, bottom = 20.dp)
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            // The grab handle every sheet here has, and the thing that says the
-            // drawer can be pulled away before anybody tries it.
-            Box(
-                Modifier
-                    .padding(bottom = 12.dp)
-                    .size(width = 36.dp, height = 4.dp)
-                    .clip(CircleShape)
-                    .background(Color.White.copy(alpha = 0.25f)),
-            )
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleLarge.copy(
-                    fontSize = 19.sp,
-                    fontWeight = FontWeight.Bold,
-                ),
-                color = Color.White,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 4.dp, bottom = titleGap),
-            )
+            if (!slideFromEnd) {
+                // The bottom drawer's grab handle advertises its pull-down gesture.
+                Box(
+                    Modifier
+                        .padding(bottom = 12.dp)
+                        .size(width = 36.dp, height = 4.dp)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.25f)),
+                )
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontSize = 19.sp,
+                        fontWeight = FontWeight.Bold,
+                    ),
+                    color = Color.White,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 4.dp, bottom = titleGap),
+                )
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(start = 4.dp, bottom = titleGap),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontSize = 19.sp,
+                            fontWeight = FontWeight.Bold,
+                        ),
+                        color = Color.White,
+                        modifier = Modifier.weight(1f),
+                    )
+                    IconButton(onClick = onDismiss, modifier = Modifier.size(36.dp)) {
+                        Icon(
+                            imageVector = Icons.Rounded.Close,
+                            contentDescription = "Close",
+                            tint = Color.White,
+                        )
+                    }
+                }
+            }
             content()
         }
         }

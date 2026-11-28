@@ -12,15 +12,9 @@ import android.content.SharedPreferences
  * private API usage, so none belong in ordinary app preferences.
  *
  * A restored file whose keyset this device can't unwrap is recreated, and a
- * Keystore that can't be used at all degrades to plain prefs rather than
- * crashing on launch; see [EncryptedPrefs]. Both encrypted and fallback files
- * are excluded from Android Auto Backup in backup_rules.xml and
- * data_extraction_rules.xml.
- *
- * A restored file whose keyset this device can't unwrap is recreated, and a
- * Keystore that can't be used at all degrades to plain prefs rather than
- * crashing on launch; see [EncryptedPrefs]. Kept out of backups for the first
- * reason, in backup_rules.xml and data_extraction_rules.xml.
+ * Keystore that can't be used at all degrades to a plain fallback rather than
+ * crashing on launch; see [EncryptedPrefs]. The encrypted and fallback files
+ * are excluded from Android Auto Backup and device transfer.
  */
 class AuthStore(context: Context) {
 
@@ -149,6 +143,33 @@ class AuthStore(context: Context) {
     var spotifySpdcToken: String?
         get() = prefs.getString(KEY_SPOTIFY_SPDC_TOKEN, null)
         set(value) = prefs.edit().putString(KEY_SPOTIFY_SPDC_TOKEN, value).apply()
+
+    /**
+     * Migrate old provider keys in one durable write. The encrypted store wins
+     * whenever it already has a non-empty value; the caller may delete legacy
+     * plaintext keys only when this commit succeeds.
+     */
+    internal fun migrateProviderCredentials(
+        paxSenixApiKey: String?,
+        lastfmSessionKey: String?,
+        lastfmApiKey: String?,
+        lastfmSecret: String?,
+        listenBrainzToken: String?,
+        spotifySpdcToken: String?,
+    ): Boolean {
+        val edit = prefs.edit()
+        fun putIfMissing(key: String, value: String?) {
+            if (value.isNullOrEmpty() || !prefs.getString(key, null).isNullOrEmpty()) return
+            edit.putString(key, value)
+        }
+        putIfMissing(KEY_PAXSENIX_API_KEY, paxSenixApiKey)
+        putIfMissing(KEY_LASTFM_SESSION_KEY, lastfmSessionKey)
+        putIfMissing(KEY_LASTFM_API_KEY, lastfmApiKey)
+        putIfMissing(KEY_LASTFM_SECRET, lastfmSecret)
+        putIfMissing(KEY_LISTENBRAINZ_TOKEN, listenBrainzToken)
+        putIfMissing(KEY_SPOTIFY_SPDC_TOKEN, spotifySpdcToken)
+        return edit.commit()
+    }
 
     /**
      * The channel the listener chose to act as, if they chose one.

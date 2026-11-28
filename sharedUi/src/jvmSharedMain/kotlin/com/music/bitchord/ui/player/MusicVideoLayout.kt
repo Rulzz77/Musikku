@@ -145,7 +145,7 @@ internal fun FullscreenVideoPlayer(
                             }
                         }
                     }
-                    .windowInsetsPadding(WindowInsets.safeDrawing.union(stableStatusBarInsets()))
+                    .windowInsetsPadding(WindowInsets.safeDrawing).windowInsetsPadding(stableStatusBarInsets())
                     .padding(horizontal = 24.dp, vertical = 16.dp),
             ) {
                 Row(

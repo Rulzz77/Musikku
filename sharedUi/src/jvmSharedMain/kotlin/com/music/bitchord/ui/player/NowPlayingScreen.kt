@@ -3378,7 +3378,14 @@ fun NowPlayingScreen(
                         )
                     },
                     lyricsPane = {
-                        LandscapeLyricsPane(
+                        // Keep the regular landscape pane composed so its scroll state
+                        // survives fullscreen entry/exit, but do not show it behind the Dialog.
+                        Box(
+                            Modifier.fillMaxSize().graphicsLayer {
+                                alpha = if (lyricsFullscreenVisible) 0f else 1f
+                            },
+                        ) {
+                            LandscapeLyricsPane(
                             hasLyrics = lyricsTranslation.displayedLyrics.isNotEmpty(),
                             placeholder = if (lyricsUnavailable) {
                                 stringResource(Res.string.lyrics_not_available)
@@ -3443,15 +3450,11 @@ fun NowPlayingScreen(
                                     onPickLine = lyricPicker.pick,
                                     onTogglePick = lyricPicker.toggle,
                                     centerFocus = true,
-                                    // The fullscreen Dialog owns the visible lyric list.
-                                    // Keep this copy composed for its scroll state, but
-                                    // hide its pixels underneath transparent backgrounds.
-                                    modifier = Modifier.fillMaxSize().graphicsLayer {
-                                        alpha = if (lyricsFullscreenVisible) 0f else 1f
-                                    },
+                                    modifier = Modifier.fillMaxSize(),
                                 )
                                 }
                             }
+                        }
                         }
                     },
                     queuePane = {

@@ -203,6 +203,15 @@ internal fun normalizeScrobbleDelayPercent(value: Float): Float =
 
 internal fun normalizeScrobbleDelaySeconds(value: Int): Int = value.coerceIn(30, 300)
 
+internal fun normalizeTranslationLanguage(value: String): String {
+    val candidate = value.trim()
+    if (candidate.isEmpty()) return ""
+    return com.music.bitchord.data.lyrics.TRANSLATION_LANGUAGES
+        .firstOrNull { it.code.equals(candidate, ignoreCase = true) }
+        ?.code
+        .orEmpty()
+}
+
 internal fun webDavCredentialBindingChanged(
     oldUrl: String?,
     oldUsername: String?,
@@ -1184,7 +1193,11 @@ object AppSettings {
         ).coerceIn(0, 40)
         lyricsOffsetMs.value = prefs.getInt(KEY_LYRICS_OFFSET_MS, 0)
             .coerceIn(MIN_LYRICS_OFFSET_MS, MAX_LYRICS_OFFSET_MS)
-        translationLanguage.value = prefs.getString(KEY_TRANSLATION_LANGUAGE, "").orEmpty()
+        val storedTranslationLanguage = prefs.getString(KEY_TRANSLATION_LANGUAGE, "").orEmpty()
+        translationLanguage.value = normalizeTranslationLanguage(storedTranslationLanguage)
+        if (translationLanguage.value != storedTranslationLanguage) {
+            prefs.edit().putString(KEY_TRANSLATION_LANGUAGE, translationLanguage.value).apply()
+        }
         if (highPerformanceMode.value) {
             reduceAnimation.value = false
             reduceDynamicBlur.value = false
@@ -1773,8 +1786,9 @@ object AppSettings {
 
     /** Blank restores "follow the app language"; see [translationLanguage]. */
     fun setTranslationLanguage(value: String) {
-        translationLanguage.value = value
-        prefs.edit().putString(KEY_TRANSLATION_LANGUAGE, value).apply()
+        val normalized = normalizeTranslationLanguage(value)
+        translationLanguage.value = normalized
+        prefs.edit().putString(KEY_TRANSLATION_LANGUAGE, normalized).apply()
     }
 
     fun setSyncedLyrics(value: Boolean) {
@@ -2388,6 +2402,9 @@ object AppSettings {
         KEY_SCROBBLE_MIN_DURATION -> value is Int && value in 15..120
         KEY_SCROBBLE_DELAY_PERCENT -> value is Float && value.isFinite() && value in 0.1f..1f
         KEY_SCROBBLE_DELAY_SECONDS -> value is Int && value in 30..300
+        KEY_TRANSLATION_LANGUAGE -> value is String && (
+            value.isBlank() || normalizeTranslationLanguage(value).equals(value, ignoreCase = true)
+        )
         KEY_LASTFM_ENDPOINT -> value is String && (
             value.isBlank() || runCatching {
                 com.music.bitchord.data.scrobbling.LastFM.normalizeEndpoint(value)
@@ -2502,6 +2519,9 @@ object AppSettings {
         "downloaded_tracks_metadata",
         "downloaded_collections",
         KEY_LOCAL_MUSIC_FOLDER_URI,
+        // Custom integration endpoint is a device-specific network trust
+        // decision; a backup must not silently enable calls to an arbitrary host.
+        KEY_SIGNATURE_API_URL,
         KEY_LAST_VERSION_CODE,
         KEY_ONBOARDING_COMPLETE,
     )
@@ -2528,7 +2548,7 @@ object AppSettings {
         value.takeIf { it in 50..240 } ?: DEFAULT_PERFORMANCE_REFRESH_RATE
 
     fun normalizeSignatureApiUrl(raw: String): String =
-        raw.trim().trimEnd('/').take(500)
+        raw.trim().takeIf { it.length <= 500 }?.trimEnd('/').orEmpty()
 
     private const val KEY_QUALITY_LEGACY = "audio_quality"
     private const val KEY_QUALITY_WIFI = "audio_quality_wifi"

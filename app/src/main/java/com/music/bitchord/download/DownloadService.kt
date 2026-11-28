@@ -165,7 +165,9 @@ class DownloadService : Service() {
         drain?.cancel()
         notifier?.cancel()
         stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelf(startId)
+        // Stop the service unconditionally: another enqueue may have advanced
+        // startId while this long-running dataSync service was draining.
+        stopSelf()
     }
 
     override fun onDestroy() {

@@ -339,24 +339,25 @@ private val PortraitClipScrim = Brush.verticalGradient(
  * cover-derived mesh as they arrive, so the ambient colours follow the video
  * without keeping a full-resolution blur or a live GPU readback running.
  */
-private const val FULLSCREEN_AMBIENT_DRIFT_MS = 32_000
+private const val FULLSCREEN_AMBIENT_DRIFT_MS = 22_000
 
 @Composable
 private fun FullscreenLyricsAmbientBackdrop(
     trackKey: String,
     imageUrl: String?,
     canvasFrame: ImageBitmap?,
-    isPlaying: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val mesh = rememberArtworkMesh(imageUrl, canvasFrame, ART_PX, seed = null, clipKey = trackKey)
     val reduceAnimation by PlayerSettings.reduceAnimation.collectAsStateWithLifecycle()
     val drift = remember(trackKey) { Animatable(0f) }
 
-    LaunchedEffect(trackKey, reduceAnimation, isPlaying) {
+    LaunchedEffect(trackKey, reduceAnimation) {
         if (reduceAnimation) {
             drift.snapTo(0f)
-        } else if (isPlaying) {
+        } else {
+            // This is an ambient reading surface, not a playback visualiser:
+            // keep the movement alive while paused as well as while playing.
             while (true) {
                 drift.animateTo(
                     targetValue = drift.value + (2f * kotlin.math.PI.toFloat()),
@@ -370,20 +371,21 @@ private fun FullscreenLyricsAmbientBackdrop(
         ArtworkMeshBackdrop(
             mesh = mesh,
             modifier = modifier.graphicsLayer {
-                // Overscan keeps the slow pan from exposing an edge. The
-                // translation is a transform of a tiny pre-blurred texture,
-                // not another full-screen blur at display refresh rate.
-                scaleX = 1.12f
-                scaleY = 1.12f
+                // Overscan keeps the clearly visible pan from exposing an edge.
+                // Translation and subtle rotation transform the small,
+                // pre-blurred mesh rather than blurring the full screen per frame.
+                scaleX = 1.20f
+                scaleY = 1.20f
                 val phase = drift.value
-                translationX = kotlin.math.sin(phase) * size.width * 0.018f
-                translationY = kotlin.math.cos(phase * 0.86f) * size.height * 0.018f
+                translationX = kotlin.math.sin(phase) * size.width * 0.036f
+                translationY = kotlin.math.cos(phase * 0.86f) * size.height * 0.032f
+                rotationZ = kotlin.math.sin(phase * 0.53f) * 1.15f
             },
         )
     }
 }
 
-/** One Lyrics View backdrop shared by the ordinary landscape pane and fullscreen. */
+/** The configurable backdrop used only by the dedicated fullscreen lyrics reader. */
 @Composable
 private fun LyricsViewBackdrop(
     trackKey: String,
@@ -392,7 +394,6 @@ private fun LyricsViewBackdrop(
     artistImageUrl: String?,
     blurPx: Int,
     canvasFrame: ImageBitmap?,
-    isPlaying: Boolean,
     fullArtworkBlurImage: ImageBitmap?,
     modifier: Modifier = Modifier,
 ) {
@@ -406,7 +407,6 @@ private fun LyricsViewBackdrop(
                 trackKey = trackKey,
                 imageUrl = imageUrl,
                 canvasFrame = canvasFrame,
-                isPlaying = isPlaying,
                 modifier = modifier,
             )
         }
@@ -2399,7 +2399,6 @@ fun NowPlayingScreen(
                     artistImageUrl = artistImageUrl,
                     blurPx = lyricsBackgroundBlurPx,
                     canvasFrame = fullscreenCanvasFrame,
-                    isPlaying = isPlaying,
                     fullArtworkBlurImage = fullArtworkBlurImage,
                     modifier = Modifier.fillMaxSize().hazeSource(queueHaze),
                 )

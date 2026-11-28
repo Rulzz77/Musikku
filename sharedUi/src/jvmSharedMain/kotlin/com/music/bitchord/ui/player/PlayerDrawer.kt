@@ -209,7 +209,7 @@ fun PlayerDrawer(
         }
     }
 
-    Box(
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
             .containSheetGestures()
@@ -221,6 +221,10 @@ fun PlayerDrawer(
             ),
         contentAlignment = alignment,
     ) {
+        val fullscreenWidth = minOf(
+            maxWidth * FULLSCREEN_PLAYER_PANEL_WIDTH_FRACTION,
+            minOf(panelMaxWidth, FULLSCREEN_PLAYER_PANEL_MAX_WIDTH),
+        )
         AnimatedVisibility(
             visible = shown,
             enter = if (slideFromEnd) {
@@ -234,14 +238,6 @@ fun PlayerDrawer(
                 slideOutVertically(tween(180)) { it }
             },
         ) {
-        BoxWithConstraints(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = alignment,
-        ) {
-        val fullscreenWidth = minOf(
-            maxWidth * FULLSCREEN_PLAYER_PANEL_WIDTH_FRACTION,
-            minOf(panelMaxWidth, FULLSCREEN_PLAYER_PANEL_MAX_WIDTH),
-        )
         Column(
             modifier = if (slideFromEnd) {
                 // Fullscreen drawers share the exact side-panel footprint of
@@ -343,7 +339,6 @@ fun PlayerDrawer(
                 }
             }
             content()
-        }
         }
         }
     }

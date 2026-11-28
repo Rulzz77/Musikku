@@ -310,8 +310,8 @@ object WebDavClient {
             "WebDAV href must not contain credentials or fragments"
         }
         val result = resolved.toASCIIString()
-        require(WebDavConfig.sameOrigin(base, result)) {
-            "WebDAV href must remain on the configured server origin"
+        require(WebDavConfig.isWithinBasePath(base, result)) {
+            "WebDAV href must remain within the configured library folder"
         }
         return result
     }

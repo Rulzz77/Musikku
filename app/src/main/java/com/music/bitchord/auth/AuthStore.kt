@@ -158,9 +158,11 @@ class AuthStore(context: Context) {
         spotifySpdcToken: String?,
     ): Boolean {
         val edit = prefs.edit()
+        var changed = false
         fun putIfMissing(key: String, value: String?) {
             if (value.isNullOrEmpty() || !prefs.getString(key, null).isNullOrEmpty()) return
             edit.putString(key, value)
+            changed = true
         }
         putIfMissing(KEY_PAXSENIX_API_KEY, paxSenixApiKey)
         putIfMissing(KEY_LASTFM_SESSION_KEY, lastfmSessionKey)
@@ -168,7 +170,7 @@ class AuthStore(context: Context) {
         putIfMissing(KEY_LASTFM_SECRET, lastfmSecret)
         putIfMissing(KEY_LISTENBRAINZ_TOKEN, listenBrainzToken)
         putIfMissing(KEY_SPOTIFY_SPDC_TOKEN, spotifySpdcToken)
-        return edit.commit()
+        return !changed || edit.commit()
     }
 
     /**

@@ -12,7 +12,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -62,6 +62,7 @@ import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.ui.theme.HideSystemBars
+import com.music.bitchord.ui.theme.stableStatusBarInsets
 import kotlinx.coroutines.delay
 
 /** How long the controls stay over a playing video untouched. */
@@ -144,7 +145,7 @@ internal fun FullscreenVideoPlayer(
                             }
                         }
                     }
-                    .windowInsetsPadding(WindowInsets.displayCutout)
+                    .windowInsetsPadding(WindowInsets.safeDrawing).windowInsetsPadding(stableStatusBarInsets())
                     .padding(horizontal = 24.dp, vertical = 16.dp),
             ) {
                 Row(

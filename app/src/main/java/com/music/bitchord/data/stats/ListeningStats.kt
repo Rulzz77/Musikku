@@ -284,22 +284,32 @@ object ListeningStats {
      * than re-serialising a month every time a track ticks over.
      */
     fun flush() {
-        pending()?.let { (key, snapshot) -> writer.launch { write(key, snapshot) } }
+        pending()?.let { pending ->
+            writer.launch { write(pending.key, pending.snapshot, pending.generation) }
+        }
     }
 
     /** As [flush], for a caller that is about to read back what it wrote. */
     private suspend fun flushAndAwait() {
-        pending()?.let { (key, snapshot) -> writer.launch { write(key, snapshot) }.join() }
+        pending()?.let { pending ->
+            writer.launch { write(pending.key, pending.snapshot, pending.generation) }.join()
+        }
     }
 
+    private data class PendingWrite(
+        val key: String,
+        val snapshot: StoredBucket,
+        val generation: Long,
+    )
+
     /** The open month as bytes-to-be, or null when nothing has changed. */
-    private fun pending(): Pair<String, StoredBucket>? {
+    private fun pending(): PendingWrite? {
         if (!ready) return null
         return synchronized(lock) {
             if (!dirty) return null
             val bucket = open ?: return null
             dirty = false
-            bucket.key to bucket.snapshot()
+            PendingWrite(bucket.key, bucket.snapshot(), writeGeneration)
         }
     }
 
@@ -315,20 +325,26 @@ object ListeningStats {
      * Written aside and renamed, so a kill mid-write leaves the previous
      * month rather than a truncated one.
      */
-    private suspend fun write(key: String, snapshot: StoredBucket) = writeLock.withLock {
+    private suspend fun write(
+        key: String,
+        snapshot: StoredBucket,
+        generation: Long,
+    ) = writeLock.withLock {
+        if (generation != writeGeneration) return@withLock
+        val temporary = File(directory, "$key.json.tmp")
         runCatching {
             directory.mkdirs()
             val file = File(directory, "$key.json")
-            val temporary = File(directory, "$key.json.tmp")
             temporary.writeText(json.encodeToString(StoredBucket.serializer(), snapshot))
-            if (!temporary.renameTo(file)) {
-                // renameTo will not replace on some filesystems; the delete is
-                // the only thing standing between that and a .tmp per flush.
-                if (file.delete() && temporary.renameTo(file)) Unit else temporary.delete()
-            }
+            // Os.rename atomically replaces the target on the same filesystem;
+            // a failed write leaves the previous valid month untouched.
+            Os.rename(temporary.absolutePath, file.absolutePath)
             version++
             _revision.value = version
-        }.onFailure { Log.w(TAG, "Could not write listening bucket $key", it) }
+        }.onFailure {
+            temporary.delete()
+            Log.w(TAG, "Could not write listening bucket $key", it)
+        }
     }
 
     /** The bucket for [month], loading or creating it and retiring the last one. */
@@ -339,7 +355,8 @@ object ListeningStats {
         // has to reach disk before it is dropped on the floor.
         open?.let { previous ->
             val stale = previous.snapshot()
-            writer.launch { write(previous.key, stale) }
+            val generation = writeGeneration
+            writer.launch { write(previous.key, stale, generation) }
         }
         val loaded = read(key) ?: StoredBucket(month = key)
         return OpenBucket.of(key, loaded).also {

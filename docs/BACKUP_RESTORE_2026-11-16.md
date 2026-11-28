@@ -38,11 +38,13 @@ Device playlists keep content:// and file:// references so they can restore on t
 ## Android device backup versus in-app backup
 
 Android's cloud backup and device-to-device transfer rules exclude the full
-`bitchord_settings.xml` SharedPreferences file. Android backup rules
-cannot exclude individual keys in a SharedPreferences file, and older app
-versions stored provider credentials in that same file. The exclusion also
-means Android will not automatically carry ordinary settings and search
-history to a replacement phone.
+`bitchord_settings.xml` SharedPreferences file and the `app_webview/`
+Chromium profile. Android backup rules cannot exclude individual keys in a
+SharedPreferences file, and older app versions stored provider credentials
+in that same file. The WebView profile holds persistent Google, Spotify and
+other website cookies/session data, so it must not be copied to another device.
+The exclusions also mean Android will not automatically carry ordinary
+settings and search history to a replacement phone.
 
 Before reinstalling or moving to another device, use **Settings → Backup &
 Restore** in MusikKu, save the exported JSON somewhere safe, install MusikKu

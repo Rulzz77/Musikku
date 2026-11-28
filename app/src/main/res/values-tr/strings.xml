@@ -1532,4 +1532,8 @@
     <string name="automix_mini_art_transition">Mini oynatıcı kapak geçişi</string>
     <string name="automix_mini_art_transition_subtitle">AutoMix sırasında mini oynatıcıda kapak geçişlerini gösterir.</string>
     <string name="listen_together_invalid_qr">Bu QR kodu, Birlikte Dinle için geçerli bir davet değil.</string>
+    <string name="player_more_playback_lyrics">Çalma ve şarkı sözleri</string>
+    <string name="player_more_queue_actions">Kuyruk işlemleri</string>
+    <string name="player_more_library_downloads">Kitaplık ve indirmeler</string>
+    <string name="player_more_song_details">Şarkı ayrıntıları</string>
 </resources>

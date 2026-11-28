@@ -1553,4 +1553,8 @@
     <string name="automix_mini_art_transition">ミニプレーヤーのアートワーク切り替え</string>
     <string name="automix_mini_art_transition_subtitle">AutoMix中にミニプレーヤーでアートワークの切り替えを表示します。</string>
     <string name="listen_together_invalid_qr">このQRコードは「一緒に聴く」への有効な招待ではありません。</string>
+    <string name="player_more_playback_lyrics">再生と歌詞</string>
+    <string name="player_more_queue_actions">キューの操作</string>
+    <string name="player_more_library_downloads">ライブラリとダウンロード</string>
+    <string name="player_more_song_details">曲の詳細</string>
 </resources>

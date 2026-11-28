@@ -67,6 +67,7 @@ import com.music.bitchord.data.webdav.WebDavUploads
 import com.music.bitchord.download.DownloadState
 import com.music.bitchord.download.Downloads
 import com.music.bitchord.playback.SleepTimer
+import com.music.bitchord.ui.player.PlayerBackHandler
 import com.music.bitchord.ui.components.thumbnailBorder
 import com.music.bitchord.ui.theme.ArtworkPalette
 import kotlinx.coroutines.delay
@@ -97,6 +98,71 @@ import java.util.Locale
  * [IosMenuPopover] hung off the ⋮ or the player's ⋯ that opened it, or
  * [HeldContextMenu] under the row a hold lifted.
  */
+private enum class SongMenuPopupSection { HOME, PLAYBACK, QUEUE, LIBRARY, DETAILS }
+
+@Composable
+private fun SongMenuPopupHeader(title: String, subtitle: String, onBack: () -> Unit) {
+    val colors = iosMenuColors()
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 8.dp, end = 18.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(onClick = onBack) {
+            Icon(
+                imageVector = SfIcons.ArrowBack,
+                contentDescription = stringResource(R.string.back),
+                tint = colors.label,
+            )
+        }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+            Text(
+                text = title,
+                color = colors.label,
+                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = subtitle,
+                color = colors.secondaryLabel,
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+    HorizontalDivider(thickness = 0.5.dp, color = colors.separator)
+}
+
+@Composable
+private fun SongMenuPopupSummary(song: Song) {
+    val colors = iosMenuColors()
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 18.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Text(
+            text = song.title,
+            color = colors.label,
+            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            text = song.artist,
+            color = colors.secondaryLabel,
+            style = MaterialTheme.typography.bodySmall,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+    HorizontalDivider(thickness = 0.5.dp, color = colors.separator)
+}
+
 @Composable
 fun SongActionsMenu(
     song: Song,
@@ -184,9 +250,22 @@ fun SongActionsMenu(
     resolvingLinks: Boolean = false,
     /** Queue rows already belong to the queue, so hide its insertion actions. */
     fromQueue: Boolean = false,
+    /** Uses compact category pages when this menu is opened over fullscreen lyrics. */
+    compactPopup: Boolean = false,
 ) {
     var showingSongInfo by remember(song.videoId) { mutableStateOf(false) }
-    var pickingSleepTimer by remember { mutableStateOf(false) }
+    var pickingSleepTimer by remember(song.videoId) { mutableStateOf(false) }
+    var popupSection by remember(song.videoId, compactPopup) {
+        mutableStateOf(SongMenuPopupSection.HOME)
+    }
+    // Back returns to the previous compact popup page before dismissing the menu.
+    PlayerBackHandler(
+        enabled = compactPopup && (popupSection != SongMenuPopupSection.HOME || pickingSleepTimer),
+        onBack = {
+            if (pickingSleepTimer) pickingSleepTimer = false
+            else popupSection = SongMenuPopupSection.HOME
+        },
+    )
     // A menu has no pages to swap, so Song Info opens as a dialog.
     if (showingSongInfo) SongInfoDialog(song) { showingSongInfo = false }
     // Neutral rather than the sleeve's colours: the panel floats over the page
@@ -197,14 +276,14 @@ fun SongActionsMenu(
     // A local file or a finished download has no YouTube identity behind it to
     // rate, save, queue into a playlist, fetch again, or share a link for.
     val isOffline = song.localUri != null
+    val canRate = isOffline || signedIn
+    val shareAction = onShare?.takeIf { !isOffline }
     val rows: @Composable ColumnScope.() -> Unit = {
         // Groups are drawn as they turn out to have something in them, and the
         // separator goes *before* a group, never after — so a menu whose last
         // group is empty doesn't end on a stray line.
         var drawnAny = false
         fun startsGroup(): Boolean = drawnAny.also { drawnAny = true }
-        val canRate = isOffline || signedIn
-        val shareAction = onShare?.takeIf { !isOffline }
 
         // Like is deliberately kept on the Player Page's adjacent heart button,
         // not duplicated inside the three-dot menu. These quick actions are
@@ -405,13 +484,242 @@ fun SongActionsMenu(
     }
 
     CompositionLocalProvider(LocalActionRowStyle provides ActionRowStyle.Menu) {
-        Column(modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
-            // The player's menu has the sleep timer, and swaps its rows for
-            // the picker in place.
-            if (pickingSleepTimer) {
-                SleepTimerPicker(palette = palette, onBack = { pickingSleepTimer = false })
-            } else {
-                rows()
+        if (!compactPopup) {
+            Column(modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+                // The player's menu has the sleep timer, and swaps its rows for
+                // the picker in place.
+                if (pickingSleepTimer) {
+                    SleepTimerPicker(palette = palette, onBack = { pickingSleepTimer = false })
+                } else {
+                    rows()
+                }
+            }
+        } else {
+            // The fullscreen popup opens on a short category page. Only the
+            // selected category scrolls, never the whole list of song actions.
+            Column(modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+                if (pickingSleepTimer) {
+                    SleepTimerPicker(palette = palette, onBack = { pickingSleepTimer = false })
+                } else {
+                    when (popupSection) {
+                        SongMenuPopupSection.HOME -> {
+                            SongMenuPopupSummary(song)
+                            val shareAction = onShare?.takeIf { !isOffline }
+                            if ((signedIn && !isOffline) || shareAction != null) {
+                                IosMenuQuickActions {
+                                    if (signedIn && !isOffline) {
+                                        IosMenuQuickAction(
+                                            icon = if (disliked) BrokenHeart.Fill else BrokenHeart.Outline,
+                                            label = stringResource(R.string.dislike),
+                                            tint = if (disliked) palette.accent else null,
+                                            onClick = onToggleDislike,
+                                        )
+                                    }
+                                    shareAction?.let {
+                                        IosMenuQuickAction(
+                                            icon = SfIcons.Share,
+                                            label = stringResource(R.string.share),
+                                            onClick = it,
+                                        )
+                                    }
+                                }
+                            }
+                            ActionRow(
+                                icon = SfIcons.GraphicEq,
+                                label = stringResource(R.string.player_more_playback_lyrics),
+                                onClick = { popupSection = SongMenuPopupSection.PLAYBACK },
+                            )
+                            ActionRow(
+                                icon = SfIcons.PlayLast,
+                                label = stringResource(R.string.player_more_queue_actions),
+                                onClick = { popupSection = SongMenuPopupSection.QUEUE },
+                            )
+                            ActionRow(
+                                icon = SfIcons.AddToPlaylist,
+                                label = stringResource(R.string.player_more_library_downloads),
+                                onClick = { popupSection = SongMenuPopupSection.LIBRARY },
+                            )
+                            ActionRow(
+                                icon = SfIcons.Info,
+                                label = stringResource(R.string.player_more_song_details),
+                                onClick = { popupSection = SongMenuPopupSection.DETAILS },
+                            )
+                        }
+
+                        SongMenuPopupSection.PLAYBACK -> {
+                            SongMenuPopupHeader(
+                                title = stringResource(R.string.player_more_playback_lyrics),
+                                subtitle = song.title,
+                                onBack = { popupSection = SongMenuPopupSection.HOME },
+                            )
+                            if (onRollbackToOriginal != null || onUpgradeQuality != null || onToggleAudioVersion != null) {
+                                (onRollbackToOriginal ?: onUpgradeQuality)?.let {
+                                    ActionRow(
+                                        icon = if (onRollbackToOriginal != null) SfIcons.Revert else SfIcons.Upgrade,
+                                        label = stringResource(
+                                            if (onRollbackToOriginal != null) R.string.revert_to_original
+                                            else R.string.upgrade_quality,
+                                        ),
+                                        accent = palette.accent,
+                                        enabled = onRollbackToOriginal != null || !upgradeQualityInProgress,
+                                        onClick = it,
+                                    )
+                                }
+                                onToggleAudioVersion?.let {
+                                    ActionRow(
+                                        icon = if (isAudioVersion) SfIcons.Video else SfIcons.MusicNote,
+                                        label = stringResource(
+                                            when {
+                                                audioVersionMissing && isAudioVersion -> R.string.no_video_version
+                                                audioVersionMissing -> R.string.no_audio_version
+                                                isAudioVersion -> R.string.convert_to_video
+                                                else -> R.string.convert_to_audio
+                                            },
+                                        ),
+                                        accent = palette.accent,
+                                        enabled = !audioVersionMissing,
+                                        onClick = it,
+                                    )
+                                }
+                            }
+                            if (showSleepTimer) {
+                                ActionRow(
+                                    icon = SfIcons.SleepTimer,
+                                    label = stringResource(R.string.sleep_timer),
+                                    value = sleepTimerStatus(),
+                                    accent = palette.accent,
+                                ) { pickingSleepTimer = true }
+                            }
+                            onAutomixOverview?.let {
+                                ActionRow(
+                                    icon = SfIcons.GraphicEq,
+                                    label = stringResource(R.string.automix_overview),
+                                    accent = palette.accent,
+                                    onClick = it,
+                                )
+                            }
+                            onLyricsOffset?.let {
+                                ActionRow(
+                                    icon = SfIcons.Sliders,
+                                    label = stringResource(R.string.lyrics_offset),
+                                    accent = palette.accent,
+                                    onClick = it,
+                                )
+                            }
+                            onCopyLog?.let {
+                                ActionRow(
+                                    SfIcons.Bug,
+                                    stringResource(R.string.copy_log),
+                                    accent = palette.accent,
+                                    onClick = it,
+                                )
+                            }
+                        }
+
+                        SongMenuPopupSection.QUEUE -> {
+                            SongMenuPopupHeader(
+                                title = stringResource(R.string.player_more_queue_actions),
+                                subtitle = song.title,
+                                onBack = { popupSection = SongMenuPopupSection.HOME },
+                            )
+                            ActionRow(
+                                icon = SfIcons.Radio,
+                                label = stringResource(R.string.start_radio),
+                                accent = palette.accent,
+                                onClick = onStartRadio,
+                            )
+                            if (!fromQueue) {
+                                ActionRow(
+                                    icon = SfIcons.PlayNext,
+                                    label = stringResource(R.string.play_next),
+                                    accent = palette.accent,
+                                    onClick = onPlayNext,
+                                )
+                                ActionRow(
+                                    icon = SfIcons.PlayLast,
+                                    label = stringResource(R.string.add_to_queue),
+                                    accent = palette.accent,
+                                    onClick = onAddToQueue,
+                                )
+                            }
+                        }
+
+                        SongMenuPopupSection.LIBRARY -> {
+                            SongMenuPopupHeader(
+                                title = stringResource(R.string.player_more_library_downloads),
+                                subtitle = song.title,
+                                onBack = { popupSection = SongMenuPopupSection.HOME },
+                            )
+                            ActionRow(
+                                icon = SfIcons.AddToPlaylist,
+                                label = stringResource(R.string.add_to_playlist),
+                                accent = palette.accent,
+                                onClick = onAddToPlaylist,
+                            )
+                            if (canRate) {
+                                onRemoveFromPlaylist?.let {
+                                    ActionRow(
+                                        icon = SfIcons.RemoveFromPlaylist,
+                                        label = stringResource(R.string.remove_from_playlist),
+                                        accent = palette.accent,
+                                        onClick = it,
+                                    )
+                                }
+                            }
+                            DownloadRow(song, palette, isOffline, onDownload)
+                            onRemoveFromCache?.let {
+                                ActionRow(
+                                    icon = SfIcons.Trash,
+                                    label = stringResource(R.string.remove_from_cache),
+                                    accent = palette.accent,
+                                    onClick = it,
+                                )
+                            }
+                            WebDavUploadRow(song, palette, isOffline, onUploadToWebDav)
+                            onRemoveFromHistory?.let {
+                                ActionRow(
+                                    icon = SfIcons.History,
+                                    label = stringResource(R.string.remove_from_history),
+                                    accent = palette.accent,
+                                    onClick = it,
+                                )
+                            }
+                        }
+
+                        SongMenuPopupSection.DETAILS -> {
+                            SongMenuPopupHeader(
+                                title = stringResource(R.string.player_more_song_details),
+                                subtitle = song.title,
+                                onBack = { popupSection = SongMenuPopupSection.HOME },
+                            )
+                            when (val id = song.albumId) {
+                                null -> if (resolvingLinks) {
+                                    LoadingActionRow(SfIcons.Album, stringResource(R.string.open_album), palette)
+                                }
+                                else -> ActionRow(
+                                    SfIcons.Album,
+                                    stringResource(R.string.open_album),
+                                    accent = palette.accent,
+                                    description = song.albumName,
+                                ) { onOpenAlbum(id) }
+                            }
+                            when (val id = song.artistId) {
+                                null -> if (resolvingLinks) {
+                                    LoadingActionRow(SfIcons.Artist, stringResource(R.string.open_artist), palette)
+                                }
+                                else -> ActionRow(
+                                    SfIcons.Artist,
+                                    stringResource(R.string.open_artist),
+                                    accent = palette.accent,
+                                    description = song.artist.takeIf { it.isNotBlank() },
+                                ) { onOpenArtist(id) }
+                            }
+                            ActionRow(SfIcons.Info, stringResource(R.string.song_info), accent = palette.accent) {
+                                showingSongInfo = true
+                            }
+                        }
+                    }
+                }
             }
         }
     }

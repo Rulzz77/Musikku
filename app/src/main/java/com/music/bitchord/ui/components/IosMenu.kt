@@ -74,6 +74,8 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.lerp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.ui.components.backdrop.backdrops.SnapshotBackdrop
@@ -433,6 +435,8 @@ fun <T : Any> IosMenuPopover(
     onDismiss: () -> Unit,
     backdrop: Backdrop? = null,
     hazeState: HazeState? = null,
+    /** Places the player menu in its own window above fullscreen player Dialogs. */
+    dialogWindow: Boolean = false,
     content: @Composable (T) -> Unit,
 ) {
     var last by remember { mutableStateOf<Pair<T, Rect?>?>(null) }
@@ -441,7 +445,10 @@ fun <T : Any> IosMenuPopover(
         SideEffect { last = requested }
     }
     val shown = requested ?: last ?: return
-    val (menuItem, menuAnchor) = shown
+    val (menuItem, storedMenuAnchor) = shown
+    // The fullscreen menu anchor is recorded in the same full-window coordinate
+    // space; the Dialog is also full-window, so it can retain the button position.
+    val menuAnchor = storedMenuAnchor
     val open = item != null
 
     val context = LocalContext.current
@@ -498,9 +505,10 @@ fun <T : Any> IosMenuPopover(
     val insets = WindowInsets.safeDrawing
     var overlayOffset by remember { mutableStateOf(Offset.Zero) }
 
-    Layout(
-        modifier = Modifier
-            .fillMaxSize()
+    val menuLayout: @Composable () -> Unit = {
+        Layout(
+            modifier = Modifier
+                .fillMaxSize()
             .onGloballyPositioned { overlayOffset = it.positionInWindow() }
             // Nothing under the menu moves while it is up: a drag that the
             // rows didn't take would otherwise reach the sheet the player is
@@ -533,9 +541,12 @@ fun <T : Any> IosMenuPopover(
                     // Taps between rows land on the panel, not the scrim under it.
                     .pointerInput(Unit) {}
                     .iosMenuPanel(
-                        translucent = true,
-                        backdrop = backdrop,
-                        hazeState = hazeState,
+                        // A Dialog cannot sample the TextureView in the Activity
+                        // window, so use the normal opaque panel rather than
+                        // showing a translucent slab with an empty frost source.
+                        translucent = !dialogWindow,
+                        backdrop = backdrop.takeUnless { dialogWindow },
+                        hazeState = hazeState.takeUnless { dialogWindow },
                         castsShadow = false,
                     ),
                 propagateMinConstraints = true,
@@ -573,8 +584,14 @@ fun <T : Any> IosMenuPopover(
 
         val scrimPlaceable = measurables[0].measure(Constraints.fixed(width, height))
         val panelWidth = IosMenuWidth.roundToPx().coerceAtMost(width - margin * 2)
+        val availablePanelHeight = (bottom - top).coerceAtLeast(0)
+        val panelMaxHeight = if (dialogWindow) {
+            minOf(availablePanelHeight, 340.dp.roundToPx())
+        } else {
+            availablePanelHeight
+        }
         val panel = measurables[2].measure(
-            Constraints(minWidth = panelWidth, maxWidth = panelWidth, maxHeight = (bottom - top).coerceAtLeast(0)),
+            Constraints(minWidth = panelWidth, maxWidth = panelWidth, maxHeight = panelMaxHeight),
         )
         val shadowPlate = measurables[1].measure(Constraints.fixed(panel.width, panel.height))
         val anchorBounds = menuAnchor?.translate(-overlayOffset)
@@ -609,5 +626,21 @@ fun <T : Any> IosMenuPopover(
                 compositingStrategy = CompositingStrategy.Offscreen
             }
         }
+        }
+    }
+
+    if (dialogWindow) {
+        Dialog(
+            onDismissRequest = onDismiss,
+            properties = DialogProperties(
+                usePlatformDefaultWidth = false,
+                dismissOnBackPress = true,
+                dismissOnClickOutside = false,
+            ),
+        ) {
+            Box(Modifier.fillMaxSize()) { menuLayout() }
+        }
+    } else {
+        menuLayout()
     }
 }

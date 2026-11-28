@@ -1559,4 +1559,8 @@
     <string name="auto_backup_failed" translatable="false">Cadangan terakhir gagal. Periksa akses Drive dan koneksi internet</string>
     <string name="auto_backup_last_success" translatable="false">Cadangan terakhir: %1$s</string>
     <string name="listen_together_invalid_qr">Kode QR ini bukan undangan Dengerin Bareng yang valid.</string>
+    <string name="player_more_playback_lyrics">Pemutaran &amp; lirik</string>
+    <string name="player_more_queue_actions">Aksi antrean</string>
+    <string name="player_more_library_downloads">Pustaka &amp; unduhan</string>
+    <string name="player_more_song_details">Detail lagu</string>
 </resources>

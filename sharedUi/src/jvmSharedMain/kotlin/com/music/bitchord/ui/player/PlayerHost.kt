@@ -447,6 +447,8 @@ class CanvasVideoSpec(
     val onCoverChanged: (Float) -> Unit,
     val bottomFade: Float,
     val bottomFadeEndPx: Float?,
+    /** Share of the right edge that dissolves into the player's backdrop. */
+    val rightEdgeFade: Float,
     val pausedForTransition: Boolean,
     val resumeDelayMs: Long,
     val startPositionMs: Long,
@@ -498,6 +500,8 @@ fun CanvasArtworkPlayer(
     onCoverChanged: (Float) -> Unit = {},
     bottomFade: Float = 0f,
     bottomFadeEndPx: Float? = null,
+    /** Fraction of the clip width dissolved into the artwork backdrop at its right edge. */
+    rightEdgeFade: Float = 0f,
     pausedForTransition: Boolean = false,
     /** How long the clip holds still after [pausedForTransition] lifts before it plays on. */
     resumeDelayMs: Long = 0L,
@@ -533,6 +537,7 @@ fun CanvasArtworkPlayer(
             onCoverChanged = onCoverChanged,
             bottomFade = bottomFade,
             bottomFadeEndPx = bottomFadeEndPx,
+            rightEdgeFade = rightEdgeFade,
             pausedForTransition = pausedForTransition,
             resumeDelayMs = resumeDelayMs,
             startPositionMs = startPositionMs,

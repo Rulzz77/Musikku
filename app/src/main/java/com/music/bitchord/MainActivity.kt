@@ -772,6 +772,7 @@ private fun BitChordApp(
      */
     val livePlayerBackdrop = rememberLayerBackdrop()
     var playerLiveCanvas by remember { mutableStateOf(false) }
+    var playerLyricsFullscreen by remember { mutableStateOf(false) }
     /**
      * The same for a ⋮ or ⋯ menu over a page: a still of everything under it —
      * the page, its bars, the mini player — blurred under the panel. The
@@ -2702,6 +2703,7 @@ private fun BitChordApp(
             // the parameter.
             menuOpen = { songActions != null && menuFromPlayer && songMenuOrigin == null },
             onLiveCanvasChanged = { playerLiveCanvas = it },
+            onLyricsFullscreenChanged = { playerLyricsFullscreen = it },
             isPlaying = player.isPlaying,
             isLoading = playPauseBusy,
             position = player.position,
@@ -4744,6 +4746,7 @@ private fun BitChordApp(
             }
             SongActionsMenu(
                 song = song,
+                compactPopup = fromPlayer && playerLyricsFullscreen,
                 fromQueue = fromQueue,
                 signedIn = signedIn,
                 likeStatus = likeStatusOf(song),
@@ -5110,7 +5113,9 @@ private fun BitChordApp(
                         item = songActions?.takeIf { songMenuOrigin == null && menuFromPlayer },
                         anchor = songMenuAnchor,
                         onDismiss = { songActions = null },
-                        backdrop = if (playerLiveCanvas) livePlayerBackdrop else playerBackdrop,
+                        backdrop = if (playerLyricsFullscreen) null
+                            else if (playerLiveCanvas) livePlayerBackdrop else playerBackdrop,
+                        dialogWindow = playerLyricsFullscreen,
                     ) { song ->
                         songMenuBody(song)
                     }

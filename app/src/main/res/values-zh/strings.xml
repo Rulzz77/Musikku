@@ -1552,4 +1552,8 @@
     <string name="automix_mini_art_transition">迷你播放器封面过渡</string>
     <string name="automix_mini_art_transition_subtitle">在 AutoMix 期间于迷你播放器中显示封面过渡效果。</string>
     <string name="listen_together_invalid_qr">此二维码不是有效的“一起听”邀请。</string>
+    <string name="player_more_playback_lyrics">播放与歌词</string>
+    <string name="player_more_queue_actions">队列操作</string>
+    <string name="player_more_library_downloads">媒体库与下载</string>
+    <string name="player_more_song_details">歌曲详情</string>
 </resources>

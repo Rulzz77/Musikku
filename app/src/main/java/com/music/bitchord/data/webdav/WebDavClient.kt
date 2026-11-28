@@ -244,7 +244,11 @@ object WebDavClient {
             val node = responses.item(i) as? Element ?: continue
             val href = node.getElementsByTagNameNS("*", "href").item(0)?.textContent?.trim().orEmpty()
             if (href.isEmpty()) continue
-            val url = resolveHref(dirUrl, href)
+            // A server controls every href in its multistatus document. Only
+            // follow resources on the configured origin: an absolute href to
+            // another host/port/scheme must never receive this server's Basic
+            // credentials on the next PROPFIND, media or artwork request.
+            val url = runCatching { resolveHref(dirUrl, href) }.getOrNull() ?: continue
             if (isSameUrl(url, dirUrl)) continue
             val displayName = node.getElementsByTagNameNS("*", "displayname")
                 .item(0)?.textContent?.trim().orEmpty()
@@ -259,22 +263,28 @@ object WebDavClient {
         return out
     }
 
+    /**
+     * Resolves a DAV href but never follows it off the configured origin.
+     * PROPFIND responses are untrusted input: a malicious server could
+     * otherwise return an absolute URL and make the next recursive request
+     * send the saved Basic credential to an attacker-controlled host.
+     */
     fun resolveHref(baseUrl: String, href: String): String {
         val trimmed = href.trim()
-        if (trimmed.startsWith("http://", ignoreCase = true) ||
-            trimmed.startsWith("https://", ignoreCase = true)
-        ) {
-            return trimmed
-        }
+        require(trimmed.isNotEmpty()) { "Empty WebDAV href" }
         val base = WebDavConfig.normalizeUrl(baseUrl)
-        val schemeHost = base.substringBefore('/', "").let {
-            // Keep "https://host" (and port) only.
-            val schemeEnd = base.indexOf("://")
-            if (schemeEnd < 0) return trimmed
-            val pathStart = base.indexOf('/', schemeEnd + 3)
-            if (pathStart < 0) base else base.substring(0, pathStart)
+        require(WebDavConfig.isConfigured(base)) { "Invalid WebDAV base URL" }
+        val baseUri = java.net.URI(base.trimEnd('/') + "/")
+        val hrefUri = java.net.URI(trimmed)
+        val resolved = baseUri.resolve(hrefUri).normalize()
+        require(resolved.userInfo == null && resolved.fragment == null) {
+            "WebDAV href must not contain credentials or fragments"
         }
-        return if (trimmed.startsWith("/")) "$schemeHost$trimmed" else "$base/$trimmed"
+        val result = resolved.toASCIIString()
+        require(WebDavConfig.sameOrigin(base, result)) {
+            "WebDAV href must remain on the configured server origin"
+        }
+        return result
     }
 
     private fun isSameUrl(a: String, b: String): Boolean {

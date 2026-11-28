@@ -45,8 +45,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.ui.draw.alpha
 import kotlinx.coroutines.delay
@@ -2411,11 +2409,7 @@ fun NowPlayingScreen(
 
                 val fullscreenLyricsCanvas = canvas
                 Row(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        // The dialog draws its backdrop edge-to-edge, but all interactive
-                        // player content stays inside the same safe area as LandscapePlayer.
-                        .windowInsetsPadding(WindowInsets.safeDrawing).windowInsetsPadding(stableStatusBarInsets()),
+                    modifier = Modifier.fillMaxSize(),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     if (fullscreenLyricsCanvas != null) {
@@ -2816,62 +2810,70 @@ fun NowPlayingScreen(
                                     indication = null,
                                 ) { fullscreenQueueOpen = false },
                         ) {
-                            // Keep the modal scrim full-bleed, while the queue panel itself
-                            // is measured in the same safe viewport as the lyrics columns.
                             Box(
                                 modifier = Modifier
-                                    .fillMaxSize()
-                                    .windowInsetsPadding(WindowInsets.safeDrawing).windowInsetsPadding(stableStatusBarInsets()),
-                                contentAlignment = Alignment.CenterEnd,
+                                    .align(Alignment.CenterEnd)
+                                    .fillMaxHeight()
+                                    .fillMaxWidth(0.62f)
+                                    .widthIn(max = 480.dp)
+                                    .padding(10.dp)
+                                    .clip(RoundedCornerShape(22.dp))
+                                    .background(Color(0xF51A1720))
+                                    // Consume taps on empty panel space so they do not
+                                    // fall through to the scrim and dismiss the queue.
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                    ) {}
+                                    .border(
+                                        1.dp,
+                                        Color.White.copy(alpha = 0.10f),
+                                        RoundedCornerShape(22.dp),
+                                    ),
                             ) {
+                                InlineQueue(
+                                    queue = queue,
+                                    currentIndex = queueIndex,
+                                    autoplayEnabled = autoplayEnabled,
+                                    controlsLocked = controlsLocked,
+                                    hazeState = queueHaze,
+                                    onJumpTo = onJumpTo,
+                                    onRemove = onRemoveFromQueue,
+                                    onMove = onMoveInQueue,
+                                    onClear = onClearQueue,
+                                    onSongMenu = onQueueSongMenu,
+                                    onScrollingChange = { queueScrolling = it },
+                                    onDragActiveChange = onQueueDragActiveChange,
+                                    onSwipeToQueue = onQueueSwipeToQueue,
+                                    gesturesEnabled = fullscreenQueueOpen,
+                                    undoNotice = queueUndoNotice,
+                                    selection = queueSelection,
+                                    onBulkAction = onQueueBulkAction,
+                                    onRemoveSelected = onQueueRemoveEntries,
+                                    // InlineQueue bleeds its scroll surface by PLAYER_GUTTER
+                                    // on either side. Keep the header and the rows on
+                                    // the same inset, and leave a clean touch margin
+                                    // between the content and the rounded panel edge.
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(horizontal = PLAYER_GUTTER)
+                                        .padding(top = 44.dp),
+                                    onAddAllToPlaylist = onQueueAddAllToPlaylist,
+                                )
                                 Box(
                                     modifier = Modifier
-                                        // The fullscreen lyrics split is 46/54; the queue
-                                        // occupies that same right-hand pane instead of
-                                        // overlapping the Canvas side with a wider 62% sheet.
-                                        .fillMaxHeight()
-.fillMaxWidth(0.54f)
-                                        .padding(10.dp)
-                                        .clip(RoundedCornerShape(22.dp))
-                                        .background(Color(0xF51A1720))
-                                        // Consume taps on empty panel space so they do not
-                                        // fall through to the scrim and dismiss the queue.
-                                        .clickable(
-                                            interactionSource = remember { MutableInteractionSource() },
-                                            indication = null,
-                                        ) {}
-                                        .border(
-                                            1.dp,
-                                            Color.White.copy(alpha = 0.10f),
-                                            RoundedCornerShape(22.dp),
-                                        ),
+                                        .align(Alignment.TopEnd)
+                                        .padding(top = 8.dp, end = 8.dp)
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                        .background(Color.Black.copy(alpha = 0.44f))
+                                        .clickable { fullscreenQueueOpen = false },
+                                    contentAlignment = Alignment.Center,
                                 ) {
-                                    InlineQueue(
-                                        queue = queue,
-                                        currentIndex = queueIndex,
-                                        autoplayEnabled = autoplayEnabled,
-                                        controlsLocked = controlsLocked,
-                                        hazeState = queueHaze,
-                                        onJumpTo = onJumpTo,
-                                        onRemove = onRemoveFromQueue,
-                                        onMove = onMoveInQueue,
-                                        onClear = onClearQueue,
-                                        onSongMenu = onQueueSongMenu,
-                                        onScrollingChange = { queueScrolling = it },
-                                        onDragActiveChange = onQueueDragActiveChange,
-                                        onSwipeToQueue = onQueueSwipeToQueue,
-                                        gesturesEnabled = fullscreenQueueOpen,
-                                        undoNotice = queueUndoNotice,
-                                        selection = queueSelection,
-                                        onBulkAction = onQueueBulkAction,
-                                        onRemoveSelected = onQueueRemoveEntries,
-                                        onClose = { fullscreenQueueOpen = false },
-                                        // Match the landscape queue's 30dp visible content
-                                        // inset, accounting for the panel's 10dp outer frame.
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .padding(horizontal = (PLAYER_GUTTER - 10.dp).coerceAtLeast(0.dp)),
-                                        onAddAllToPlaylist = onQueueAddAllToPlaylist,
+                                    Icon(
+                                        imageVector = Icons.Rounded.Close,
+                                        contentDescription = stringResource(Res.string.close_lyrics),
+                                        tint = Color.White,
                                     )
                                 }
                             }

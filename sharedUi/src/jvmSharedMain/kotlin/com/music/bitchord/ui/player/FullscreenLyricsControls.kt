@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -92,6 +93,8 @@ internal fun FullscreenLyricsControls(
                     active = liked,
                     modifier = glyphModifier,
                 )
+            } else {
+                Spacer(Modifier.size(34.dp))
             }
         }
         val shuffleButton: @Composable () -> Unit = {

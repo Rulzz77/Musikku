@@ -110,6 +110,60 @@ class WebDavTest {
     }
 
     @Test
+    fun rejectsWebDavServersThatReturnExternalEntityXml() {
+        val xml = """<?xml version="1.0"?>
+<!DOCTYPE d:multistatus [
+  <!ENTITY xxe SYSTEM "file:///etc/passwd">
+]>
+<d:multistatus xmlns:d="DAV:">
+  <d:response>
+    <d:href>&xxe;</d:href>
+    <d:propstat><d:prop>
+      <d:displayname>leak.txt</d:displayname>
+      <d:resourcetype/>
+    </d:prop></d:propstat>
+  </d:response>
+</d:multistatus>
+"""
+        assertTrue(
+            WebDavClient.parseMultistatus(xml, "https://cloud.example.com/Music").isEmpty(),
+        )
+    }
+
+    @Test
+    fun parseMultistatusSkipsCrossOriginHrefsButKeepsValidEntries() {
+        val xml = """<?xml version="1.0"?>
+<d:multistatus xmlns:d="DAV:">
+  <d:response>
+    <d:href>https://attacker.example/steal.mp3</d:href>
+    <d:propstat><d:prop>
+      <d:displayname>steal.mp3</d:displayname>
+      <d:resourcetype/>
+    </d:prop></d:propstat>
+  </d:response>
+  <d:response>
+    <d:href>/Music/song.mp3</d:href>
+    <d:propstat><d:prop>
+      <d:displayname>song.mp3</d:displayname>
+      <d:resourcetype/>
+    </d:prop></d:propstat>
+  </d:response>
+</d:multistatus>
+"""
+        val entries = WebDavClient.parseMultistatus(xml, "https://cloud.example.com/Music")
+        assertEquals(1, entries.size)
+        assertEquals("https://cloud.example.com/Music/song.mp3", entries.single().url)
+    }
+
+    @Test
+    fun rejectsWebDavUrlsWithUserInfoOrMalformedAuthority() {
+        assertFalse(WebDavConfig.isConfigured("https://user:pass@cloud.example.com/Music"))
+        assertFalse(WebDavConfig.isConfigured("https://cloud.example.com:99999/Music"))
+        assertFalse(WebDavConfig.isConfigured("javascript:alert(1)"))
+        assertTrue(WebDavConfig.isConfigured("https://cloud.example.com:8443/Music"))
+    }
+
+    @Test
     fun resolvesRelativeHrefsOnlyWithinTheConfiguredOrigin() {
         assertEquals(
             "https://cloud.example.com/remote.php/dav/files/user/Music/a.mp3",

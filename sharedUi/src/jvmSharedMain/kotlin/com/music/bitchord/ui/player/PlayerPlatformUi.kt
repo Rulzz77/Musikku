@@ -26,6 +26,17 @@ internal expect fun appLanguageTag(): String
 expect fun PlayerBackHandler(enabled: Boolean, onBack: () -> Unit)
 
 /**
+ * The landscape lyrics reader owns a full-window surface. Android opts out of
+ * decor fitting so the Dialog measures edge-to-edge instead of shrinking its
+ * content to the system-bar safe area; desktop keeps its native Dialog sizing.
+ */
+@Composable
+internal expect fun PlayerFullscreenDialog(
+    onDismissRequest: () -> Unit,
+    content: @Composable () -> Unit,
+)
+
+/**
  * Whether a scroll that runs out inside a [PlayerDrawer] should drag the drawer
  * with it.
  *

@@ -155,8 +155,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.isSpecified
 import androidx.compose.ui.unit.lerp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import coil3.compose.AsyncImage
 import com.music.bitchord.ui.components.ExplicitBadge
 import com.music.bitchord.ui.components.VideoThumbnails
@@ -2376,13 +2374,7 @@ fun NowPlayingScreen(
     // is the background itself, not a framed cover beside the lyrics. Portrait
     // keeps the regular player lyrics layout unchanged.
     if (lyricsFullscreenVisible) {
-        Dialog(
-            onDismissRequest = exitLyricsFullscreen,
-            properties = DialogProperties(
-                usePlatformDefaultWidth = false,
-                dismissOnClickOutside = false,
-            ),
-        ) {
+        PlayerFullscreenDialog(onDismissRequest = exitLyricsFullscreen) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()

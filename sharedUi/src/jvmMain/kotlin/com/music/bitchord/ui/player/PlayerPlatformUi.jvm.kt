@@ -8,6 +8,8 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import java.util.Locale
 import kotlin.math.floor
 import kotlin.math.round
@@ -18,6 +20,21 @@ import org.jetbrains.skia.Matrix33
 import org.jetbrains.skia.MipmapMode
 import org.jetbrains.skia.Paint
 import org.jetbrains.skia.Rect as SkRect
+
+@Composable
+internal actual fun PlayerFullscreenDialog(
+    onDismissRequest: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    Dialog(
+        onDismissRequest = onDismissRequest,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnClickOutside = false,
+        ),
+        content = content,
+    )
+}
 
 private val startNanos = System.nanoTime()
 

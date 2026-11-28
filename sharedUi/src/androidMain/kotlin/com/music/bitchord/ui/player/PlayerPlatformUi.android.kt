@@ -15,6 +15,29 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.platform.LocalView
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+
+/**
+ * Full-window lyrics surface. With platform width disabled, Compose recommends
+ * disabling decor fitting too; otherwise the Dialog can be laid out against a
+ * system-bar-inset viewport and leave a narrow, mismeasured edge in landscape.
+ */
+@Composable
+internal actual fun PlayerFullscreenDialog(
+    onDismissRequest: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    Dialog(
+        onDismissRequest = onDismissRequest,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnClickOutside = false,
+            decorFitsSystemWindows = false,
+        ),
+        content = content,
+    )
+}
 
 internal actual fun uptimeMillis(): Long = SystemClock.uptimeMillis()
 

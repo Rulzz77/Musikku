@@ -88,7 +88,8 @@ class PhoneLink(context: Context, private val scope: CoroutineScope) :
     @Volatile private var phoneNode: String? = null
     private var artId: String? = null
     private var artJob: Job? = null
-    @Volatile private var lastQueueRevision = 0L
+    private val queueSnapshotLock = Any()
+    private var lastQueueRevision = 0L
     private val queueArtworkGeneration = AtomicLong()
     private var started = false
 
@@ -381,18 +382,7 @@ class PhoneLink(context: Context, private val scope: CoroutineScope) :
     }
 
     private fun applyQueue(map: DataMap) {
-        // Data Layer updates can complete out of order if a previous request
-        // timed out. Ignore older revisions before changing the visible queue.
         val revision = map.getLong(P.KEY_QUEUE_REVISION, 0L)
-        if (revision > 0L) {
-            if (revision < lastQueueRevision) return
-            lastQueueRevision = revision
-        }
-
-        // A later queue snapshot can keep the same playing media id. Give each
-        // snapshot its own generation so slow artwork from an older order
-        // cannot overwrite the rows of the latest queue.
-        val generation = queueArtworkGeneration.incrementAndGet()
         val items = map.getDataMapArrayList(P.KEY_ITEMS).orEmpty()
         val current = map.getInt(P.KEY_CURRENT_INDEX)
         val mediaId = map.getString(P.KEY_QUEUE_MEDIA_ID).orEmpty()
@@ -404,7 +394,20 @@ class PhoneLink(context: Context, private val scope: CoroutineScope) :
                 art = null,
             )
         }
-        _queue.value = Queue(rows, current, mediaId)
+
+        // Revision validation, generation assignment, and the visible text
+        // update are one atomic step. Listener callbacks can be concurrent;
+        // otherwise an older callback could pass its check, pause, and publish
+        // its rows after a newer callback had already advanced the queue.
+        val generation = synchronized(queueSnapshotLock) {
+            if ((revision == 0L && lastQueueRevision > 0L) ||
+                (revision > 0L && revision < lastQueueRevision)
+            ) return
+            if (revision > 0L) lastQueueRevision = revision
+            queueArtworkGeneration.incrementAndGet().also {
+                _queue.value = Queue(rows, current, mediaId)
+            }
+        }
         // Thumbnails after the text, in one go, so the list is readable at once
         // and recomposes once more rather than once per row.
         scope.launch {

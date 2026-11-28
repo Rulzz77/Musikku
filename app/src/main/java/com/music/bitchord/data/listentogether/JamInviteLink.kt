@@ -33,7 +33,7 @@ object JamInviteLink {
         if (
             intent == null ||
             intent.action != Intent.ACTION_VIEW ||
-            intent.getBooleanExtra(EXTRA_CONSUMED, false)
+            runCatching { intent.getBooleanExtra(EXTRA_CONSUMED, false) }.getOrDefault(false)
         ) return false
 
         val invite = parseInvite(intent.dataString) ?: return false
@@ -55,7 +55,8 @@ object JamInviteLink {
      * 2. https://bitchord.kushagrasingh.in/invite/<CODE>?server=<SERVER>
      */
     fun parseInvite(value: String?): ParsedJamInvite? {
-        val uri = runCatching { URI(value ?: return null) }.getOrNull() ?: return null
+        val rawValue = value?.takeIf { it.length <= MAX_INVITE_URI_LENGTH } ?: return null
+        val uri = runCatching { URI(rawValue) }.getOrNull() ?: return null
         val scheme = uri.scheme?.lowercase() ?: return null
         val host = uri.host?.lowercase() ?: return null
         // Reject user-info even on custom-scheme links; it has no legitimate
@@ -204,6 +205,8 @@ object JamInviteLink {
     }
 
     private val NUMERIC_HOST = Regex("""(?i)^(?:0x[0-9a-f]+|[0-9]+)(?:\.(?:0x[0-9a-f]+|[0-9]+))*$""")
+
+    private const val MAX_INVITE_URI_LENGTH = 4_096
 
     private val INVITE_PATH = Regex("""^(.*)/invite/([A-Za-z0-9]{${ListenTogether.CODE_LENGTH}})$""")
 }

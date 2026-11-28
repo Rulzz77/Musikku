@@ -559,3 +559,75 @@ func TestWebSocketTokenAsSubprotocol(t *testing.T) {
 		t.Fatalf("expected 401 for a wrong subprotocol token, got %v", err)
 	}
 }
+
+
+func TestRejoinedDeviceCannotUsePreviousWebSocketSession(t *testing.T) {
+	ts := setupTestServer()
+	defer ts.Close()
+
+	createBody, _ := json.Marshal(map[string]string{
+		"userId": "same-user", "deviceId": "same-device", "displayName": "Phone",
+	})
+	createRes, err := http.Post(ts.URL+"/api/parties", "application/json", bytes.NewReader(createBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer createRes.Body.Close()
+	var created map[string]interface{}
+	if err := json.NewDecoder(createRes.Body).Decode(&created); err != nil {
+		t.Fatal(err)
+	}
+	code := created["code"].(string)
+	oldToken := created["token"].(string)
+
+	u, _ := url.Parse(ts.URL)
+	u.Scheme = "ws"
+	u.Path = fmt.Sprintf("/ws/parties/%s", code)
+	headers := http.Header{}
+	headers.Set("Authorization", "Bearer "+oldToken)
+	ws, _, err := websocket.DefaultDialer.Dial(u.String(), headers)
+	if err != nil {
+		t.Fatalf("initial WebSocket connection failed: %v", err)
+	}
+	defer ws.Close()
+
+	var welcome map[string]interface{}
+	_ = ws.SetReadDeadline(time.Now().Add(2 * time.Second))
+	if err := ws.ReadJSON(&welcome); err != nil || welcome["type"] != protocol.FrameWelcome {
+		t.Fatalf("expected welcome frame, got %v (%v)", welcome, err)
+	}
+
+	// Rejoining the same device rotates its token while the old socket is still open.
+	joinBody, _ := json.Marshal(map[string]string{
+		"userId": "same-user", "deviceId": "same-device", "displayName": "Phone",
+	})
+	joinRes, err := http.Post(
+		fmt.Sprintf("%s/api/parties/%s/join", ts.URL, code),
+		"application/json",
+		bytes.NewReader(joinBody),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer joinRes.Body.Close()
+	var joined map[string]interface{}
+	if err := json.NewDecoder(joinRes.Body).Decode(&joined); err != nil {
+		t.Fatal(err)
+	}
+	newToken := joined["token"].(string)
+	if newToken == oldToken {
+		t.Fatal("rejoining the same device must rotate its token")
+	}
+
+	if err := ws.WriteJSON(map[string]interface{}{"type": protocol.FramePing}); err != nil {
+		t.Fatalf("old socket should still accept a frame before server rejects its stale session: %v", err)
+	}
+	var bye map[string]interface{}
+	_ = ws.SetReadDeadline(time.Now().Add(2 * time.Second))
+	if err := ws.ReadJSON(&bye); err != nil {
+		t.Fatalf("expected stale session to receive a bye frame, got %v", err)
+	}
+	if bye["type"] != protocol.FrameBye || bye["reason"] != "session_replaced" {
+		t.Fatalf("expected session_replaced bye frame, got %#v", bye)
+	}
+}

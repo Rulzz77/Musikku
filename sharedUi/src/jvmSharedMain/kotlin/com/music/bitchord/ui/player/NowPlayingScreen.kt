@@ -2854,7 +2854,7 @@ fun NowPlayingScreen(
                                 ) {
                                     Icon(
                                         imageVector = Icons.Rounded.Close,
-                                        contentDescription = stringResource(Res.string.close),
+                                        contentDescription = stringResource(Res.string.close_lyrics),
                                         tint = Color.White,
                                     )
                                 }

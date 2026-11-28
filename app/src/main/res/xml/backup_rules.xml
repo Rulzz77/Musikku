@@ -34,4 +34,6 @@
     <exclude domain="sharedpref" path="bitchord_listen_together.xml" />
     <exclude domain="sharedpref" path="bitchord_listen_together_secure.xml" />
     <exclude domain="sharedpref" path="bitchord_listen_together_secure_plain.xml" />
+    <!-- WebView stores Google, Spotify and other account cookies in its Chromium profile. -->
+    <exclude domain="root" path="app_webview/" />
 </full-backup-content>

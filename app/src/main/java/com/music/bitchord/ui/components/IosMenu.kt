@@ -628,7 +628,7 @@ fun <T : Any> IosMenuPopover(
             onDismissRequest = onDismiss,
             properties = DialogProperties(
                 usePlatformDefaultWidth = false,
-                dismissOnBackPress = false,
+                dismissOnBackPress = true,
                 dismissOnClickOutside = false,
             ),
         ) {

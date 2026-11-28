@@ -14,6 +14,10 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import org.json.JSONObject
 import okhttp3.Request
+import okhttp3.ResponseBody
+import java.io.ByteArrayOutputStream
+import java.io.IOException
+import java.nio.charset.StandardCharsets
 
 /**
  * A module/index URL with its host hidden, for logging.
@@ -111,6 +115,31 @@ class ModuleManager {
     private val indexCache = mutableMapOf<String, CachedIndex>()
     private val indexLock = Mutex()
 
+    private companion object {
+        const val MAX_MODULE_INDEX_BYTES = 4 * 1024 * 1024
+        const val MAX_MODULE_SOURCE_BYTES = 2 * 1024 * 1024
+    }
+
+    /** Read a module response without allowing a remote server to exhaust app memory. */
+    private fun ResponseBody.readUtf8Limited(maxBytes: Int): String {
+        require(contentLength() <= maxBytes || contentLength() < 0) {
+            "Module response is too large"
+        }
+        val output = ByteArrayOutputStream(minOf(maxBytes, 32 * 1024))
+        byteStream().use { input ->
+            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+            var total = 0
+            while (true) {
+                val count = input.read(buffer)
+                if (count < 0) break
+                total += count
+                if (total > maxBytes) throw IOException("Module response is too large")
+                output.write(buffer, 0, count)
+            }
+        }
+        return output.toString(StandardCharsets.UTF_8.name())
+    }
+
     /**
      * GETs [sourceUrl], parses every `"category:*"` key, returns all modules.
      *
@@ -133,11 +162,11 @@ class ModuleManager {
                 TrackLog.d(TAG, "▶ fetchIndex(${redactModuleUrl(sourceUrl)})")
                 runCatching {
                     val request = Request.Builder().url(sourceUrl).build()
-                    Http.client.newCall(request).execute().use { resp ->
+                    QuickJsExecutor.moduleHttpClient.newCall(request).execute().use { resp ->
                         if (!resp.isSuccessful) {
                             throw Exception("HTTP ${resp.code} from ${redactModuleUrl(sourceUrl)}")
                         }
-                        val body = resp.body?.string()
+                        val body = resp.body?.readUtf8Limited(MAX_MODULE_INDEX_BYTES)
                             ?: throw Exception("Empty body from ${redactModuleUrl(sourceUrl)}")
                         val modules = ModuleIndex.parseModules(json, body)
                         TrackLog.d(TAG, "  Parsed ${modules.size} modules")
@@ -217,11 +246,12 @@ class ModuleManager {
 
             TrackLog.d(TAG, "  Resolved download URL: ${redactModuleUrl(downloadUrl)}")
             val request = Request.Builder().url(downloadUrl).build()
-            val jsCode = Http.client.newCall(request).execute().use { resp ->
+            val jsCode = QuickJsExecutor.moduleHttpClient.newCall(request).execute().use { resp ->
                 if (!resp.isSuccessful) {
                     throw Exception("HTTP ${resp.code} downloading module ${module.id}")
                 }
-                resp.body?.string() ?: throw Exception("Empty body for module ${module.id}")
+                resp.body?.readUtf8Limited(MAX_MODULE_SOURCE_BYTES)
+                    ?: throw Exception("Empty body for module ${module.id}")
             }
             val baseUrl = downloadUrl.substringBeforeLast("/")
 

@@ -889,14 +889,27 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	conn.SetReadLimit(config.WebSocketMaxBytes)
 	_ = conn.SetReadDeadline(time.Now().Add(time.Duration(config.ConnectionIdleMs) * time.Millisecond))
 
+	// Revalidate after the HTTP upgrade and attach while holding the party lock.
+	// A member can be kicked or rejoin (rotating its token) during the handshake.
+	// Doing both operations under the same lock means a kick either wins first
+	// and this socket is rejected, or sees this socket in the hub and closes it.
+	var sc *hub.SafeConn
 	p.Lock()
+	member, err = p.Authenticate(token)
+	if err != nil {
+		p.Unlock()
+		_ = conn.WriteControl(
+			websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "membership changed during connection"),
+			time.Now().Add(time.Second),
+		)
+		_ = conn.Close()
+		return
+	}
 	p.MarkConnected(member, true)
-	p.Unlock()
+	sc = hubInst.Attach(p.Code, member.MemberId, conn)
 
-	sc := hubInst.Attach(p.Code, member.MemberId, conn)
-
-	// Send welcome frame
-	p.Lock()
+	// Send welcome frame from the same locked membership snapshot.
 	welcome := map[string]interface{}{
 		"type":     protocol.FrameWelcome,
 		"you":      member.ToWire(),
@@ -911,15 +924,24 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	// Read loop
 	defer func() {
-		hubInst.Detach(p.Code, member.MemberId, sc)
+		wasCurrent := hubInst.Detach(p.Code, member.MemberId, sc)
 		_ = sc.Close()
+		if !wasCurrent {
+			// A replacement socket already owns this member's hub slot.
+			return
+		}
 
 		p.Lock()
-		p.MarkConnected(member, false)
-		mFrame := membersFrame(p)
+		var mFrame map[string]interface{}
+		if p.Members[member.MemberId] == member && !hubInst.HasConnection(p.Code, member.MemberId) {
+			p.MarkConnected(member, false)
+			mFrame = membersFrame(p)
+		}
 		p.Unlock()
 
-		hubInst.Broadcast(p.Code, mFrame, "")
+		if mFrame != nil {
+			hubInst.Broadcast(p.Code, mFrame, "")
+		}
 	}()
 
 	for {
@@ -928,11 +950,11 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 		_ = conn.SetReadDeadline(time.Now().Add(time.Duration(config.ConnectionIdleMs) * time.Millisecond))
-		handleSocketFrame(p, member, sc, raw)
+		handleSocketFrame(p, member, token, sc, raw)
 	}
 }
 
-func handleSocketFrame(p *party.Party, member *party.Member, sc *hub.SafeConn, frame map[string]interface{}) {
+func handleSocketFrame(p *party.Party, member *party.Member, token string, sc *hub.SafeConn, frame map[string]interface{}) {
 	kind, _ := frame["type"].(string)
 	if kind == "" {
 		return
@@ -940,6 +962,18 @@ func handleSocketFrame(p *party.Party, member *party.Member, sc *hub.SafeConn, f
 
 	p.Lock()
 	defer p.Unlock()
+	// A device rejoining rotates the member token, and a kick removes the
+	// member. Existing sockets must lose authority immediately on their next
+	// frame even though they still hold the original *Member pointer.
+	if p.Members[member.MemberId] != member || member.Token != token {
+		_ = sc.WriteJSON(map[string]interface{}{
+			"type": protocol.FrameBye,
+			"reason": "session_replaced",
+			"message": "This session is no longer active. Reconnect to continue.",
+		})
+		_ = sc.Close()
+		return
+	}
 	if !p.SpendFrameBudget(member) {
 		_ = sc.WriteJSON(map[string]interface{}{
 			"type": protocol.FrameError, "error": "rate_limited", "message": "Too many messages at once.",

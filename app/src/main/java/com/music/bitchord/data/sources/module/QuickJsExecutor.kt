@@ -147,7 +147,7 @@ internal object QuickJsExecutor {
             .build()
     }
 
-    private fun isBlockedModuleAddress(address: InetAddress): Boolean {
+    internal fun isBlockedModuleAddress(address: InetAddress): Boolean {
         if (
             address.isAnyLocalAddress || address.isLoopbackAddress ||
             address.isLinkLocalAddress || address.isSiteLocalAddress ||
@@ -179,7 +179,7 @@ internal object QuickJsExecutor {
             (a == 203 && b == 0 && c == 113)
     }
 
-    private fun validateModuleFetchUrl(rawUrl: String): String {
+    internal fun validateModuleFetchUrl(rawUrl: String): String {
         require(rawUrl.length <= MAX_FETCH_URL_LENGTH) { "Module URL is too long" }
         val parsed = rawUrl.toHttpUrlOrNull()
             ?: throw IllegalArgumentException("Module fetch only supports HTTPS URLs")

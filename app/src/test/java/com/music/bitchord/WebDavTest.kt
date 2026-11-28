@@ -180,10 +180,10 @@ class WebDavTest {
             ),
         )
         assertEquals(
-            "https://cloud.example.com/other/a.mp3",
+            "https://cloud.example.com/music/Album/cover.jpg",
             WebDavClient.resolveHref(
                 "https://cloud.example.com/music",
-                "https://cloud.example.com/other/a.mp3",
+                "https://cloud.example.com/music/Album/cover.jpg",
             ),
         )
     }
@@ -213,7 +213,7 @@ class WebDavTest {
         try {
             assertEquals(
                 "Basic dXNlcjpwYXNz",
-                WebDavCoilAuth.authHeaderFor("https://cloud.example.com/Music/Album/cover.jpg"),
+                WebDavCoilAuth.authHeaderFor("https://cloud.example.com/music/Album/cover.jpg"),
             )
             // Anything else passes through untouched.
             assertNull(WebDavCoilAuth.authHeaderFor("https://other.example.com/cover.jpg"))
@@ -225,7 +225,7 @@ class WebDavTest {
             // A request carrying its own credential is never overridden.
             assertNull(
                 WebDavCoilAuth.authHeaderFor(
-                    "https://cloud.example.com/Music/Album/cover.jpg",
+                    "https://cloud.example.com/music/Album/cover.jpg",
                     NetworkHeaders.Builder().set("Authorization", "Bearer x").build(),
                 ),
             )
@@ -237,20 +237,20 @@ class WebDavTest {
     @Test
     fun coilAuth_staysQuietWhenUnconfigured() {
         WebDavAuth.update("", "", "")
-        assertNull(WebDavCoilAuth.authHeaderFor("https://cloud.example.com/Music/Album/cover.jpg"))
+        assertNull(WebDavCoilAuth.authHeaderFor("https://cloud.example.com/music/Album/cover.jpg"))
     }
 
     @Test
     fun authorizesOnlyTheConfiguredOrigin() {
         WebDavAuth.update("https://cloud.example.com/music", "user", "pass")
-        assertTrue(WebDavAuth.shouldAuthorize("https://cloud.example.com/Music/a.mp3"))
-        assertTrue(WebDavAuth.shouldAuthorize("https://cloud.example.com:443/Music/a.mp3"))
+        assertTrue(WebDavAuth.shouldAuthorize("https://cloud.example.com/music/a.mp3"))
+        assertTrue(WebDavAuth.shouldAuthorize("https://cloud.example.com:443/music/a.mp3"))
         assertFalse(WebDavAuth.shouldAuthorize("http://cloud.example.com/Music/a.mp3"))
         assertFalse(WebDavAuth.shouldAuthorize("https://cloud.example.com:8443/Music/a.mp3"))
         assertFalse(WebDavAuth.shouldAuthorize("https://other.example.com/Music/a.mp3"))
         assertNotNull(WebDavAuth.authHeader)
         WebDavAuth.update("", "", "")
-        assertFalse(WebDavAuth.shouldAuthorize("https://cloud.example.com/Music/a.mp3"))
+        assertFalse(WebDavAuth.shouldAuthorize("https://cloud.example.com/music/a.mp3"))
     }
 
     @Test
@@ -383,7 +383,7 @@ class WebDavTest {
         )
         val siblings = listOf(img("IMG_1234.jpg"), img("cover.jpg"), img("back.jpg"))
         assertEquals(
-            "https://cloud.example.com/Music/Album/cover.jpg",
+            "https://cloud.example.com/music/Album/cover.jpg",
             WebDavRepository.artworkFor("https://cloud.example.com/Music/Album/song.mp3", siblings),
         )
     }

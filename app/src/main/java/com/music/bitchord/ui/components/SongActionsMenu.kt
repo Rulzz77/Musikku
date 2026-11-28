@@ -98,7 +98,7 @@ import java.util.Locale
  * [HeldContextMenu] under the row a hold lifted.
  */
 @Composable
-private enum class SongMenuPopupSection { HOME, PLAYBACK, LIBRARY, DETAILS }
+private enum class SongMenuPopupSection { HOME, PLAYBACK, QUEUE, LIBRARY, DETAILS }
 
 @Composable
 private fun SongMenuPopupHeader(title: String, subtitle: String, onBack: () -> Unit) {
@@ -522,8 +522,13 @@ fun SongActionsMenu(
                                 onClick = { popupSection = SongMenuPopupSection.PLAYBACK },
                             )
                             ActionRow(
+                                icon = SfIcons.PlayLast,
+                                label = stringResource(R.string.player_more_queue_actions),
+                                onClick = { popupSection = SongMenuPopupSection.QUEUE },
+                            )
+                            ActionRow(
                                 icon = SfIcons.AddToPlaylist,
-                                label = stringResource(R.string.player_more_queue_library),
+                                label = stringResource(R.string.player_more_library_downloads),
                                 onClick = { popupSection = SongMenuPopupSection.LIBRARY },
                             )
                             ActionRow(
@@ -603,28 +608,12 @@ fun SongActionsMenu(
                             }
                         }
 
-                        SongMenuPopupSection.LIBRARY -> {
+                        SongMenuPopupSection.QUEUE -> {
                             SongMenuPopupHeader(
-                                title = stringResource(R.string.player_more_queue_library),
+                                title = stringResource(R.string.player_more_queue_actions),
                                 subtitle = song.title,
                                 onBack = { popupSection = SongMenuPopupSection.HOME },
                             )
-                            ActionRow(
-                                icon = SfIcons.AddToPlaylist,
-                                label = stringResource(R.string.add_to_playlist),
-                                accent = palette.accent,
-                                onClick = onAddToPlaylist,
-                            )
-                            if (canRate) {
-                                onRemoveFromPlaylist?.let {
-                                    ActionRow(
-                                        icon = SfIcons.RemoveFromPlaylist,
-                                        label = stringResource(R.string.remove_from_playlist),
-                                        accent = palette.accent,
-                                        onClick = it,
-                                    )
-                                }
-                            }
                             ActionRow(
                                 icon = SfIcons.Radio,
                                 label = stringResource(R.string.start_radio),
@@ -644,6 +633,30 @@ fun SongActionsMenu(
                                     accent = palette.accent,
                                     onClick = onAddToQueue,
                                 )
+                            }
+                        }
+
+                        SongMenuPopupSection.LIBRARY -> {
+                            SongMenuPopupHeader(
+                                title = stringResource(R.string.player_more_library_downloads),
+                                subtitle = song.title,
+                                onBack = { popupSection = SongMenuPopupSection.HOME },
+                            )
+                            ActionRow(
+                                icon = SfIcons.AddToPlaylist,
+                                label = stringResource(R.string.add_to_playlist),
+                                accent = palette.accent,
+                                onClick = onAddToPlaylist,
+                            )
+                            if (canRate) {
+                                onRemoveFromPlaylist?.let {
+                                    ActionRow(
+                                        icon = SfIcons.RemoveFromPlaylist,
+                                        label = stringResource(R.string.remove_from_playlist),
+                                        accent = palette.accent,
+                                        onClick = it,
+                                    )
+                                }
                             }
                             DownloadRow(song, palette, isOffline, onDownload)
                             onRemoveFromCache?.let {

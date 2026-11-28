@@ -213,11 +213,12 @@ object Backup {
         }
         require(file.settings.size <= MAX_SETTINGS) { "Backup contains too many settings" }
         file.settings.forEach { (key, value) ->
-            val decoded = value.decoded()
-            require(
-                key.isNotBlank() && value.isValid() &&
-                    AppSettings.isValidImportedPreference(key, decoded)
-            ) { "Backup contains an invalid setting: $key" }
+            require(key.isNotBlank() && value.isValid()) {
+                "Backup contains an invalid setting: $key"
+            }
+            require(AppSettings.isValidImportedPreference(key, value.decoded())) {
+                "Backup contains an out-of-range setting: $key"
+            }
         }
         validatePlaylists(file.spotifyPlaylists, "Spotify")
         validatePlaylists(file.devicePlaylists, "device")

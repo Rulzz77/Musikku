@@ -155,8 +155,15 @@ internal object QuickJsExecutor {
 
         val bytes = address.address.map { it.toInt() and 0xff }
         if (bytes.size == 16) {
-            // IPv6 unique-local fc00::/7.
-            return (bytes[0] and 0xfe) == 0xfc
+            // IPv4-mapped IPv6 must inherit the IPv4 policy. Otherwise a
+            // private IPv4 literal could be wrapped as ::ffff:a.b.c.d.
+            if (bytes.take(10).all { it == 0 } && bytes[10] == 0xff && bytes[11] == 0xff) {
+                val mappedIpv4 = InetAddress.getByAddress(bytes.drop(12).map(Int::toByte).toByteArray())
+                return isBlockedModuleAddress(mappedIpv4)
+            }
+            // IPv6 unique-local fc00::/7 and the documentation-only 2001:db8::/32.
+            return (bytes[0] and 0xfe) == 0xfc ||
+                (bytes[0] == 0x20 && bytes[1] == 0x01 && bytes[2] == 0x0d && bytes[3] == 0xb8)
         }
         if (bytes.size != 4) return true
         val (a, b, c, _) = bytes
@@ -447,24 +454,27 @@ internal object QuickJsExecutor {
 
     private fun bindConsole(qjs: QuickJs) {
         qjs.define("console") {
+            // An add-on may log its own settings object, which can contain
+            // API keys or session credentials. Keep call shape for debugging,
+            // never persist arbitrary module-supplied values in app logs.
             function("log", object : FunctionBinding<Unit> {
                 override fun invoke(args: Array<Any?>) {
-                    TrackLog.d(TAG, "[JS] ${args.joinToString(" ") { it?.toString() ?: "null" }}")
+                    TrackLog.d(TAG, "[JS] ${args.size} argument(s)")
                 }
             })
             function("error", object : FunctionBinding<Unit> {
                 override fun invoke(args: Array<Any?>) {
-                    TrackLog.e(TAG, "[JS-ERR] ${args.joinToString(" ") { it?.toString() ?: "null" }}")
+                    TrackLog.e(TAG, "[JS-ERR] ${args.size} argument(s)")
                 }
             })
             function("warn", object : FunctionBinding<Unit> {
                 override fun invoke(args: Array<Any?>) {
-                    TrackLog.w(TAG, "[JS-WARN] ${args.joinToString(" ") { it?.toString() ?: "null" }}")
+                    TrackLog.w(TAG, "[JS-WARN] ${args.size} argument(s)")
                 }
             })
             function("info", object : FunctionBinding<Unit> {
                 override fun invoke(args: Array<Any?>) {
-                    TrackLog.i(TAG, "[JS-INFO] ${args.joinToString(" ") { it?.toString() ?: "null" }}")
+                    TrackLog.i(TAG, "[JS-INFO] ${args.size} argument(s)")
                 }
             })
         }

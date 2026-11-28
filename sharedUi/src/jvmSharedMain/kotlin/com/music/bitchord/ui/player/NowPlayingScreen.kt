@@ -2339,6 +2339,7 @@ fun NowPlayingScreen(
             LyricsOffsetSheet(
                 hazeState = overlayHaze,
                 onDismiss = onDismissLyricsOffset,
+                fullscreen = lyricsFullscreenVisible,
             )
         }
         lyricsShare?.let { request ->

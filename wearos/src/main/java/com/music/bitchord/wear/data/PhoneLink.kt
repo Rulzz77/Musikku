@@ -290,10 +290,16 @@ class PhoneLink(context: Context, private val scope: CoroutineScope) :
     override fun onCapabilityChanged(info: CapabilityInfo) {
         val node = info.nodes.firstOrNull { it.isNearby } ?: info.nodes.firstOrNull()
         val nodeId = node?.id
-        if (nodeId != phoneNode || (nodeId != null && _link.value != Link.Connected)) {
-            _link.value = if (nodeId == null) Link.NoPhone else Link.Connecting
-            scope.launch { connectTo(nodeId) }
+        // The capability callback is the ordering point. Select synchronously
+        // here, before launching work, so an older queued coroutine cannot
+        // overwrite a newer phone selection when scheduling happens out of
+        // order. Ignore duplicate notifications while this exact node is
+        // already connected or being connected.
+        if (nodeId == phoneNode && (_link.value == Link.Connected || _link.value == Link.Connecting)) {
+            return
         }
+        val generation = selectPhoneNode(nodeId)
+        scope.launch { connectTo(nodeId, generation) }
     }
 
     private fun applyOutputs(map: DataMap) {
@@ -334,11 +340,15 @@ class PhoneLink(context: Context, private val scope: CoroutineScope) :
     }
 
     private suspend fun connect() {
-        connectTo(findPhone())
+        val nodeId = findPhone()
+        val generation = selectPhoneNode(nodeId)
+        connectTo(nodeId, generation)
     }
 
-    private suspend fun connectTo(nodeId: String?) {
-        val generation = selectPhoneNode(nodeId)
+    private suspend fun connectTo(nodeId: String?, generation: Long) {
+        synchronized(phoneSelectionLock) {
+            if (generation != phoneSelectionGeneration.get() || phoneNode != nodeId) return
+        }
         if (nodeId == null) {
             _link.value = Link.NoPhone
             return

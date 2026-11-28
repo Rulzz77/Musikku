@@ -2506,8 +2506,8 @@ fun NowPlayingScreen(
                     }
 
                     // The lyric side stays transparent over the same blurred
-                    // artwork backdrop. A reverse gradient matches the Canvas
-                    // edge fade, so the two panes melt together without a divider.
+                    // artwork backdrop. The Canvas itself now dissolves into this
+                    // shared layer, so there is no separate tint or divider to match.
                     Box(
                         modifier = Modifier
                             .weight(0.54f)

@@ -73,7 +73,7 @@ The latest stable build is available from GitHub Releases. APK links below alway
 | [**x86_64**](https://github.com/Rulzz77/Musikku/releases/latest/download/MusikKu-x86_64.apk) | x86_64 Android devices and emulators |
 | [**Wear OS**](https://github.com/Rulzz77/Musikku/releases/latest/download/MusikKu-WearOS.apk) | Compatible Wear OS watches |
 
-**Installation:** download the APK for your device, allow your browser or file manager to install unknown apps when Android asks, then install the package. For the full changelog and all release assets, visit [Releases](https://github.com/Rulzz77/Musikku/releases).
+**Installation:** download the APK for your device, allow your browser or file manager to install unknown apps when Android asks, then install the package. When upgrading the Wear OS companion from older builds that used the `com.music.bitchord` package, uninstall that old watch app once before installing the corrected companion APK; the current watch package now matches the phone so the Wearable Data Layer can connect. For the full changelog and all release assets, visit [Releases](https://github.com/Rulzz77/Musikku/releases).
 
 ## Features
 

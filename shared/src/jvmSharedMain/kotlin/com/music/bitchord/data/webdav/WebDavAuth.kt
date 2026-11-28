@@ -39,6 +39,7 @@ object WebDavAuth {
     private fun parseUrl(raw: String): java.net.URI? = runCatching {
         java.net.URI(raw).also { uri ->
             require(!uri.isOpaque && uri.userInfo == null)
+            require(uri.rawQuery == null && uri.rawFragment == null)
             require(uri.host.isNullOrBlank().not())
             require(uri.scheme.equals("https", true) || uri.scheme.equals("http", true))
             require(uri.port in -1..65535)

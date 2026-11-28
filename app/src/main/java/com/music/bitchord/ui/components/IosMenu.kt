@@ -74,6 +74,8 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.lerp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.ui.components.backdrop.backdrops.SnapshotBackdrop
@@ -433,6 +435,8 @@ fun <T : Any> IosMenuPopover(
     onDismiss: () -> Unit,
     backdrop: Backdrop? = null,
     hazeState: HazeState? = null,
+    /** Places the player menu in its own window above fullscreen player Dialogs. */
+    dialogWindow: Boolean = false,
     content: @Composable (T) -> Unit,
 ) {
     var last by remember { mutableStateOf<Pair<T, Rect?>?>(null) }
@@ -441,7 +445,10 @@ fun <T : Any> IosMenuPopover(
         SideEffect { last = requested }
     }
     val shown = requested ?: last ?: return
-    val (menuItem, menuAnchor) = shown
+    val (menuItem, storedMenuAnchor) = shown
+    // Coordinates measured in the player Dialog are not valid in this second
+    // Dialog window. Fullscreen toolbar menus use the safe bottom-end position.
+    val menuAnchor = storedMenuAnchor.takeUnless { dialogWindow }
     val open = item != null
 
     val context = LocalContext.current
@@ -498,9 +505,10 @@ fun <T : Any> IosMenuPopover(
     val insets = WindowInsets.safeDrawing
     var overlayOffset by remember { mutableStateOf(Offset.Zero) }
 
-    Layout(
-        modifier = Modifier
-            .fillMaxSize()
+    val menuLayout: @Composable () -> Unit = {
+        Layout(
+            modifier = Modifier
+                .fillMaxSize()
             .onGloballyPositioned { overlayOffset = it.positionInWindow() }
             // Nothing under the menu moves while it is up: a drag that the
             // rows didn't take would otherwise reach the sheet the player is
@@ -533,9 +541,12 @@ fun <T : Any> IosMenuPopover(
                     // Taps between rows land on the panel, not the scrim under it.
                     .pointerInput(Unit) {}
                     .iosMenuPanel(
-                        translucent = true,
-                        backdrop = backdrop,
-                        hazeState = hazeState,
+                        // A Dialog cannot sample the TextureView in the Activity
+                        // window, so use the normal opaque panel rather than
+                        // showing a translucent slab with an empty frost source.
+                        translucent = !dialogWindow,
+                        backdrop = backdrop.takeUnless { dialogWindow },
+                        hazeState = hazeState.takeUnless { dialogWindow },
                         castsShadow = false,
                     ),
                 propagateMinConstraints = true,
@@ -609,5 +620,21 @@ fun <T : Any> IosMenuPopover(
                 compositingStrategy = CompositingStrategy.Offscreen
             }
         }
+        }
+    }
+
+    if (dialogWindow) {
+        Dialog(
+            onDismissRequest = onDismiss,
+            properties = DialogProperties(
+                usePlatformDefaultWidth = false,
+                dismissOnBackPress = false,
+                dismissOnClickOutside = false,
+            ),
+        ) {
+            Box(Modifier.fillMaxSize()) { menuLayout() }
+        }
+    } else {
+        menuLayout()
     }
 }

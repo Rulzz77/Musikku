@@ -45,10 +45,13 @@ object SelfUpdate {
     fun publishInfo(context: Context) {
         val app = context.applicationContext
         val info = runCatching { app.packageManager.getPackageInfo(app.packageName, 0) }.getOrNull() ?: return
+        val installedHash = runCatching { apkHash(app, info.lastUpdateTime) }
+            .onFailure { Log.w(TAG, "couldn't hash the installed Wear APK", it) }
+            .getOrNull() ?: return
         val request = PutDataMapRequest.create(P.PATH_WATCH_INFO).apply {
             dataMap.putLong(P.KEY_VERSION_CODE, info.longVersionCode)
             dataMap.putString(P.KEY_VERSION_NAME, info.versionName.orEmpty())
-            dataMap.putString(P.KEY_APK_SHA256, apkHash(app, info.lastUpdateTime))
+            dataMap.putString(P.KEY_APK_SHA256, installedHash)
             // Always a change, so asking twice still answers.
             dataMap.putLong(P.KEY_POSITION_AT, System.currentTimeMillis())
         }

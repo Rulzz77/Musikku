@@ -30,16 +30,66 @@ object WebDavConfig {
         }
     }
 
-    fun isConfigured(url: String): Boolean {
-        val normalized = normalizeUrl(url)
-        if (!normalized.startsWith("http://", ignoreCase = true) &&
-            !normalized.startsWith("https://", ignoreCase = true)
-        ) {
-            return false
+    fun isConfigured(url: String): Boolean = originOf(url) != null
+
+    /** Canonical URL origin, used to fence credentials and server-provided hrefs. */
+    fun originOf(raw: String): String? = runCatching {
+        val uri = java.net.URI(normalizeUrl(raw))
+        val scheme = uri.scheme?.lowercase(Locale.ROOT) ?: return null
+        if (scheme != "http" && scheme != "https") return null
+        if (uri.isOpaque || uri.userInfo != null || uri.host.isNullOrBlank()) return null
+        if (uri.rawQuery != null || uri.rawFragment != null) return null
+        if (uri.port !in -1..65535 || uri.normalize().rawPath != uri.rawPath) return null
+        val port = uri.port.takeIf { it >= 0 } ?: if (scheme == "https") 443 else 80
+        scheme + "://" + uri.host.lowercase(Locale.ROOT) + ":" + port
+    }.getOrNull()
+
+    fun sameOrigin(first: String, second: String): Boolean =
+        originOf(first) != null && originOf(first) == originOf(second)
+
+    /**
+     * Decode path separators/dot-segments before binding credentials. Some
+     * servers decode %2F and %2E%2E before filesystem lookup; comparing only
+     * raw URI paths would let a crafted href escape the configured folder.
+     */
+    private fun decodedNormalizedPath(rawPath: String?): String? = runCatching {
+        val raw = rawPath.orEmpty().ifEmpty { "/" }
+        val decoded = java.net.URLDecoder.decode(
+            raw.replace("+", "%2B"),
+            Charsets.UTF_8.name(),
+        )
+        require(decoded.none { it == '\\' || it.code < 0x20 || it.code == 0x7f })
+        val stack = ArrayDeque<String>()
+        decoded.split('/').forEach { segment ->
+            when (segment) {
+                "", "." -> Unit
+                ".." -> {
+                    require(stack.isNotEmpty()) { "WebDAV path escapes its root" }
+                    stack.removeLast()
+                }
+                else -> stack.addLast(segment)
+            }
         }
-        // "not a url" normalizes to "https://not a url" — only a parseable
-        // host counts as configured.
-        return hostOf(normalized) != null
+        "/" + stack.joinToString("/")
+    }.getOrNull()
+
+    /** The credential binding includes the selected WebDAV folder, not just its domain. */
+    fun credentialBindingKey(raw: String): String? {
+        val normalized = normalizeUrl(raw)
+        val origin = originOf(normalized) ?: return null
+        val uri = runCatching { java.net.URI(normalized) }.getOrNull() ?: return null
+        val path = decodedNormalizedPath(uri.rawPath) ?: return null
+        return origin + path.trimEnd('/').ifEmpty { "/" }
+    }
+
+    /** True when [target] is the configured root folder or a descendant of it. */
+    fun isWithinBasePath(baseUrl: String, targetUrl: String): Boolean {
+        if (!sameOrigin(baseUrl, targetUrl)) return false
+        val baseUri = runCatching { java.net.URI(normalizeUrl(baseUrl)) }.getOrNull() ?: return false
+        val targetUri = runCatching { java.net.URI(targetUrl) }.getOrNull() ?: return false
+        val basePath = decodedNormalizedPath(baseUri.rawPath) ?: return false
+        val targetPath = decodedNormalizedPath(targetUri.rawPath) ?: return false
+        return basePath == "/" || targetPath == basePath || targetPath.startsWith(basePath.trimEnd('/') + "/")
     }
 
     fun basicAuthHeader(username: String, password: String): String? {
@@ -52,7 +102,7 @@ object WebDavConfig {
 
     fun hostOf(url: String): String? = runCatching {
         java.net.URI(normalizeUrl(url)).host?.lowercase(Locale.ROOT)
-    }.getOrNull()?.takeIf { it.isNotBlank() }
+    }.getOrNull()?.takeIf { it.isNotBlank() && originOf(url) != null }
 
     fun isAudioFile(name: String): Boolean {
         val ext = name.substringAfterLast('.', "").lowercase(Locale.ROOT)
@@ -92,4 +142,4 @@ object WebDavConfig {
 
 /** Publishes the saved server's credentials to the shared HTTP client. */
 fun WebDavAuth.update(url: String, username: String, password: String) =
-    update(WebDavConfig.hostOf(url), WebDavConfig.basicAuthHeader(username, password))
+    update(url.takeIf { WebDavConfig.isConfigured(it) }, WebDavConfig.basicAuthHeader(username, password))

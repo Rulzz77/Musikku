@@ -61,20 +61,28 @@ func (h *Hub) Attach(code, memberId string, conn *websocket.Conn) *SafeConn {
 	return sc
 }
 
-func (h *Hub) Detach(code, memberId string, sc *SafeConn) {
+func (h *Hub) Detach(code, memberId string, sc *SafeConn) bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
 	room, ok := h.sockets[code]
-	if !ok {
-		return
+	if !ok || room[memberId] != sc {
+		return false
 	}
-	if room[memberId] == sc {
-		delete(room, memberId)
-	}
+	delete(room, memberId)
 	if len(room) == 0 {
 		delete(h.sockets, code)
 	}
+	return true
+}
+
+// HasConnection reports whether a member currently owns a live hub slot.
+// Callers that also hold a party lock must keep the same party -> hub lock order
+// used by Attach and the kick path.
+func (h *Hub) HasConnection(code, memberId string) bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.sockets[code] != nil && h.sockets[code][memberId] != nil
 }
 
 func (h *Hub) DropParty(code string) {

@@ -96,11 +96,29 @@ internal fun browserUserAgent(platformUserAgent: String?): String {
  * session was established, and matching the wrong one means a sign-in that
  * appears to succeed and then does nothing.
  */
-private fun isSignedIn(url: String?): Boolean =
-    url != null &&
-        url.startsWith("https://discord.com/") &&
-        !url.contains("/login") &&
-        !url.contains("/register")
+internal fun isSignedIn(url: String?): Boolean {
+    val uri = runCatching { java.net.URI(url ?: return false) }.getOrNull() ?: return false
+    if (
+        !uri.scheme.equals("https", ignoreCase = true) ||
+        !uri.host.equals("discord.com", ignoreCase = true) ||
+        uri.port !in setOf(-1, 443)
+    ) return false
+    val path = uri.path.orEmpty()
+    return !path.startsWith("/login", ignoreCase = true) &&
+        !path.startsWith("/register", ignoreCase = true)
+}
+
+/**
+ * The token is passed only from Discord's same-origin localStorage alert.
+ * Bound its size and reject markup/whitespace/control characters before it
+ * reaches the encrypted account store.
+ */
+internal fun isDiscordTokenCandidate(value: String?): Boolean =
+    value != null && value.length in MIN_TOKEN_LENGTH..MAX_TOKEN_LENGTH &&
+        value.all { it in 'A'..'Z' || it in 'a'..'z' || it in '0'..'9' || it in "._-=" }
+
+private const val MIN_TOKEN_LENGTH = 20
+private const val MAX_TOKEN_LENGTH = 4_096
 
 /**
  * In-app Discord sign-in for Rich Presence.
@@ -200,12 +218,14 @@ fun DiscordLoginScreen(
                     ): Boolean {
                         result.confirm()
                         if (captured) return true
+                        // JavaScript alerts from any other frame or an
+                        // intermediate login page are not token messages.
+                        if (!isSignedIn(url)) return true
 
-                        val token = message.takeUnless {
-                            it.isBlank() || it == "null" || it == "undefined"
-                        }
+                        val token = message.takeIf(::isDiscordTokenCandidate)
                         if (token == null) {
-                            // Client still booting — the key isn't written yet.
+                            // Client still booting — the key isn't written yet,
+                            // or the page sent a malformed/unexpected value.
                             view.postDelayed({ harvestToken() }, TOKEN_RETRY_MS)
                             return true
                         }

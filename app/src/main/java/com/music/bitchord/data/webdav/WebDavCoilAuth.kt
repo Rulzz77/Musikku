@@ -37,8 +37,7 @@ class WebDavCoilAuth : Interceptor {
         fun authHeaderFor(data: Any?, headers: NetworkHeaders = NetworkHeaders.EMPTY): String? {
             if (headers["Authorization"] != null) return null
             val url = (data as? String)?.takeIf { it.startsWith("http") } ?: return null
-            val host = runCatching { java.net.URI(url).host }.getOrNull() ?: return null
-            if (!WebDavAuth.shouldAuthorize(host)) return null
+            if (!WebDavAuth.shouldAuthorize(url)) return null
             return WebDavAuth.authHeader
         }
     }

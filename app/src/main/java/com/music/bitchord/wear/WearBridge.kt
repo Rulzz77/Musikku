@@ -58,6 +58,9 @@ import com.music.bitchord.playback.cast.CastSink
 import com.music.bitchord.playback.cast.RemoteSpeaker
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -68,9 +71,10 @@ import java.util.concurrent.Executors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -125,6 +129,11 @@ object WearBridge {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val lock = Any()
+    private val queuePublishMutex = Mutex()
+    private val queuePublishLock = Any()
+    private var queuePublishGeneration = 0L
+    private var queuePublishJob: Job? = null
+    private var queueRevision = System.currentTimeMillis()
 
     @Volatile private var last: Playing? = null
     @Volatile private var art: Art? = null
@@ -206,28 +215,55 @@ object WearBridge {
 
     internal fun publishQueue(context: Context, rows: List<QueueRow>, currentIndex: Int, currentMediaId: String?) {
         val app = context.applicationContext
-        val request = PutDataMapRequest.create(P.PATH_QUEUE)
-        val items = ArrayList<DataMap>(rows.size)
-        rows.forEachIndexed { position, row ->
-            items += DataMap().apply {
-                putInt(P.KEY_INDEX, row.index)
-                putString(P.KEY_TITLE, row.title)
-                putString(P.KEY_ARTIST, row.artist)
-                if (position < QUEUE_ART_ROWS) {
-                    runBlocking { loadBitmap(app, row.artworkUrl, ROW_ART_PX, P.ROW_ART_PX) }
-                        ?.let { putAsset(P.KEY_ART, Asset.createFromBytes(it.jpeg(80))) }
+        // Keep only the newest pending snapshot. The mutex also serializes
+        // actual Data Layer writes if an older put is already in flight.
+        val snapshot = rows.toList()
+        val job = synchronized(queuePublishLock) {
+            val generation = ++queuePublishGeneration
+            queuePublishJob?.cancel()
+            scope.launch(start = CoroutineStart.LAZY) {
+                queuePublishMutex.withLock {
+                    currentCoroutineContext().ensureActive()
+                    if (!isCurrentQueueGeneration(generation)) return@withLock
+
+                    val request = PutDataMapRequest.create(P.PATH_QUEUE)
+                    val items = ArrayList<DataMap>(snapshot.size)
+                    snapshot.forEachIndexed { position, row ->
+                        currentCoroutineContext().ensureActive()
+                        if (!isCurrentQueueGeneration(generation)) return@withLock
+                        items += DataMap().apply {
+                            putInt(P.KEY_INDEX, row.index)
+                            putString(P.KEY_TITLE, row.title)
+                            putString(P.KEY_ARTIST, row.artist)
+                            if (position < QUEUE_ART_ROWS) {
+                                loadBitmap(app, row.artworkUrl, ROW_ART_PX, P.ROW_ART_PX)
+                                    ?.let { putAsset(P.KEY_ART, Asset.createFromBytes(it.jpeg(80))) }
+                            }
+                        }
+                    }
+                    currentCoroutineContext().ensureActive()
+                    if (!isCurrentQueueGeneration(generation)) return@withLock
+
+                    val revision = synchronized(queuePublishLock) {
+                        queueRevision = maxOf(System.currentTimeMillis(), queueRevision + 1L)
+                        queueRevision
+                    }
+                    request.dataMap.apply {
+                        putDataMapArrayList(P.KEY_ITEMS, items)
+                        putInt(P.KEY_CURRENT_INDEX, currentIndex)
+                        putString(P.KEY_QUEUE_MEDIA_ID, currentMediaId.orEmpty())
+                        putLong(P.KEY_QUEUE_REVISION, revision)
+                        putLong(P.KEY_POSITION_AT, System.currentTimeMillis())
+                    }
+                    put(app, request)
                 }
-            }
+            }.also { queuePublishJob = it }
         }
-        request.dataMap.apply {
-            putDataMapArrayList(P.KEY_ITEMS, items)
-            putInt(P.KEY_CURRENT_INDEX, currentIndex)
-            putString(P.KEY_QUEUE_MEDIA_ID, currentMediaId.orEmpty())
-            // Always a change, so asking twice for the same queue still lands.
-            putLong(P.KEY_POSITION_AT, System.currentTimeMillis())
-        }
-        put(app, request)
+        job.start()
     }
+
+    private fun isCurrentQueueGeneration(generation: Long): Boolean =
+        synchronized(queuePublishLock) { generation == queuePublishGeneration }
 
     internal val queueAhead get() = QUEUE_AHEAD
 
@@ -728,8 +764,9 @@ class WearCommandService : WearableListenerService() {
                     )
                 }
                 val mediaId = controller.currentMediaItem?.mediaId
-                // Off the main thread: the thumbnails are a few disk reads each.
-                Thread { WearBridge.publishQueue(applicationContext, rows, current, mediaId) }.start()
+                // WearBridge coalesces rapid snapshots and serializes the
+                // asynchronous cover reads and Wearable Data Layer writes.
+                WearBridge.publishQueue(applicationContext, rows, current, mediaId)
             }
         }
     }

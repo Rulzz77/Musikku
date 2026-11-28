@@ -13,6 +13,7 @@ import okio.Source
 import okio.buffer
 import okio.source
 import org.w3c.dom.Element
+import org.xml.sax.SAXException
 import java.io.IOException
 import java.io.InputStream
 import java.net.URLDecoder
@@ -30,6 +31,20 @@ import javax.xml.parsers.DocumentBuilderFactory
  * Android.
  */
 object WebDavClient {
+
+    // DAV endpoints often return redirects for login portals or path aliases.
+    // Requests below may carry explicit Basic headers (including the first
+    // connection test before WebDavAuth has been updated), so do not follow
+    // redirects and risk forwarding credentials to a different resource.
+    private val client by lazy {
+        Http.client.newBuilder()
+            .followRedirects(false)
+            .followSslRedirects(false)
+            .build()
+    }
+
+    private const val MAX_MULTISTATUS_BYTES = 8L * 1024L * 1024L
+    private const val MAX_MULTISTATUS_ENTRIES = 10_000
 
     data class Entry(
         val url: String,
@@ -54,7 +69,7 @@ object WebDavClient {
                 val target = WebDavConfig.normalizeUrl(url)
                 require(WebDavConfig.isConfigured(target)) { "Enter a http(s) server URL" }
                 val request = propfindRequest(target, depth = "0", username, password)
-                Http.client.newCall(request).execute().use { response ->
+                client.newCall(request).execute().use { response ->
                     if (response.code !in 200..299 && response.code != 207) {
                         throw WebDavException("Server answered ${response.code}")
                     }
@@ -87,11 +102,13 @@ object WebDavClient {
             val visited = HashSet<String>()
             while (dirs.isNotEmpty() && foundAudio.size < maxFiles) {
                 val dir = dirs.removeFirst()
-                if (!visited.add(dir.lowercase())) continue
+                val directoryKey = resourceKey(dir) ?: continue
+                if (!visited.add(directoryKey)) continue
                 val entries = propfind(dir, username, password).getOrThrow()
                 for (entry in entries) {
                     if (entry.isCollection) {
-                        if (!visited.contains(entry.url.lowercase())) dirs.add(entry.url)
+                        val childKey = resourceKey(entry.url)
+                        if (childKey != null && childKey !in visited) dirs.add(entry.url)
                     } else {
                         val name = entry.displayName.ifBlank { entry.url }
                         when {
@@ -141,7 +158,7 @@ object WebDavClient {
             runCatching {
                 val builder = Request.Builder().url(fileUrl).head()
                 WebDavConfig.basicAuthHeader(username, password)?.let { builder.header("Authorization", it) }
-                Http.client.newCall(builder.build()).execute().use { response ->
+                client.newCall(builder.build()).execute().use { response ->
                     when (response.code) {
                         200 -> true
                         404 -> false
@@ -185,7 +202,7 @@ object WebDavClient {
             val builder = Request.Builder().url(fileUrl).put(body)
             if (!overwrite) builder.header("If-None-Match", "*")
             WebDavConfig.basicAuthHeader(username, password)?.let { builder.header("Authorization", it) }
-            Http.client.newCall(builder.build()).execute().use { response ->
+            client.newCall(builder.build()).execute().use { response ->
                 when (response.code) {
                     in 200..299 -> PutResult.Uploaded
                     412 -> PutResult.AlreadyExists
@@ -205,7 +222,7 @@ object WebDavClient {
             runCatching {
                 val builder = Request.Builder().url(dirUrl).method("MKCOL", null)
                 WebDavConfig.basicAuthHeader(username, password)?.let { builder.header("Authorization", it) }
-                Http.client.newCall(builder.build()).execute().use { response ->
+                client.newCall(builder.build()).execute().use { response ->
                     if (response.code !in 200..299 && response.code != 405) {
                         throw WebDavException("Could not create folder (${response.code})")
                     }
@@ -216,13 +233,20 @@ object WebDavClient {
     private fun propfind(dirUrl: String, username: String, password: String): Result<List<Entry>> {
         return runCatching {
             val request = propfindRequest(dirUrl, depth = "1", username, password)
-            Http.client.newCall(request).execute().use { response ->
+            client.newCall(request).execute().use { response ->
                 if (response.code != 207 && response.code !in 200..299) {
                     throw WebDavException("Listing failed with ${response.code}")
                 }
-                val body = response.body?.string().orEmpty()
-                if (body.isBlank()) return@runCatching emptyList()
-                parseMultistatus(body, dirUrl)
+                val responseBody = response.body ?: return@use emptyList()
+                if (responseBody.contentLength() > MAX_MULTISTATUS_BYTES) {
+                    throw WebDavException("WebDAV listing response is too large")
+                }
+                val xml = responseBody.source().readUtf8(MAX_MULTISTATUS_BYTES + 1L)
+                if (xml.toByteArray(Charsets.UTF_8).size > MAX_MULTISTATUS_BYTES) {
+                    throw WebDavException("WebDAV listing response is too large")
+                }
+                if (xml.isBlank()) return@use emptyList()
+                parseMultistatus(xml, dirUrl)
             }
         }
     }
@@ -233,18 +257,40 @@ object WebDavClient {
      * directory itself is dropped.
      */
     fun parseMultistatus(xml: String, dirUrl: String): List<Entry> {
-        if (xml.isBlank()) return emptyList()
+        if (xml.isBlank() || xml.toByteArray(Charsets.UTF_8).size > MAX_MULTISTATUS_BYTES) {
+            return emptyList()
+        }
         val doc = runCatching {
-            val factory = DocumentBuilderFactory.newInstance().apply { isNamespaceAware = true }
-            factory.newDocumentBuilder().parse(xml.byteInputStream(Charsets.UTF_8))
+            val factory = DocumentBuilderFactory.newInstance().apply {
+                isNamespaceAware = true
+                setFeature(javax.xml.XMLConstants.FEATURE_SECURE_PROCESSING, true)
+                setFeature("http://apache.org/xml/features/disallow-doctype-decl", true)
+                setFeature("http://xml.org/sax/features/external-general-entities", false)
+                setFeature("http://xml.org/sax/features/external-parameter-entities", false)
+                setXIncludeAware(false)
+                isExpandEntityReferences = false
+                // JAXP 1.5 properties are not implemented by every Android
+                // parser version; the entity features above are the hard guard.
+                runCatching { setAttribute(javax.xml.XMLConstants.ACCESS_EXTERNAL_DTD, "") }
+                runCatching { setAttribute(javax.xml.XMLConstants.ACCESS_EXTERNAL_SCHEMA, "") }
+            }
+            val builder = factory.newDocumentBuilder().apply {
+                setEntityResolver { _, _ -> throw SAXException("External XML entities are disabled") }
+            }
+            builder.parse(xml.byteInputStream(Charsets.UTF_8))
         }.getOrNull() ?: return emptyList()
         val responses = doc.getElementsByTagNameNS("*", "response")
+        if (responses.length > MAX_MULTISTATUS_ENTRIES) return emptyList()
         val out = ArrayList<Entry>(responses.length)
         for (i in 0 until responses.length) {
             val node = responses.item(i) as? Element ?: continue
             val href = node.getElementsByTagNameNS("*", "href").item(0)?.textContent?.trim().orEmpty()
             if (href.isEmpty()) continue
-            val url = resolveHref(dirUrl, href)
+            // A server controls every href in its multistatus document. Only
+            // follow resources on the configured origin: an absolute href to
+            // another host/port/scheme must never receive this server's Basic
+            // credentials on the next PROPFIND, media or artwork request.
+            val url = runCatching { resolveHref(dirUrl, href) }.getOrNull() ?: continue
             if (isSameUrl(url, dirUrl)) continue
             val displayName = node.getElementsByTagNameNS("*", "displayname")
                 .item(0)?.textContent?.trim().orEmpty()
@@ -259,28 +305,40 @@ object WebDavClient {
         return out
     }
 
+    /**
+     * Resolves a DAV href but never follows it off the configured origin.
+     * PROPFIND responses are untrusted input: a malicious server could
+     * otherwise return an absolute URL and make the next recursive request
+     * send the saved Basic credential to an attacker-controlled host.
+     */
     fun resolveHref(baseUrl: String, href: String): String {
         val trimmed = href.trim()
-        if (trimmed.startsWith("http://", ignoreCase = true) ||
-            trimmed.startsWith("https://", ignoreCase = true)
-        ) {
-            return trimmed
-        }
+        require(trimmed.isNotEmpty()) { "Empty WebDAV href" }
         val base = WebDavConfig.normalizeUrl(baseUrl)
-        val schemeHost = base.substringBefore('/', "").let {
-            // Keep "https://host" (and port) only.
-            val schemeEnd = base.indexOf("://")
-            if (schemeEnd < 0) return trimmed
-            val pathStart = base.indexOf('/', schemeEnd + 3)
-            if (pathStart < 0) base else base.substring(0, pathStart)
+        require(WebDavConfig.isConfigured(base)) { "Invalid WebDAV base URL" }
+        val baseUri = java.net.URI(base.trimEnd('/') + "/")
+        val hrefUri = java.net.URI(trimmed)
+        val resolved = baseUri.resolve(hrefUri).normalize()
+        require(resolved.userInfo == null && resolved.fragment == null && resolved.rawQuery == null) {
+            "WebDAV href must not contain credentials, query strings or fragments"
         }
-        return if (trimmed.startsWith("/")) "$schemeHost$trimmed" else "$base/$trimmed"
+        val result = resolved.toASCIIString()
+        require(WebDavConfig.isWithinBasePath(base, result)) {
+            "WebDAV href must remain within the configured library folder"
+        }
+        return result
     }
 
-    private fun isSameUrl(a: String, b: String): Boolean {
-        fun norm(u: String) = u.trim().trimEnd('/').lowercase()
-        return norm(a) == norm(b)
-    }
+    /** Host/scheme are case-insensitive; WebDAV resource paths are not. */
+    private fun resourceKey(raw: String): String? = runCatching {
+        val uri = java.net.URI(raw)
+        val origin = WebDavConfig.originOf(raw) ?: return null
+        val path = uri.rawPath.orEmpty().trimEnd('/').ifEmpty { "/" }
+        "$origin$path"
+    }.getOrNull()
+
+    private fun isSameUrl(a: String, b: String): Boolean =
+        resourceKey(a) != null && resourceKey(a) == resourceKey(b)
 
     private fun decodedName(url: String): String = runCatching {
         URLDecoder.decode(url.trimEnd('/').substringAfterLast('/'), "UTF-8")

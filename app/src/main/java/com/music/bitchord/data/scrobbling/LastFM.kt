@@ -225,28 +225,34 @@ object LastFM {
 
     fun isInitialized(): Boolean = runtimeConfig.apiKey.isNotEmpty() && runtimeConfig.secret.isNotEmpty()
 
+    /**
+     * Only the two services the app explicitly supports may receive a signed
+     * Last.fm request. The request body contains both the user's session key
+     * and a signature derived from the API secret, so an arbitrary endpoint
+     * imported from a backup would be a credential-exfiltration destination.
+     *
+     * Canonicalising to the fixed endpoints also prevents alternate ports,
+     * user-info, cleartext HTTP, path tricks, query strings, or a lookalike
+     * hostname from changing where credentials are posted.
+     */
     fun normalizeEndpoint(endpoint: String): String {
         val uri = URI(endpoint.trim())
-        val scheme = uri.scheme?.lowercase(Locale.ROOT)
-        require(scheme == "http" || scheme == "https")
-        require(!uri.host.isNullOrBlank())
+        require(!uri.isOpaque)
+        require(uri.scheme?.equals("https", ignoreCase = true) == true)
+        require(uri.userInfo == null)
+        require(uri.port == -1 || uri.port == 443)
         require(uri.query == null && uri.fragment == null)
 
-        val path =
-            uri.path
-                ?.takeIf { it.isNotBlank() && it != "/" }
-                ?.trimEnd('/')
-                ?: "/2.0"
+        val host = uri.host?.lowercase(Locale.ROOT)
+            ?: throw IllegalArgumentException("Last.fm endpoint must have a valid host")
+        val path = uri.path.orEmpty()
+        require(path.isEmpty() || path == "/" || path == "/2.0" || path == "/2.0/")
 
-        return URI(
-            scheme,
-            uri.userInfo,
-            uri.host,
-            uri.port,
-            "$path/",
-            null,
-            null,
-        ).toString()
+        return when (host) {
+            "ws.audioscrobbler.com" -> DEFAULT_API_ENDPOINT
+            "libre.fm" -> LIBREFM_API_ENDPOINT
+            else -> throw IllegalArgumentException("Unsupported Last.fm service host")
+        }
     }
 
     private fun requireSessionKey(): String = runtimeConfig.sessionKey ?: throw LastFmException(9, "Session key missing")

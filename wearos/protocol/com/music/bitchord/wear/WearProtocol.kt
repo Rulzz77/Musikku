@@ -9,8 +9,8 @@ package com.music.bitchord.wear
  *
  * Which phone a watch talks to is not decided here at all. The Wearable Data
  * Layer only ever delivers between apps with the same package name *and* the
- * same signing key, so the dev watch app (`com.dev.bitchord`) can only ever see
- * the dev phone app, and prod only prod. That is why the watch app takes the
+ * same signing key, so the dev watch app (`id.musikku.dev`) can only ever see
+ * the dev phone app, and prod (`id.musikku.player`) only prod. That is why the watch app takes the
  * phone app's application ids rather than ids of its own.
  *
  * Two channels:
@@ -27,6 +27,10 @@ object WearProtocol {
 
     /** Advertised by the watch app, so the phone only does the work with one around. */
     const val CAPABILITY_WATCH = "bitchord_watch"
+
+    /** Device-local persisted source of truth for the phone selected by the watch. */
+    const val PREFS_PHONE_SELECTION = "bitchord_phone_selection"
+    const val PREF_SELECTED_PHONE_NODE = "selected_phone_node"
 
     const val PATH_NOW_PLAYING = "/bitchord/now_playing"
     const val PATH_QUEUE = "/bitchord/queue"
@@ -212,6 +216,9 @@ object WearProtocol {
 
     /** The playing item's id when the queue was read, to tell a stale list from a live one. */
     const val KEY_QUEUE_MEDIA_ID = "queue_media_id"
+
+    /** Monotonic phone-side revision to reject queue snapshots delivered out of order. */
+    const val KEY_QUEUE_REVISION = "queue_revision"
 
     /** Side of the cover JPEG on [PATH_NOW_PLAYING]. */
     const val ART_PX = 240

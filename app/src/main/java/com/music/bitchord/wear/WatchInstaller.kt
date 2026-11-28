@@ -132,9 +132,11 @@ object WatchInstaller {
             while (true) {
                 val map = runCatching {
                     val items = Tasks.await(Wearable.getDataClient(app).getDataItems(uri), 5, TimeUnit.SECONDS)
-                    val found = items.firstOrNull()?.let { DataMapItem.fromDataItem(it).dataMap }
-                    items.release()
-                    found
+                    try {
+                        items.firstOrNull()?.let { DataMapItem.fromDataItem(it).dataMap }
+                    } finally {
+                        items.release()
+                    }
                 }.getOrNull()
                 // A fresh answer, not one left over from an earlier ask; the
                 // watch keeps the phone's time, so a little slack is enough.
@@ -184,16 +186,28 @@ object WatchInstaller {
                         if (c.path == channel.path) closed.complete(closeReason)
                     }
                 }
-                Tasks.await(client.registerChannelCallback(channel, callback), 10, TimeUnit.SECONDS)
-                Tasks.await(client.sendFile(channel, Uri.fromFile(apk)), 20, TimeUnit.SECONDS)
-                // A few MB over Bluetooth is a minute or so.
-                val reason = withTimeoutOrNull(5 * 60_000) { closed.await() }
-                runCatching { client.unregisterChannelCallback(channel, callback) }
-                when (reason) {
-                    ChannelClient.ChannelCallback.CLOSE_REASON_NORMAL -> Unit
-                    null, ChannelClient.ChannelCallback.CLOSE_REASON_CONNECTION_TIMEOUT -> error("the watch didn’t answer")
-                    ChannelClient.ChannelCallback.CLOSE_REASON_DISCONNECTED -> error("the watch disconnected")
-                    else -> error("the transfer stopped ($reason)")
+                var registered = false
+                try {
+                    Tasks.await(client.registerChannelCallback(channel, callback), 10, TimeUnit.SECONDS)
+                    registered = true
+                    Tasks.await(client.sendFile(channel, Uri.fromFile(apk)), 20, TimeUnit.SECONDS)
+                    // A few MB over Bluetooth is a minute or so.
+                    val reason = withTimeoutOrNull(5 * 60_000) { closed.await() }
+                    when (reason) {
+                        ChannelClient.ChannelCallback.CLOSE_REASON_NORMAL -> Unit
+                        null, ChannelClient.ChannelCallback.CLOSE_REASON_CONNECTION_TIMEOUT -> error("the watch didn’t answer")
+                        ChannelClient.ChannelCallback.CLOSE_REASON_DISCONNECTED -> error("the watch disconnected")
+                        else -> error("the transfer stopped ($reason)")
+                    }
+                } finally {
+                    // A timeout, sendFile failure or cancellation must not
+                    // leave the callback registered or the channel open.
+                    if (registered) {
+                        runCatching {
+                            Tasks.await(client.unregisterChannelCallback(channel, callback), 5, TimeUnit.SECONDS)
+                        }
+                    }
+                    runCatching { Tasks.await(client.close(channel), 5, TimeUnit.SECONDS) }
                 }
             }
             if (result.isSuccess) openOnWatch(app, nodeId)
@@ -308,6 +322,25 @@ object WatchInstaller {
                 }
                 Log.i(TAG, "watch install: ${output.trim()}")
                 if (!output.contains("Success")) error(output.trim().ifEmpty { "install failed" })
+
+                // The production companion previously shipped as
+                // com.music.bitchord. Its corrected applicationId now matches
+                // the phone (id.musikku.player), so install -r creates the new
+                // package rather than upgrading the old one. Remove the legacy
+                // package only after the replacement has installed successfully;
+                // failure to remove an absent/managed legacy package must not
+                // invalidate the working new companion.
+                runCatching {
+                    val legacyOutput = manager.openStream("exec:cmd package uninstall com.music.bitchord").use { stream ->
+                        withTimeoutOrNull(15_000) {
+                            runInterruptible { readInstallerReply(stream.openInputStream()) }
+                        }
+                    }
+                    if (legacyOutput != null && !legacyOutput.contains("Success")) {
+                        Log.i(TAG, "legacy Watch companion cleanup: ${legacyOutput.trim()}")
+                    }
+                }.onFailure { Log.w(TAG, "couldn't remove legacy Watch companion: ${it.message}") }
+
                 // Opened once, over the same connection: a just-installed app
                 // is "stopped" until it first runs, and Play services will not
                 // wake it to answer the phone until then. It is also the

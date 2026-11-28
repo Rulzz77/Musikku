@@ -30,8 +30,34 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import java.util.concurrent.atomic.AtomicLong
 import com.music.bitchord.wear.playback.Speaker
 import com.music.bitchord.wear.WearProtocol as P
+
+/** True only for a Data Layer event emitted by the selected paired phone. */
+internal fun isSelectedPhoneNode(selectedNode: String?, eventHost: String?): Boolean =
+    !selectedNode.isNullOrBlank() && eventHost == selectedNode
+
+/** Old connect/cache callbacks must not apply after a newer node selection. */
+internal fun isCurrentPhoneSelection(
+    currentNode: String?,
+    requestedNode: String?,
+    currentGeneration: Long,
+    requestedGeneration: Long,
+): Boolean = currentNode == requestedNode && currentGeneration == requestedGeneration
+
+/**
+ * Retain the chosen phone while it is still reachable. When it disappears,
+ * use a nearby node first and sort by stable node ID so a reordered capability
+ * response cannot silently switch the watch between phones.
+ */
+internal fun preferredPhoneNode(
+    nodes: List<Pair<String, Boolean>>,
+    currentNode: String?,
+): String? =
+    currentNode?.takeIf { current -> nodes.any { it.first == current } }
+        ?: nodes.filter { it.second }.minOfOrNull { it.first }
+        ?: nodes.minOfOrNull { it.first }
 
 /**
  * The watch's whole view of the phone.
@@ -49,9 +75,11 @@ class PhoneLink(context: Context, private val scope: CoroutineScope) :
     DataClient.OnDataChangedListener,
     CapabilityClient.OnCapabilityChangedListener {
 
-    private val dataClient = Wearable.getDataClient(context)
-    private val messageClient = Wearable.getMessageClient(context)
-    private val capabilityClient = Wearable.getCapabilityClient(context)
+    private val appContext = context.applicationContext
+    private val dataClient = Wearable.getDataClient(appContext)
+    private val messageClient = Wearable.getMessageClient(appContext)
+    private val capabilityClient = Wearable.getCapabilityClient(appContext)
+    private val selectionPrefs = appContext.getSharedPreferences(P.PREFS_PHONE_SELECTION, Context.MODE_PRIVATE)
 
     private val _link = MutableStateFlow(Link.Connecting)
     val link: StateFlow<Link> = _link.asStateFlow()
@@ -84,9 +112,17 @@ class PhoneLink(context: Context, private val scope: CoroutineScope) :
     private val _watchSpeaker = MutableStateFlow(false)
     val watchSpeaker: StateFlow<Boolean> = _watchSpeaker.asStateFlow()
 
-    @Volatile private var phoneNode: String? = null
+    @Volatile private var phoneNode: String? =
+        selectionPrefs.getString(P.PREF_SELECTED_PHONE_NODE, null)
+    private val phoneSelectionLock = Any()
+    private val phoneSelectionGeneration = AtomicLong()
     private var artId: String? = null
+    private var lastNowPlayingAt = 0L
+    private val artworkGeneration = AtomicLong()
     private var artJob: Job? = null
+    private val queueSnapshotLock = Any()
+    private var lastQueueRevision = 0L
+    private val queueArtworkGeneration = AtomicLong()
     private var started = false
 
     private class Hold<T>(val value: T, val until: Long)
@@ -97,6 +133,7 @@ class PhoneLink(context: Context, private val scope: CoroutineScope) :
     private var holdRepeat: Hold<Int>? = null
     private var holdVolumeUntil = 0L
 
+    private val volumeBatchLock = Any()
     private var pendingSteps = 0
     private var volumeJob: Job? = null
 
@@ -105,10 +142,7 @@ class PhoneLink(context: Context, private val scope: CoroutineScope) :
         started = true
         dataClient.addListener(this)
         capabilityClient.addListener(this, P.CAPABILITY_PHONE)
-        scope.launch {
-            readCached()
-            connect()
-        }
+        scope.launch { connect() }
     }
 
     fun stop() {
@@ -116,6 +150,7 @@ class PhoneLink(context: Context, private val scope: CoroutineScope) :
         started = false
         dataClient.removeListener(this)
         capabilityClient.removeListener(this, P.CAPABILITY_PHONE)
+        phoneSelectionGeneration.incrementAndGet()
     }
 
     fun retry() {
@@ -200,13 +235,28 @@ class PhoneLink(context: Context, private val scope: CoroutineScope) :
         if (steps == 0) return
         holdVolumeUntil = System.currentTimeMillis() + VOLUME_HOLD_MS
         _volume.update { v -> v?.copy(level = (v.level + steps).coerceIn(0, v.max)) }
-        pendingSteps += steps
-        if (volumeJob?.isActive == true) return
-        volumeJob = scope.launch {
-            delay(VOLUME_BATCH_MS)
-            val batch = pendingSteps
-            pendingSteps = 0
-            if (batch != 0) sendNow(P.CMD_VOLUME, batch.toString())
+        synchronized(volumeBatchLock) {
+            pendingSteps += steps
+            if (volumeJob?.isActive == true) return
+
+            volumeJob = scope.launch {
+                delay(VOLUME_BATCH_MS)
+                while (true) {
+                    // More crown movement can arrive while sendMessage is in
+                    // flight. Drain again before marking the worker finished,
+                    // otherwise those steps sit unsent until the next turn.
+                    val batch = synchronized(volumeBatchLock) {
+                        if (pendingSteps == 0) {
+                            volumeJob = null
+                            null
+                        } else {
+                            pendingSteps.also { pendingSteps = 0 }
+                        }
+                    } ?: return@launch
+
+                    sendNow(P.CMD_VOLUME, batch.toString())
+                }
+            }
         }
     }
 
@@ -235,32 +285,48 @@ class PhoneLink(context: Context, private val scope: CoroutineScope) :
     // ---- Data Layer ----
 
     override fun onDataChanged(events: DataEventBuffer) {
-        // Copied out before returning: the buffer is released after this call.
+        // Data items are shared at package/signing-identity scope. A watch can
+        // see more than one paired phone, so accept only the currently selected
+        // node rather than whichever phone happened to publish last.
+        val selectedNode = phoneNode ?: return
+        // Copy the payload before returning: the DataEventBuffer is released
+        // as soon as this callback finishes.
         val changes = events.mapNotNull { event ->
             if (event.type != DataEvent.TYPE_CHANGED) return@mapNotNull null
             val item = event.dataItem
-            Triple(item.uri.path, item.uri.host, DataMapItem.fromDataItem(item).dataMap)
+            val host = item.uri.host
+            if (!isSelectedPhoneNode(selectedNode, host)) return@mapNotNull null
+            Triple(item.uri.path, host, DataMapItem.fromDataItem(item).dataMap)
         }
         changes.forEach { (path, host, map) ->
-            // Fresh state is proof of a live phone, and says which node it is.
-            if (host != null && phoneNode == null) phoneNode = host
-            _link.value = Link.Connected
-            when (path) {
-                P.PATH_NOW_PLAYING -> applyNowPlaying(map)
-                P.PATH_QUEUE -> applyQueue(map)
-                P.PATH_OUTPUTS -> applyOutputs(map)
+            synchronized(phoneSelectionLock) {
+                // The selected phone may have changed after the event was copied.
+                if (!isSelectedPhoneNode(phoneNode, host)) return@synchronized
+                _link.value = Link.Connected
+                when (path) {
+                    P.PATH_NOW_PLAYING -> applyNowPlaying(map)
+                    P.PATH_QUEUE -> applyQueue(map)
+                    P.PATH_OUTPUTS -> applyOutputs(map)
+                }
             }
         }
     }
 
     override fun onCapabilityChanged(info: CapabilityInfo) {
-        val node = info.nodes.firstOrNull { it.isNearby } ?: info.nodes.firstOrNull()
-        phoneNode = node?.id
-        if (node == null) {
-            _link.value = Link.NoPhone
-        } else if (_link.value != Link.Connected) {
-            scope.launch { connect() }
+        val nodeId = preferredPhoneNode(
+            info.nodes.map { it.id to it.isNearby },
+            currentNode = phoneNode,
+        )
+        // The capability callback is the ordering point. Select synchronously
+        // here, before launching work, so an older queued coroutine cannot
+        // overwrite a newer phone selection when scheduling happens out of
+        // order. Ignore duplicate notifications while this exact node is
+        // already connected or being connected.
+        if (nodeId == phoneNode && (_link.value == Link.Connected || _link.value == Link.Connecting)) {
+            return
         }
+        val generation = selectPhoneNode(nodeId)
+        scope.launch { connectTo(nodeId, generation) }
     }
 
     private fun applyOutputs(map: DataMap) {
@@ -275,28 +341,111 @@ class PhoneLink(context: Context, private val scope: CoroutineScope) :
         }
     }
 
-    private suspend fun readCached() {
-        val uri = Uri.Builder().scheme(PutDataRequest.WEAR_URI_SCHEME).path(P.PATH_NOW_PLAYING).build()
+    private suspend fun readCached(nodeId: String) {
+        // A host-scoped query is essential here: reading the path without an
+        // authority returns all phones' snapshots and can restore the wrong one.
+        val uri = Uri.Builder()
+            .scheme(PutDataRequest.WEAR_URI_SCHEME)
+            .authority(nodeId)
+            .path(P.PATH_NOW_PLAYING)
+            .build()
         val items = runCatching { dataClient.getDataItems(uri).await() }.getOrNull() ?: return
-        val maps = items.map { DataMapItem.fromDataItem(it).dataMap }
-        items.release()
-        maps.lastOrNull()?.let(::applyNowPlaying)
+        try {
+            val item = items.firstOrNull {
+                it.uri.host == nodeId && it.uri.path == P.PATH_NOW_PLAYING
+            } ?: return
+            val map = DataMapItem.fromDataItem(item).dataMap
+            synchronized(phoneSelectionLock) {
+                if (phoneNode == nodeId) {
+                    _link.value = Link.Connected
+                    applyNowPlaying(map)
+                }
+            }
+        } finally {
+            items.release()
+        }
     }
 
     private suspend fun connect() {
-        val node = findPhone()
-        phoneNode = node
-        if (node == null) {
+        val generationBeforeLookup = phoneSelectionGeneration.get()
+        val nodeId = findPhone()
+        // A capability event may have selected a newer node while discovery
+        // was suspended. Do not let this older lookup take over afterwards.
+        val generation = synchronized(phoneSelectionLock) {
+            if (phoneSelectionGeneration.get() != generationBeforeLookup) return
+            selectPhoneNode(nodeId)
+        }
+        connectTo(nodeId, generation)
+    }
+
+    private suspend fun connectTo(nodeId: String?, generation: Long) {
+        synchronized(phoneSelectionLock) {
+            if (!isCurrentPhoneSelection(phoneNode, nodeId, phoneSelectionGeneration.get(), generation)) return
+        }
+        if (nodeId == null) {
             _link.value = Link.NoPhone
             return
         }
-        if (sendNow(P.CMD_SYNC)) _link.value = Link.Connected
+
+        _link.value = Link.Connecting
+        val sent = runCatching {
+            messageClient.sendMessage(nodeId, "${P.PATH_COMMAND}/${P.CMD_SYNC}", ByteArray(0)).await()
+        }.isSuccess
+
+        synchronized(phoneSelectionLock) {
+            if (!isCurrentPhoneSelection(phoneNode, nodeId, phoneSelectionGeneration.get(), generation)) return
+            if (sent) _link.value = Link.Connected else _link.value = Link.NoPhone
+        }
+        if (sent) readCached(nodeId)
+    }
+
+    /**
+     * Selects the source of truth for the watch. Switching phones invalidates
+     * async artwork, queue revisions, optimistic holds, and cached screen data
+     * so no state from the previous phone can leak into the new session.
+     */
+    private fun selectPhoneNode(nodeId: String?): Long = synchronized(phoneSelectionLock) {
+        if (phoneNode != nodeId) {
+            phoneNode = nodeId
+            selectionPrefs.edit().apply {
+                if (nodeId == null) remove(P.PREF_SELECTED_PHONE_NODE)
+                else putString(P.PREF_SELECTED_PHONE_NODE, nodeId)
+            }.apply()
+            artJob?.cancel()
+            artJob = null
+            artId = null
+            lastNowPlayingAt = 0L
+            artworkGeneration.incrementAndGet()
+            _artwork.value = null
+            _queue.value = null
+            _nowPlaying.value = null
+            _volume.value = null
+            _outputs.value = null
+            _watchSpeaker.value = false
+            _heard.value = false
+            holdPlaying = null
+            holdLiked = null
+            holdShuffle = null
+            holdRepeat = null
+            synchronized(volumeBatchLock) {
+                volumeJob?.cancel()
+                volumeJob = null
+                pendingSteps = 0
+            }
+            holdVolumeUntil = 0L
+            synchronized(queueSnapshotLock) {
+                lastQueueRevision = 0L
+                queueArtworkGeneration.incrementAndGet()
+            }
+        }
+        _link.value = if (nodeId == null) Link.NoPhone else Link.Connecting
+        phoneSelectionGeneration.incrementAndGet()
     }
 
     private suspend fun findPhone(): String? = withTimeoutOrNull(FIND_TIMEOUT_MS) {
         runCatching {
             val info = capabilityClient.getCapability(P.CAPABILITY_PHONE, CapabilityClient.FILTER_REACHABLE).await()
-            (info.nodes.firstOrNull { it.isNearby } ?: info.nodes.firstOrNull())?.id
+            preferredPhoneNode(info.nodes.map { it.id to it.isNearby }, currentNode = phoneNode)
         }.getOrNull()
     }
 
@@ -306,7 +455,7 @@ class PhoneLink(context: Context, private val scope: CoroutineScope) :
 
     private suspend fun sendNow(command: String, arg: String = ""): Boolean {
         repeat(2) { attempt ->
-            val node = phoneNode ?: findPhone()?.also { phoneNode = it }
+            val node = phoneNode ?: findPhone()?.also { selectPhoneNode(it) }
             if (node == null) {
                 _link.value = Link.NoPhone
                 return false
@@ -314,15 +463,30 @@ class PhoneLink(context: Context, private val scope: CoroutineScope) :
             val sent = runCatching {
                 messageClient.sendMessage(node, "${P.PATH_COMMAND}/$command", arg.toByteArray()).await()
             }.onFailure { Log.w(TAG, "send $command (attempt $attempt): ${it.message}") }.isSuccess
-            if (sent) return true
+            if (sent) {
+                val stillSelected = synchronized(phoneSelectionLock) {
+                    if (phoneNode == node) {
+                        _link.value = Link.Connected
+                        true
+                    } else {
+                        false
+                    }
+                }
+                if (stillSelected) return true
+            }
             // The node may have changed (phone rebooted, re-paired): look again once.
-            phoneNode = null
+            if (phoneNode == node) selectPhoneNode(null)
         }
         _link.value = Link.NoPhone
         return false
     }
 
     private fun applyNowPlaying(map: DataMap) {
+        // Data Layer callbacks and the initial cached read can race. Preserve
+        // the newest player snapshot even when an older event arrives late.
+        val positionAt = map.getLong(P.KEY_POSITION_AT, 0L)
+        if (positionAt > 0L && positionAt < lastNowPlayingAt) return
+        if (positionAt > 0L) lastNowPlayingAt = positionAt
         _heard.value = true
         _watchSpeaker.value = map.getBoolean(P.KEY_WATCH_SPEAKER)
         val now = System.currentTimeMillis()
@@ -335,6 +499,7 @@ class PhoneLink(context: Context, private val scope: CoroutineScope) :
         val id = map.getString(P.KEY_ART_ID)
         if (id == artId) return
         artId = id
+        val generation = artworkGeneration.incrementAndGet()
         artJob?.cancel()
         val asset = map.getAsset(P.KEY_ART)
         if (asset == null) {
@@ -343,7 +508,7 @@ class PhoneLink(context: Context, private val scope: CoroutineScope) :
         }
         artJob = scope.launch {
             val bitmap = decode(asset)
-            if (artId == id) _artwork.value = bitmap
+            if (artworkGeneration.get() == generation) _artwork.value = bitmap
         }
     }
 
@@ -362,6 +527,7 @@ class PhoneLink(context: Context, private val scope: CoroutineScope) :
     }
 
     private fun applyQueue(map: DataMap) {
+        val revision = map.getLong(P.KEY_QUEUE_REVISION, 0L)
         val items = map.getDataMapArrayList(P.KEY_ITEMS).orEmpty()
         val current = map.getInt(P.KEY_CURRENT_INDEX)
         val mediaId = map.getString(P.KEY_QUEUE_MEDIA_ID).orEmpty()
@@ -373,15 +539,29 @@ class PhoneLink(context: Context, private val scope: CoroutineScope) :
                 art = null,
             )
         }
-        _queue.value = Queue(rows, current, mediaId)
+
+        // Revision validation, generation assignment, and the visible text
+        // update are one atomic step. Listener callbacks can be concurrent;
+        // otherwise an older callback could pass its check, pause, and publish
+        // its rows after a newer callback had already advanced the queue.
+        val generation = synchronized(queueSnapshotLock) {
+            if ((revision == 0L && lastQueueRevision > 0L) ||
+                (revision > 0L && revision < lastQueueRevision)
+            ) return
+            if (revision > 0L) lastQueueRevision = revision
+            queueArtworkGeneration.incrementAndGet().also {
+                _queue.value = Queue(rows, current, mediaId)
+            }
+        }
         // Thumbnails after the text, in one go, so the list is readable at once
         // and recomposes once more rather than once per row.
         scope.launch {
             val art = items.map { item ->
                 async { item.getAsset(P.KEY_ART)?.let { decode(it) } }
             }.awaitAll()
+            if (queueArtworkGeneration.get() != generation) return@launch
             _queue.update { q ->
-                if (q == null || q.mediaId != mediaId) q
+                if (q == null || q.mediaId != mediaId || queueArtworkGeneration.get() != generation) q
                 else q.copy(rows = q.rows.mapIndexed { i, row -> row.copy(art = art.getOrNull(i)) })
             }
         }

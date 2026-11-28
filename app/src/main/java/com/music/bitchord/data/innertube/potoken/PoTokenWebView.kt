@@ -82,15 +82,18 @@ class PoTokenWebView private constructor(
         webView.webChromeClient = object : WebChromeClient() {
             override fun onConsoleMessage(m: ConsoleMessage): Boolean {
                 val msg = m.message()
-                // Log all console messages for debugging
+                // BotGuard can include challenge/token material in exceptions
+                // and console output. Keep only severity and whether the event
+                // was uncaught; never write remote JS messages to logcat.
+                val uncaught = msg.contains("Uncaught")
                 when (m.messageLevel()) {
-                    ConsoleMessage.MessageLevel.ERROR -> TrackLog.e(TAG, "JS: $msg")
-                    ConsoleMessage.MessageLevel.WARNING -> TrackLog.w(TAG, "JS: $msg")
-                    else -> TrackLog.d(TAG, "JS: $msg")
+                    ConsoleMessage.MessageLevel.ERROR -> TrackLog.e(TAG, "WebView JavaScript console error (uncaught=$uncaught)")
+                    ConsoleMessage.MessageLevel.WARNING -> TrackLog.w(TAG, "WebView JavaScript console warning")
+                    else -> TrackLog.d(TAG, "WebView JavaScript console message")
                 }
 
-                if (msg.contains("Uncaught")) {
-                    val fmt = "\"$msg\", source: ${m.sourceId()} (${m.lineNumber()})"
+                if (uncaught) {
+                    val fmt = "BotGuard JavaScript failed (line=${m.lineNumber()})"
                     if (initResumed.get()) {
                         // Post-init: our static HTML already executed fine, so an uncaught error
                         // here comes from Google's remotely-served botguard/minter JS — transient,
@@ -194,7 +197,15 @@ class PoTokenWebView private constructor(
         if (BuildConfig.DEBUG) {
             TrackLog.e(TAG, "PO-token JavaScript initialization failed")
         }
-        onInitializationErrorCloseAndCancel(buildExceptionForJsError(error))
+        // Preserve only the SyntaxError classification used to disable a
+        // broken WebView implementation; the remote error text/stack can carry
+        // challenge data and is not safe to surface or log.
+        val exception = if (error.contains("SyntaxError")) {
+            BadWebViewException("BotGuard JavaScript initialization syntax error")
+        } else {
+            PoTokenException("BotGuard JavaScript initialization failed")
+        }
+        onInitializationErrorCloseAndCancel(exception)
     }
 
     /**
@@ -203,7 +214,7 @@ class PoTokenWebView private constructor(
      */
     @JavascriptInterface
     fun onRunBotguardResult(botguardResponse: String) {
-        TrackLog.d(TAG, "botguardResponse: $botguardResponse")
+        TrackLog.d(TAG, "BotGuard response received (chars=${botguardResponse.length})")
         makeBotguardServiceRequest(
             "https://www.youtube.com/api/jnn/v1/GenerateIT",
             "[ \"$REQUEST_KEY\", \"$botguardResponse\" ]",
@@ -322,7 +333,9 @@ class PoTokenWebView private constructor(
         // "SyntaxError" comes from Google's challenge/program data, not a broken WebView engine —
         // buildExceptionForJsError's BadWebViewException mapping would permanently disable
         // poTokens for the session in PoTokenGenerator.
-        popPoTokenContinuation(requestKey)?.resumeWithException(PoTokenException(error))
+        popPoTokenContinuation(requestKey)?.resumeWithException(
+            PoTokenException("Po-token JavaScript generation failed"),
+        )
     }
 
     /**
@@ -452,7 +465,15 @@ class PoTokenWebView private constructor(
         // A live renderer mints a poToken in well under a second.
         private const val GENERATE_TIMEOUT_MS = 15_000L
 
-        private val httpClient: OkHttpClient get() = Http.client
+        // Reuse the app's DNS/connection pool but never the WebDAV Basic-auth
+        // interceptor: this fixed YouTube BotGuard request must not inherit
+        // credentials for a user-configured remote storage server.
+        private val httpClient: OkHttpClient by lazy {
+            Http.client.newBuilder().apply {
+                interceptors().clear()
+                networkInterceptors().clear()
+            }.build()
+        }
 
         suspend fun getNewPoTokenGenerator(context: Context): PoTokenWebView {
             var created: PoTokenWebView? = null

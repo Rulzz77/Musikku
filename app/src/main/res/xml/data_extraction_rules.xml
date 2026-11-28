@@ -11,10 +11,23 @@
         <exclude domain="sharedpref" path="bitchord_sources_plain.xml" />
         <!-- Tester code: a credential for this phone's owner (see AddonAuth). -->
         <exclude domain="sharedpref" path="bitchord_tester.xml" />
+        <exclude domain="sharedpref" path="bitchord_tester_secure.xml" />
+        <exclude domain="sharedpref" path="bitchord_tester_secure_plain.xml" />
+        <exclude domain="sharedpref" path="bitchord_addon_auth.xml" />
+        <exclude domain="sharedpref" path="bitchord_addon_auth_secure.xml" />
+        <exclude domain="sharedpref" path="bitchord_addon_auth_secure_plain.xml" />
         <!-- Playback queues are local session state; do not resurrect them after reinstall. -->
         <exclude domain="sharedpref" path="bitchord_last_played.xml" />
         <exclude domain="sharedpref" path="bitchord_bounded_context.xml" />
         <exclude domain="sharedpref" path="bitchord_party_queue_stash.xml" />
+        <!-- SharedPreferences cannot be filtered by key; manual backup is the settings export path. -->
+        <exclude domain="sharedpref" path="bitchord_settings.xml" />
+        <!-- Live Listen Together token and device-local identity. -->
+        <exclude domain="sharedpref" path="bitchord_listen_together.xml" />
+        <exclude domain="sharedpref" path="bitchord_listen_together_secure.xml" />
+        <exclude domain="sharedpref" path="bitchord_listen_together_secure_plain.xml" />
+        <!-- WebView's Chromium profile holds persistent cookies and website sessions. -->
+        <exclude domain="root" path="app_webview/" />
     </cloud-backup>
     <device-transfer>
         <exclude domain="sharedpref" path="bitchord_auth.xml" />
@@ -23,9 +36,22 @@
         <exclude domain="sharedpref" path="bitchord_sources_plain.xml" />
         <!-- Tester code: a credential for this phone's owner (see AddonAuth). -->
         <exclude domain="sharedpref" path="bitchord_tester.xml" />
+        <exclude domain="sharedpref" path="bitchord_tester_secure.xml" />
+        <exclude domain="sharedpref" path="bitchord_tester_secure_plain.xml" />
+        <exclude domain="sharedpref" path="bitchord_addon_auth.xml" />
+        <exclude domain="sharedpref" path="bitchord_addon_auth_secure.xml" />
+        <exclude domain="sharedpref" path="bitchord_addon_auth_secure_plain.xml" />
         <!-- Playback queues are local session state; do not resurrect them after reinstall. -->
         <exclude domain="sharedpref" path="bitchord_last_played.xml" />
         <exclude domain="sharedpref" path="bitchord_bounded_context.xml" />
         <exclude domain="sharedpref" path="bitchord_party_queue_stash.xml" />
+        <!-- SharedPreferences cannot be filtered by key; manual backup is the settings export path. -->
+        <exclude domain="sharedpref" path="bitchord_settings.xml" />
+        <!-- Live Listen Together token and device-local identity. -->
+        <exclude domain="sharedpref" path="bitchord_listen_together.xml" />
+        <exclude domain="sharedpref" path="bitchord_listen_together_secure.xml" />
+        <exclude domain="sharedpref" path="bitchord_listen_together_secure_plain.xml" />
+        <!-- Website session cookies must never be copied to another device. -->
+        <exclude domain="root" path="app_webview/" />
     </device-transfer>
 </data-extraction-rules>

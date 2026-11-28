@@ -1,3 +1,5 @@
+import { sanitizePartyImageUrl } from './invite';
+
 /**
  * The party server's wire format, one-for-one (PartyModels.kt). The server
  * speaks camelCase and `backend/README.md` is the contract: rename a field on
@@ -134,7 +136,7 @@ export function trackOf(raw: Partial<PartyTrack>): PartyTrack {
     videoId: raw.videoId ?? '',
     title: raw.title ?? '',
     artist: raw.artist ?? '',
-    thumbnailUrl: raw.thumbnailUrl ?? null,
+    thumbnailUrl: sanitizePartyImageUrl(raw.thumbnailUrl),
     durationMs: raw.durationMs ?? null,
     fromAutoplay: raw.fromAutoplay ?? false,
   };
@@ -145,7 +147,7 @@ export function memberOf(raw: Partial<PartyMember>): PartyMember {
     memberId: raw.memberId ?? '',
     userId: raw.userId ?? '',
     displayName: raw.displayName ?? '',
-    avatarUrl: raw.avatarUrl ?? null,
+    avatarUrl: sanitizePartyImageUrl(raw.avatarUrl),
     isHost: raw.isHost ?? false,
     connected: raw.connected ?? false,
     joinedAtMs: raw.joinedAtMs ?? 0,

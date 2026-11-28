@@ -1,6 +1,7 @@
 package com.music.bitchord.data.stats
 
 import android.content.Context
+import android.system.Os
 import android.util.Log
 import com.music.bitchord.data.model.Song
 import kotlinx.coroutines.CoroutineScope
@@ -97,6 +98,10 @@ object ListeningStats {
     @Volatile
     private var version = 0L
 
+    /** Invalidates flush jobs captured before a full-history restore. */
+    @Volatile
+    private var writeGeneration = 0L
+
     /** Changes only after a listening snapshot reaches disk, not on every sample. */
     private val _revision = MutableStateFlow(0L)
     val revision = _revision.asStateFlow()
@@ -114,6 +119,7 @@ object ListeningStats {
 
     fun init(context: Context) {
         directory = File(context.filesDir, DIRECTORY)
+        recoverInterruptedImport()
         // Opening a month means reading and parsing it, and the first thing to
         // ask for one is the playback sampler — on the main thread, a few
         // seconds into the first track. Done here instead, it has happened long
@@ -278,22 +284,32 @@ object ListeningStats {
      * than re-serialising a month every time a track ticks over.
      */
     fun flush() {
-        pending()?.let { (key, snapshot) -> writer.launch { write(key, snapshot) } }
+        pending()?.let { pending ->
+            writer.launch { write(pending.key, pending.snapshot, pending.generation) }
+        }
     }
 
     /** As [flush], for a caller that is about to read back what it wrote. */
     private suspend fun flushAndAwait() {
-        pending()?.let { (key, snapshot) -> writer.launch { write(key, snapshot) }.join() }
+        pending()?.let { pending ->
+            writer.launch { write(pending.key, pending.snapshot, pending.generation) }.join()
+        }
     }
 
+    private data class PendingWrite(
+        val key: String,
+        val snapshot: StoredBucket,
+        val generation: Long,
+    )
+
     /** The open month as bytes-to-be, or null when nothing has changed. */
-    private fun pending(): Pair<String, StoredBucket>? {
+    private fun pending(): PendingWrite? {
         if (!ready) return null
         return synchronized(lock) {
             if (!dirty) return null
             val bucket = open ?: return null
             dirty = false
-            bucket.key to bucket.snapshot()
+            PendingWrite(bucket.key, bucket.snapshot(), writeGeneration)
         }
     }
 
@@ -309,20 +325,26 @@ object ListeningStats {
      * Written aside and renamed, so a kill mid-write leaves the previous
      * month rather than a truncated one.
      */
-    private suspend fun write(key: String, snapshot: StoredBucket) = writeLock.withLock {
+    private suspend fun write(
+        key: String,
+        snapshot: StoredBucket,
+        generation: Long,
+    ) = writeLock.withLock {
+        if (generation != writeGeneration) return@withLock
+        val temporary = File(directory, "$key.json.tmp")
         runCatching {
             directory.mkdirs()
             val file = File(directory, "$key.json")
-            val temporary = File(directory, "$key.json.tmp")
             temporary.writeText(json.encodeToString(StoredBucket.serializer(), snapshot))
-            if (!temporary.renameTo(file)) {
-                // renameTo will not replace on some filesystems; the delete is
-                // the only thing standing between that and a .tmp per flush.
-                if (file.delete() && temporary.renameTo(file)) Unit else temporary.delete()
-            }
+            // Os.rename atomically replaces the target on the same filesystem;
+            // a failed write leaves the previous valid month untouched.
+            Os.rename(temporary.absolutePath, file.absolutePath)
             version++
             _revision.value = version
-        }.onFailure { Log.w(TAG, "Could not write listening bucket $key", it) }
+        }.onFailure {
+            temporary.delete()
+            Log.w(TAG, "Could not write listening bucket $key", it)
+        }
     }
 
     /** The bucket for [month], loading or creating it and retiring the last one. */
@@ -333,7 +355,8 @@ object ListeningStats {
         // has to reach disk before it is dropped on the floor.
         open?.let { previous ->
             val stale = previous.snapshot()
-            writer.launch { write(previous.key, stale) }
+            val generation = writeGeneration
+            writer.launch { write(previous.key, stale, generation) }
         }
         val loaded = read(key) ?: StoredBucket(month = key)
         return OpenBucket.of(key, loaded).also {
@@ -507,31 +530,88 @@ object ListeningStats {
     }
 
     /**
-     * Replaces everything held with [buckets].
+     * Replaces history only after every incoming month has been written to a
+     * sibling staging directory. The old directory is renamed aside, then the
+     * staged directory is swapped in. A failed stage never touches existing
+     * history; an interrupted swap is recovered on the next [init].
      *
-     * A replace rather than a merge, and deliberately so: an import is a restore
-     * onto a new device, and two copies of the same month added together would
-     * silently double every number on the page with no way to tell afterwards.
+     * The write mutex waits for in-flight flushes, while [writeGeneration]
+     * invalidates snapshots that were queued before the restore but had not
+     * acquired the mutex yet.
      */
-    fun importAll(buckets: List<StoredBucket>) {
-        if (!ready) return
-        synchronized(lock) {
-            open = null
-            dirty = false
-            directory.listFiles()?.forEach { it.delete() }
-            directory.mkdirs()
-            version++
-            _revision.value = version
-            cached = null
-            buckets.forEach { bucket ->
-                val key = runCatching { YearMonth.parse(bucket.month).toString() }.getOrNull()
-                    ?: return@forEach
-                runCatching {
-                    File(directory, "$key.json")
-                        .writeText(json.encodeToString(StoredBucket.serializer(), bucket))
-                }.onFailure { Log.w(TAG, "Could not import bucket $key", it) }
-            }
+    suspend fun importAll(buckets: List<StoredBucket>) = withContext(Dispatchers.IO) {
+        if (!ready) return@withContext
+
+        val parent = directory.parentFile ?: error("Listening history has no parent directory")
+        check(parent.exists() || parent.mkdirs()) { "Couldn't prepare listening history storage" }
+        val staging = File(parent, "$DIRECTORY.importing")
+        val previous = File(parent, "$DIRECTORY.previous")
+        if (staging.exists()) check(staging.deleteRecursively()) {
+            "Couldn't clear a previous listening-history staging directory"
         }
+        check(staging.mkdirs()) { "Couldn't create listening-history staging directory" }
+
+        try {
+            val months = HashSet<String>()
+            buckets.forEach { bucket ->
+                val key = YearMonth.parse(bucket.month).toString()
+                require(months.add(key)) { "Backup contains duplicate listening months" }
+                File(staging, "$key.json").writeText(
+                    json.encodeToString(StoredBucket.serializer(), bucket),
+                )
+            }
+
+            writeLock.withLock {
+                synchronized(lock) {
+                    if (previous.exists()) check(previous.deleteRecursively()) {
+                        "Couldn't clear the previous listening-history rollback directory"
+                    }
+                    val hadCurrent = directory.exists()
+                    if (hadCurrent && !directory.renameTo(previous)) {
+                        error("Couldn't move the current listening history aside")
+                    }
+                    if (!staging.renameTo(directory)) {
+                        val restored = !hadCurrent || previous.renameTo(directory)
+                        if (!restored) {
+                            error("Couldn't install imported history or restore the previous history")
+                        }
+                        error("Couldn't install imported listening history; previous history was restored")
+                    }
+
+                    // Commit memory only after the new files are in place.
+                    writeGeneration++
+                    open = null
+                    dirty = false
+                    version++
+                    _revision.value = version
+                    cached = null
+                }
+            }
+            // If cleanup fails, init() removes the stale rollback directory once
+            // it sees that the new history directory is present.
+            runCatching { previous.deleteRecursively() }
+        } finally {
+            if (staging.exists()) runCatching { staging.deleteRecursively() }
+        }
+    }
+
+    /**
+     * Finishes or rolls back a directory swap interrupted by process death.
+     * If the new directory is present it won; otherwise restore the previous
+     * one before the playback sampler can open a month.
+     */
+    private fun recoverInterruptedImport() {
+        val parent = directory.parentFile ?: return
+        val previous = File(parent, "$DIRECTORY.previous")
+        val staging = File(parent, "$DIRECTORY.importing")
+        if (!directory.exists() && previous.exists()) {
+            if (!previous.renameTo(directory)) {
+                Log.e(TAG, "Could not recover previous listening history after interrupted import")
+            }
+        } else if (previous.exists()) {
+            runCatching { previous.deleteRecursively() }
+        }
+        if (staging.exists()) runCatching { staging.deleteRecursively() }
     }
 
     // ── Shapes ──────────────────────────────────────────────────────────────

@@ -46,7 +46,7 @@ jobs:
       - run: chmod +x gradlew
 
       - name: Tests
-        run: ./gradlew :shared:jvmTest testDevDebugUnitTest
+        run: ./gradlew :shared:jvmTest testDevDebugUnitTest :wearos:testDevDebugUnitTest
 
       # APK splitting packages several ABI outputs in parallel. The default
       # worker count plus a 4 GiB heap can exhaust the runner while packaging;
@@ -62,6 +62,18 @@ jobs:
         with:
           name: musikku-dev-debug
           path: app/build/outputs/apk/dev/debug/*.apk
+
+      - name: Build the Wear OS dev APK
+        run: >-
+          ./gradlew --no-daemon --max-workers=2
+          -Dorg.gradle.jvmargs="-Xmx6g -Dfile.encoding=UTF-8 -Djava.net.preferIPv4Stack=true"
+          :wearos:assembleDevDebug
+
+      - name: Upload the Wear OS dev APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: musikku-wear-dev-debug
+          path: wearos/build/outputs/apk/dev/debug/*.apk
 
       - name: Upload test reports
         if: failure()

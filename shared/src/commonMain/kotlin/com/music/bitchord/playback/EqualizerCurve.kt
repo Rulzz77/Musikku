@@ -106,9 +106,22 @@ class EqCurve(
     companion object {
         val FLAT = of(FloatArray(EqLayout.SLOTS), FloatArray(EqLayout.SLOTS) { 0.707f })
 
-        /** Builds a curve and works out the attenuation it needs. */
-        fun of(gainsDb: FloatArray, qs: FloatArray): EqCurve =
-            EqCurve(gainsDb, qs, preampFor(gainsDb, qs))
+        /** Builds a finite, bounded curve and works out its attenuation. */
+        fun of(gainsDb: FloatArray, qs: FloatArray): EqCurve {
+            val safeGains = FloatArray(EqLayout.SLOTS) { index ->
+                gainsDb.getOrElse(index) { 0f }
+                    .takeIf(Float::isFinite)
+                    ?.coerceIn(-EqLayout.MANUAL_RANGE_DB, EqLayout.MANUAL_RANGE_DB)
+                    ?: 0f
+            }
+            val safeQs = FloatArray(EqLayout.SLOTS) { index ->
+                qs.getOrElse(index) { 0.707f }
+                    .takeIf { it.isFinite() && it > 0f }
+                    ?.coerceIn(MIN_Q, MAX_Q)
+                    ?: 0.707f
+            }
+            return EqCurve(safeGains, safeQs, preampFor(safeGains, safeQs))
+        }
     }
 }
 
@@ -219,6 +232,10 @@ internal fun sectionGainDb(slot: FilterSlot, gainDb: Float, q: Float, hz: Float)
 
 /** How much of a curve's peak boost [preampFor] takes back; [PeakLimiter] covers the rest. */
 private const val MAKEUP_FRACTION = 0.5f
+
+/** Defensive Q bounds for untrusted or cross-version curve inputs. */
+private const val MIN_Q = 0.1f
+private const val MAX_Q = 10f
 
 /** Enough to find the peak of a curve this smooth without wasting time on it. */
 private const val RESPONSE_POINTS = 96

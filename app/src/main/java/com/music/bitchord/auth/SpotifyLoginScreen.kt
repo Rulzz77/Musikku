@@ -39,7 +39,20 @@ private fun hostMatches(uri: Uri?, suffixes: List<String>): Boolean {
     return suffixes.any { host == it || host.endsWith(".$it") }
 }
 
-private fun isLoginHost(uri: Uri?) = hostMatches(uri, LOGIN_HOST_SUFFIXES)
+private fun isLoginHost(uri: Uri?): Boolean =
+    uri != null &&
+        uri.userInfo == null &&
+        uri.port in setOf(-1, 443) &&
+        hostMatches(uri, LOGIN_HOST_SUFFIXES)
+
+/** The only URL that may complete Spotify sign-in and release the session cookie. */
+internal fun isSpotifyPlayerLanding(rawUrl: String?): Boolean {
+    val uri = runCatching { Uri.parse(rawUrl ?: return false) }.getOrNull() ?: return false
+    return uri.scheme.equals("https", ignoreCase = true) &&
+        uri.host.equals("open.spotify.com", ignoreCase = true) &&
+        uri.port in setOf(-1, 443) &&
+        uri.userInfo == null
+}
 
 /**
  * Signs the login WebView out of Spotify. Disconnecting only forgot the
@@ -115,7 +128,7 @@ fun SpotifyLoginScreen(
 
                     override fun onPageFinished(view: WebView, url: String?) {
                         canGoBack = view.canGoBack()
-                        if (sent || url?.startsWith("https://open.spotify.com") != true) return
+                        if (sent || !isSpotifyPlayerLanding(url)) return
                         val raw = CookieManager.getInstance().getCookie("https://open.spotify.com") ?: return
                         val token = raw.split(";")
                             .map { it.trim() }

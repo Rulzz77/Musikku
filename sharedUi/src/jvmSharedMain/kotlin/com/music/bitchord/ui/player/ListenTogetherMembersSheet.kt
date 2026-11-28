@@ -35,6 +35,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.music.bitchord.sharedui.resources.*
 import com.music.bitchord.data.listentogether.PartyMember
+import com.music.bitchord.data.listentogether.isSafePartyImageUrl
 import com.music.bitchord.ui.haptics.Haptic
 import com.music.bitchord.ui.haptics.rememberHaptics
 import dev.chrisbanes.haze.HazeState
@@ -101,9 +102,10 @@ private fun MemberDrawerRow(member: PartyMember, isYou: Boolean) {
                 .background(Color.White.copy(alpha = 0.08f)),
             contentAlignment = Alignment.Center,
         ) {
-            if (member.avatarUrl != null) {
+            val safeAvatarUrl = member.avatarUrl?.takeIf(::isSafePartyImageUrl)
+            if (safeAvatarUrl != null) {
                 AsyncImage(
-                    model = member.avatarUrl,
+                    model = safeAvatarUrl,
                     contentDescription = null,
                     modifier = Modifier.size(40.dp).clip(CircleShape),
                 )

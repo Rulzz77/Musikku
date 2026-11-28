@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import com.music.bitchord.R
 import com.music.bitchord.data.listentogether.ListenTogether
+import com.music.bitchord.data.listentogether.isSafePartyImageUrl
 import com.music.bitchord.data.listentogether.PartyPreview
 import com.music.bitchord.ui.components.PillTextField
 import com.music.bitchord.ui.components.QrCode
@@ -103,6 +104,7 @@ internal fun GlowingAvatar(
     size: Dp = 104.dp,
     glow: Color = MaterialTheme.colorScheme.primary,
 ) {
+    val safeUrl = url?.takeIf(::isSafePartyImageUrl)
     val breathe = rememberInfiniteTransition(label = "partyGlow")
     val spread by breathe.animateFloat(
         initialValue = 0.92f,
@@ -154,9 +156,9 @@ internal fun GlowingAvatar(
                     shape = CircleShape,
                 ),
         )
-        if (url != null) {
+        if (safeUrl != null) {
             AsyncImage(
-                model = url,
+                model = safeUrl,
                 contentDescription = null,
                 modifier = Modifier
                     .size(size)
@@ -397,9 +399,10 @@ private fun StepperButton(label: String, enabled: Boolean, onClick: () -> Unit) 
 /** The avatar as the sheets draw it — larger than a settings row's glyph. */
 @Composable
 private fun PartySheetAvatar(url: String?, size: Dp = 40.dp) {
-    if (url != null) {
+    val safeUrl = url?.takeIf(::isSafePartyImageUrl)
+    if (safeUrl != null) {
         AsyncImage(
-            model = url,
+            model = safeUrl,
             contentDescription = null,
             modifier = Modifier.size(size).clip(CircleShape),
         )
@@ -517,9 +520,10 @@ internal fun MemberAvatarStack(
                     .border(2.dp, MaterialTheme.colorScheme.background, CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
-                if (avatar != null) {
+                val safeAvatar = avatar?.takeIf(::isSafePartyImageUrl)
+                if (safeAvatar != null) {
                     AsyncImage(
-                        model = avatar,
+                        model = safeAvatar,
                         contentDescription = null,
                         modifier = Modifier.size(faceSize).clip(CircleShape),
                     )

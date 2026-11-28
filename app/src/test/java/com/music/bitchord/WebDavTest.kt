@@ -110,7 +110,63 @@ class WebDavTest {
     }
 
     @Test
-    fun resolvesRelativeHrefs() {
+    fun rejectsWebDavServersThatReturnExternalEntityXml() {
+        val xml = """<?xml version="1.0"?>
+<!DOCTYPE d:multistatus [
+  <!ENTITY xxe SYSTEM "file:///etc/passwd">
+]>
+<d:multistatus xmlns:d="DAV:">
+  <d:response>
+    <d:href>&xxe;</d:href>
+    <d:propstat><d:prop>
+      <d:displayname>leak.txt</d:displayname>
+      <d:resourcetype/>
+    </d:prop></d:propstat>
+  </d:response>
+</d:multistatus>
+"""
+        assertTrue(
+            WebDavClient.parseMultistatus(xml, "https://cloud.example.com/Music").isEmpty(),
+        )
+    }
+
+    @Test
+    fun parseMultistatusSkipsCrossOriginHrefsButKeepsValidEntries() {
+        val xml = """<?xml version="1.0"?>
+<d:multistatus xmlns:d="DAV:">
+  <d:response>
+    <d:href>https://attacker.example/steal.mp3</d:href>
+    <d:propstat><d:prop>
+      <d:displayname>steal.mp3</d:displayname>
+      <d:resourcetype/>
+    </d:prop></d:propstat>
+  </d:response>
+  <d:response>
+    <d:href>/Music/song.mp3</d:href>
+    <d:propstat><d:prop>
+      <d:displayname>song.mp3</d:displayname>
+      <d:resourcetype/>
+    </d:prop></d:propstat>
+  </d:response>
+</d:multistatus>
+"""
+        val entries = WebDavClient.parseMultistatus(xml, "https://cloud.example.com/Music")
+        assertEquals(1, entries.size)
+        assertEquals("https://cloud.example.com/Music/song.mp3", entries.single().url)
+    }
+
+    @Test
+    fun rejectsWebDavUrlsWithUserInfoOrMalformedAuthority() {
+        assertFalse(WebDavConfig.isConfigured("https://user:pass@cloud.example.com/Music"))
+        assertFalse(WebDavConfig.isConfigured("https://cloud.example.com:99999/Music"))
+        assertFalse(WebDavConfig.isConfigured("javascript:alert(1)"))
+        assertFalse(WebDavConfig.isConfigured("https://cloud.example.com/Music?token=abc"))
+        assertFalse(WebDavConfig.isConfigured("https://cloud.example.com/Music#fragment"))
+        assertTrue(WebDavConfig.isConfigured("https://cloud.example.com:8443/Music"))
+    }
+
+    @Test
+    fun resolvesRelativeHrefsOnlyWithinTheConfiguredOrigin() {
         assertEquals(
             "https://cloud.example.com/remote.php/dav/files/user/Music/a.mp3",
             WebDavClient.resolveHref(
@@ -119,12 +175,74 @@ class WebDavTest {
             ),
         )
         assertEquals(
-            "https://other.example.com/a.mp3",
+            "https://cloud.example.com/remote.php/dav/files/user/Music/a.mp3",
             WebDavClient.resolveHref(
-                "https://cloud.example.com/music",
-                "https://other.example.com/a.mp3",
+                "https://cloud.example.com/remote.php/dav/files/user/Music",
+                "a.mp3",
             ),
         )
+        assertEquals(
+            "https://cloud.example.com/music/Album/cover.jpg",
+            WebDavClient.resolveHref(
+                "https://cloud.example.com/music",
+                "https://cloud.example.com/music/Album/cover.jpg",
+            ),
+        )
+    }
+
+    @Test
+    fun rejectsEncodedPathTraversalAndEscapedFolderBoundaries() {
+        listOf(
+            "https://cloud.example.com/api/private.mp3",
+            "https://cloud.example.com/music/%2e%2e/api/private.mp3",
+            "https://cloud.example.com/music/%2E%2E%2Fapi/private.mp3",
+            "https://cloud.example.com/music/%2f%2fattacker/private.mp3",
+            "https://cloud.example.com/music/%5c%5cattacker/private.mp3",
+            "https://cloud.example.com/music/%00/private.mp3",
+        ).forEach { href ->
+            try {
+                WebDavClient.resolveHref("https://cloud.example.com/music", href)
+                throw AssertionError("Path outside the configured WebDAV root was accepted: $href")
+            } catch (_: IllegalArgumentException) {
+                // Expected: credentials are bound to the decoded root path.
+            }
+        }
+    }
+
+    @Test
+    fun webDavAuthDoesNotAuthorizeEncodedTraversalWithinSameOrigin() {
+        WebDavAuth.update("https://cloud.example.com/music", "user", "pass")
+        try {
+            assertEquals(
+                "Basic dXNlcjpwYXNz",
+                WebDavAuth.authHeader,
+            )
+            assertFalse(WebDavAuth.shouldAuthorize("https://cloud.example.com/music/%2e%2e/admin"))
+            assertFalse(WebDavAuth.shouldAuthorize("https://cloud.example.com/music/%2F%2Fadmin"))
+            assertFalse(WebDavAuth.shouldAuthorize("https://cloud.example.com/music/%5c%5cadmin"))
+            assertTrue(WebDavAuth.shouldAuthorize("https://cloud.example.com/music/Album/song.mp3"))
+        } finally {
+            WebDavAuth.update("", "", "")
+        }
+    }
+
+    @Test
+    fun rejectsCrossOriginCredentialsAndDowngradeHrefs() {
+        listOf(
+            "https://other.example.com/a.mp3",
+            "https://cloud.example.com:8443/a.mp3",
+            "http://cloud.example.com/a.mp3",
+            "//other.example.com/a.mp3",
+            "https://user:pass@cloud.example.com/a.mp3",
+            "javascript:alert(1)",
+        ).forEach { href ->
+            try {
+                WebDavClient.resolveHref("https://cloud.example.com/music", href)
+                throw AssertionError("Unsafe WebDAV href was accepted: $href")
+            } catch (_: IllegalArgumentException) {
+                // Expected: server-provided resources must stay on the configured origin.
+            }
+        }
     }
 
     @Test
@@ -133,17 +251,19 @@ class WebDavTest {
         try {
             assertEquals(
                 "Basic dXNlcjpwYXNz",
-                WebDavCoilAuth.authHeaderFor("https://cloud.example.com/Music/Album/cover.jpg"),
+                WebDavCoilAuth.authHeaderFor("https://cloud.example.com/music/Album/cover.jpg"),
             )
             // Anything else passes through untouched.
             assertNull(WebDavCoilAuth.authHeaderFor("https://other.example.com/cover.jpg"))
+            assertNull(WebDavCoilAuth.authHeaderFor("https://cloud.example.com:8443/cover.jpg"))
+            assertNull(WebDavCoilAuth.authHeaderFor("http://cloud.example.com/cover.jpg"))
             assertNull(WebDavCoilAuth.authHeaderFor("not a url"))
             assertNull(WebDavCoilAuth.authHeaderFor(null))
             assertNull(WebDavCoilAuth.authHeaderFor(42))
             // A request carrying its own credential is never overridden.
             assertNull(
                 WebDavCoilAuth.authHeaderFor(
-                    "https://cloud.example.com/Music/Album/cover.jpg",
+                    "https://cloud.example.com/music/Album/cover.jpg",
                     NetworkHeaders.Builder().set("Authorization", "Bearer x").build(),
                 ),
             )
@@ -155,17 +275,20 @@ class WebDavTest {
     @Test
     fun coilAuth_staysQuietWhenUnconfigured() {
         WebDavAuth.update("", "", "")
-        assertNull(WebDavCoilAuth.authHeaderFor("https://cloud.example.com/Music/Album/cover.jpg"))
+        assertNull(WebDavCoilAuth.authHeaderFor("https://cloud.example.com/music/Album/cover.jpg"))
     }
 
     @Test
-    fun authorizesOnlyConfiguredHost() {
+    fun authorizesOnlyTheConfiguredOrigin() {
         WebDavAuth.update("https://cloud.example.com/music", "user", "pass")
-        assertTrue(WebDavAuth.shouldAuthorize("cloud.example.com"))
-        assertFalse(WebDavAuth.shouldAuthorize("other.example.com"))
+        assertTrue(WebDavAuth.shouldAuthorize("https://cloud.example.com/music/a.mp3"))
+        assertTrue(WebDavAuth.shouldAuthorize("https://cloud.example.com:443/music/a.mp3"))
+        assertFalse(WebDavAuth.shouldAuthorize("http://cloud.example.com/Music/a.mp3"))
+        assertFalse(WebDavAuth.shouldAuthorize("https://cloud.example.com:8443/Music/a.mp3"))
+        assertFalse(WebDavAuth.shouldAuthorize("https://other.example.com/Music/a.mp3"))
         assertNotNull(WebDavAuth.authHeader)
         WebDavAuth.update("", "", "")
-        assertFalse(WebDavAuth.shouldAuthorize("cloud.example.com"))
+        assertFalse(WebDavAuth.shouldAuthorize("https://cloud.example.com/music/a.mp3"))
     }
 
     @Test
@@ -298,7 +421,7 @@ class WebDavTest {
         )
         val siblings = listOf(img("IMG_1234.jpg"), img("cover.jpg"), img("back.jpg"))
         assertEquals(
-            "https://cloud.example.com/Music/Album/cover.jpg",
+            "https://cloud.example.com/music/Album/cover.jpg",
             WebDavRepository.artworkFor("https://cloud.example.com/Music/Album/song.mp3", siblings),
         )
     }

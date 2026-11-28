@@ -6,17 +6,15 @@ import android.content.SharedPreferences
 /**
  * Encrypted-at-rest storage for credentials.
  *
- * Two live here: the YouTube Music session cookie, and — if the user turns on
- * the Discord integration — that account's own bearer token. Neither is a
- * password: the Google one is typed into accounts.google.com inside a WebView,
- * and the Discord one is read out of a completed login session. But both grant
- * full access to their account, so they don't go in the plain prefs the
- * scrobbler tokens use.
+ * Account cookies, account bearer tokens, remote-storage passwords, and
+ * provider credentials (Last.fm, ListenBrainz, Spotify Canvas and lyric
+ * providers) live here. These values can authorize account access or paid/
+ * private API usage, so none belong in ordinary app preferences.
  *
  * A restored file whose keyset this device can't unwrap is recreated, and a
- * Keystore that can't be used at all degrades to plain prefs rather than
- * crashing on launch; see [EncryptedPrefs]. Kept out of backups for the first
- * reason, in backup_rules.xml and data_extraction_rules.xml.
+ * Keystore that can't be used at all degrades to a plain fallback rather than
+ * crashing on launch; see [EncryptedPrefs]. The encrypted and fallback files
+ * are excluded from Android Auto Backup and device transfer.
  */
 class AuthStore(context: Context) {
 
@@ -120,6 +118,60 @@ class AuthStore(context: Context) {
     var smbPassword: String?
         get() = prefs.getString(KEY_SMB_PASSWORD, null)
         set(value) = prefs.edit().putString(KEY_SMB_PASSWORD, value).apply()
+
+    /** Provider credentials; never mirrored into the unencrypted settings file. */
+    var paxSenixApiKey: String?
+        get() = prefs.getString(KEY_PAXSENIX_API_KEY, null)
+        set(value) = prefs.edit().putString(KEY_PAXSENIX_API_KEY, value).apply()
+
+    var lastfmSessionKey: String?
+        get() = prefs.getString(KEY_LASTFM_SESSION_KEY, null)
+        set(value) = prefs.edit().putString(KEY_LASTFM_SESSION_KEY, value).apply()
+
+    var lastfmApiKey: String?
+        get() = prefs.getString(KEY_LASTFM_API_KEY, null)
+        set(value) = prefs.edit().putString(KEY_LASTFM_API_KEY, value).apply()
+
+    var lastfmSecret: String?
+        get() = prefs.getString(KEY_LASTFM_SECRET, null)
+        set(value) = prefs.edit().putString(KEY_LASTFM_SECRET, value).apply()
+
+    var listenBrainzToken: String?
+        get() = prefs.getString(KEY_LISTENBRAINZ_TOKEN, null)
+        set(value) = prefs.edit().putString(KEY_LISTENBRAINZ_TOKEN, value).apply()
+
+    var spotifySpdcToken: String?
+        get() = prefs.getString(KEY_SPOTIFY_SPDC_TOKEN, null)
+        set(value) = prefs.edit().putString(KEY_SPOTIFY_SPDC_TOKEN, value).apply()
+
+    /**
+     * Migrate old provider keys in one durable write. The encrypted store wins
+     * whenever it already has a non-empty value; the caller may delete legacy
+     * plaintext keys only when this commit succeeds.
+     */
+    internal fun migrateProviderCredentials(
+        paxSenixApiKey: String?,
+        lastfmSessionKey: String?,
+        lastfmApiKey: String?,
+        lastfmSecret: String?,
+        listenBrainzToken: String?,
+        spotifySpdcToken: String?,
+    ): Boolean {
+        val edit = prefs.edit()
+        var changed = false
+        fun putIfMissing(key: String, value: String?) {
+            if (value.isNullOrEmpty() || !prefs.getString(key, null).isNullOrEmpty()) return
+            edit.putString(key, value)
+            changed = true
+        }
+        putIfMissing(KEY_PAXSENIX_API_KEY, paxSenixApiKey)
+        putIfMissing(KEY_LASTFM_SESSION_KEY, lastfmSessionKey)
+        putIfMissing(KEY_LASTFM_API_KEY, lastfmApiKey)
+        putIfMissing(KEY_LASTFM_SECRET, lastfmSecret)
+        putIfMissing(KEY_LISTENBRAINZ_TOKEN, listenBrainzToken)
+        putIfMissing(KEY_SPOTIFY_SPDC_TOKEN, spotifySpdcToken)
+        return !changed || edit.commit()
+    }
 
     /**
      * The channel the listener chose to act as, if they chose one.
@@ -230,5 +282,11 @@ class AuthStore(context: Context) {
         private const val KEY_DISCORD_TOKEN = "discord_token"
         private const val KEY_WEBDAV_PASSWORD = "webdav_password"
         private const val KEY_SMB_PASSWORD = "smb_password"
+        private const val KEY_PAXSENIX_API_KEY = "paxsenix_api_key"
+        private const val KEY_LASTFM_SESSION_KEY = "lastfm_session_key"
+        private const val KEY_LASTFM_API_KEY = "lastfm_api_key"
+        private const val KEY_LASTFM_SECRET = "lastfm_secret"
+        private const val KEY_LISTENBRAINZ_TOKEN = "listenbrainz_token"
+        private const val KEY_SPOTIFY_SPDC_TOKEN = "spotify_spdc_token"
     }
 }

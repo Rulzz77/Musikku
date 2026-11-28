@@ -183,6 +183,57 @@ enum class SongSort {
  * same flows and applies changes to the live ExoPlayer instance immediately —
  * no restart, no rebinding.
  */
+internal fun normalizeCrossfadeSeconds(value: Int): Int = value.coerceIn(0, 12)
+
+internal fun normalizeEqualizerBalance(value: Float): Float =
+    value.takeIf(Float::isFinite)?.coerceIn(-1f, 1f) ?: 0f
+
+internal fun normalizeEqualizerBands(values: List<Float>, count: Int, rangeDb: Float): List<Float> =
+    List(count) { index ->
+        values.getOrElse(index) { 0f }
+            .takeIf(Float::isFinite)
+            ?.coerceIn(-rangeDb, rangeDb)
+            ?: 0f
+    }
+
+internal fun normalizeScrobbleMinDuration(value: Int): Int = value.coerceIn(15, 120)
+
+internal fun normalizeScrobbleDelayPercent(value: Float): Float =
+    value.takeIf(Float::isFinite)?.coerceIn(0.1f, 1f) ?: 0.5f
+
+internal fun normalizeScrobbleDelaySeconds(value: Int): Int = value.coerceIn(30, 300)
+
+internal fun normalizeTranslationLanguage(value: String): String {
+    val candidate = value.trim()
+    if (candidate.isEmpty()) return ""
+    return com.music.bitchord.data.lyrics.TRANSLATION_LANGUAGES
+        .firstOrNull { it.code.equals(candidate, ignoreCase = true) }
+        ?.code
+        .orEmpty()
+}
+
+internal fun webDavCredentialBindingChanged(
+    oldUrl: String?,
+    oldUsername: String?,
+    newUrl: String?,
+    newUsername: String?,
+): Boolean =
+    com.music.bitchord.data.webdav.WebDavConfig.credentialBindingKey(oldUrl.orEmpty()) !=
+        com.music.bitchord.data.webdav.WebDavConfig.credentialBindingKey(newUrl.orEmpty()) ||
+        oldUsername.orEmpty().trim() != newUsername.orEmpty().trim()
+
+internal fun smbCredentialBindingChanged(
+    oldHost: String?,
+    oldUsername: String?,
+    newHost: String?,
+    newUsername: String?,
+): Boolean {
+    val oldAddress = com.music.bitchord.data.smb.SmbConfig.splitHostPort(oldHost.orEmpty())
+    val newAddress = com.music.bitchord.data.smb.SmbConfig.splitHostPort(newHost.orEmpty())
+    return oldAddress != newAddress ||
+        oldUsername.orEmpty().trim() != newUsername.orEmpty().trim()
+}
+
 object AppSettings {
 
     private lateinit var prefs: SharedPreferences
@@ -961,6 +1012,7 @@ object AppSettings {
     fun init(context: Context, authStore: AuthStore) {
         prefs = context.getSharedPreferences("bitchord_settings", Context.MODE_PRIVATE)
         this.authStore = authStore
+        migrateLegacyCredentials()
         com.music.bitchord.data.spotify.LocalPlaylistStore.init(context)
         com.music.bitchord.data.OfflinePlaylists.init(
             context,
@@ -986,6 +1038,43 @@ object AppSettings {
         readAll()
     }
 
+    /**
+     * Move credentials written by older releases out of the plain settings
+     * file. Do not delete the legacy copy until the encrypted store confirms a
+     * durable commit; a failed Keystore write must never log the user out.
+     */
+    private fun migrateLegacyCredentials() {
+        val paxSenix = prefs.getString(KEY_PAXSENIX_API_KEY, null)
+        val lastfmSession = prefs.getString(KEY_LASTFM_SESSION_KEY, null)
+        val lastfmApiKeyValue = prefs.getString(KEY_LASTFM_API_KEY, null)
+        val lastfmSecretValue = prefs.getString(KEY_LASTFM_SECRET, null)
+        val listenBrainz = prefs.getString(KEY_LISTENBRAINZ_TOKEN, null)
+        val spotifySpdc = prefs.getString(KEY_SPOTIFY_SPDC_TOKEN, null)
+
+        if (listOf(paxSenix, lastfmSession, lastfmApiKeyValue, lastfmSecretValue, listenBrainz, spotifySpdc).all { it.isNullOrEmpty() }) {
+            return
+        }
+
+        val migrated = authStore.migrateProviderCredentials(
+            paxSenixApiKey = paxSenix,
+            lastfmSessionKey = lastfmSession,
+            lastfmApiKey = lastfmApiKeyValue,
+            lastfmSecret = lastfmSecretValue,
+            listenBrainzToken = listenBrainz,
+            spotifySpdcToken = spotifySpdc,
+        )
+        if (migrated) {
+            prefs.edit()
+                .remove(KEY_PAXSENIX_API_KEY)
+                .remove(KEY_LASTFM_SESSION_KEY)
+                .remove(KEY_LASTFM_API_KEY)
+                .remove(KEY_LASTFM_SECRET)
+                .remove(KEY_LISTENBRAINZ_TOKEN)
+                .remove(KEY_SPOTIFY_SPDC_TOKEN)
+                .commit()
+        }
+    }
+
     private fun readAll() {
         migrateSingleQuality()
         audioQualityWifi.value = readQuality(KEY_QUALITY_WIFI)
@@ -1000,7 +1089,7 @@ object AppSettings {
         exportDownloads.value = prefs.getBoolean(KEY_EXPORT_DOWNLOADS, false)
         syncDownloadedPlaylists.value = prefs.getBoolean(KEY_SYNC_DOWNLOADED_PLAYLISTS, false)
         downloadLikedSongs.value = prefs.getBoolean(KEY_DOWNLOAD_LIKED_SONGS, false)
-        crossfadeSeconds.value = prefs.getInt(KEY_CROSSFADE, 0)
+        crossfadeSeconds.value = normalizeCrossfadeSeconds(prefs.getInt(KEY_CROSSFADE, 0))
         smartFadeEnabled.value = prefs.getBoolean(KEY_SMART_FADE, false)
         _autoMixArtwork.value = AutoMixArtworkPreferences(
             artTransition = prefs.getBoolean(KEY_AUTOMIX_ART_TRANSITION, false),
@@ -1037,10 +1126,12 @@ object AppSettings {
         equalizerToneX.value = prefs.getInt(KEY_EQ_TONE_X, 0).coerceIn(-EqLayout.TONE_STEPS, EqLayout.TONE_STEPS)
         equalizerToneY.value = prefs.getInt(KEY_EQ_TONE_Y, 0).coerceIn(-EqLayout.TONE_STEPS, EqLayout.TONE_STEPS)
         equalizerFocused.value = prefs.getBoolean(KEY_EQ_FOCUSED, false)
-        equalizerBalance.value = prefs.getFloat(KEY_EQ_BALANCE, 0f).coerceIn(-1f, 1f)
+        equalizerBalance.value = normalizeEqualizerBalance(prefs.getFloat(KEY_EQ_BALANCE, 0f))
         equalizerBands.value = readEqualizerBands()
         equalizerPreset.value = EqualizerPreset.matching(equalizerBands.value)
         playbackSpeed.value = prefs.getFloat(KEY_SPEED, 1.0f)
+            .takeIf { it.isFinite() && it in MIN_PLAYBACK_SPEED..MAX_PLAYBACK_SPEED }
+            ?: 1.0f
         themeMode.value = runCatching {
             ThemeMode.valueOf(prefs.getString(KEY_THEME, null) ?: "DARK")
         }.getOrDefault(ThemeMode.DARK)
@@ -1050,6 +1141,8 @@ object AppSettings {
         autoplay.value = prefs.getBoolean(KEY_AUTOPLAY, true)
         shuffleEnabled.value = prefs.getBoolean(KEY_SHUFFLE_ENABLED, false)
         repeatMode.value = prefs.getInt(KEY_REPEAT_MODE, Player.REPEAT_MODE_OFF)
+            .takeIf { it in Player.REPEAT_MODE_OFF..Player.REPEAT_MODE_ALL }
+            ?: Player.REPEAT_MODE_OFF
         showNerdStats.value = prefs.getBoolean(KEY_NERD_STATS, false)
         showListenTogetherButton.value = prefs.getBoolean(KEY_LISTEN_TOGETHER_BUTTON, false)
         reduceAnimation.value = prefs.getBoolean(KEY_REDUCE_ANIMATION, false)
@@ -1100,7 +1193,11 @@ object AppSettings {
         ).coerceIn(0, 40)
         lyricsOffsetMs.value = prefs.getInt(KEY_LYRICS_OFFSET_MS, 0)
             .coerceIn(MIN_LYRICS_OFFSET_MS, MAX_LYRICS_OFFSET_MS)
-        translationLanguage.value = prefs.getString(KEY_TRANSLATION_LANGUAGE, "").orEmpty()
+        val storedTranslationLanguage = prefs.getString(KEY_TRANSLATION_LANGUAGE, "").orEmpty()
+        translationLanguage.value = normalizeTranslationLanguage(storedTranslationLanguage)
+        if (translationLanguage.value != storedTranslationLanguage) {
+            prefs.edit().putString(KEY_TRANSLATION_LANGUAGE, translationLanguage.value).apply()
+        }
         if (highPerformanceMode.value) {
             reduceAnimation.value = false
             reduceDynamicBlur.value = false
@@ -1129,26 +1226,38 @@ object AppSettings {
         lyricsSources.value = readLyricsSources()
         lyricsSourceOrder.value = readLyricsSourceOrder()
         prioritizeSyllableSync.value = prefs.getBoolean(KEY_PRIORITIZE_SYLLABLE_SYNC, false)
-        paxSenixApiKey.value = prefs.getString(KEY_PAXSENIX_API_KEY, "").orEmpty()
+        paxSenixApiKey.value = authStore.paxSenixApiKey.orEmpty()
         com.music.bitchord.data.lyrics.PaxSenix.setApiKey(paxSenixApiKey.value)
         audioCacheLimitBytes.value = clampCacheLimit(prefs.getLong(KEY_CACHE_LIMIT, DEFAULT_CACHE_LIMIT_BYTES))
         showCacheFolder.value = prefs.getBoolean(KEY_SHOW_CACHE_FOLDER, false)
         lastfmEnabled.value = prefs.getBoolean(KEY_LASTFM_ENABLED, false)
         lastfmUsername.value = prefs.getString(KEY_LASTFM_USERNAME, "").orEmpty()
-        lastfmSessionKey.value = prefs.getString(KEY_LASTFM_SESSION_KEY, "").orEmpty()
-        lastfmApiKey.value = prefs.getString(KEY_LASTFM_API_KEY, "").orEmpty().ifBlank { BuildConfig.LASTFM_API_KEY }
-        lastfmSecret.value = prefs.getString(KEY_LASTFM_SECRET, "").orEmpty().ifBlank { BuildConfig.LASTFM_SECRET }
-        lastfmEndpoint.value = prefs.getString(KEY_LASTFM_ENDPOINT, "").orEmpty()
+        lastfmSessionKey.value = authStore.lastfmSessionKey.orEmpty()
+        lastfmApiKey.value = authStore.lastfmApiKey.orEmpty().ifBlank { BuildConfig.LASTFM_API_KEY }
+        lastfmSecret.value = authStore.lastfmSecret.orEmpty().ifBlank { BuildConfig.LASTFM_SECRET }
+        val storedLastfmEndpoint = prefs.getString(KEY_LASTFM_ENDPOINT, "").orEmpty()
+        lastfmEndpoint.value = normalizeLastfmEndpointOrBlank(storedLastfmEndpoint)
+        if (lastfmEndpoint.value != storedLastfmEndpoint) {
+            // Purge old/custom or malformed destinations from disk as well as
+            // from the live flow so a later backup cannot re-export them.
+            prefs.edit().putString(KEY_LASTFM_ENDPOINT, lastfmEndpoint.value).apply()
+        }
         lastfmScrobbleEnabled.value = prefs.getBoolean(KEY_LASTFM_SCROBBLE_ENABLED, false)
         lastfmNowPlaying.value = prefs.getBoolean(KEY_LASTFM_NOW_PLAYING, false) && lastfmScrobbleEnabled.value
         lastfmPrimaryArtistOnly.value = prefs.getBoolean(KEY_LASTFM_PRIMARY_ARTIST_ONLY, false)
-        scrobbleMinDuration.value = prefs.getInt(KEY_SCROBBLE_MIN_DURATION, 30)
-        scrobbleDelayPercent.value = prefs.getFloat(KEY_SCROBBLE_DELAY_PERCENT, 0.5f)
-        scrobbleDelaySeconds.value = prefs.getInt(KEY_SCROBBLE_DELAY_SECONDS, 180)
+        scrobbleMinDuration.value = normalizeScrobbleMinDuration(
+            prefs.getInt(KEY_SCROBBLE_MIN_DURATION, 30),
+        )
+        scrobbleDelayPercent.value = normalizeScrobbleDelayPercent(
+            prefs.getFloat(KEY_SCROBBLE_DELAY_PERCENT, 0.5f),
+        )
+        scrobbleDelaySeconds.value = normalizeScrobbleDelaySeconds(
+            prefs.getInt(KEY_SCROBBLE_DELAY_SECONDS, 180),
+        )
         listenBrainzEnabled.value = prefs.getBoolean(KEY_LISTENBRAINZ_ENABLED, false)
-        listenBrainzToken.value = prefs.getString(KEY_LISTENBRAINZ_TOKEN, "").orEmpty()
+        listenBrainzToken.value = authStore.listenBrainzToken.orEmpty()
         listenBrainzPrimaryArtistOnly.value = prefs.getBoolean(KEY_LISTENBRAINZ_PRIMARY_ARTIST_ONLY, false)
-        spotifySpdcToken.value = prefs.getString(KEY_SPOTIFY_SPDC_TOKEN, "").orEmpty()
+        spotifySpdcToken.value = authStore.spotifySpdcToken.orEmpty()
         replayGenres.value = prefs.getBoolean(KEY_REPLAY_GENRES, true)
         filterNonMusicAudio.value = prefs.getBoolean(KEY_FILTER_NON_MUSIC_AUDIO, true)
         localMusicSort.value = readLocalMusicSort(KEY_LOCAL_MUSIC_SORT)
@@ -1306,8 +1415,10 @@ object AppSettings {
     }
 
     fun setRepeatMode(value: Int) {
-        repeatMode.value = value
-        prefs.edit().putInt(KEY_REPEAT_MODE, value).apply()
+        val safeValue = value.takeIf { it in Player.REPEAT_MODE_OFF..Player.REPEAT_MODE_ALL }
+            ?: Player.REPEAT_MODE_OFF
+        repeatMode.value = safeValue
+        prefs.edit().putInt(KEY_REPEAT_MODE, safeValue).apply()
     }
 
     fun setAudioQualityWifi(value: AudioQuality) {
@@ -1340,8 +1451,9 @@ object AppSettings {
     }
 
     fun setCrossfadeSeconds(value: Int) {
-        crossfadeSeconds.value = value
-        prefs.edit().putInt(KEY_CROSSFADE, value).apply()
+        val normalized = normalizeCrossfadeSeconds(value)
+        crossfadeSeconds.value = normalized
+        prefs.edit().putInt(KEY_CROSSFADE, normalized).apply()
     }
 
     fun setSmartFadeEnabled(value: Boolean) {
@@ -1436,7 +1548,7 @@ object AppSettings {
     }
 
     fun setEqualizerBalance(value: Float) {
-        val clamped = value.coerceIn(-1f, 1f)
+        val clamped = normalizeEqualizerBalance(value)
         equalizerBalance.value = clamped
         prefs.edit().putFloat(KEY_EQ_BALANCE, clamped).apply()
     }
@@ -1449,9 +1561,11 @@ object AppSettings {
      * one string is one thing to keep in step rather than seven.
      */
     fun setEqualizerBands(values: List<Float>) {
-        val clamped = List(EqLayout.MANUAL_COUNT) {
-            values.getOrElse(it) { 0f }.coerceIn(-EqLayout.MANUAL_RANGE_DB, EqLayout.MANUAL_RANGE_DB)
-        }
+        val clamped = normalizeEqualizerBands(
+            values,
+            count = EqLayout.MANUAL_COUNT,
+            rangeDb = EqLayout.MANUAL_RANGE_DB,
+        )
         equalizerBands.value = clamped
         equalizerPreset.value = EqualizerPreset.matching(clamped)
         prefs.edit().putString(KEY_EQ_BANDS, clamped.joinToString(",")).apply()
@@ -1466,18 +1580,21 @@ object AppSettings {
     private fun readEqualizerBands(): List<Float> {
         val stored = prefs.getString(KEY_EQ_BANDS, null)
             ?.split(",")
-            ?.mapNotNull { it.trim().toFloatOrNull() }
+            ?.mapNotNull { token -> token.trim().toFloatOrNull()?.takeIf(Float::isFinite) }
             .orEmpty()
         // Padded rather than rejected: a backup written by a build with a
         // different number of bands should restore the ones it does have.
-        return List(EqLayout.MANUAL_COUNT) {
-            stored.getOrElse(it) { 0f }.coerceIn(-EqLayout.MANUAL_RANGE_DB, EqLayout.MANUAL_RANGE_DB)
-        }
+        return normalizeEqualizerBands(
+            stored,
+            count = EqLayout.MANUAL_COUNT,
+            rangeDb = EqLayout.MANUAL_RANGE_DB,
+        )
     }
 
     fun setPlaybackSpeed(value: Float) {
-        playbackSpeed.value = value
-        prefs.edit().putFloat(KEY_SPEED, value).apply()
+        val safeValue = value.takeIf { it.isFinite() && it in MIN_PLAYBACK_SPEED..MAX_PLAYBACK_SPEED } ?: 1.0f
+        playbackSpeed.value = safeValue
+        prefs.edit().putFloat(KEY_SPEED, safeValue).apply()
     }
 
     fun setShowNerdStats(value: Boolean) {
@@ -1669,8 +1786,9 @@ object AppSettings {
 
     /** Blank restores "follow the app language"; see [translationLanguage]. */
     fun setTranslationLanguage(value: String) {
-        translationLanguage.value = value
-        prefs.edit().putString(KEY_TRANSLATION_LANGUAGE, value).apply()
+        val normalized = normalizeTranslationLanguage(value)
+        translationLanguage.value = normalized
+        prefs.edit().putString(KEY_TRANSLATION_LANGUAGE, normalized).apply()
     }
 
     fun setSyncedLyrics(value: Boolean) {
@@ -1761,7 +1879,8 @@ object AppSettings {
     fun setPaxSenixApiKey(value: String) {
         val normalized = com.music.bitchord.data.lyrics.normalizePaxSenixApiKey(value)
         paxSenixApiKey.value = normalized
-        prefs.edit().putString(KEY_PAXSENIX_API_KEY, normalized).apply()
+        authStore.paxSenixApiKey = normalized.ifEmpty { null }
+        prefs.edit().remove(KEY_PAXSENIX_API_KEY).apply()
         com.music.bitchord.data.lyrics.PaxSenix.setApiKey(normalized)
     }
 
@@ -1863,27 +1982,37 @@ object AppSettings {
 
     fun setLastfmSessionKey(value: String) {
         lastfmSessionKey.value = value
-        prefs.edit().putString(KEY_LASTFM_SESSION_KEY, value).apply()
+        authStore.lastfmSessionKey = value.ifEmpty { null }
+        prefs.edit().remove(KEY_LASTFM_SESSION_KEY).apply()
     }
 
     fun setLastfmApiKey(value: String) {
         lastfmApiKey.value = value
-        prefs.edit().putString(KEY_LASTFM_API_KEY, value).apply()
+        authStore.lastfmApiKey = value.ifEmpty { null }
+        prefs.edit().remove(KEY_LASTFM_API_KEY).apply()
     }
 
     fun setLastfmSecret(value: String) {
         lastfmSecret.value = value
-        prefs.edit().putString(KEY_LASTFM_SECRET, value).apply()
+        authStore.lastfmSecret = value.ifEmpty { null }
+        prefs.edit().remove(KEY_LASTFM_SECRET).apply()
     }
 
     fun setLastfmEndpoint(value: String) {
-        lastfmEndpoint.value = value
-        prefs.edit().putString(KEY_LASTFM_ENDPOINT, value).apply()
+        val normalized = normalizeLastfmEndpointOrBlank(value)
+        lastfmEndpoint.value = normalized
+        prefs.edit().putString(KEY_LASTFM_ENDPOINT, normalized).apply()
     }
+
+    private fun normalizeLastfmEndpointOrBlank(value: String): String =
+        if (value.isBlank()) "" else runCatching {
+            com.music.bitchord.data.scrobbling.LastFM.normalizeEndpoint(value)
+        }.getOrDefault("")
 
     fun setSpotifySpdcToken(value: String) {
         spotifySpdcToken.value = value
-        prefs.edit().putString(KEY_SPOTIFY_SPDC_TOKEN, value).apply()
+        authStore.spotifySpdcToken = value.ifEmpty { null }
+        prefs.edit().remove(KEY_SPOTIFY_SPDC_TOKEN).apply()
         SpotifyToken.invalidate()
     }
 
@@ -1958,18 +2087,21 @@ object AppSettings {
     }
 
     fun setScrobbleMinDuration(value: Int) {
-        scrobbleMinDuration.value = value
-        prefs.edit().putInt(KEY_SCROBBLE_MIN_DURATION, value).apply()
+        val normalized = normalizeScrobbleMinDuration(value)
+        scrobbleMinDuration.value = normalized
+        prefs.edit().putInt(KEY_SCROBBLE_MIN_DURATION, normalized).apply()
     }
 
     fun setScrobbleDelayPercent(value: Float) {
-        scrobbleDelayPercent.value = value
-        prefs.edit().putFloat(KEY_SCROBBLE_DELAY_PERCENT, value).apply()
+        val normalized = normalizeScrobbleDelayPercent(value)
+        scrobbleDelayPercent.value = normalized
+        prefs.edit().putFloat(KEY_SCROBBLE_DELAY_PERCENT, normalized).apply()
     }
 
     fun setScrobbleDelaySeconds(value: Int) {
-        scrobbleDelaySeconds.value = value
-        prefs.edit().putInt(KEY_SCROBBLE_DELAY_SECONDS, value).apply()
+        val normalized = normalizeScrobbleDelaySeconds(value)
+        scrobbleDelaySeconds.value = normalized
+        prefs.edit().putInt(KEY_SCROBBLE_DELAY_SECONDS, normalized).apply()
     }
 
     fun setListenBrainzEnabled(value: Boolean) {
@@ -1979,7 +2111,8 @@ object AppSettings {
 
     fun setListenBrainzToken(value: String) {
         listenBrainzToken.value = value
-        prefs.edit().putString(KEY_LISTENBRAINZ_TOKEN, value).apply()
+        authStore.listenBrainzToken = value.ifEmpty { null }
+        prefs.edit().remove(KEY_LISTENBRAINZ_TOKEN).apply()
     }
 
     fun setListenBrainzPrimaryArtistOnly(value: Boolean) {
@@ -2257,21 +2390,32 @@ object AppSettings {
     // ── Backup ──────────────────────────────────────────────────────────────
 
     /**
-     * Every stored preference, for an export.
-     *
-     * Read off the preference file wholesale rather than assembled from the
-     * flows above, so a setting added in a later build is in the backup the day
-     * it is added instead of the day somebody remembers to list it here. What is
-     * *left out* is therefore the part worth stating explicitly, and it is
-     * [SECRETS]: an export is a file the user is about to put in Drive or a
-     * chat, and a scrobbler session key or an API secret in it is a credential
-     * that has left the device in plain text. Signing back in after a restore is
-     * a minute; a leaked session key is not recoverable at all.
-     *
-     * The Discord token is not here for the same reason and one more: it never
-     * reaches this file. It lives in the encrypted store — see [AuthStore] — and
-     * so does the YouTube cookie, which means neither can be exported by
-     * accident.
+     * Validates values that have runtime constraints beyond their primitive
+     * type. Other keys retain their existing per-setting normalisation in
+     * [readAll]; unknown keys remain ignored by the settings readers.
+     */
+    fun isValidImportedPreference(key: String, value: Any?): Boolean = when (key) {
+        KEY_SPEED -> value is Float && value.isFinite() && value in MIN_PLAYBACK_SPEED..MAX_PLAYBACK_SPEED
+        KEY_REPEAT_MODE -> value is Int && value in Player.REPEAT_MODE_OFF..Player.REPEAT_MODE_ALL
+        KEY_CROSSFADE -> value is Int && value in 0..12
+        KEY_EQ_BALANCE -> value is Float && value.isFinite() && value in -1f..1f
+        KEY_SCROBBLE_MIN_DURATION -> value is Int && value in 15..120
+        KEY_SCROBBLE_DELAY_PERCENT -> value is Float && value.isFinite() && value in 0.1f..1f
+        KEY_SCROBBLE_DELAY_SECONDS -> value is Int && value in 30..300
+        KEY_TRANSLATION_LANGUAGE -> value is String && (
+            value.isBlank() || normalizeTranslationLanguage(value).equals(value, ignoreCase = true)
+        )
+        KEY_LASTFM_ENDPOINT -> value is String && (
+            value.isBlank() || runCatching {
+                com.music.bitchord.data.scrobbling.LastFM.normalizeEndpoint(value)
+            }.isSuccess
+        )
+        else -> true
+    }
+
+    /**
+     * Every stored preference, for an export. Credential keys are kept in
+     * [AuthStore] and excluded by [SECRETS] for compatibility with old backups.
      */
     fun exportPrefs(): Map<String, Any?> {
         if (!this::prefs.isInitialized) return emptyMap()
@@ -2290,9 +2434,47 @@ object AppSettings {
     fun importPrefs(values: Map<String, Any?>) {
         if (!this::prefs.isInitialized) return
         val kept = prefs.all.filterKeys { it in SECRETS || it in DEVICE_LOCAL }
+        val incoming = values.filterKeys { it !in SECRETS && it !in DEVICE_LOCAL }
+        require(incoming.all { (key, value) -> isValidImportedPreference(key, value) }) {
+            "Imported settings contain an out-of-range player value"
+        }
+
+        // Backup files deliberately exclude remote-storage passwords, but they
+        // do contain endpoint and username settings. Never combine a password
+        // that was saved on this phone with a different endpoint from an
+        // untrusted backup: WebDAV would send Basic auth and SMB would perform
+        // an NTLM challenge against the replacement server.
+        val oldWebDavUrl = prefs.getString(KEY_WEBDAV_URL, "").orEmpty()
+        val oldWebDavUsername = prefs.getString(KEY_WEBDAV_USERNAME, "").orEmpty()
+        val newWebDavUrl = incoming[KEY_WEBDAV_URL] as? String ?: ""
+        val newWebDavUsername = incoming[KEY_WEBDAV_USERNAME] as? String ?: ""
+        val clearWebDavPassword = webDavCredentialBindingChanged(
+            oldWebDavUrl,
+            oldWebDavUsername,
+            newWebDavUrl,
+            newWebDavUsername,
+        )
+
+        val oldSmbHost = prefs.getString(KEY_SMB_HOST, "").orEmpty()
+        val oldSmbUsername = prefs.getString(KEY_SMB_USERNAME, "").orEmpty()
+        val newSmbHost = incoming[KEY_SMB_HOST] as? String ?: ""
+        val newSmbUsername = incoming[KEY_SMB_USERNAME] as? String ?: ""
+        val clearSmbPassword = smbCredentialBindingChanged(
+            oldSmbHost,
+            oldSmbUsername,
+            newSmbHost,
+            newSmbUsername,
+        )
+
+        if (clearWebDavPassword && !authStore.webdavPassword.isNullOrEmpty()) {
+            authStore.webdavPassword = null
+        }
+        if (clearSmbPassword && !authStore.smbPassword.isNullOrEmpty()) {
+            authStore.smbPassword = null
+        }
+
         prefs.edit().apply {
             clear()
-            val incoming = values.filterKeys { it !in SECRETS && it !in DEVICE_LOCAL }
             (kept + incoming).forEach { (key, value) ->
                 when (value) {
                     is Boolean -> putBoolean(key, value)
@@ -2337,6 +2519,9 @@ object AppSettings {
         "downloaded_tracks_metadata",
         "downloaded_collections",
         KEY_LOCAL_MUSIC_FOLDER_URI,
+        // Custom integration endpoint is a device-specific network trust
+        // decision; a backup must not silently enable calls to an arbitrary host.
+        KEY_SIGNATURE_API_URL,
         KEY_LAST_VERSION_CODE,
         KEY_ONBOARDING_COMPLETE,
     )
@@ -2350,6 +2535,9 @@ object AppSettings {
     const val MIN_LYRICS_OFFSET_MS = -5_000
     const val MAX_LYRICS_OFFSET_MS = 5_000
 
+    const val MIN_PLAYBACK_SPEED = 0.25f
+    const val MAX_PLAYBACK_SPEED = 4.0f
+
     const val DEFAULT_UPGRADE_LENGTH_SLACK_SECONDS = 5
     const val MIN_UPGRADE_LENGTH_SLACK_SECONDS = 0
     const val MAX_UPGRADE_LENGTH_SLACK_SECONDS = 10
@@ -2360,7 +2548,7 @@ object AppSettings {
         value.takeIf { it in 50..240 } ?: DEFAULT_PERFORMANCE_REFRESH_RATE
 
     fun normalizeSignatureApiUrl(raw: String): String =
-        raw.trim().trimEnd('/').take(500)
+        raw.trim().takeIf { it.length <= 500 }?.trimEnd('/').orEmpty()
 
     private const val KEY_QUALITY_LEGACY = "audio_quality"
     private const val KEY_QUALITY_WIFI = "audio_quality_wifi"

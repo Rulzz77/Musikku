@@ -193,4 +193,15 @@ class BackupFormatTest {
         assertEquals(true, Backup.PrefValue.of(true)?.decoded())
         assertTrue(!Backup.PrefValue("float", "NaN").isValid())
     }
+
+    @Test
+    fun `player settings reject out of range values during restore`() {
+        assertTrue(com.music.bitchord.data.settings.AppSettings.isValidImportedPreference("playback_speed", 1.25f))
+        assertTrue(!com.music.bitchord.data.settings.AppSettings.isValidImportedPreference("playback_speed", Float.NaN))
+        assertTrue(!com.music.bitchord.data.settings.AppSettings.isValidImportedPreference("playback_speed", 0f))
+        assertTrue(!com.music.bitchord.data.settings.AppSettings.isValidImportedPreference("playback_speed", 9f))
+        assertTrue(com.music.bitchord.data.settings.AppSettings.isValidImportedPreference("repeat_mode", 2))
+        assertTrue(!com.music.bitchord.data.settings.AppSettings.isValidImportedPreference("repeat_mode", -1))
+        assertTrue(!com.music.bitchord.data.settings.AppSettings.isValidImportedPreference("repeat_mode", 5))
+    }
 }

@@ -47,7 +47,7 @@
 
 **MusikKu** is an independent Android music player that brings online music discovery and local audio playback together with tools for organising playlists, understanding listening habits, and managing an offline library.
 
-> **Current source version:** `0.1.78` (`versionCode 79`). The Download section always links to the latest release that has actually been published.
+> **Current source version:** `0.2.8` (`versionCode 110`). The Download section always links to the latest release that has actually been published.
 
 The Android application is built with **Kotlin and Jetpack Compose**. The repository also contains shared Kotlin modules, Android TV and Wear OS targets, a Go service for Listen Together, and a web player with a companion browser extension.
 
@@ -73,7 +73,7 @@ The latest stable build is available from GitHub Releases. APK links below alway
 | [**x86_64**](https://github.com/Rulzz77/Musikku/releases/latest/download/MusikKu-x86_64.apk) | x86_64 Android devices and emulators |
 | [**Wear OS**](https://github.com/Rulzz77/Musikku/releases/latest/download/MusikKu-WearOS.apk) | Compatible Wear OS watches |
 
-**Installation:** download the APK for your device, allow your browser or file manager to install unknown apps when Android asks, then install the package. For the full changelog and all release assets, visit [Releases](https://github.com/Rulzz77/Musikku/releases).
+**Installation:** download the APK for your device, allow your browser or file manager to install unknown apps when Android asks, then install the package. When upgrading the Wear OS companion from older builds that used the `com.music.bitchord` package, uninstall that old watch app once before installing the corrected companion APK; the current watch package now matches the phone so the Wearable Data Layer can connect. For the full changelog and all release assets, visit [Releases](https://github.com/Rulzz77/Musikku/releases).
 
 ## Features
 
@@ -251,10 +251,11 @@ A few important boundaries are intentional:
 
 - **No music hosting:** MusikKu is a player and client. It does not operate a catalogue or host the music that users play.
 - **Third-party dependencies:** online catalogues, lyrics, scrobbling, and other integrations may depend on external services, their availability, account access, and their terms.
+- **Community add-on modules:** Android downloads their index and JavaScript only from public HTTPS hosts. The module runtime blocks loopback/private-network destinations and caps downloaded source, request/response sizes, memory, and execution time. Local HTTP/LAN-hosted module indexes are intentionally unsupported; publish modules over HTTPS instead.
 - **Listen Together:** when you create or join a party, the configured party server receives a random per-installation device ID, a participant ID derived with SHA-256, your party display name, the host’s autoplay preference when creating the party, and shared playback/queue metadata such as video ID, title, artist, thumbnail URL, duration, and playback controls. On Android, the participant ID is derived from the installation ID; the app sends the locally chosen nickname and does not send a Google/YouTube account ID or profile avatar. In the web player, the participant ID is derived from the signed-in YouTube Music login/channel identifiers; the raw identifiers and browser cookies/tokens are not sent to the party server. The web player sends the selected channel’s display name (unless you set a party nickname) and may send its public avatar URL. Unless you configure another server, the Android app’s built-in party-server address is `https://bitchord-listen-together.onrender.com`; the web deployment uses its configured `VITE_PARTY_SERVER_URL`. Choose a server you trust before sharing party activity. The server operator and hosting provider can observe requests and associated network metadata.
 - **No permanent ad-free or service-availability promise:** MusikKu does not guarantee that a third-party service will remain available, change its policies, or provide a particular playback experience.
 - **Smart Playlist metadata:** genre tags and release-year/runtime metadata may be missing for some tracks. Filters only use values actually supplied or cached.
-- **Backup scope:** backups do not bundle downloaded audio bytes, app caches, account credentials, or API secrets. Local-file references may need to be relinked when moving a backup to another device.
+- **Backup scope:** in-app Backup & Restore does not bundle downloaded audio bytes, app caches, account credentials, or API secrets. Android's automatic cloud backup and device-transfer backup deliberately exclude the app's whole settings SharedPreferences file and the WebView Chromium profile (which contains website cookies and login sessions). Android cannot omit only secret keys from those stores; use MusikKu's **Settings → Backup & Restore** before moving to a new phone to carry supported settings, search history, playlists, and listening history. Third-party account sessions must be signed in again on the new device. Local-file references may need to be relinked when moving a backup to another device.
 - **Download recovery:** an interrupted item can be queued again when the app is reopened, but the current downloader does not promise byte-for-byte partial download resumption.
 
 Use music sources and content only where you have the necessary rights and permissions, and follow the applicable third-party service terms and local laws.

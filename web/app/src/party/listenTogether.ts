@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { config } from '@/config';
 import { ytAuthSnapshot } from '@/extension/useYtAuth';
 import { ServerClock } from './clock';
-import { cleanCode, CODE_LENGTH, sanitizeServerUrl } from './invite';
+import { cleanCode, CODE_LENGTH, sanitizePartyImageUrl, sanitizeServerUrl } from './invite';
 import {
   EMPTY_PLAYBACK,
   EMPTY_QUEUE,
@@ -163,7 +163,7 @@ async function identity(): Promise<Omit<JoinRequest, 'maxMembers' | 'autoplayEna
     userId: (await sha256(`${active.authUser}:${active.id}`)).slice(0, 32),
     deviceId: deviceId(),
     displayName: name,
-    avatarUrl: active.avatarUrl?.startsWith('http') ? active.avatarUrl : null,
+    avatarUrl: sanitizePartyImageUrl(active.avatarUrl),
   };
 }
 
@@ -257,7 +257,14 @@ export async function previewParty(rawCode: string, serverUrl?: string | null): 
   refuseIfRecentlyKicked(code);
   const base = sanitizeServerUrl(serverUrl) ?? idleServer();
   try {
-    return await request<PartyPreview>(`${base}/api/parties/${code}/preview`);
+    const preview = await request<PartyPreview>(`${base}/api/parties/${code}/preview`);
+    return {
+      ...preview,
+      members: preview.members.map((member) => ({
+        ...member,
+        avatarUrl: sanitizePartyImageUrl(member.avatarUrl),
+      })),
+    };
   } catch (error) {
     // A server that predates /preview answers its router's plain-text 404: still joinable.
     if (error instanceof PartyError && error.code === 'http_404') {

@@ -92,6 +92,66 @@ func TestValidateAvatarUrl(t *testing.T) {
 	}
 }
 
+func TestIsSafeRemoteHTTPURL(t *testing.T) {
+	allowed := []string{
+		"https://example.com/avatar.png",
+		"http://cdn.example.com:8080/image.webp?token=abc",
+		"https://[2606:4700:4700::1111]/avatar.png",
+		"https://192.0.1.1/image.png",
+	}
+	for _, raw := range allowed {
+		if !IsSafeRemoteHTTPURL(raw) {
+			t.Errorf("expected public URL to be allowed: %q", raw)
+		}
+	}
+
+	blocked := []string{
+		"",
+		"javascript:alert(1)",
+		"data:image/png;base64,AAAA",
+		"ftp://example.com/a.png",
+		"https://user:pass@example.com/avatar.png",
+		"https://localhost/avatar.png",
+		"https://printer.local/avatar.png",
+		"https://127.0.0.1/avatar.png",
+		"https://127.1/avatar.png",
+		"https://0x7f000001/avatar.png",
+		"https://10.0.0.8/avatar.png",
+		"https://100.64.0.1/avatar.png",
+		"https://169.254.169.254/latest/meta-data/",
+		"https://172.16.0.1/avatar.png",
+		"https://192.168.1.1/avatar.png",
+		"https://198.18.0.1/avatar.png",
+		"https://203.0.113.1/avatar.png",
+		"https://[::1]/avatar.png",
+		"https://[fc00::1]/avatar.png",
+		"https://[fe80::1]/avatar.png",
+		"https://[ff02::1]/avatar.png",
+		"https://[2001:db8::1]/avatar.png",
+		"https://example.com:99999/avatar.png",
+	}
+	for _, raw := range blocked {
+		if IsSafeRemoteHTTPURL(raw) {
+			t.Errorf("expected unsafe URL to be rejected: %q", raw)
+		}
+	}
+}
+
+func TestValidateRejectsPrivateAvatarURL(t *testing.T) {
+	for _, raw := range []string{
+		"https://127.0.0.1/avatar.png",
+		"https://192.168.1.10/avatar.png",
+		"https://[::1]/avatar.png",
+		"https://user:pass@example.com/avatar.png",
+	} {
+		req := validRequest()
+		req.AvatarUrl = &raw
+		if err := req.Validate(); err == nil {
+			t.Errorf("unsafe avatar URL accepted: %q", raw)
+		}
+	}
+}
+
 func TestValidateMaxMembers(t *testing.T) {
 	for _, n := range []int{2, 5, 10} {
 		req := validRequest()

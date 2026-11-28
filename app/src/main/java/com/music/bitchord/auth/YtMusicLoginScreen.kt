@@ -23,6 +23,15 @@ import kotlinx.serialization.json.jsonObject
 
 private const val MUSIC_ORIGIN = "https://music.youtube.com"
 
+/** True only for the exact HTTPS origin from which YouTube Music exposes ytcfg. */
+internal fun isYouTubeMusicOrigin(rawUrl: String?): Boolean {
+    val uri = runCatching { java.net.URI(rawUrl ?: return false) }.getOrNull() ?: return false
+    return uri.scheme.equals("https", ignoreCase = true) &&
+        uri.host.equals("music.youtube.com", ignoreCase = true) &&
+        uri.port in setOf(-1, 443) &&
+        uri.userInfo == null
+}
+
 private const val LOGIN_URL =
     "https://accounts.google.com/ServiceLogin" +
         "?ltmpl=music&service=youtube&prompt=select_account" +
@@ -108,7 +117,7 @@ fun YtMusicLoginScreen(
                         // listener to choose an identity on this very page.
                         // Capturing automatically here is the race that used to
                         // create a fake "Personal" profile and close too soon.
-                        currentOnPageReady(url?.startsWith(MUSIC_ORIGIN) == true)
+                        currentOnPageReady(isYouTubeMusicOrigin(url))
                     }
                 }
 
@@ -132,6 +141,12 @@ private fun captureFrom(
     onCaptured: (CapturedSession) -> Unit,
     onUnavailable: () -> Unit,
 ) {
+    // CookieManager is process-wide. Never combine a YouTube cookie snapshot
+    // with ytcfg values from a page hosted by another origin.
+    if (!isYouTubeMusicOrigin(view.url)) {
+        onUnavailable()
+        return
+    }
     val cookies = CookieManager.getInstance().getCookie(MUSIC_ORIGIN)
     if (cookies == null || !AuthStore.hasApiSid(cookies)) {
         onUnavailable()

@@ -77,6 +77,39 @@ func TestPartyCapacityLimit(t *testing.T) {
 	}
 }
 
+func TestTrackFromWireDropsUnsafeThumbnailURL(t *testing.T) {
+	for _, raw := range []string{
+		"https://127.0.0.1/private.png",
+		"https://192.168.1.10/private.png",
+		"https://[::1]/private.png",
+		"javascript:alert(1)",
+		"data:image/png;base64,AAAA",
+	} {
+		track := TrackFromWire(map[string]interface{}{
+			"videoId": "abcdefghijk",
+			"title": "Safe title",
+			"thumbnailUrl": raw,
+		})
+		if track == nil {
+			t.Fatalf("unsafe optional thumbnail should not invalidate track %q", raw)
+		}
+		if track.ThumbnailUrl != nil {
+			t.Errorf("unsafe thumbnail URL was retained: %q", raw)
+		}
+	}
+}
+
+func TestTrackFromWireKeepsPublicThumbnailURL(t *testing.T) {
+	track := TrackFromWire(map[string]interface{}{
+		"videoId": "abcdefghijk",
+		"title": "Safe title",
+		"thumbnailUrl": "https://i.ytimg.com/vi/abcdefghijk/hqdefault.jpg",
+	})
+	if track == nil || track.ThumbnailUrl == nil {
+		t.Fatal("valid public thumbnail URL should be retained")
+	}
+}
+
 func TestQueueUpcoming25Limit(t *testing.T) {
 	ps := NewPlaybackState()
 	current := &Track{VideoId: "now_playing", Title: "Now Playing"}

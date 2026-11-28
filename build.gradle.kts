@@ -41,9 +41,17 @@ buildscript {
  * No "v" in the name — the in-app updater reads it as a number; the "v" is the
  * release tag's alone.
  */
-extra["musikkuVersionCode"] = 109
-extra["musikkuVersionName"] = "0.2.7"
+extra["musikkuVersionCode"] = 110
+extra["musikkuVersionName"] = "0.2.8"
 extra["musikkuBetaSuffix"] = ""
+
+/*
+ * The phone and watch variants must have matching application IDs for the
+ * Wearable Data Layer to authenticate the companion pair. Keep both variants
+ * here so :app and :wearos cannot silently drift apart again.
+ */
+extra["musikkuApplicationId"] = "id.musikku.player"
+extra["musikkuDevApplicationId"] = "id.musikku.dev"
 /*
  * Bump this by hand before cutting each sideloaded test build ("beta2",
  * "beta3", ...) and blank it out before cutting the real release. Marks the
@@ -54,8 +62,8 @@ extra["musikkuBetaSuffix"] = ""
  * Applied to release builds as well as debug ones, and that is the whole
  * point of it. A sideloaded beta is a *release* build — signed with the real
  * key, installed over the real package — so leaving the marker off it is
- * exactly the case that strands a tester: their build calls itself 1.6.1,
- * the published 1.6.1 then matches it, isNewer() says no, and no update prompt ever
+ * exactly the case that strands a tester: their build calls itself 0.2.7,
+ * the published 0.2.7 then matches it, isNewer() says no, and no update prompt ever
  * comes. Blanking this line is the one step that turns a beta into a release,
  * so it is the one place to get right.
  *
@@ -63,7 +71,6 @@ extra["musikkuBetaSuffix"] = ""
  * the phone compares the watch's installed APK with the one it carries, so a
  * beta watch app shows "Update available" as soon as the phone has the release.
  */
-extra["musikkuBetaSuffix"] = ""
 plugins {
     id("com.android.application") version "8.10.1" apply false
     id("com.android.library") version "8.10.1" apply false

@@ -19,6 +19,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.io.ByteArrayOutputStream
 import java.time.Instant
+import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -111,22 +112,39 @@ object Backup {
             val smartPlaylistRules = file.smartPlaylistRules.map { it.toSmartPlaylistRule() }
             val remoteImports = file.remoteSpotifyImports.mapValues { (_, ids) -> ids.toSet() }
 
-            // All parsing and structural validation happens before the first
-            // write. Commit the collection stores together and roll each one
-            // back if any playlist, folder, or Smart Playlist write fails.
-            if (file.version >= 2) {
-                val previousSpotifyPlaylists = LocalPlaylistStore.playlists.value.toList()
-                val previousRemoteImports = LocalPlaylistStore.remoteSpotifyImportsSnapshot()
-                val previousDevicePlaylists = OfflinePlaylists.playlists.value.toList()
-                val previousPlaylistFolders = PlaylistFolders.folders.value.toList()
-                val previousSmartPlaylistRules = SmartPlaylists.rules.value.toList()
-                try {
+            // Snapshot every store that this restore can replace. All file
+            // parsing and validation has already completed in readBackup().
+            // Keep the cross-store commit ordered and roll all stores back if
+            // any later persistence step fails.
+            val previousListening = ListeningStats.exportAll()
+            val previousSettings = AppSettings.exportPrefs()
+            val previousSpotifyPlaylists = LocalPlaylistStore.playlists.value.toList()
+            val previousRemoteImports = LocalPlaylistStore.remoteSpotifyImportsSnapshot()
+            val previousDevicePlaylists = OfflinePlaylists.playlists.value.toList()
+            val previousPlaylistFolders = PlaylistFolders.folders.value.toList()
+            val previousSmartPlaylistRules = SmartPlaylists.rules.value.toList()
+
+            var listeningAttempted = false
+            var settingsAttempted = false
+            var collectionsAttempted = false
+            try {
+                ListeningStats.importAll(file.listening)
+                listeningAttempted = true
+
+                if (file.version >= 2) {
+                    collectionsAttempted = true
                     LocalPlaylistStore.restoreFromBackup(spotifyPlaylists, remoteImports, mergePlaylists)
                     OfflinePlaylists.restoreFromBackup(devicePlaylists, mergePlaylists)
                     if (file.version >= 3) PlaylistFolders.restoreFromBackup(playlistFolders, mergePlaylists)
                     if (file.version >= 4) SmartPlaylists.restoreFromBackup(smartPlaylistRules, mergePlaylists)
-                } catch (failure: Throwable) {
-                    val rollbackFailures = mutableListOf<Throwable>()
+                }
+
+                settingsAttempted = true
+                AppSettings.importPrefs(settings)
+                SearchHistory.reload()
+            } catch (failure: Throwable) {
+                val rollbackFailures = mutableListOf<Throwable>()
+                if (collectionsAttempted) {
                     runCatching {
                         LocalPlaylistStore.restoreFromBackup(
                             previousSpotifyPlaylists,
@@ -143,22 +161,23 @@ object Backup {
                     runCatching {
                         SmartPlaylists.restoreFromBackup(previousSmartPlaylistRules, merge = false)
                     }.exceptionOrNull()?.let(rollbackFailures::add)
-                    if (rollbackFailures.isNotEmpty()) {
-                        throw IllegalStateException(
-                            "Playlist restore failed and the previous collections could not be fully restored",
-                            failure,
-                        ).also { error -> rollbackFailures.forEach(error::addSuppressed) }
-                    }
-                    throw failure
                 }
+                if (listeningAttempted) {
+                    runCatching { ListeningStats.importAll(previousListening) }
+                        .exceptionOrNull()?.let(rollbackFailures::add)
+                }
+                if (settingsAttempted) {
+                    runCatching { AppSettings.importPrefs(previousSettings) }
+                        .exceptionOrNull()?.let(rollbackFailures::add)
+                }
+                if (rollbackFailures.isNotEmpty()) {
+                    throw IllegalStateException(
+                        "Backup restore failed and one or more previous stores could not be fully restored",
+                        failure,
+                    ).also { error -> rollbackFailures.forEach(error::addSuppressed) }
+                }
+                throw failure
             }
-
-            // These existing APIs replace their own stores. Playlist commits
-            // above happen first so a failed playlist write cannot leave the
-            // app with new settings/history but old collections.
-            ListeningStats.importAll(file.listening)
-            AppSettings.importPrefs(settings)
-            SearchHistory.reload()
 
             val restoredSpotifyPlaylists = if (file.version >= 2) {
                 LocalPlaylistStore.playlists.value
@@ -213,7 +232,12 @@ object Backup {
         }
         require(file.settings.size <= MAX_SETTINGS) { "Backup contains too many settings" }
         file.settings.forEach { (key, value) ->
-            require(key.isNotBlank() && value.isValid()) { "Backup contains an invalid setting" }
+            require(key.isNotBlank() && value.isValid()) {
+                "Backup contains an invalid setting: $key"
+            }
+            require(AppSettings.isValidImportedPreference(key, value.decoded())) {
+                "Backup contains an out-of-range setting: $key"
+            }
         }
         validatePlaylists(file.spotifyPlaylists, "Spotify")
         validatePlaylists(file.devicePlaylists, "device")
@@ -242,13 +266,97 @@ object Backup {
             }
         }
         require(file.listening.size <= MAX_LISTENING_MONTHS) { "Backup contains too much listening history" }
-        val months = HashSet<String>()
-        file.listening.forEach { bucket ->
-            val month = runCatching { YearMonth.parse(bucket.month).toString() }.getOrNull()
-                ?: error("Backup contains an invalid listening-history month")
-            require(months.add(month)) { "Backup contains duplicate listening-history months" }
-        }
+        validateListeningBuckets(file.listening)
         return file
+    }
+
+    /**
+     * History buckets are consumed by Replay as trusted aggregates. Reject
+     * malformed dates, duplicate IDs, oversized maps, and negative counters
+     * here rather than letting corrupt values leak into chart arithmetic.
+     */
+    internal fun validateListeningBuckets(buckets: List<StoredBucket>) {
+        val months = HashSet<String>()
+        buckets.forEach { bucket ->
+            val month = runCatching { YearMonth.parse(bucket.month) }.getOrNull()
+                ?: error("Backup contains an invalid listening-history month")
+            require(bucket.month == month.toString() && months.add(bucket.month)) {
+                "Backup contains a non-canonical or duplicate listening-history month"
+            }
+            val daysInMonth = month.lengthOfMonth()
+            val monthMs = daysInMonth * 86_400_000L
+            val monthPlayLimit = daysInMonth * 86_400
+            fun validDate(dateKey: String): Boolean =
+                runCatching { LocalDate.parse(dateKey) }.getOrNull()?.let {
+                    YearMonth.from(it) == month
+                } == true
+            fun validDailyStats(stats: DayStats): Boolean =
+                stats.ms in 0L..86_400_000L && stats.plays in 0..86_400
+            fun validDays(days: Map<String, DayStats>): Boolean =
+                days.size <= daysInMonth && days.all { (date, stats) ->
+                    validDate(date) && validDailyStats(stats)
+                }
+
+            require(bucket.tracks.size <= 600 && bucket.artists.size <= 400 && bucket.albums.size <= 400) {
+                "Backup contains too many listening-history entries in $month"
+            }
+            require(bucket.hours.size <= 24 && bucket.hours.all {
+                it in 0L..(daysInMonth * 3_600_000L)
+            }) {
+                "Backup contains invalid hourly listening totals in $month"
+            }
+            require(bucket.days.size <= daysInMonth && bucket.days.all { (day, ms) ->
+                day in 1..daysInMonth && ms in 0L..86_400_000L
+            }) {
+                "Backup contains invalid daily listening totals in $month"
+            }
+            require(bucket.tracks.map { it.id }.distinct().size == bucket.tracks.size) {
+                "Backup contains duplicate listening-history track IDs in $month"
+            }
+            bucket.tracks.forEach { track ->
+                require(track.id.isNotBlank() && track.id.length <= 4_096 &&
+                    track.title.length <= 4_096 && track.artist.length <= 4_096 &&
+                    (track.album?.length ?: 0) <= 4_096 &&
+                    (track.art?.length ?: 0) <= 4_096 &&
+                    (track.localUri?.length ?: 0) <= 4_096 &&
+                    (track.localPath?.length ?: 0) <= 4_096 &&
+                    (track.durationText?.length ?: 0) <= 256 &&
+                    track.ms in 0L..monthMs && track.plays in 0..monthPlayLimit && track.last >= 0L &&
+                    track.days.size <= daysInMonth && validDays(track.days)) {
+                    "Backup contains an invalid listening-history track in $month"
+                }
+            }
+            bucket.artists.forEach { artist ->
+                require(artist.name.isNotBlank() && artist.name.length <= 4_096 &&
+                    (artist.sub?.length ?: 0) <= 4_096 &&
+                    (artist.art?.length ?: 0) <= 4_096 &&
+                    (artist.id?.length ?: 0) <= 4_096 &&
+                    (artist.key?.length ?: 0) <= 8_192 &&
+                    artist.ms in 0L..monthMs && artist.plays in 0..monthPlayLimit &&
+                    artist.days.size <= daysInMonth && validDays(artist.days)) {
+                    "Backup contains an invalid listening-history artist in $month"
+                }
+            }
+            bucket.albums.forEach { album ->
+                require(album.name.isNotBlank() && album.name.length <= 4_096 &&
+                    (album.sub?.length ?: 0) <= 4_096 &&
+                    (album.art?.length ?: 0) <= 4_096 &&
+                    (album.id?.length ?: 0) <= 4_096 &&
+                    (album.key?.length ?: 0) <= 8_192 &&
+                    album.ms in 0L..monthMs && album.plays in 0..monthPlayLimit &&
+                    album.days.size <= daysInMonth && validDays(album.days)) {
+                    "Backup contains an invalid listening-history album in $month"
+                }
+            }
+
+            listOfNotNull(bucket.trackDays, bucket.artistDays, bucket.albumDays).forEach { daily ->
+                require(daily.size <= daysInMonth && daily.all { (date, stats) ->
+                    validDate(date) && validDailyStats(stats)
+                }) {
+                    "Backup contains invalid per-day history in $month"
+                }
+            }
+        }
     }
 
     private fun validatePlaylists(playlists: List<BackupPlaylist>, label: String) {

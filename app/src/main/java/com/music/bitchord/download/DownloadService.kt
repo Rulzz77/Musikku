@@ -156,6 +156,20 @@ class DownloadService : Service() {
         stopSelf()
     }
 
+    /**
+     * Android 15+ may time out dataSync foreground services after the system
+     * allowance is exhausted. Stop immediately and let onDestroy persist the
+     * recoverable queue; never try to continue work past the platform deadline.
+     */
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        drain?.cancel()
+        notifier?.cancel()
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        // Stop the service unconditionally: another enqueue may have advanced
+        // startId while this long-running dataSync service was draining.
+        stopSelf()
+    }
+
     override fun onDestroy() {
         scope.cancel()
         Downloads.onStopped()

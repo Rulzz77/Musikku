@@ -70,21 +70,27 @@ object MusicLink {
 
     /** Reads an incoming intent, and reports whether it carried a request. */
     fun consume(intent: Intent?): Boolean {
-        if (intent == null || intent.getBooleanExtra(EXTRA_CONSUMED, false)) return false
+        if (
+            intent == null ||
+            runCatching { intent.getBooleanExtra(EXTRA_CONSUMED, false) }.getOrDefault(false)
+        ) return false
         val request = when (intent.action) {
             // Only the audio filter in the manifest takes these two schemes, so
             // either one is a file to play rather than a link to look up.
             Intent.ACTION_VIEW -> intent.data?.let { uri ->
                 if (uri.scheme == "content" || uri.scheme == "file") LinkRequest.LocalFile(uri) else parse(uri)
             }
-            Intent.ACTION_SEND -> intent.getStringExtra(Intent.EXTRA_TEXT)
+            Intent.ACTION_SEND -> runCatching { intent.getStringExtra(Intent.EXTRA_TEXT) }
+                .getOrNull()
+                ?.take(MAX_SHARED_TEXT_CHARS)
                 ?.let(::firstUrl)
                 ?.let { parse(Uri.parse(it)) }
             // The assistant's "play <something>". An empty query is the whole
             // point of the Resume case: "play music" names nothing, and the
             // useful answer is to carry on with what was already on.
             MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH -> {
-                val query = intent.getStringExtra(SearchManager.QUERY).orEmpty().trim()
+                val query = runCatching { intent.getStringExtra(SearchManager.QUERY) }
+                    .getOrNull().orEmpty().take(MAX_SHARED_TEXT_CHARS).trim()
                 if (query.isEmpty()) LinkRequest.Resume else LinkRequest.Search(query, play = true)
             }
             else -> null
@@ -117,6 +123,7 @@ object MusicLink {
      * as through the browser.
      */
     fun parse(uri: Uri): LinkRequest? {
+        if (uri.toString().length > MAX_SHARED_TEXT_CHARS) return null
         val host = uri.host?.lowercase()?.removePrefix("www.") ?: return null
         val segments = uri.pathSegments.orEmpty()
         if (host == "youtu.be") {
@@ -171,6 +178,8 @@ object MusicLink {
      */
     private fun firstUrl(text: String): String? =
         URL_IN_TEXT.find(text)?.value
+
+    private const val MAX_SHARED_TEXT_CHARS = 16_384
 
     private val URL_IN_TEXT = Regex("""https?://\S+""")
 }

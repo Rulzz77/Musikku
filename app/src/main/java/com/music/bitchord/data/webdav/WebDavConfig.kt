@@ -38,6 +38,7 @@ object WebDavConfig {
         val scheme = uri.scheme?.lowercase(Locale.ROOT) ?: return null
         if (scheme != "http" && scheme != "https") return null
         if (uri.isOpaque || uri.userInfo != null || uri.host.isNullOrBlank()) return null
+        if (uri.rawQuery != null || uri.rawFragment != null) return null
         if (uri.port !in -1..65535 || uri.normalize().rawPath != uri.rawPath) return null
         val port = uri.port.takeIf { it >= 0 } ?: if (scheme == "https") 443 else 80
         scheme + "://" + uri.host.lowercase(Locale.ROOT) + ":" + port

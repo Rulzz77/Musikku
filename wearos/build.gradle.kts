@@ -16,8 +16,8 @@ plugins {
  *
  * It has to share the phone app's application id *and* signing key, because the
  * Wearable Data Layer only delivers between apps that match on both. So:
- *   dev  -> com.dev.bitchord   pairs only with the phone's dev build
- *   prod -> com.music.bitchord pairs only with the phone's prod build
+ *   dev  -> id.musikku.dev     pairs only with the phone's dev build
+ *   prod -> id.musikku.player  pairs only with the phone's prod build
  * and each build type is signed exactly the way the phone's is (debug key for
  * debug, the release keystore for release), so a watch build pairs with the
  * phone build of the same variant.
@@ -35,7 +35,7 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.music.bitchord"
+        applicationId = rootProject.extra["musikkuApplicationId"] as String
         // Wear OS 3, the oldest a Galaxy Watch 4 ever shipped with.
         minSdk = 30
         targetSdk = 36
@@ -53,7 +53,7 @@ android {
     productFlavors {
         create("dev") {
             dimension = "env"
-            applicationId = "com.dev.bitchord"
+            applicationId = rootProject.extra["musikkuDevApplicationId"] as String
             resValue("string", "app_name", "MusikKu Dev")
         }
         create("prod") {

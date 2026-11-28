@@ -188,7 +188,10 @@ internal fun MixViewPopup(
             .background(ScrimColor.copy(alpha = ScrimColor.alpha * scrimAlpha)),
         contentAlignment = if (fullscreen) Alignment.CenterEnd else Alignment.Center,
     ) {
-        BoxWithConstraints(Modifier.fillMaxSize()) {
+        BoxWithConstraints(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = if (fullscreen) Alignment.CenterEnd else Alignment.Center,
+        ) {
         val fullscreenWidth = minOf(maxWidth * FULLSCREEN_PLAYER_PANEL_WIDTH_FRACTION, FULLSCREEN_PLAYER_PANEL_MAX_WIDTH)
         AnimatedVisibility(
             visible = shown,

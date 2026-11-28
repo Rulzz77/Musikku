@@ -2856,18 +2856,13 @@ fun NowPlayingScreen(
                                 .width(panelWidth)
                                 .fillMaxHeight()
                                 .padding(10.dp)
-                                .clip(FULLSCREEN_PLAYER_PANEL_SHAPE)
-                                .background(FULLSCREEN_PLAYER_PANEL_BACKGROUND)
+                                .fullscreenPlayerPanelSurface()
                                 // Keep taps inside the panel from dismissing the scrim.
                                 .clickable(
                                     interactionSource = remember { MutableInteractionSource() },
                                     indication = null,
                                 ) {}
-                                .border(
-                                    1.dp,
-                                    FULLSCREEN_PLAYER_PANEL_BORDER,
-                                    FULLSCREEN_PLAYER_PANEL_SHAPE,
-                                ),
+                                ,
                         ) {
                             InlineQueue(
                                 queue = queue,

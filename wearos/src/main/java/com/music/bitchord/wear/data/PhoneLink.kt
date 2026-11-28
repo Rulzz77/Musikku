@@ -75,9 +75,11 @@ class PhoneLink(context: Context, private val scope: CoroutineScope) :
     DataClient.OnDataChangedListener,
     CapabilityClient.OnCapabilityChangedListener {
 
-    private val dataClient = Wearable.getDataClient(context)
-    private val messageClient = Wearable.getMessageClient(context)
-    private val capabilityClient = Wearable.getCapabilityClient(context)
+    private val appContext = context.applicationContext
+    private val dataClient = Wearable.getDataClient(appContext)
+    private val messageClient = Wearable.getMessageClient(appContext)
+    private val capabilityClient = Wearable.getCapabilityClient(appContext)
+    private val selectionPrefs = appContext.getSharedPreferences(P.PREFS_PHONE_SELECTION, Context.MODE_PRIVATE)
 
     private val _link = MutableStateFlow(Link.Connecting)
     val link: StateFlow<Link> = _link.asStateFlow()
@@ -110,7 +112,8 @@ class PhoneLink(context: Context, private val scope: CoroutineScope) :
     private val _watchSpeaker = MutableStateFlow(false)
     val watchSpeaker: StateFlow<Boolean> = _watchSpeaker.asStateFlow()
 
-    @Volatile private var phoneNode: String? = null
+    @Volatile private var phoneNode: String? =
+        selectionPrefs.getString(P.PREF_SELECTED_PHONE_NODE, null)
     private val phoneSelectionLock = Any()
     private val phoneSelectionGeneration = AtomicLong()
     private var artId: String? = null
@@ -404,6 +407,10 @@ class PhoneLink(context: Context, private val scope: CoroutineScope) :
     private fun selectPhoneNode(nodeId: String?): Long = synchronized(phoneSelectionLock) {
         if (phoneNode != nodeId) {
             phoneNode = nodeId
+            selectionPrefs.edit().apply {
+                if (nodeId == null) remove(P.PREF_SELECTED_PHONE_NODE)
+                else putString(P.PREF_SELECTED_PHONE_NODE, nodeId)
+            }.apply()
             artJob?.cancel()
             artJob = null
             artId = null

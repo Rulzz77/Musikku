@@ -102,11 +102,13 @@ object WebDavClient {
             val visited = HashSet<String>()
             while (dirs.isNotEmpty() && foundAudio.size < maxFiles) {
                 val dir = dirs.removeFirst()
-                if (!visited.add(dir.lowercase())) continue
+                val directoryKey = resourceKey(dir) ?: continue
+                if (!visited.add(directoryKey)) continue
                 val entries = propfind(dir, username, password).getOrThrow()
                 for (entry in entries) {
                     if (entry.isCollection) {
-                        if (!visited.contains(entry.url.lowercase())) dirs.add(entry.url)
+                        val childKey = resourceKey(entry.url)
+                        if (childKey != null && childKey !in visited) dirs.add(entry.url)
                     } else {
                         val name = entry.displayName.ifBlank { entry.url }
                         when {
@@ -317,8 +319,8 @@ object WebDavClient {
         val baseUri = java.net.URI(base.trimEnd('/') + "/")
         val hrefUri = java.net.URI(trimmed)
         val resolved = baseUri.resolve(hrefUri).normalize()
-        require(resolved.userInfo == null && resolved.fragment == null) {
-            "WebDAV href must not contain credentials or fragments"
+        require(resolved.userInfo == null && resolved.fragment == null && resolved.rawQuery == null) {
+            "WebDAV href must not contain credentials, query strings or fragments"
         }
         val result = resolved.toASCIIString()
         require(WebDavConfig.isWithinBasePath(base, result)) {
@@ -327,10 +329,16 @@ object WebDavClient {
         return result
     }
 
-    private fun isSameUrl(a: String, b: String): Boolean {
-        fun norm(u: String) = u.trim().trimEnd('/').lowercase()
-        return norm(a) == norm(b)
-    }
+    /** Host/scheme are case-insensitive; WebDAV resource paths are not. */
+    private fun resourceKey(raw: String): String? = runCatching {
+        val uri = java.net.URI(raw)
+        val origin = WebDavConfig.originOf(raw) ?: return null
+        val path = uri.rawPath.orEmpty().trimEnd('/').ifEmpty { "/" }
+        "$origin$path"
+    }.getOrNull()
+
+    private fun isSameUrl(a: String, b: String): Boolean =
+        resourceKey(a) != null && resourceKey(a) == resourceKey(b)
 
     private fun decodedName(url: String): String = runCatching {
         URLDecoder.decode(url.trimEnd('/').substringAfterLast('/'), "UTF-8")

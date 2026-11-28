@@ -53,9 +53,24 @@ class NowPlayingListener : WearableListenerService() {
     }
 
     override fun onDataChanged(events: DataEventBuffer) {
-        val latest = events.lastOrNull {
-            it.type == DataEvent.TYPE_CHANGED && it.dataItem.uri.path == P.PATH_NOW_PLAYING
+        // This service can be woken while WearActivity is not running. Read the
+        // same persisted phone selection as PhoneLink; otherwise an update from
+        // a second paired phone could replace the watch-face notification even
+        // though the in-app player is connected to a different device.
+        val selectedNode = getSharedPreferences(P.PREFS_PHONE_SELECTION, Context.MODE_PRIVATE)
+            .getString(P.PREF_SELECTED_PHONE_NODE, null)
+            ?: return
+        val latest = events.lastOrNull { event ->
+            event.dataItem.uri.host == selectedNode &&
+                event.dataItem.uri.path == P.PATH_NOW_PLAYING &&
+                event.type in setOf(DataEvent.TYPE_CHANGED, DataEvent.TYPE_DELETED)
         } ?: return
+
+        if (latest.type == DataEvent.TYPE_DELETED) {
+            hide(this)
+            return
+        }
+
         val map = DataMapItem.fromDataItem(latest.dataItem).dataMap
         // With this watch as the speaker its own media session carries the
         // ongoing icon, and it opens this app already.

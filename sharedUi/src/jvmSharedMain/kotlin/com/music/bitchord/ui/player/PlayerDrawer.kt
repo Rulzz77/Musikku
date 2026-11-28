@@ -96,6 +96,12 @@ internal val FULLSCREEN_PLAYER_PANEL_BORDER = Color.White.copy(alpha = 0.10f)
 internal const val FULLSCREEN_PLAYER_PANEL_WIDTH_FRACTION = 0.54f
 internal val SCRIM_COLOR = Color.Black.copy(alpha = 0.5f)
 
+/** Shared surface used by the fullscreen queue and every fullscreen player drawer. */
+internal fun Modifier.fullscreenPlayerPanelSurface(): Modifier = this
+    .clip(FULLSCREEN_PLAYER_PANEL_SHAPE)
+    .background(FULLSCREEN_PLAYER_PANEL_BACKGROUND)
+    .border(1.dp, FULLSCREEN_PLAYER_PANEL_BORDER, FULLSCREEN_PLAYER_PANEL_SHAPE)
+
 /**
  * How much of its own height the drawer has to be dragged before letting go
  * dismisses it rather than springing back. A quarter is enough to be a decision
@@ -232,8 +238,10 @@ fun PlayerDrawer(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = alignment,
         ) {
-        val fullscreenShape = FULLSCREEN_PLAYER_PANEL_SHAPE
-        val fullscreenWidth = minOf(maxWidth * FULLSCREEN_PLAYER_PANEL_WIDTH_FRACTION, minOf(panelMaxWidth, FULLSCREEN_PLAYER_PANEL_MAX_WIDTH))
+        val fullscreenWidth = minOf(
+            maxWidth * FULLSCREEN_PLAYER_PANEL_WIDTH_FRACTION,
+            minOf(panelMaxWidth, FULLSCREEN_PLAYER_PANEL_MAX_WIDTH),
+        )
         Column(
             modifier = if (slideFromEnd) {
                 // Fullscreen drawers share the exact side-panel footprint of
@@ -243,9 +251,7 @@ fun PlayerDrawer(
                     .width(fullscreenWidth)
                     .fillMaxHeight()
                     .padding(10.dp)
-                    .clip(fullscreenShape)
-                    .background(FULLSCREEN_PLAYER_PANEL_BACKGROUND)
-                    .border(1.dp, FULLSCREEN_PLAYER_PANEL_BORDER, fullscreenShape)
+                    .fullscreenPlayerPanelSurface()
                     .clickable(
                         indication = null,
                         interactionSource = remember { MutableInteractionSource() },

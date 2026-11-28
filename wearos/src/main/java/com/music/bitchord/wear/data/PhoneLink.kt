@@ -47,6 +47,19 @@ internal fun isCurrentPhoneSelection(
 ): Boolean = currentNode == requestedNode && currentGeneration == requestedGeneration
 
 /**
+ * Retain the chosen phone while it is still reachable. When it disappears,
+ * use a nearby node first and sort by stable node ID so a reordered capability
+ * response cannot silently switch the watch between phones.
+ */
+internal fun preferredPhoneNode(
+    nodes: List<Pair<String, Boolean>>,
+    currentNode: String?,
+): String? =
+    currentNode?.takeIf { current -> nodes.any { it.first == current } }
+        ?: nodes.filter { it.second }.minOfOrNull { it.first }
+        ?: nodes.minOfOrNull { it.first }
+
+/**
  * The watch's whole view of the phone.
  *
  * Listens only while the app is on screen ([start]/[stop] follow the activity),
@@ -297,8 +310,10 @@ class PhoneLink(context: Context, private val scope: CoroutineScope) :
     }
 
     override fun onCapabilityChanged(info: CapabilityInfo) {
-        val node = info.nodes.firstOrNull { it.isNearby } ?: info.nodes.firstOrNull()
-        val nodeId = node?.id
+        val nodeId = preferredPhoneNode(
+            info.nodes.map { it.id to it.isNearby },
+            currentNode = phoneNode,
+        )
         // The capability callback is the ordering point. Select synchronously
         // here, before launching work, so an older queued coroutine cannot
         // overwrite a newer phone selection when scheduling happens out of
@@ -349,8 +364,14 @@ class PhoneLink(context: Context, private val scope: CoroutineScope) :
     }
 
     private suspend fun connect() {
+        val generationBeforeLookup = phoneSelectionGeneration.get()
         val nodeId = findPhone()
-        val generation = selectPhoneNode(nodeId)
+        // A capability event may have selected a newer node while discovery
+        // was suspended. Do not let this older lookup take over afterwards.
+        val generation = synchronized(phoneSelectionLock) {
+            if (phoneSelectionGeneration.get() != generationBeforeLookup) return
+            selectPhoneNode(nodeId)
+        }
         connectTo(nodeId, generation)
     }
 
@@ -417,7 +438,7 @@ class PhoneLink(context: Context, private val scope: CoroutineScope) :
     private suspend fun findPhone(): String? = withTimeoutOrNull(FIND_TIMEOUT_MS) {
         runCatching {
             val info = capabilityClient.getCapability(P.CAPABILITY_PHONE, CapabilityClient.FILTER_REACHABLE).await()
-            (info.nodes.firstOrNull { it.isNearby } ?: info.nodes.firstOrNull())?.id
+            preferredPhoneNode(info.nodes.map { it.id to it.isNearby }, currentNode = phoneNode)
         }.getOrNull()
     }
 

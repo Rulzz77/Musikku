@@ -46,6 +46,25 @@ object WebDavConfig {
     fun sameOrigin(first: String, second: String): Boolean =
         originOf(first) != null && originOf(first) == originOf(second)
 
+    /** The credential binding includes the selected WebDAV folder, not just its domain. */
+    fun credentialBindingKey(raw: String): String? {
+        val normalized = normalizeUrl(raw)
+        val origin = originOf(normalized) ?: return null
+        val uri = runCatching { java.net.URI(normalized) }.getOrNull() ?: return null
+        val path = uri.rawPath.orEmpty().trimEnd('/').ifEmpty { "/" }
+        return origin + path
+    }
+
+    /** True when [target] is the configured root folder or a descendant of it. */
+    fun isWithinBasePath(baseUrl: String, targetUrl: String): Boolean {
+        if (!sameOrigin(baseUrl, targetUrl)) return false
+        val basePath = runCatching { java.net.URI(normalizeUrl(baseUrl)).rawPath.orEmpty() }
+            .getOrNull()?.trimEnd('/').orEmpty()
+        val targetPath = runCatching { java.net.URI(targetUrl).rawPath.orEmpty() }
+            .getOrNull().orEmpty().ifEmpty { "/" }
+        return basePath.isEmpty() || targetPath == basePath || targetPath.startsWith(basePath + "/")
+    }
+
     fun basicAuthHeader(username: String, password: String): String? {
         if (username.isBlank() && password.isBlank()) return null
         val credentials = "$username:$password"

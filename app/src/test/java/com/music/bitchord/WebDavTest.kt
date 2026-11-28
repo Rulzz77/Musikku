@@ -160,6 +160,8 @@ class WebDavTest {
         assertFalse(WebDavConfig.isConfigured("https://user:pass@cloud.example.com/Music"))
         assertFalse(WebDavConfig.isConfigured("https://cloud.example.com:99999/Music"))
         assertFalse(WebDavConfig.isConfigured("javascript:alert(1)"))
+        assertFalse(WebDavConfig.isConfigured("https://cloud.example.com/Music?token=abc"))
+        assertFalse(WebDavConfig.isConfigured("https://cloud.example.com/Music#fragment"))
         assertTrue(WebDavConfig.isConfigured("https://cloud.example.com:8443/Music"))
     }
 

@@ -80,8 +80,11 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatDelegate
 import com.music.bitchord.data.lyrics.translationLanguageName
+import com.music.bitchord.data.settings.LyricsBackgroundMode
 import com.music.bitchord.data.AppUpdateChecker
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -256,6 +259,9 @@ fun SettingsScreen(
     val progressiveBlur by AppSettings.progressiveBlur.collectAsStateWithLifecycle()
     val liquidGlassSupported = isGlassSupported()
     val lyricsBlur by AppSettings.lyricsBlur.collectAsStateWithLifecycle()
+    val lyricsBackgroundMode by AppSettings.lyricsBackgroundMode.collectAsStateWithLifecycle()
+    val lyricsBackgroundBlurPx by AppSettings.lyricsBackgroundBlurPx.collectAsStateWithLifecycle()
+    var lyricsBackgroundMenuOpen by rememberSaveable { mutableStateOf(false) }
     val animatedCanvas by AppSettings.animatedCanvas.collectAsStateWithLifecycle()
     val canvasOverCellular by AppSettings.canvasOverCellular.collectAsStateWithLifecycle()
     val signatureApiEnabled by AppSettings.signatureApiEnabled.collectAsStateWithLifecycle()
@@ -1441,6 +1447,55 @@ fun SettingsScreen(
                         },
                         onClick = { AppSettings.setLyricsBlur(!lyricsBlur) },
                     )
+                }
+                row(
+                    "Lyrics View Background",
+                    "lyrics", "background", "artist image", "cover art", "cover colors",
+                    "kawarp", "transparent",
+                ) {
+                    val blurApplies = lyricsBackgroundMode == LyricsBackgroundMode.ARTIST_IMAGE ||
+                        lyricsBackgroundMode == LyricsBackgroundMode.COVER_ART
+                    Column {
+                        Box {
+                            SettingsRow(
+                                icon = SfIcons.Gradient,
+                                title = "Background",
+                                subtitle = "Lyrics View",
+                                value = lyricsBackgroundMode.label,
+                                onClick = { lyricsBackgroundMenuOpen = true },
+                            )
+                            DropdownMenu(
+                                expanded = lyricsBackgroundMenuOpen,
+                                onDismissRequest = { lyricsBackgroundMenuOpen = false },
+                            ) {
+                                LyricsBackgroundMode.entries.forEach { mode ->
+                                    DropdownMenuItem(
+                                        text = { Text(mode.label) },
+                                        trailingIcon = {
+                                            if (mode == lyricsBackgroundMode) {
+                                                Icon(Icons.Rounded.Check, contentDescription = null)
+                                            }
+                                        },
+                                        onClick = {
+                                            AppSettings.setLyricsBackgroundMode(mode)
+                                            lyricsBackgroundMenuOpen = false
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                        SliderRow(
+                            icon = SfIcons.BlurOn,
+                            title = "Image Blur",
+                            value = "$lyricsBackgroundBlurPx px",
+                            sliderValue = lyricsBackgroundBlurPx.toFloat(),
+                            onSliderValue = { AppSettings.setLyricsBackgroundBlurPx(it.roundToInt()) },
+                            valueRange = 0f..40f,
+                            steps = 39,
+                            subtitle = "Softens the Artist Image and Cover Art backgrounds. Only applies to Artist Image and Cover Art.",
+                            enabled = blurApplies,
+                        )
+                    }
                 }
                 val lyricsSourcesTitle = stringResource(R.string.lyrics_sources)
                 row(lyricsSourcesTitle, "lyrics", "lrclib", "musixmatch") {
@@ -3096,13 +3151,18 @@ internal fun SliderRow(
     valueRange: ClosedFloatingPointRange<Float>,
     steps: Int,
     subtitle: String? = null,
+    enabled: Boolean = true,
 ) {
     val colors = SliderDefaults.colors(
         thumbColor = MaterialTheme.colorScheme.primary,
         activeTrackColor = MaterialTheme.colorScheme.primary,
         inactiveTrackColor = MaterialTheme.colorScheme.outline,
     )
-    Column(Modifier.padding(start = ROW_INSET, end = ROW_INSET, top = 12.dp, bottom = 4.dp)) {
+    Column(
+        Modifier
+            .alpha(if (enabled) 1f else 0.45f)
+            .padding(start = ROW_INSET, end = ROW_INSET, top = 12.dp, bottom = 4.dp),
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(
                 imageVector = icon,
@@ -3137,6 +3197,7 @@ internal fun SliderRow(
             onValueChange = onSliderValue,
             valueRange = valueRange,
             steps = steps,
+            enabled = enabled,
             colors = colors,
             // Bare track: the step ticks and the end-stop dot are noise when the
             // value is already spelled out on the line above.

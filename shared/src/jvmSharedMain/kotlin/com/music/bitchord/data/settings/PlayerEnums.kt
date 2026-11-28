@@ -45,3 +45,12 @@ enum class LastPlayerScreen {
     LYRICS,
     QUEUE,
 }
+
+/** How the Lyrics View is backed while it is open. */
+enum class LyricsBackgroundMode(val label: String) {
+    DYNAMIC_KAWARP("Dynamic (Kawarp)"),
+    ARTIST_IMAGE("Artist Image"),
+    COVER_ART("Cover Art"),
+    COVER_COLORS("Cover Colors"),
+    TRANSPARENT("None (Transparent)"),
+}

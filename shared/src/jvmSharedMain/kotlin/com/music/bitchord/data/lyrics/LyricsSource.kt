@@ -182,3 +182,23 @@ internal fun lyricsSourceSequence(
                 !source.hidden &&
                 (allowManualOnlySources || !source.manualOnly)
         }
+
+/**
+ * Sources safe to ask before Media3 has prepared a restored, paused item.
+ *
+ * Name-and-length catalogues can return the wrong edit when handed 0 ms, so
+ * they stay untouched until a real duration is known. These two YouTube
+ * providers are keyed to the exact video id and need no length to answer.
+ */
+internal fun lyricsSourceSequenceForDuration(
+    order: List<LyricsSource>,
+    enabledSources: Set<LyricsSource>,
+    durationMs: Long,
+    allowManualOnlySources: Boolean = false,
+): List<LyricsSource> {
+    val configured = lyricsSourceSequence(order, enabledSources, allowManualOnlySources)
+    if (durationMs > 0L) return configured
+    return configured.filter { source ->
+        source == LyricsSource.YOUTUBE_TRANSCRIPT || source == LyricsSource.YOUTUBE_MUSIC
+    }
+}

@@ -101,6 +101,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import org.jetbrains.compose.resources.stringResource
 import org.jetbrains.compose.resources.stringArrayResource
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
@@ -178,6 +179,7 @@ import com.music.bitchord.data.canvas.CanvasSource
 import com.music.bitchord.data.lyrics.LyricLine
 import com.music.bitchord.data.lyrics.LyricsSource
 import com.music.bitchord.data.settings.LastPlayerScreen
+import com.music.bitchord.data.settings.LyricsBackgroundMode
 import com.music.bitchord.data.settings.PlayerTheme
 import com.music.bitchord.data.model.LikeStatus
 import com.music.bitchord.data.model.PlaybackSourceType
@@ -344,16 +346,17 @@ private fun FullscreenLyricsAmbientBackdrop(
     trackKey: String,
     imageUrl: String?,
     canvasFrame: ImageBitmap?,
+    isPlaying: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val mesh = rememberArtworkMesh(imageUrl, canvasFrame, ART_PX, seed = null, clipKey = trackKey)
     val reduceAnimation by PlayerSettings.reduceAnimation.collectAsStateWithLifecycle()
     val drift = remember(trackKey) { Animatable(0f) }
 
-    LaunchedEffect(trackKey, reduceAnimation) {
+    LaunchedEffect(trackKey, reduceAnimation, isPlaying) {
         if (reduceAnimation) {
             drift.snapTo(0f)
-        } else {
+        } else if (isPlaying) {
             while (true) {
                 drift.animateTo(
                     targetValue = drift.value + (2f * kotlin.math.PI.toFloat()),
@@ -377,6 +380,96 @@ private fun FullscreenLyricsAmbientBackdrop(
                 translationY = kotlin.math.cos(phase * 0.86f) * size.height * 0.018f
             },
         )
+    }
+}
+
+/** One Lyrics View backdrop shared by the ordinary landscape pane and fullscreen. */
+@Composable
+private fun LyricsViewBackdrop(
+    trackKey: String,
+    mode: LyricsBackgroundMode,
+    imageUrl: String?,
+    artistImageUrl: String?,
+    blurPx: Int,
+    canvasFrame: ImageBitmap?,
+    isPlaying: Boolean,
+    fullArtworkBlurImage: ImageBitmap?,
+    modifier: Modifier = Modifier,
+) {
+    when (mode) {
+        LyricsBackgroundMode.DYNAMIC_KAWARP -> {
+            FullArtworkBlurBackdrop(
+                image = fullArtworkBlurImage,
+                modifier = modifier,
+            )
+            FullscreenLyricsAmbientBackdrop(
+                trackKey = trackKey,
+                imageUrl = imageUrl,
+                canvasFrame = canvasFrame,
+                isPlaying = isPlaying,
+                modifier = modifier,
+            )
+        }
+
+        LyricsBackgroundMode.ARTIST_IMAGE,
+        LyricsBackgroundMode.COVER_ART -> {
+            val selectedImage = if (mode == LyricsBackgroundMode.ARTIST_IMAGE) {
+                artistImageUrl?.takeIf(String::isNotBlank) ?: imageUrl
+            } else {
+                imageUrl
+            }
+            val blurRadius = with(LocalDensity.current) { blurPx.coerceIn(0, 40).toFloat().toDp() }
+            Box(modifier = modifier.background(Color(0xFF111018))) {
+                if (!selectedImage.isNullOrBlank()) {
+                    AsyncImage(
+                        model = selectedImage,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize().blur(blurRadius),
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                0f to Color.Black.copy(alpha = 0.30f),
+                                0.52f to Color.Black.copy(alpha = 0.42f),
+                                1f to Color.Black.copy(alpha = 0.70f),
+                            ),
+                        ),
+                )
+            }
+        }
+
+        LyricsBackgroundMode.COVER_COLORS -> {
+            val mesh = rememberArtworkMesh(
+                imageUrl = imageUrl,
+                canvasFrame = null,
+                artPx = ART_PX,
+                seed = null,
+                clipKey = "lyrics-colors:$trackKey",
+            )
+            Box(modifier = modifier) {
+                ArtworkMeshBackdrop(
+                    mesh = mesh,
+                    modifier = Modifier.fillMaxSize(),
+                    fallback = Color(0xFF17141D),
+                )
+                Box(
+                    Modifier.fillMaxSize().background(
+                        Brush.verticalGradient(
+                            0f to Color.Black.copy(alpha = 0.18f),
+                            1f to Color.Black.copy(alpha = 0.48f),
+                        ),
+                    ),
+                )
+            }
+        }
+
+        LyricsBackgroundMode.TRANSPARENT -> {
+            Box(modifier = modifier.background(Color.Transparent))
+        }
     }
 }
 
@@ -1148,6 +1241,8 @@ fun NowPlayingScreen(
     onLiveCanvasChanged: (Boolean) -> Unit = {},
     /** Mirrors fullscreen-lyrics visibility so the player menu can use the top Dialog window. */
     onLyricsFullscreenChanged: (Boolean) -> Unit = {},
+    /** Cached artist-header image; the cover is the documented fallback. */
+    artistImageUrl: String? = null,
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
@@ -1203,6 +1298,8 @@ fun NowPlayingScreen(
     val syncedLyricsEnabled by PlayerSettings.syncedLyrics.collectAsStateWithLifecycle()
     val hideLyricsPreview by PlayerSettings.hideLyricsPreview.collectAsStateWithLifecycle()
     val lyricsOffsetMs by PlayerSettings.lyricsOffsetMs.collectAsStateWithLifecycle()
+    val lyricsBackgroundMode by PlayerSettings.lyricsBackgroundMode.collectAsStateWithLifecycle()
+    val lyricsBackgroundBlurPx by PlayerSettings.lyricsBackgroundBlurPx.collectAsStateWithLifecycle()
     // A lambda, not a value: read by the lyric strip and panel in scopes of
     // their own, so a tick recomposes them and not the player around them.
     val lyricsPlayhead = rememberLyricPlayhead(position)
@@ -1258,6 +1355,10 @@ fun NowPlayingScreen(
     }
     var lyricsFullscreen by remember { mutableStateOf(false) }
     var lyricsRequestedLandscape by remember { mutableStateOf(false) }
+    // The queue is an overlay *inside* fullscreen lyrics, not a replacement
+    // player surface. Keeping its own flag preserves the lyrics dialog and the
+    // landscape request while the list is open.
+    var fullscreenQueueOpen by remember { mutableStateOf(false) }
     // The dedicated fullscreen lyrics/Canvas presentation is landscape-only.
     // Portrait keeps the regular lyrics layout in the player.
     val lyricsFullscreenVisible = lyricsFullscreen && lyricsOpen && sideways
@@ -1273,6 +1374,7 @@ fun NowPlayingScreen(
                 fullscreenRequested = false
                 lyricsFullscreen = false
                 lyricsRequestedLandscape = false
+                fullscreenQueueOpen = false
                 reportLyricsFullscreen(false)
             }
         }
@@ -1439,6 +1541,7 @@ fun NowPlayingScreen(
         if (lyricsRequestedLandscape) screenOrientation.landscape()
     }
     val exitLyricsFullscreen: () -> Unit = {
+        fullscreenQueueOpen = false
         lyricsFullscreen = false
         if (lyricsRequestedLandscape) screenOrientation.portrait()
         lyricsRequestedLandscape = false
@@ -1452,20 +1555,23 @@ fun NowPlayingScreen(
         if (lyricsOpen) closeLyrics() else openLyrics()
     }
     val toggleQueue: () -> Unit = {
-        val opening = !queueOpen
-        if (opening && lyricsOpen) queueSlide.floatValue = 1f
-        // The fullscreen lyrics dialog already asked for landscape. Hand that
-        // request to the landscape player's queue instead of letting
-        // closeLyrics() restore portrait as the dialog disappears.
-        if (opening && lyricsFullscreen && lyricsRequestedLandscape) {
-            lyricsRequestedLandscape = false
+        if (lyricsFullscreen) {
+            // Stay in the current fullscreen Dialog and put the queue over it.
+            // Closing it returns to the exact same lyric/Canvas state without
+            // asking the user to enter fullscreen again.
+            fullscreenQueueOpen = !fullscreenQueueOpen
+            if (fullscreenQueueOpen) revealLyricsControls()
+        } else {
+            val opening = !queueOpen
+            if (opening && lyricsOpen) queueSlide.floatValue = 1f
+            // The fullscreen lyrics dialog already asked for landscape. Hand that
+            // request to the landscape player's queue instead of letting
+            // closeLyrics() restore portrait as the dialog disappears.
+            if (opening && lyricsRequestedLandscape) lyricsRequestedLandscape = false
+            if (opening) queueControlsOpen = true
+            queueOpen = opening
+            if (opening) closeLyrics()
         }
-        // With the queue rather than after it, for the reason [openLyrics]
-        // gives: left to the effect above, it was a second recomposition of
-        // the whole player on the sleeve's first frame of moving.
-        if (opening) queueControlsOpen = true
-        queueOpen = opening
-        if (opening) closeLyrics()
     }
     val lyricsLoadingLines = stringArrayResource(Res.array.lyrics_loading_lines)
     val lyricsLoadingText = remember(song.videoId) { lyricsLoadingLines.random() }
@@ -1550,6 +1656,10 @@ fun NowPlayingScreen(
     // Controls being visible must not insert an extra navigation level. Back
     // always leaves lyrics in one step, whether it starts over the lyrics list
     // or over the half-player at the bottom.
+    PlayerBackHandler(enabled = fullscreenQueueOpen) {
+        if (queueSelection.active) queueSelection.clear() else fullscreenQueueOpen = false
+    }
+
     PlayerBackHandler(enabled = lyricsFullscreen, onBack = exitLyricsFullscreen)
 
     PlayerBackHandler(enabled = lyricsOpen, onBack = closeLyrics)
@@ -2262,19 +2372,24 @@ fun NowPlayingScreen(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black),
+                    .background(
+                        if (lyricsBackgroundMode == LyricsBackgroundMode.TRANSPARENT) {
+                            Color.Transparent
+                        } else {
+                            Color.Black
+                        },
+                    ),
             ) {
-                // The soft artwork blur is the shared background for both
-                // layouts. Canvas clips or the square cover sit above it.
-                FullArtworkBlurBackdrop(
-                    image = fullArtworkBlurImage,
-                    modifier = Modifier.fillMaxSize(),
-                )
-                FullscreenLyricsAmbientBackdrop(
+                LyricsViewBackdrop(
                     trackKey = song.videoId,
+                    mode = lyricsBackgroundMode,
                     imageUrl = remoteArt,
+                    artistImageUrl = artistImageUrl,
+                    blurPx = lyricsBackgroundBlurPx,
                     canvasFrame = fullscreenCanvasFrame,
-                    modifier = Modifier.fillMaxSize(),
+                    isPlaying = isPlaying,
+                    fullArtworkBlurImage = fullArtworkBlurImage,
+                    modifier = Modifier.fillMaxSize().hazeSource(queueHaze),
                 )
                 Box(
                     modifier = Modifier
@@ -2664,6 +2779,89 @@ fun NowPlayingScreen(
                         }
                         }
                     }
+                    // The queue floats over fullscreen lyrics. The scrim dims
+                    // the reading surface slightly, but the lyrics Dialog and its
+                    // Canvas decoder stay mounted underneath the interactive list.
+                    AnimatedVisibility(
+                        visible = fullscreenQueueOpen,
+                        enter = fadeIn(tween(180)),
+                        exit = fadeOut(tween(140)),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .zIndex(20f),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color.Black.copy(alpha = 0.18f))
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null,
+                                ) { fullscreenQueueOpen = false },
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.CenterEnd)
+                                    .fillMaxHeight()
+                                    .fillMaxWidth(0.60f)
+                                    .widthIn(max = 480.dp)
+                                    .padding(10.dp)
+                                    .clip(RoundedCornerShape(22.dp))
+                                    .background(Color(0xF51A1720))
+                                    // Consume taps on empty panel space so they do not
+                                    // fall through to the scrim and dismiss the queue.
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                    ) {}
+                                    .border(
+                                        1.dp,
+                                        Color.White.copy(alpha = 0.10f),
+                                        RoundedCornerShape(22.dp),
+                                    ),
+                            ) {
+                                InlineQueue(
+                                    queue = queue,
+                                    currentIndex = queueIndex,
+                                    autoplayEnabled = autoplayEnabled,
+                                    controlsLocked = controlsLocked,
+                                    hazeState = queueHaze,
+                                    onJumpTo = onJumpTo,
+                                    onRemove = onRemoveFromQueue,
+                                    onMove = onMoveInQueue,
+                                    onClear = onClearQueue,
+                                    onSongMenu = onQueueSongMenu,
+                                    onScrollingChange = { queueScrolling = it },
+                                    onDragActiveChange = onQueueDragActiveChange,
+                                    onSwipeToQueue = onQueueSwipeToQueue,
+                                    gesturesEnabled = fullscreenQueueOpen && !queueDragging,
+                                    undoNotice = queueUndoNotice,
+                                    selection = queueSelection,
+                                    onBulkAction = onQueueBulkAction,
+                                    onRemoveSelected = onQueueRemoveEntries,
+                                    modifier = Modifier.fillMaxSize(),
+                                    onAddAllToPlaylist = onQueueAddAllToPlaylist,
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .padding(top = 8.dp, end = 8.dp)
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                        .background(Color.Black.copy(alpha = 0.44f))
+                                        .clickable { fullscreenQueueOpen = false },
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Close,
+                                        contentDescription = stringResource(Res.string.close_lyrics),
+                                        tint = Color.White,
+                                    )
+                                }
+                            }
+                        }
+                    }
+
                     // Draw the player drawers in this Dialog window. The normal
                     // player overlays sit in the Activity window underneath it,
                     // which made Audio Output and Lyrics Sources look unresponsive.
@@ -3185,11 +3383,23 @@ fun NowPlayingScreen(
                                 )
                             },
                         ) { panelModifier ->
-                            LyricsTranslationMotion(
-                                trigger = lyricsTranslation.transition,
-                                reduceMotion = lyricsTranslation.reduceMotion,
-                                modifier = panelModifier,
-                            ) { particleProgress ->
+                            Box(Modifier.fillMaxSize()) {
+                                LyricsViewBackdrop(
+                                    trackKey = song.videoId,
+                                    mode = lyricsBackgroundMode,
+                                    imageUrl = remoteArt,
+                                    artistImageUrl = artistImageUrl,
+                                    blurPx = lyricsBackgroundBlurPx,
+                                    canvasFrame = canvasFrame,
+                                    isPlaying = isPlaying,
+                                    fullArtworkBlurImage = fullArtworkBlurImage,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                                LyricsTranslationMotion(
+                                    trigger = lyricsTranslation.transition,
+                                    reduceMotion = lyricsTranslation.reduceMotion,
+                                    modifier = panelModifier,
+                                ) { particleProgress ->
                                 // [controlsOpen] is a constant `true`: that flag
                                 // exists because the portrait player hides its
                                 // transport behind the lyrics and needs a tap to
@@ -3216,6 +3426,7 @@ fun NowPlayingScreen(
                                     centerFocus = true,
                                     modifier = Modifier.fillMaxSize(),
                                 )
+                                }
                             }
                         }
                     },
@@ -4769,24 +4980,34 @@ fun NowPlayingScreen(
                         // header — which is its first frame of moving.
                         val lyricsPanelVisible = lyricsOpen && collapseDone
                         if (lyricsPanelVisible || playerPrewarmStage >= 2) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(top = HEADER_HEIGHT)
+                                    // Keep the prepared list measured but completely
+                                    // outside hit-testing/drawing until it is needed.
+                                    .offset {
+                                        if (lyricsPanelVisible) IntOffset.Zero else IntOffset(100_000, 0)
+                                    }
+                                    // Arrives after the sleeve has finished collapsing
+                                    // into the header rather than during — see [collapseDone].
+                                    .graphicsLayer { alpha = if (lyricsPanelVisible) panelFade.value else 0f },
+                            ) {
+                                LyricsViewBackdrop(
+                                    trackKey = song.videoId,
+                                    mode = lyricsBackgroundMode,
+                                    imageUrl = remoteArt,
+                                    artistImageUrl = artistImageUrl,
+                                    blurPx = lyricsBackgroundBlurPx,
+                                    canvasFrame = canvasFrame,
+                                    isPlaying = isPlaying,
+                                    fullArtworkBlurImage = fullArtworkBlurImage,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
                                 LyricsTranslationMotion(
                                     trigger = lyricsTranslation.transition,
                                     reduceMotion = lyricsTranslation.reduceMotion,
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(top = HEADER_HEIGHT)
-                                        // Keep the prepared list measured but completely
-                                        // outside hit-testing/drawing until it is needed.
-                                        .offset {
-                                            if (lyricsPanelVisible) IntOffset.Zero else IntOffset(100_000, 0)
-                                        }
-                                        // Arrives after the sleeve has finished collapsing
-                                        // into the header rather than during — see
-                                        // [collapseDone]. Fading lyrics in over a sleeve
-                                        // still mid-collapse doubled the same movement in
-                                        // two places on screen at once, and composing them
-                                        // there was what made the collapse stutter.
-                                        .graphicsLayer { alpha = if (lyricsPanelVisible) panelFade.value else 0f },
+                                    modifier = Modifier.fillMaxSize(),
                                 ) { particleProgress ->
                                     LyricsPanel(
                                         lines = lyrics.orEmpty(),
@@ -4810,6 +5031,7 @@ fun NowPlayingScreen(
                                         modifier = Modifier.fillMaxSize(),
                                     )
                                 }
+                            }
                             // Floated over the foot of the lyrics rather than placed in
                             // the controls below them. In the controls it was a row of
                             // layout like any other, and the bottom block is measured at

@@ -106,7 +106,16 @@ object LyricsRepository {
         /** Manual selection may opt into providers whose responses lack track identity. */
         allowManualOnlySources: Boolean = false,
     ): Result? = coroutineScope {
-        val sequence = lyricsSourceSequence(order, sources, allowManualOnlySources)
+        // With no duration, only sources keyed to the exact YouTube video can
+        // run. Name/length catalogues silently match another edit when passed
+        // zero, which is worse than waiting for the media duration to arrive.
+        val sequence = lyricsSourceSequenceForDuration(
+            order = order,
+            enabledSources = sources,
+            durationMs = durationMs,
+            allowManualOnlySources = allowManualOnlySources,
+        )
+        if (sequence.isEmpty()) return@coroutineScope null
 
         // Every source but [SimpMusicLyrics] is asked for a name, and
         // YouTube's is not the name anyone catalogued. Cleaned once, here,

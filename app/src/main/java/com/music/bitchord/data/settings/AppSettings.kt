@@ -535,6 +535,12 @@ object AppSettings {
     /** Blurs unfocused lyric lines, keeping the active line sharp. */
     val lyricsBlur = MutableStateFlow(true)
 
+    /** Artwork treatment behind the Lyrics View. */
+    val lyricsBackgroundMode = MutableStateFlow(LyricsBackgroundMode.DYNAMIC_KAWARP)
+
+    /** Image blur in px; used only by Artist Image and Cover Art. */
+    val lyricsBackgroundBlurPx = MutableStateFlow(0)
+
     /** Positive values delay synced lyrics; negative values bring them forward. */
     val lyricsOffsetMs = MutableStateFlow(0)
 
@@ -1078,6 +1084,12 @@ object AppSettings {
         glassPerformance.value = prefs.getBoolean(KEY_GLASS_PERFORMANCE, false)
         progressiveBlur.value = prefs.getBoolean(KEY_PROGRESSIVE_BLUR, false)
         lyricsBlur.value = prefs.getBoolean(KEY_LYRICS_BLUR, true)
+        lyricsBackgroundMode.value = runCatching {
+            LyricsBackgroundMode.valueOf(
+                prefs.getString(KEY_LYRICS_BACKGROUND_MODE, null).orEmpty(),
+            )
+        }.getOrDefault(LyricsBackgroundMode.DYNAMIC_KAWARP)
+        lyricsBackgroundBlurPx.value = prefs.getInt(KEY_LYRICS_BACKGROUND_BLUR_PX, 0).coerceIn(0, 40)
         lyricsOffsetMs.value = prefs.getInt(KEY_LYRICS_OFFSET_MS, 0)
             .coerceIn(MIN_LYRICS_OFFSET_MS, MAX_LYRICS_OFFSET_MS)
         translationLanguage.value = prefs.getString(KEY_TRANSLATION_LANGUAGE, "").orEmpty()
@@ -1625,6 +1637,19 @@ object AppSettings {
     fun setLyricsBlur(value: Boolean) {
         lyricsBlur.value = value
         prefs.edit().putBoolean(KEY_LYRICS_BLUR, value).apply()
+    }
+
+    fun setLyricsBackgroundMode(value: LyricsBackgroundMode) {
+        if (lyricsBackgroundMode.value == value) return
+        lyricsBackgroundMode.value = value
+        prefs.edit().putString(KEY_LYRICS_BACKGROUND_MODE, value.name).apply()
+    }
+
+    fun setLyricsBackgroundBlurPx(value: Int) {
+        val normalized = value.coerceIn(0, 40)
+        if (lyricsBackgroundBlurPx.value == normalized) return
+        lyricsBackgroundBlurPx.value = normalized
+        prefs.edit().putInt(KEY_LYRICS_BACKGROUND_BLUR_PX, normalized).apply()
     }
 
     fun setLyricsOffsetMs(value: Int) {
@@ -2397,6 +2422,8 @@ object AppSettings {
     private const val KEY_GLASS_PERFORMANCE = "glass_performance"
     private const val KEY_PROGRESSIVE_BLUR = "progressive_blur"
     private const val KEY_LYRICS_BLUR = "lyrics_blur"
+    private const val KEY_LYRICS_BACKGROUND_MODE = "lyrics_background_mode"
+    private const val KEY_LYRICS_BACKGROUND_BLUR_PX = "lyrics_background_blur_px"
     private const val KEY_LYRICS_OFFSET_MS = "lyrics_offset_ms"
     private const val KEY_TRANSLATION_LANGUAGE = "translation_language"
     private const val KEY_ANIMATED_CANVAS = "animated_canvas"

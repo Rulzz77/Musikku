@@ -1576,4 +1576,8 @@
     <string name="automix_mini_art_transition">Transition des pochettes du mini-lecteur</string>
     <string name="automix_mini_art_transition_subtitle">Affiche les transitions de pochettes dans le mini-lecteur pendant AutoMix.</string>
     <string name="listen_together_invalid_qr">Ce code QR n’est pas une invitation valide pour écouter ensemble.</string>
+    <string name="player_more_playback_lyrics">Lecture et paroles</string>
+    <string name="player_more_queue_actions">Actions de la file d’attente</string>
+    <string name="player_more_library_downloads">Bibliothèque et téléchargements</string>
+    <string name="player_more_song_details">Détails du morceau</string>
 </resources>

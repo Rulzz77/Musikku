@@ -1492,4 +1492,8 @@
     <string name="automix_mini_art_transition">Chuyển cảnh ảnh bìa ở trình phát thu nhỏ</string>
     <string name="automix_mini_art_transition_subtitle">Hiển thị hiệu ứng chuyển ảnh bìa trong trình phát thu nhỏ khi dùng AutoMix.</string>
     <string name="listen_together_invalid_qr">Mã QR này không phải là lời mời nghe cùng hợp lệ.</string>
+    <string name="player_more_playback_lyrics">Phát nhạc &amp; lời bài hát</string>
+    <string name="player_more_queue_actions">Thao tác hàng đợi</string>
+    <string name="player_more_library_downloads">Thư viện &amp; nội dung tải xuống</string>
+    <string name="player_more_song_details">Chi tiết bài hát</string>
 </resources>

@@ -6,12 +6,16 @@ import android.content.SharedPreferences
 /**
  * Encrypted-at-rest storage for credentials.
  *
- * Two live here: the YouTube Music session cookie, and — if the user turns on
- * the Discord integration — that account's own bearer token. Neither is a
- * password: the Google one is typed into accounts.google.com inside a WebView,
- * and the Discord one is read out of a completed login session. But both grant
- * full access to their account, so they don't go in the plain prefs the
- * scrobbler tokens use.
+ * Account cookies, account bearer tokens, remote-storage passwords, and
+ * provider credentials (Last.fm, ListenBrainz, Spotify Canvas and lyric
+ * providers) live here. These values can authorize account access or paid/
+ * private API usage, so none belong in ordinary app preferences.
+ *
+ * A restored file whose keyset this device can't unwrap is recreated, and a
+ * Keystore that can't be used at all degrades to plain prefs rather than
+ * crashing on launch; see [EncryptedPrefs]. Both encrypted and fallback files
+ * are excluded from Android Auto Backup in backup_rules.xml and
+ * data_extraction_rules.xml.
  *
  * A restored file whose keyset this device can't unwrap is recreated, and a
  * Keystore that can't be used at all degrades to plain prefs rather than
@@ -120,6 +124,31 @@ class AuthStore(context: Context) {
     var smbPassword: String?
         get() = prefs.getString(KEY_SMB_PASSWORD, null)
         set(value) = prefs.edit().putString(KEY_SMB_PASSWORD, value).apply()
+
+    /** Provider credentials; never mirrored into the unencrypted settings file. */
+    var paxSenixApiKey: String?
+        get() = prefs.getString(KEY_PAXSENIX_API_KEY, null)
+        set(value) = prefs.edit().putString(KEY_PAXSENIX_API_KEY, value).apply()
+
+    var lastfmSessionKey: String?
+        get() = prefs.getString(KEY_LASTFM_SESSION_KEY, null)
+        set(value) = prefs.edit().putString(KEY_LASTFM_SESSION_KEY, value).apply()
+
+    var lastfmApiKey: String?
+        get() = prefs.getString(KEY_LASTFM_API_KEY, null)
+        set(value) = prefs.edit().putString(KEY_LASTFM_API_KEY, value).apply()
+
+    var lastfmSecret: String?
+        get() = prefs.getString(KEY_LASTFM_SECRET, null)
+        set(value) = prefs.edit().putString(KEY_LASTFM_SECRET, value).apply()
+
+    var listenBrainzToken: String?
+        get() = prefs.getString(KEY_LISTENBRAINZ_TOKEN, null)
+        set(value) = prefs.edit().putString(KEY_LISTENBRAINZ_TOKEN, value).apply()
+
+    var spotifySpdcToken: String?
+        get() = prefs.getString(KEY_SPOTIFY_SPDC_TOKEN, null)
+        set(value) = prefs.edit().putString(KEY_SPOTIFY_SPDC_TOKEN, value).apply()
 
     /**
      * The channel the listener chose to act as, if they chose one.
@@ -230,5 +259,11 @@ class AuthStore(context: Context) {
         private const val KEY_DISCORD_TOKEN = "discord_token"
         private const val KEY_WEBDAV_PASSWORD = "webdav_password"
         private const val KEY_SMB_PASSWORD = "smb_password"
+        private const val KEY_PAXSENIX_API_KEY = "paxsenix_api_key"
+        private const val KEY_LASTFM_SESSION_KEY = "lastfm_session_key"
+        private const val KEY_LASTFM_API_KEY = "lastfm_api_key"
+        private const val KEY_LASTFM_SECRET = "lastfm_secret"
+        private const val KEY_LISTENBRAINZ_TOKEN = "listenbrainz_token"
+        private const val KEY_SPOTIFY_SPDC_TOKEN = "spotify_spdc_token"
     }
 }

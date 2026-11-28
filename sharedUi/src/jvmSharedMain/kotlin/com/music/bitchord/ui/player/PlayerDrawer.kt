@@ -13,6 +13,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -125,6 +126,7 @@ fun PlayerDrawer(
     // springs back or goes — see [DISMISS_DRAG_FRACTION].
     var drag by remember { mutableFloatStateOf(0f) }
     var height by remember { mutableIntStateOf(0) }
+    var width by remember { mutableIntStateOf(0) }
     val offset by animateFloatAsState(
         targetValue = drag,
         animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
@@ -132,7 +134,8 @@ fun PlayerDrawer(
     )
     // Fades with the drawer rather than staying at full strength under a sheet
     // halfway off the screen, which is what makes the drag feel connected.
-    val scrimAlpha = if (height > 0) (1f - offset / height).coerceIn(0f, 1f) else 1f
+    val dragExtent = if (slideFromEnd) width else height
+    val scrimAlpha = if (dragExtent > 0) (1f - offset / dragExtent).coerceIn(0f, 1f) else 1f
 
     // Flipped on the first composition so the drawer travels up from the edge
     // instead of appearing over the player fully formed.
@@ -151,7 +154,7 @@ fun PlayerDrawer(
     // answers to its own drag alone, because a scroll leftover means something
     // else there and must not be read as a pull.
     val dismissOnRelease: () -> Unit = {
-        if (height > 0 && drag > height * DISMISS_DRAG_FRACTION) onDismiss() else drag = 0f
+        if (dragExtent > 0 && drag > dragExtent * DISMISS_DRAG_FRACTION) onDismiss() else drag = 0f
     }
     val drawerScroll = remember {
         object : NestedScrollConnection {
@@ -220,12 +223,15 @@ fun PlayerDrawer(
                 // rather than growing one into a full-screen page.
                 .heightIn(max = 560.dp)
                 // Capped before the fill, so [Modifier.fillMaxWidth] fills to
-                // the cap rather than to the window. Centred by the parent's
-                // own BottomCenter alignment once it is narrower.
+                // the cap rather than to the window. The parent's alignment
+                // then anchors a bottom drawer or a fullscreen side panel.
                 .widthIn(max = panelMaxWidth)
                 .fillMaxWidth()
-                .onSizeChanged { height = it.height }
-                .offset { IntOffset(0, offset.roundToInt()) }
+                .onSizeChanged { height = it.height; width = it.width }
+                .offset {
+                    if (slideFromEnd) IntOffset(offset.roundToInt(), 0)
+                    else IntOffset(0, offset.roundToInt())
+                }
                 .clip(panelShape)
                 .then(
                     // The ⋯ menu's frost, so the drawers and the menu read as one
@@ -247,13 +253,22 @@ fun PlayerDrawer(
                 // Dragged down to dismiss, like every other sheet in the app.
                 // Upward drag is clamped to zero rather than followed: there is
                 // nothing above the drawer to reveal.
-                .then(if (drawerFollowsListScroll) Modifier.nestedScroll(drawerScroll) else Modifier)
-                .pointerInput(height) {
-                    detectVerticalDragGestures(
-                        onDragEnd = dismissOnRelease,
-                        onDragCancel = { drag = 0f },
-                    ) { _, delta ->
-                        drag = (drag + delta).coerceAtLeast(0f)
+                .then(if (drawerFollowsListScroll && !slideFromEnd) Modifier.nestedScroll(drawerScroll) else Modifier)
+                .pointerInput(height, width, slideFromEnd) {
+                    if (slideFromEnd) {
+                        detectHorizontalDragGestures(
+                            onDragEnd = dismissOnRelease,
+                            onDragCancel = { drag = 0f },
+                        ) { _, delta ->
+                            drag = (drag + delta).coerceAtLeast(0f)
+                        }
+                    } else {
+                        detectVerticalDragGestures(
+                            onDragEnd = dismissOnRelease,
+                            onDragCancel = { drag = 0f },
+                        ) { _, delta ->
+                            drag = (drag + delta).coerceAtLeast(0f)
+                        }
                     }
                 }
                 .navigationBarsPadding()

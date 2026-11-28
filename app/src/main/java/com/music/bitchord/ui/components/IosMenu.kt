@@ -446,9 +446,9 @@ fun <T : Any> IosMenuPopover(
     }
     val shown = requested ?: last ?: return
     val (menuItem, storedMenuAnchor) = shown
-    // Coordinates measured in the player Dialog are not valid in this second
-    // Dialog window. Fullscreen toolbar menus use the safe bottom-end position.
-    val menuAnchor = storedMenuAnchor.takeUnless { dialogWindow }
+    // The fullscreen menu anchor is recorded in the same full-window coordinate
+    // space; the Dialog is also full-window, so it can retain the button position.
+    val menuAnchor = storedMenuAnchor
     val open = item != null
 
     val context = LocalContext.current

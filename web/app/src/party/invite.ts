@@ -24,7 +24,8 @@ function isPrivateHost(hostname: string): boolean {
   if (
     host === 'localhost' || host.endsWith('.localhost') ||
     host.endsWith('.local') || host.endsWith('.lan') ||
-    host.endsWith('.internal') || host.endsWith('.home')
+    host.endsWith('.internal') || host.endsWith('.home') ||
+    host.endsWith('.localdomain')
   ) return true;
   const ipv4 = host.split('.').map(Number);
   if (ipv4.length === 4 && ipv4.every((part) => Number.isInteger(part) && part >= 0 && part <= 255)) {
@@ -45,6 +46,28 @@ function isPrivateHost(hostname: string): boolean {
       host.startsWith('2001:db8:');
   }
   return false;
+}
+
+/**
+ * A party server may be self-hosted, but an avatar/thumbnail is fetched by
+ * every participant's device. Keep untrusted shared image URLs on public
+ * HTTP(S) hosts only so a custom or old server cannot direct peers at LAN
+ * services or local files.
+ */
+export function sanitizePartyImageUrl(raw: string | null | undefined): string | null {
+  const value = raw?.trim();
+  if (!value || value.length > 4_096 || /[\\\\\u0000-\u0020]/.test(value)) return null;
+  try {
+    const parsed = new URL(value);
+    if (
+      (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') ||
+      !parsed.hostname || parsed.username || parsed.password ||
+      isPrivateHost(parsed.hostname) || !parsed.hostname.includes('.')
+    ) return null;
+    return parsed.href;
+  } catch {
+    return null;
+  }
 }
 
 export function sanitizeServerUrl(raw: string | null | undefined): string | null {

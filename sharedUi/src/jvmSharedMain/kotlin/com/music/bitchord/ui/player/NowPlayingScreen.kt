@@ -1659,11 +1659,13 @@ fun NowPlayingScreen(
     // or over the half-player at the bottom.
     PlayerBackHandler(enabled = lyricsFullscreen, onBack = exitLyricsFullscreen)
 
+    PlayerBackHandler(enabled = lyricsOpen, onBack = closeLyrics)
+
+    // Higher priority than leaving the ordinary lyrics panel, but lower than
+    // the drawers opened over fullscreen. Back closes the overlay first.
     PlayerBackHandler(enabled = fullscreenQueueOpen) {
         if (queueSelection.active) queueSelection.clear() else fullscreenQueueOpen = false
     }
-
-    PlayerBackHandler(enabled = lyricsOpen, onBack = closeLyrics)
 
     // Back out of the queue to the player.
     PlayerBackHandler(enabled = queueOpen) {

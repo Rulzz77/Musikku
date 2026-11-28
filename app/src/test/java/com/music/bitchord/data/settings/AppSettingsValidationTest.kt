@@ -54,6 +54,102 @@ class AppSettingsValidationTest {
     }
 
     @Test
+    fun `WebDAV password remains bound to the same origin and username`() {
+        assertFalse(
+            webDavCredentialBindingChanged(
+                "https://cloud.example.com/remote.php/dav",
+                "alice",
+                "https://cloud.example.com/Music",
+                "alice",
+            ),
+        )
+        assertTrue(
+            webDavCredentialBindingChanged(
+                "https://cloud.example.com/remote.php/dav",
+                "alice",
+                "https://cloud.example.com:8443/remote.php/dav",
+                "alice",
+            ),
+        )
+        assertTrue(
+            webDavCredentialBindingChanged(
+                "https://cloud.example.com/remote.php/dav",
+                "alice",
+                "http://cloud.example.com/remote.php/dav",
+                "alice",
+            ),
+        )
+        assertTrue(
+            webDavCredentialBindingChanged(
+                "https://cloud.example.com/remote.php/dav",
+                "alice",
+                "https://attacker.example/remote.php/dav",
+                "alice",
+            ),
+        )
+        assertTrue(
+            webDavCredentialBindingChanged(
+                "https://cloud.example.com/remote.php/dav",
+                "alice",
+                "https://cloud.example.com/remote.php/dav",
+                "bob",
+            ),
+        )
+        assertTrue(
+            webDavCredentialBindingChanged(
+                "https://cloud.example.com/remote.php/dav",
+                "alice",
+                null,
+                null,
+            ),
+        )
+    }
+
+    @Test
+    fun `SMB password is invalidated when server address or username changes`() {
+        assertFalse(
+            smbCredentialBindingChanged(
+                "nas.example.com:445",
+                "alice",
+                "nas.example.com",
+                "alice",
+            ),
+        )
+        assertTrue(
+            smbCredentialBindingChanged(
+                "nas.example.com:445",
+                "alice",
+                "attacker.example.com:445",
+                "alice",
+            ),
+        )
+        assertTrue(
+            smbCredentialBindingChanged(
+                "nas.example.com:445",
+                "alice",
+                "nas.example.com:1445",
+                "alice",
+            ),
+        )
+        assertTrue(
+            smbCredentialBindingChanged(
+                "nas.example.com:445",
+                "alice",
+                "nas.example.com:445",
+                "bob",
+            ),
+        )
+        assertTrue(
+            smbCredentialBindingChanged(
+                "nas.example.com:445",
+                "alice",
+                null,
+                null,
+            ),
+        )
+    }
+
+    @Test
     fun `Last.fm backup endpoints are limited to official HTTPS providers`() {
         assertTrue(
             AppSettings.isValidImportedPreference(

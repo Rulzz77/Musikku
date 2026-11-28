@@ -21,9 +21,16 @@ function isLocalDevelopmentHost(hostname: string): boolean {
 
 function isPrivateHost(hostname: string): boolean {
   const host = hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  if (
+    host === 'localhost' || host.endsWith('.localhost') ||
+    host.endsWith('.local') || host.endsWith('.lan') ||
+    host.endsWith('.internal') || host.endsWith('.home')
+  ) return true;
   const ipv4 = host.split('.').map(Number);
   if (ipv4.length === 4 && ipv4.every((part) => Number.isInteger(part) && part >= 0 && part <= 255)) {
-    const [a, b, c] = ipv4;
+    const a = ipv4[0]!;
+    const b = ipv4[1]!;
+    const c = ipv4[2]!;
     return a === 0 || a === 10 || a === 127 || a >= 224 ||
       (a === 100 && b! >= 64 && b! <= 127) ||
       (a === 169 && b === 254) ||

@@ -10,8 +10,8 @@ buildscript {
          *
          * 8.10.x miscompiles `NowPlayingScreen`, which is large enough — 36
          * parameters, ~5,500 dex instructions, registers past v287 — to hit a
-         * register-allocation bug in debug-mode dexing. Resolving phis at one of
-         * the join points emits `const/16 v29, #int 48` over the register already
+         * register-allocation bug in debug-mode dexing. Resolving phis at one
+         * of the join points emits `const/16 v29, #int 48` over the register already
          * holding the `MeshPalette` from `rememberArtworkColors`, and the
          * `MeshGradientBackground` call downstream then reads it back as a
          * reference:
@@ -41,8 +41,8 @@ buildscript {
  * No "v" in the name — the in-app updater reads it as a number; the "v" is the
  * release tag's alone.
  */
-extra["musikkuVersionCode"] = 99
-extra["musikkuVersionName"] = "0.1.98"
+extra["musikkuVersionCode"] = 100
+extra["musikkuVersionName"] = "0.1.99"
 extra["musikkuBetaSuffix"] = ""
 /*
  * Bump this by hand before cutting each sideloaded test build ("beta2",

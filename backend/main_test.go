@@ -22,6 +22,7 @@ import (
 func setupTestServer() *httptest.Server {
 	// Each test server starts with its own party-creation allowance.
 	createLimiter = newIPRateLimiter(time.Minute, config.CreateRatePerMinute, config.RateLimitMaxEntries)
+	joinLimiter = newIPRateLimiter(time.Minute, config.JoinRatePerMinute, config.RateLimitMaxEntries)
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", handleRoot)
 	mux.HandleFunc("GET /healthz", handleHealthz)
@@ -37,6 +38,22 @@ func setupTestServer() *httptest.Server {
 	mux.HandleFunc("GET /ws/parties/{code}", handleWebSocket)
 
 	return httptest.NewServer(corsMiddleware(mux))
+}
+
+func TestJoinRateLimiterRejectsBurstPerIP(t *testing.T) {
+	limiter := newIPRateLimiter(time.Minute, 2, 10)
+	if !limiter.Allow("203.0.113.10") {
+		t.Fatal("first join attempt should be allowed")
+	}
+	if !limiter.Allow("203.0.113.10") {
+		t.Fatal("second join attempt should be allowed")
+	}
+	if limiter.Allow("203.0.113.10") {
+		t.Fatal("third join attempt from the same IP should be rate limited")
+	}
+	if !limiter.Allow("203.0.113.11") {
+		t.Fatal("another IP should have an independent budget")
+	}
 }
 
 func TestRESTEndpoints(t *testing.T) {

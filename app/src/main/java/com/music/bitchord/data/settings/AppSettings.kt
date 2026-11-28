@@ -2342,6 +2342,9 @@ object AppSettings {
         prefs.edit().apply {
             clear()
             val incoming = values.filterKeys { it !in SECRETS && it !in DEVICE_LOCAL }
+            require(incoming.all { (key, value) -> isValidImportedPreference(key, value) }) {
+                "Imported settings contain an out-of-range player value"
+            }
             (kept + incoming).forEach { (key, value) ->
                 when (value) {
                     is Boolean -> putBoolean(key, value)

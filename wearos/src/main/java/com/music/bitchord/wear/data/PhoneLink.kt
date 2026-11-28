@@ -30,6 +30,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import java.util.concurrent.atomic.AtomicLong
 import com.music.bitchord.wear.playback.Speaker
 import com.music.bitchord.wear.WearProtocol as P
 
@@ -87,6 +88,7 @@ class PhoneLink(context: Context, private val scope: CoroutineScope) :
     @Volatile private var phoneNode: String? = null
     private var artId: String? = null
     private var artJob: Job? = null
+    private val queueArtworkGeneration = AtomicLong()
     private var started = false
 
     private class Hold<T>(val value: T, val until: Long)
@@ -378,6 +380,10 @@ class PhoneLink(context: Context, private val scope: CoroutineScope) :
     }
 
     private fun applyQueue(map: DataMap) {
+        // A later queue snapshot can keep the same playing media id. Give each
+        // snapshot its own generation so slow artwork from an older order
+        // cannot overwrite the rows of the latest queue.
+        val generation = queueArtworkGeneration.incrementAndGet()
         val items = map.getDataMapArrayList(P.KEY_ITEMS).orEmpty()
         val current = map.getInt(P.KEY_CURRENT_INDEX)
         val mediaId = map.getString(P.KEY_QUEUE_MEDIA_ID).orEmpty()
@@ -396,8 +402,9 @@ class PhoneLink(context: Context, private val scope: CoroutineScope) :
             val art = items.map { item ->
                 async { item.getAsset(P.KEY_ART)?.let { decode(it) } }
             }.awaitAll()
+            if (queueArtworkGeneration.get() != generation) return@launch
             _queue.update { q ->
-                if (q == null || q.mediaId != mediaId) q
+                if (q == null || q.mediaId != mediaId || queueArtworkGeneration.get() != generation) q
                 else q.copy(rows = q.rows.mapIndexed { i, row -> row.copy(art = art.getOrNull(i)) })
             }
         }

@@ -764,8 +764,9 @@ class WearCommandService : WearableListenerService() {
                     )
                 }
                 val mediaId = controller.currentMediaItem?.mediaId
-                // Off the main thread: the thumbnails are a few disk reads each.
-                Thread { WearBridge.publishQueue(applicationContext, rows, current, mediaId) }.start()
+                // WearBridge coalesces rapid snapshots and serializes the
+                // asynchronous cover reads and Wearable Data Layer writes.
+                WearBridge.publishQueue(applicationContext, rows, current, mediaId)
             }
         }
     }

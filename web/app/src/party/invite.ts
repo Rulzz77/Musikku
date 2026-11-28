@@ -81,7 +81,7 @@ export function parseInvite(value: string): { code: string; serverUrl: string | 
     return code ? { code, serverUrl: server } : null;
   }
   const match = url.pathname.match(/^\/invite\/([A-Za-z0-9]{6})$/);
-  const secureInvitePage = url.protocol === 'https:' ||
+  const secureInvitePage = (url.protocol === 'https:' && !isPrivateHost(url.hostname)) ||
     (url.protocol === 'http:' && isLocalDevelopmentHost(url.hostname));
   if (secureInvitePage && match) return { code: match[1]!.toUpperCase(), serverUrl: server };
   return null;

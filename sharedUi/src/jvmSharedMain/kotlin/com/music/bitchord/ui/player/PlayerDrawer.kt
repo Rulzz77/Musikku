@@ -8,6 +8,8 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -41,6 +43,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
@@ -105,6 +108,14 @@ fun PlayerDrawer(
     modifier: Modifier = Modifier,
     /** Air between the title and whatever the drawer opens with. */
     titleGap: Dp = 14.dp,
+    /** Where the panel is anchored; fullscreen player sheets use the right edge. */
+    alignment: Alignment = Alignment.BottomCenter,
+    /** Width cap for a side panel; the phone's bottom drawer keeps its wider default. */
+    panelMaxWidth: Dp = DRAWER_MAX_WIDTH,
+    /** Rounded on all sides for fullscreen side panels. */
+    panelShape: Shape = DRAWER_SHAPE,
+    /** Enters and exits horizontally when this is a side panel. */
+    slideFromEnd: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val reduceDynamicBlur by PlayerSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
@@ -188,12 +199,20 @@ fun PlayerDrawer(
                 interactionSource = remember { MutableInteractionSource() },
                 onClick = onDismiss,
             ),
-        contentAlignment = Alignment.BottomCenter,
+        contentAlignment = alignment,
     ) {
         AnimatedVisibility(
             visible = shown,
-            enter = slideInVertically(tween(260, easing = FastOutSlowInEasing)) { it },
-            exit = slideOutVertically(tween(180)) { it },
+            enter = if (slideFromEnd) {
+                slideInHorizontally(tween(260, easing = FastOutSlowInEasing)) { it }
+            } else {
+                slideInVertically(tween(260, easing = FastOutSlowInEasing)) { it }
+            },
+            exit = if (slideFromEnd) {
+                slideOutHorizontally(tween(180)) { it }
+            } else {
+                slideOutVertically(tween(180)) { it }
+            },
         ) {
         Column(
             modifier = Modifier
@@ -203,11 +222,11 @@ fun PlayerDrawer(
                 // Capped before the fill, so [Modifier.fillMaxWidth] fills to
                 // the cap rather than to the window. Centred by the parent's
                 // own BottomCenter alignment once it is narrower.
-                .widthIn(max = DRAWER_MAX_WIDTH)
+                .widthIn(max = panelMaxWidth)
                 .fillMaxWidth()
                 .onSizeChanged { height = it.height }
                 .offset { IntOffset(0, offset.roundToInt()) }
-                .clip(DRAWER_SHAPE)
+                .clip(panelShape)
                 .then(
                     // The ⋯ menu's frost, so the drawers and the menu read as one
                     // material over the player — its own where the player is
@@ -215,7 +234,7 @@ fun PlayerDrawer(
                     when {
                         reduceDynamicBlur -> Modifier.background(MenuFrostDark)
                         frost != null -> with(frost) {
-                            Modifier.frostPanel(DRAWER_SHAPE, MenuFrostDark.copy(alpha = MENU_FROST_ALPHA))
+                            Modifier.frostPanel(panelShape, MenuFrostDark.copy(alpha = MENU_FROST_ALPHA))
                         }
                         else -> Modifier.liveMenuFrost(hazeState, MenuFrostDark)
                     }

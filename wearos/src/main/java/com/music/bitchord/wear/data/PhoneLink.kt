@@ -88,6 +88,7 @@ class PhoneLink(context: Context, private val scope: CoroutineScope) :
     @Volatile private var phoneNode: String? = null
     private var artId: String? = null
     private var artJob: Job? = null
+    @Volatile private var lastQueueRevision = 0L
     private val queueArtworkGeneration = AtomicLong()
     private var started = false
 
@@ -380,6 +381,14 @@ class PhoneLink(context: Context, private val scope: CoroutineScope) :
     }
 
     private fun applyQueue(map: DataMap) {
+        // Data Layer updates can complete out of order if a previous request
+        // timed out. Ignore older revisions before changing the visible queue.
+        val revision = map.getLong(P.KEY_QUEUE_REVISION, 0L)
+        if (revision > 0L) {
+            if (revision < lastQueueRevision) return
+            lastQueueRevision = revision
+        }
+
         // A later queue snapshot can keep the same playing media id. Give each
         // snapshot its own generation so slow artwork from an older order
         // cannot overwrite the rows of the latest queue.

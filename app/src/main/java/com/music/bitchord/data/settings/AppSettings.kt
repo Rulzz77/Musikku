@@ -989,26 +989,39 @@ object AppSettings {
 
     /**
      * Move credentials written by older releases out of the plain settings
-     * SharedPreferences before reading the flows. The secure value wins if a
-     * user has already re-entered a credential after a partial migration.
+     * file. Do not delete the legacy copy until the encrypted store confirms a
+     * durable commit; a failed Keystore write must never log the user out.
      */
-    private fun migrateLegacySecret(
-        legacyKey: String,
-        readSecure: () -> String?,
-        writeSecure: (String?) -> Unit,
-    ) {
-        val legacy = prefs.getString(legacyKey, null)?.takeIf(String::isNotEmpty) ?: return
-        if (readSecure().isNullOrEmpty()) writeSecure(legacy)
-        prefs.edit().remove(legacyKey).apply()
-    }
-
     private fun migrateLegacyCredentials() {
-        migrateLegacySecret(KEY_PAXSENIX_API_KEY, { authStore.paxSenixApiKey }) { authStore.paxSenixApiKey = it }
-        migrateLegacySecret(KEY_LASTFM_SESSION_KEY, { authStore.lastfmSessionKey }) { authStore.lastfmSessionKey = it }
-        migrateLegacySecret(KEY_LASTFM_API_KEY, { authStore.lastfmApiKey }) { authStore.lastfmApiKey = it }
-        migrateLegacySecret(KEY_LASTFM_SECRET, { authStore.lastfmSecret }) { authStore.lastfmSecret = it }
-        migrateLegacySecret(KEY_LISTENBRAINZ_TOKEN, { authStore.listenBrainzToken }) { authStore.listenBrainzToken = it }
-        migrateLegacySecret(KEY_SPOTIFY_SPDC_TOKEN, { authStore.spotifySpdcToken }) { authStore.spotifySpdcToken = it }
+        val paxSenix = prefs.getString(KEY_PAXSENIX_API_KEY, null)
+        val lastfmSession = prefs.getString(KEY_LASTFM_SESSION_KEY, null)
+        val lastfmApiKeyValue = prefs.getString(KEY_LASTFM_API_KEY, null)
+        val lastfmSecretValue = prefs.getString(KEY_LASTFM_SECRET, null)
+        val listenBrainz = prefs.getString(KEY_LISTENBRAINZ_TOKEN, null)
+        val spotifySpdc = prefs.getString(KEY_SPOTIFY_SPDC_TOKEN, null)
+
+        if (listOf(paxSenix, lastfmSession, lastfmApiKeyValue, lastfmSecretValue, listenBrainz, spotifySpdc).all { it.isNullOrEmpty() }) {
+            return
+        }
+
+        val migrated = authStore.migrateProviderCredentials(
+            paxSenixApiKey = paxSenix,
+            lastfmSessionKey = lastfmSession,
+            lastfmApiKey = lastfmApiKeyValue,
+            lastfmSecret = lastfmSecretValue,
+            listenBrainzToken = listenBrainz,
+            spotifySpdcToken = spotifySpdc,
+        )
+        if (migrated) {
+            prefs.edit()
+                .remove(KEY_PAXSENIX_API_KEY)
+                .remove(KEY_LASTFM_SESSION_KEY)
+                .remove(KEY_LASTFM_API_KEY)
+                .remove(KEY_LASTFM_SECRET)
+                .remove(KEY_LISTENBRAINZ_TOKEN)
+                .remove(KEY_SPOTIFY_SPDC_TOKEN)
+                .commit()
+        }
     }
 
     private fun readAll() {

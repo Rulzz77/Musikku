@@ -268,14 +268,14 @@ fun SongActionsMenu(
     // A local file or a finished download has no YouTube identity behind it to
     // rate, save, queue into a playlist, fetch again, or share a link for.
     val isOffline = song.localUri != null
+    val canRate = isOffline || signedIn
+    val shareAction = onShare?.takeIf { !isOffline }
     val rows: @Composable ColumnScope.() -> Unit = {
         // Groups are drawn as they turn out to have something in them, and the
         // separator goes *before* a group, never after — so a menu whose last
         // group is empty doesn't end on a stray line.
         var drawnAny = false
         fun startsGroup(): Boolean = drawnAny.also { drawnAny = true }
-        val canRate = isOffline || signedIn
-        val shareAction = onShare?.takeIf { !isOffline }
 
         // Like is deliberately kept on the Player Page's adjacent heart button,
         // not duplicated inside the three-dot menu. These quick actions are

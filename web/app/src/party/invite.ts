@@ -40,9 +40,8 @@ function isPrivateHost(hostname: string): boolean {
       (a === 203 && b === 0 && c === 113);
   }
   if (host.includes(':')) {
-    return host === '::' || host.startsWith('fc') || host.startsWith('fd') ||
-      /^fe[89a-f]/.test(host) || host.startsWith('::ffff:') ||
-      host.startsWith('2001:db8:');
+    return host.startsWith('::') || host.startsWith('fc') || host.startsWith('fd') ||
+      /^fe[89a-f]/.test(host) || host.startsWith('2001:db8:');
   }
   return false;
 }
@@ -54,11 +53,14 @@ export function sanitizeServerUrl(raw: string | null | undefined): string | null
   try {
     const parsed = new URL(withScheme);
     if (!parsed.hostname || parsed.username || parsed.password || parsed.search || parsed.hash) return null;
-    if (!isLocalDevelopmentHost(parsed.hostname) && isPrivateHost(parsed.hostname)) return null;
+    // A private host is permitted only for an HTTP localhost development
+    // server. HTTPS does not make a loopback/LAN destination a production host.
+    const localDevelopmentServer =
+      parsed.protocol === 'http:' && isLocalDevelopmentHost(parsed.hostname);
+    if (isPrivateHost(parsed.hostname) && !localDevelopmentServer) return null;
     // Production party servers must use TLS. Plain HTTP is only accepted for
     // local development servers where TLS is commonly unavailable.
-    if (parsed.protocol !== 'https:' &&
-        !(parsed.protocol === 'http:' && isLocalDevelopmentHost(parsed.hostname))) return null;
+    if (parsed.protocol !== 'https:' && !localDevelopmentServer) return null;
     if (parsed.pathname !== '/' && parsed.pathname !== '') return null;
     return `${parsed.protocol}//${parsed.host}`;
   } catch {

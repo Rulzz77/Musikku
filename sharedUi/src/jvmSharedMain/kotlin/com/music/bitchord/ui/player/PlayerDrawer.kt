@@ -215,7 +215,7 @@ fun PlayerDrawer(
             modifier = if (slideFromEnd) {
                 // Side drawers in Full Screen use the same cutout/system-bar-safe
                 // viewport as the player beneath them; the dimmed backdrop remains full-bleed.
-                Modifier.windowInsetsPadding(WindowInsets.safeDrawing.union(stableStatusBarInsets()))
+                Modifier.windowInsetsPadding(WindowInsets.safeDrawing).windowInsetsPadding(stableStatusBarInsets())
             } else Modifier,
             enter = if (slideFromEnd) {
                 slideInHorizontally(tween(260, easing = FastOutSlowInEasing)) { it }

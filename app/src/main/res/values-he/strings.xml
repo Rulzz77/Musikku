@@ -1580,4 +1580,8 @@
     <string name="automix_mini_art_transition">מעבר עטיפות בנגן הממוזער</string>
     <string name="automix_mini_art_transition_subtitle">מציג מעברי עטיפות בנגן הממוזער במהלך AutoMix.</string>
     <string name="listen_together_invalid_qr">קוד ה-QR הזה אינו הזמנה תקפה להאזנה משותפת.</string>
+    <string name="player_more_playback_lyrics">השמעה ומילים</string>
+    <string name="player_more_queue_actions">פעולות בתור</string>
+    <string name="player_more_library_downloads">ספרייה והורדות</string>
+    <string name="player_more_song_details">פרטי השיר</string>
 </resources>

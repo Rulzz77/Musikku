@@ -1335,7 +1335,6 @@ object AppSettings {
     }
 
     fun setRepeatMode(value: Int) {
-        repeatMode.value = value
         val safeValue = value.takeIf { it in Player.REPEAT_MODE_OFF..Player.REPEAT_MODE_ALL }
             ?: Player.REPEAT_MODE_OFF
         repeatMode.value = safeValue
@@ -2296,23 +2295,6 @@ object AppSettings {
     // ── Backup ──────────────────────────────────────────────────────────────
 
     /**
-     * Every stored preference, for an export.
-     *
-     * Read off the preference file wholesale rather than assembled from the
-     * flows above, so a setting added in a later build is in the backup the day
-     * it is added instead of the day somebody remembers to list it here. What is
-     * *left out* is therefore the part worth stating explicitly, and it is
-     * [SECRETS]: an export is a file the user is about to put in Drive or a
-     * chat, and a scrobbler session key or an API secret in it is a credential
-     * that has left the device in plain text. Signing back in after a restore is
-     * a minute; a leaked session key is not recoverable at all.
-     *
-     * The Discord token is not here for the same reason and one more: it never
-     * reaches this file. It lives in the encrypted store — see [AuthStore] — and
-     * so does the YouTube cookie, which means neither can be exported by
-     * accident.
-     */
-    /**
      * Validates values that have runtime constraints beyond their primitive
      * type. Other keys retain their existing per-setting normalisation in
      * [readAll]; unknown keys remain ignored by the settings readers.
@@ -2323,6 +2305,10 @@ object AppSettings {
         else -> true
     }
 
+    /**
+     * Every stored preference, for an export. Credential keys are kept in
+     * [AuthStore] and excluded by [SECRETS] for compatibility with old backups.
+     */
     fun exportPrefs(): Map<String, Any?> {
         if (!this::prefs.isInitialized) return emptyMap()
         return prefs.all.filterKeys { it !in SECRETS && it !in DEVICE_LOCAL }

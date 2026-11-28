@@ -38,6 +38,7 @@ import com.music.bitchord.data.lyrics.CommunityTtmlLyricsStore
 import com.music.bitchord.data.lyrics.EmbeddedLyrics
 import com.music.bitchord.data.lyrics.LyricLine
 import com.music.bitchord.data.lyrics.LyricsRepository
+import com.music.bitchord.data.lyrics.PersistentLyricsCache
 import com.music.bitchord.data.lyrics.LyricsSource
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.ui.navigation.AppNavigator
@@ -372,6 +373,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * different one.
      */
     private var lyricsFor: List<Any>? = null
+    /** True after a lookup has had the real track duration available. */
+    private var lyricsDurationKnown = false
 
     /**
      * Called as the playing track changes; cheap no-op when already loaded.
@@ -396,19 +399,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         } else {
             emptySet()
         }
-        val key = lyricsLookupKey(
-            videoId, sources, AppSettings.lyricsSourceOrder.value, AppSettings.prioritizeSyllableSync.value,
-        )
-        if (lyricsFor == key) return
-        // The duration lands a beat after the track, and a database match needs
-        // it. Turned away here rather than inside the job below: claiming the
-        // lookup first and giving it up asynchronously means the very re-trigger
-        // that carries the duration can arrive while the claim still stands, be
-        // dropped as a duplicate, and leave the track marked as being looked up
-        // by nobody — which is what left a paused track loading for ever, since
-        // pausing is when the duration is most likely to arrive a frame late.
-        if (localUri == null && durationMs <= 0L) return
+        val sourceOrder = AppSettings.lyricsSourceOrder.value
+        val prioritizeSyllableSync = AppSettings.prioritizeSyllableSync.value
+        val key = lyricsLookupKey(videoId, sources, sourceOrder, prioritizeSyllableSync)
+
+        // A durationless pass may only ask exact-video providers. Once Media3
+        // learns the real duration, run again under the same settings so the
+        // name/length catalogue providers can safely improve that first answer.
+        if (lyricsFor == key && (durationMs <= 0L || lyricsDurationKnown)) return
         lyricsFor = key
+        lyricsDurationKnown = durationMs > 0L
         lyricsGeneration += 1
         val generation = lyricsGeneration
         currentLyricsRequest = LyricsRequest(videoId, title, artist, durationMs, album, localUri)
@@ -421,12 +421,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _lyrics.value = null
         _lyricsSource.value = null
         lyricsJob?.cancel()
+
         if (!AppSettings.syncedLyrics.value) {
             // The master lyrics switch is off. Local imports and embedded
             // lyrics respect the same switch as online sources.
             _lyricsChecked.value = true
             return
         }
+
         _lyricsChecked.value = false
         lyricsJob = viewModelScope.launch {
             // A listener-imported TTML is a deliberate per-track override. It is
@@ -434,6 +436,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             val communityLyrics = withContext(Dispatchers.IO) {
                 CommunityTtmlLyricsStore.read(getApplication<Application>().filesDir, videoId)
             }
+            if (generation != lyricsGeneration) return@launch
             if (communityLyrics != null) {
                 _lyrics.value = communityLyrics
                 _lyricsSource.value = LyricsSource.COMMUNITY_TTML
@@ -441,34 +444,47 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 return@launch
             }
 
-            // The file first, and without the duration gate below: a length is
-            // only needed to *match* a track against a stranger's database, and
-            // nothing is being matched here — these lyrics were written into
-            // this exact file, for this exact recording.
+            // The file first, and without a duration gate: a length is only
+            // needed to match a stranger's database, not this exact recording.
             if (localUri != null) {
                 EmbeddedLyrics.forUri(getApplication(), localUri)?.let { embedded ->
+                    if (generation != lyricsGeneration) return@launch
                     _lyrics.value = embedded
-                    // No source to name: what the file records is the lyrics,
-                    // not which of the eight services they came from months ago.
                     _lyricsSource.value = null
                     _lyricsChecked.value = true
                     return@launch
                 }
             }
             if (sources.isEmpty()) {
-                // A local import or embedded lyric still works when every
-                // remote provider is unchecked; no network query is made.
                 _lyricsChecked.value = true
                 return@launch
             }
-            if (durationMs <= 0L) {
-                // Duration arrives a beat after the track does; wait for it.
-                lyricsFor = null
-                return@launch
+
+            val cacheKey = PersistentLyricsCache.key(
+                videoId = videoId,
+                sources = sources,
+                order = sourceOrder,
+                prioritizeSyllableSync = prioritizeSyllableSync,
+            )
+            val cached = withContext(Dispatchers.IO) {
+                PersistentLyricsCache.read(getApplication<Application>(), cacheKey)
             }
+            if (generation != lyricsGeneration) return@launch
+            if (cached != null) {
+                _lyrics.value = cached.lines
+                _lyricsSource.value = cached.source
+                // A durationless cached answer is useful immediately, but once
+                // an accurate duration is available we still ask the full
+                // catalogue rather than treating the provisional match as final.
+                if (durationMs <= 0L || cached.durationMs > 0L) {
+                    _lyricsChecked.value = true
+                    return@launch
+                }
+            }
+
             val found = LyricsRepository.lyrics(
                 videoId, title, artist, durationMs, album, sources,
-                AppSettings.lyricsSourceOrder.value, AppSettings.prioritizeSyllableSync.value,
+                sourceOrder, prioritizeSyllableSync,
                 onSourceStarted = { source -> providerStarted(generation, source) },
                 onSourceResult = { source, result ->
                     providerFinished(generation, source, result)
@@ -476,8 +492,22 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 onSourceCancelled = { source -> providerCancelled(generation, source) },
             )
             val selected = selectedLyricsSource?.let(lyricsProviderResults::get) ?: found
-            _lyrics.value = selected?.lines
-            _lyricsSource.value = selected?.source
+            if (generation != lyricsGeneration) return@launch
+            if (selected != null && selected.lines.isNotEmpty()) {
+                _lyrics.value = selected.lines
+                _lyricsSource.value = selected.source
+                withContext(Dispatchers.IO) {
+                    PersistentLyricsCache.write(
+                        context = getApplication<Application>(),
+                        cacheKey = cacheKey,
+                        source = selected.source,
+                        durationMs = durationMs,
+                        lines = selected.lines,
+                    )
+                }
+            } else if (_lyrics.value == null) {
+                _lyricsSource.value = null
+            }
             _lyricsChecked.value = true
         }
     }
@@ -562,7 +592,27 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
         lyricsProviderResults[source] = result
         _lyricsProviderStates.update { it + (source to LyricsProviderState.FOUND) }
-        if (selectedLyricsSource == source) showLyricsResult(result)
+        if (selectedLyricsSource == source) {
+            showLyricsResult(result)
+            currentLyricsRequest?.let { request ->
+                val sources = AppSettings.lyricsSources.value
+                val cacheKey = PersistentLyricsCache.key(
+                    videoId = request.videoId,
+                    sources = sources,
+                    order = AppSettings.lyricsSourceOrder.value,
+                    prioritizeSyllableSync = AppSettings.prioritizeSyllableSync.value,
+                )
+                viewModelScope.launch(Dispatchers.IO) {
+                    PersistentLyricsCache.write(
+                        context = getApplication<Application>(),
+                        cacheKey = cacheKey,
+                        source = result.source,
+                        durationMs = request.durationMs,
+                        lines = result.lines,
+                    )
+                }
+            }
+        }
     }
 
     private fun providerCancelled(generation: Long, source: LyricsSource) {

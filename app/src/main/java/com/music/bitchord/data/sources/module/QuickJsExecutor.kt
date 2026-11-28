@@ -118,6 +118,13 @@ internal object QuickJsExecutor {
             .connectTimeout(20, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)
             .callTimeout(30, TimeUnit.SECONDS)
+            // OkHttp follows redirects by default. Re-validate each network
+            // hop as well as the initial URL so a public HTTPS endpoint cannot
+            // redirect a module into HTTP or a private network.
+            .addNetworkInterceptor { chain ->
+                validateModuleFetchUrl(chain.request().url.toString())
+                chain.proceed(chain.request())
+            }
             // Add-on code can call fetch(). Resolve each destination through a
             // checked DNS policy so it cannot reach loopback, LAN or link-local
             // services (including the cloud metadata endpoint).

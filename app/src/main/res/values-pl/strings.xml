@@ -1615,4 +1615,8 @@
     <string name="automix_mini_art_transition">Przejście okładek w miniodtwarzaczu</string>
     <string name="automix_mini_art_transition_subtitle">Pokazuje przejścia okładek w miniodtwarzaczu podczas AutoMix.</string>
     <string name="listen_together_invalid_qr">Ten kod QR nie jest prawidłowym zaproszeniem do wspólnego słuchania.</string>
+    <string name="player_more_playback_lyrics">Odtwarzanie i teksty</string>
+    <string name="player_more_queue_actions">Działania kolejki</string>
+    <string name="player_more_library_downloads">Biblioteka i pobrane</string>
+    <string name="player_more_song_details">Szczegóły utworu</string>
 </resources>

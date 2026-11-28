@@ -124,6 +124,8 @@ class AndroidPlayerHost(context: Context) : PlayerHost {
         override val lastPlayerScreen get() = AppSettings.lastPlayerScreen
         override val playerTheme get() = AppSettings.playerTheme
         override val lyricsBlur get() = AppSettings.lyricsBlur
+        override val lyricsBackgroundMode get() = AppSettings.lyricsBackgroundMode
+        override val lyricsBackgroundBlurPx get() = AppSettings.lyricsBackgroundBlurPx
         override val lyricsOffsetMs get() = AppSettings.lyricsOffsetMs
         override val lyricsSourceOrder get() = AppSettings.lyricsSourceOrder
         override val meteredConnection get() = AppSettings.meteredConnection

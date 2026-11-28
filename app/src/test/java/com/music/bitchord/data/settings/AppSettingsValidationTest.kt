@@ -54,6 +54,48 @@ class AppSettingsValidationTest {
     }
 
     @Test
+    fun `Last.fm backup endpoints are limited to official HTTPS providers`() {
+        assertTrue(
+            AppSettings.isValidImportedPreference(
+                "lastfm_endpoint",
+                "https://ws.audioscrobbler.com/2.0/",
+            ),
+        )
+        assertTrue(
+            AppSettings.isValidImportedPreference(
+                "lastfm_endpoint",
+                "https://libre.fm/2.0/",
+            ),
+        )
+        assertTrue(AppSettings.isValidImportedPreference("lastfm_endpoint", ""))
+
+        assertFalse(
+            AppSettings.isValidImportedPreference(
+                "lastfm_endpoint",
+                "http://ws.audioscrobbler.com/2.0/",
+            ),
+        )
+        assertFalse(
+            AppSettings.isValidImportedPreference(
+                "lastfm_endpoint",
+                "https://evil.example/2.0/",
+            ),
+        )
+        assertFalse(
+            AppSettings.isValidImportedPreference(
+                "lastfm_endpoint",
+                "https://ws.audioscrobbler.com.evil.example/2.0/",
+            ),
+        )
+        assertFalse(
+            AppSettings.isValidImportedPreference(
+                "lastfm_endpoint",
+                "https://user:pass@ws.audioscrobbler.com/2.0/",
+            ),
+        )
+    }
+
+    @Test
     fun `non finite EQ values are never considered valid imported settings`() {
         assertFalse(AppSettings.isValidImportedPreference("equalizer_balance", Float.NaN))
         assertFalse(AppSettings.isValidImportedPreference("equalizer_balance", Float.POSITIVE_INFINITY))

@@ -97,6 +97,7 @@ class PhoneLink(context: Context, private val scope: CoroutineScope) :
     private var holdRepeat: Hold<Int>? = null
     private var holdVolumeUntil = 0L
 
+    private val volumeBatchLock = Any()
     private var pendingSteps = 0
     private var volumeJob: Job? = null
 
@@ -200,13 +201,28 @@ class PhoneLink(context: Context, private val scope: CoroutineScope) :
         if (steps == 0) return
         holdVolumeUntil = System.currentTimeMillis() + VOLUME_HOLD_MS
         _volume.update { v -> v?.copy(level = (v.level + steps).coerceIn(0, v.max)) }
-        pendingSteps += steps
-        if (volumeJob?.isActive == true) return
-        volumeJob = scope.launch {
-            delay(VOLUME_BATCH_MS)
-            val batch = pendingSteps
-            pendingSteps = 0
-            if (batch != 0) sendNow(P.CMD_VOLUME, batch.toString())
+        synchronized(volumeBatchLock) {
+            pendingSteps += steps
+            if (volumeJob?.isActive == true) return
+
+            volumeJob = scope.launch {
+                delay(VOLUME_BATCH_MS)
+                while (true) {
+                    // More crown movement can arrive while sendMessage is in
+                    // flight. Drain again before marking the worker finished,
+                    // otherwise those steps sit unsent until the next turn.
+                    val batch = synchronized(volumeBatchLock) {
+                        if (pendingSteps == 0) {
+                            volumeJob = null
+                            null
+                        } else {
+                            pendingSteps.also { pendingSteps = 0 }
+                        }
+                    } ?: return@launch
+
+                    sendNow(P.CMD_VOLUME, batch.toString())
+                }
+            }
         }
     }
 

@@ -52,5 +52,12 @@ enum class LyricsBackgroundMode(val label: String) {
     ARTIST_IMAGE("Artist Image"),
     COVER_ART("Cover Art"),
     COVER_COLORS("Cover Colors"),
-    TRANSPARENT("None (Transparent)"),
 }
+
+/**
+ * Restores the user's saved lyrics background. Unknown or retired values
+ * fall back to the stable default instead of breaking settings loading.
+ */
+fun lyricsBackgroundModeFromStoredName(value: String?): LyricsBackgroundMode =
+    LyricsBackgroundMode.entries.firstOrNull { it.name == value }
+        ?: LyricsBackgroundMode.DYNAMIC_KAWARP

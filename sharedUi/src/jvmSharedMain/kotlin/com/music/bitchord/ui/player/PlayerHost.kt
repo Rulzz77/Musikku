@@ -341,6 +341,9 @@ interface PlayerSettingsSource {
 
     fun setLastPlayerScreen(value: LastPlayerScreen)
     fun setLyricsOffsetMs(value: Int)
+    /** Persist the appearance used by the dedicated fullscreen lyrics reader. */
+    fun setLyricsBackgroundMode(value: LyricsBackgroundMode) = Unit
+    fun setLyricsBackgroundBlurPx(value: Int) = Unit
     /** Whether the mix popup is up, so the host lays out [smartMixPreview] for it. */
     fun setMixViewOpen(open: Boolean)
 }

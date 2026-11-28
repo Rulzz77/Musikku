@@ -2428,7 +2428,11 @@ fun NowPlayingScreen(
                                 canvas = fullscreenLyricsCanvas,
                                 isPlaying = isPlaying,
                                 modifier = Modifier.fillMaxSize(),
-                                contentMode = CanvasContentMode.CROP,
+                                // Portrait Canvas artwork should remain fully composed
+                                // in the narrower landscape pane. FIT_PORTRAIT only
+                                // contains portrait clips; square and landscape clips
+                                // keep their existing crop-to-fill behavior.
+                                contentMode = CanvasContentMode.FIT_PORTRAIT,
                                 onRenderedChanged = { canvasRendered = it },
                                 onFrameCaptured = { fullscreenCanvasFrame = it },
                                 refreshFrameEveryMs = if (isPlaying) MESH_REFRESH_MS else null,
@@ -2846,7 +2850,14 @@ fun NowPlayingScreen(
                                     selection = queueSelection,
                                     onBulkAction = onQueueBulkAction,
                                     onRemoveSelected = onQueueRemoveEntries,
-                                    modifier = Modifier.fillMaxSize().padding(top = 44.dp),
+                                    // InlineQueue bleeds its scroll surface by PLAYER_GUTTER
+                                    // on either side. Keep the header and the rows on
+                                    // the same inset, and leave a clean touch margin
+                                    // between the content and the rounded panel edge.
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(horizontal = PLAYER_GUTTER)
+                                        .padding(top = 44.dp),
                                     onAddAllToPlaylist = onQueueAddAllToPlaylist,
                                 )
                                 Box(

@@ -1,4 +1,4 @@
-// Top-level build file where you can add configuration options common to all the sub-projects/modules.
+// Top-level build file where you can add configuration options common to all of the sub-projects/modules.
 buildscript {
     repositories {
         google()
@@ -41,8 +41,8 @@ buildscript {
  * No "v" in the name — the in-app updater reads it as a number; the "v" is the
  * release tag's alone.
  */
-extra["musikkuVersionCode"] = 100
-extra["musikkuVersionName"] = "0.1.99"
+extra["musikkuVersionCode"] = 101
+extra["musikkuVersionName"] = "0.1.100"
 extra["musikkuBetaSuffix"] = ""
 /*
  * Bump this by hand before cutting each sideloaded test build ("beta2",
@@ -55,7 +55,7 @@ extra["musikkuBetaSuffix"] = ""
  * point of it. A sideloaded beta is a *release* build — signed with the real
  * key, installed over the real package — so leaving the marker off it is
  * exactly the case that strands a tester: their build calls itself 1.6.1,
- * the published 1.6.1 then matches it, isNewer() says no, and no prompt ever
+ * the published 1.6.1 then matches it, isNewer() says no, and no update prompt ever
  * comes. Blanking this line is the one step that turns a beta into a release,
  * so it is the one place to get right.
  *

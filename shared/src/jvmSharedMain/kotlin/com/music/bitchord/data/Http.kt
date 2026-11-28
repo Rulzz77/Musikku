@@ -118,7 +118,7 @@ object Http {
     private val webDavInterceptor = okhttp3.Interceptor { chain ->
         val request = chain.request()
         if (request.header("Authorization") == null &&
-            com.music.bitchord.data.webdav.WebDavAuth.shouldAuthorize(request.url.host)
+            com.music.bitchord.data.webdav.WebDavAuth.shouldAuthorize(request.url.toString())
         ) {
             val header = com.music.bitchord.data.webdav.WebDavAuth.authHeader
             if (!header.isNullOrBlank()) {
@@ -136,7 +136,9 @@ object Http {
         .retryOnConnectionFailure(true)
         .dispatcher(Dispatcher().apply { maxRequestsPerHost = 16 })
         .connectionPool(ConnectionPool(16, 5, TimeUnit.MINUTES))
-        .addInterceptor(webDavInterceptor)
+        // Run for each network exchange (including redirect follow-ups), so
+        // an Authorization header is never added to a different origin.
+        .addNetworkInterceptor(webDavInterceptor)
         .apply { if (USAGE_LOGGING_ENABLED) addNetworkInterceptor(usageInterceptor) }
         .build()
 }

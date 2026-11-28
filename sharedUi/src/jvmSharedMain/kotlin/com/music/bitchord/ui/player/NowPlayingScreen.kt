@@ -170,6 +170,9 @@ import com.music.bitchord.ui.LyricsProviderState
 import com.music.bitchord.ui.haptics.Haptic
 import com.music.bitchord.ui.haptics.rememberHaptics
 import com.music.bitchord.ui.icons.BitChordIcons
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.music.bitchord.data.canvas.CanvasSource
 import com.music.bitchord.data.lyrics.LyricLine
@@ -1209,6 +1212,23 @@ fun NowPlayingScreen(
     // Portrait keeps the regular lyrics layout in the player.
     val lyricsFullscreenVisible = lyricsFullscreen && lyricsOpen && sideways
     val reportLyricsFullscreen by rememberUpdatedState(onLyricsFullscreenChanged)
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(lifecycle) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) {
+                // Leaving the app ends an explicit fullscreen session. The
+                // Android orientation owner releases its request at the same
+                // lifecycle event, so reopening starts in the device's normal
+                // orientation instead of reviving a stale landscape lock.
+                fullscreenRequested = false
+                lyricsFullscreen = false
+                lyricsRequestedLandscape = false
+                reportLyricsFullscreen(false)
+            }
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
     val canvas = rememberCanvasArtwork(
         song = song,
         allowFullscreenOnLowMemory = lyricsFullscreenVisible,

@@ -19,4 +19,12 @@
     <exclude domain="sharedpref" path="bitchord_last_played.xml" />
     <exclude domain="sharedpref" path="bitchord_bounded_context.xml" />
     <exclude domain="sharedpref" path="bitchord_party_queue_stash.xml" />
+    <!--
+        SharedPreferences backups are whole-file: Android cannot exclude only
+        the credential keys. App settings have a separate, user-controlled
+        encrypted-aware export/import flow, so do not copy this file wholesale.
+    -->
+    <exclude domain="sharedpref" path="bitchord_settings.xml" />
+    <!-- Contains a live Listen Together party token and per-device identity. -->
+    <exclude domain="sharedpref" path="bitchord_listen_together.xml" />
 </full-backup-content>

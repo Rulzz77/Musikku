@@ -1297,34 +1297,10 @@ private fun BitChordApp(
     // Optimistically updated track for instant UI updates when switching versions
     var optimisticVersionSong by remember { mutableStateOf<Song?>(null) }
 
-    // Lyrics follow whatever is playing; duration lands a beat after the track.
-    // Keyed on the lyric settings too, so turning a source on or off, reordering
-    // them or changing the syllable preference applies to the track already
-    // playing rather than only the next one.
     val syncedLyricsEnabled by AppSettings.syncedLyrics.collectAsStateWithLifecycle()
     val lyricsSources by AppSettings.lyricsSources.collectAsStateWithLifecycle()
     val lyricsSourceOrder by AppSettings.lyricsSourceOrder.collectAsStateWithLifecycle()
     val prioritizeSyllableSync by AppSettings.prioritizeSyllableSync.collectAsStateWithLifecycle()
-    LaunchedEffect(
-        player.song?.videoId, player.durationMs, syncedLyricsEnabled, lyricsSources,
-        lyricsSourceOrder, prioritizeSyllableSync,
-    ) {
-        player.song?.let {
-            viewModel.loadLyrics(
-                it.videoId,
-                it.title,
-                it.artist,
-                // The player's own length, and the catalogue's where it has
-                // none yet. Paused, ExoPlayer never finishes preparing the
-                // track it was skipped to, so it reports no duration at all —
-                // and a lookup that waits for one waits for ever, which left
-                // the lyrics of a paused track loading until it was played.
-                player.durationMs.takeIf { ms -> ms > 0L } ?: it.durationMillis(),
-                it.albumName,
-                it.localUri,
-            )
-        }
-    }
 
     val homeListState = rememberLazyListState()
     val exploreListState = rememberLazyListState()
@@ -2635,12 +2611,19 @@ private fun BitChordApp(
     // mini player still costs nothing.
     val playerShowing = showNowPlaying
     var links by remember { mutableStateOf<Song?>(null) }
-    LaunchedEffect(player.song?.videoId, playerShowing) {
+    LaunchedEffect(player.song?.videoId, playerShowing, syncedLyricsEnabled) {
         links = null
         linksLoading = false
-        if (!playerShowing) return@LaunchedEffect
         val current = player.song ?: return@LaunchedEffect
-        if (current.albumId != null && current.artistId != null) return@LaunchedEffect
+        // A restored, paused Media3 item can have no duration yet. The watch
+        // queue carries the catalogue length, so fetch it even with the player
+        // collapsed when synced lyrics need a reliable match.
+        val needsLyricsDuration = syncedLyricsEnabled &&
+            current.durationMillis() <= 0L && player.durationMs <= 0L
+        if (!playerShowing && !needsLyricsDuration) return@LaunchedEffect
+        if (current.albumId != null && current.artistId != null &&
+            (current.durationMillis() > 0L || player.durationMs > 0L)
+        ) return@LaunchedEffect
         linksLoading = true
         links = YtMusicRepository.trackLinks(current.videoId).getOrNull()
         linksLoading = false
@@ -2651,7 +2634,27 @@ private fun BitChordApp(
             artistId = current.artistId ?: extra.artistId,
             albumId = current.albumId ?: extra.albumId,
             albumName = current.albumName ?: extra.albumName,
+            durationText = current.durationText?.takeIf { it.isNotBlank() } ?: extra.durationText,
         )
+    }
+    // Use the restored track's catalogue duration when ExoPlayer has not
+    // prepared the paused item. The duration is part of the effect key, so a
+    // watch-queue enrichment re-runs this lookup without making the user press
+    // Play just to initialise the media decoder.
+    LaunchedEffect(
+        playerSong?.videoId, player.durationMs, playerSong?.durationText,
+        syncedLyricsEnabled, lyricsSources, lyricsSourceOrder, prioritizeSyllableSync,
+    ) {
+        playerSong?.let { song ->
+            viewModel.loadLyrics(
+                song.videoId,
+                song.title,
+                song.artist,
+                player.durationMs.takeIf { ms -> ms > 0L } ?: song.durationMillis(),
+                song.albumName,
+                song.localUri,
+            )
+        }
     }
     // The three-dot menu snapshots the track into songActions when it's opened,
     // so a menu opened before the lookup above resolves would otherwise be

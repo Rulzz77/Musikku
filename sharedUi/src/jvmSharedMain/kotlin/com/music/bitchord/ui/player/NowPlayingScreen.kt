@@ -2313,18 +2313,21 @@ fun NowPlayingScreen(
                 hazeState = overlayHaze,
                 isPlaying = isPlaying,
                 onDismiss = { showAudioPipeline = false },
+                fullscreen = lyricsFullscreenVisible,
             )
         }
         if (showCast) {
             PlayerPlatform.host.CastDialog(
                 hazeState = overlayHaze,
                 onDismiss = { showCast = false },
+                fullscreen = lyricsFullscreenVisible,
             )
         }
         if (showListenTogetherMembers) {
             ListenTogetherMembersSheet(
                 hazeState = overlayHaze,
                 onDismiss = { showListenTogetherMembers = false },
+                fullscreen = lyricsFullscreenVisible,
                 onManage = {
                     showListenTogetherMembers = false
                     onListenTogether()

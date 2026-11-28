@@ -1547,4 +1547,8 @@
     <string name="automix_mini_art_transition">Transición de portada del minirreproductor</string>
     <string name="automix_mini_art_transition_subtitle">Muestra las transiciones de portada en el minirreproductor durante AutoMix.</string>
     <string name="listen_together_invalid_qr">Este código QR no es una invitación válida para escuchar juntos.</string>
+    <string name="player_more_playback_lyrics">Reproducción y letras</string>
+    <string name="player_more_queue_actions">Acciones de cola</string>
+    <string name="player_more_library_downloads">Biblioteca y descargas</string>
+    <string name="player_more_song_details">Detalles de la canción</string>
 </resources>

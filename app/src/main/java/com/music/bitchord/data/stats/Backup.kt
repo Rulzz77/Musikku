@@ -300,7 +300,9 @@ object Backup {
             require(bucket.tracks.size <= 600 && bucket.artists.size <= 400 && bucket.albums.size <= 400) {
                 "Backup contains too many listening-history entries in $month"
             }
-            require(bucket.hours.size <= 24 && bucket.hours.all { it in 0L..86_400_000L }) {
+            require(bucket.hours.size <= 24 && bucket.hours.all {
+                it in 0L..(daysInMonth * 3_600_000L)
+            }) {
                 "Backup contains invalid hourly listening totals in $month"
             }
             require(bucket.days.size <= daysInMonth && bucket.days.all { (day, ms) ->

@@ -25,10 +25,12 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -159,6 +161,7 @@ internal fun MixViewPopup(
     hazeState: HazeState,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
+    fullscreen: Boolean = false,
 ) {
     val progress = PlayerSettings.smartMixProgress.collectAsStateWithLifecycle()
     var shown by remember { mutableStateOf(false) }
@@ -183,42 +186,58 @@ internal fun MixViewPopup(
                 },
             )
             .background(ScrimColor.copy(alpha = ScrimColor.alpha * scrimAlpha)),
-        contentAlignment = Alignment.Center,
+        contentAlignment = if (fullscreen) Alignment.CenterEnd else Alignment.Center,
     ) {
+        BoxWithConstraints(Modifier.fillMaxSize()) {
+        val fullscreenWidth = minOf(maxWidth * FULLSCREEN_PLAYER_PANEL_WIDTH_FRACTION, FULLSCREEN_PLAYER_PANEL_MAX_WIDTH)
         AnimatedVisibility(
             visible = shown,
             enter = fadeIn(tween(180)) + scaleIn(tween(220, easing = FastOutSlowInEasing), initialScale = 0.92f),
             exit = fadeOut(tween(150)) + scaleOut(tween(150), targetScale = 0.95f),
         ) {
             Column(
-                modifier = Modifier
-                    .widthIn(max = PopupMaxWidth)
-                    .fillMaxWidth()
-                    .padding(horizontal = 26.dp)
-                    .clip(PopupShape)
-                    .then(
-                        if (reduceDynamicBlur) {
-                            Modifier.background(PopupColor)
-                        } else {
-                            Modifier
-                                .optimizedHazeEffect(
-                                    state = hazeState,
-                                    style = HazeMaterials.regular(PopupColor),
-                                )
-                                .background(PopupColor.copy(alpha = 0.94f))
-                        },
-                    )
-                    // Taps on the card are the card's, not the scrim's.
-                    .clickable(
-                        indication = null,
-                        interactionSource = remember { MutableInteractionSource() },
-                        onClick = {},
-                    )
-                    .padding(vertical = 14.dp),
+                modifier = if (fullscreen) {
+                    Modifier
+                        .width(fullscreenWidth)
+                        .fillMaxHeight()
+                        .padding(10.dp)
+                        .fullscreenPlayerPanelSurface()
+                        .clickable(
+                            indication = null,
+                            interactionSource = remember { MutableInteractionSource() },
+                            onClick = {},
+                        )
+                        .padding(horizontal = 18.dp, vertical = 16.dp)
+                } else {
+                    Modifier
+                        .widthIn(max = PopupMaxWidth)
+                        .fillMaxWidth()
+                        .padding(horizontal = 26.dp)
+                        .clip(PopupShape)
+                        .then(
+                            if (reduceDynamicBlur) {
+                                Modifier.background(PopupColor)
+                            } else {
+                                Modifier
+                                    .optimizedHazeEffect(
+                                        state = hazeState,
+                                        style = HazeMaterials.regular(PopupColor),
+                                    )
+                                    .background(PopupColor.copy(alpha = 0.94f))
+                            },
+                        )
+                        .clickable(
+                            indication = null,
+                            interactionSource = remember { MutableInteractionSource() },
+                            onClick = {},
+                        )
+                        .padding(vertical = 14.dp)
+                },
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 MixViewContent(view ?: PlaceholderView, progress, live)
             }
+        }
         }
     }
 }
@@ -784,7 +803,7 @@ private const val PREVIEW_WAIT_MS = 2_500L
  * and not the player it is mounted in.
  */
 @Composable
-internal fun MixViewOverlay(hazeState: HazeState) {
+internal fun MixViewOverlay(hazeState: HazeState, fullscreen: Boolean = false) {
     val blend by PlayerSettings.smartMixView.collectAsStateWithLifecycle()
     val preview by PlayerSettings.smartMixPreview.collectAsStateWithLifecycle()
     var held by remember { mutableStateOf<MixTransitionView?>(null) }
@@ -831,5 +850,6 @@ internal fun MixViewOverlay(hazeState: HazeState) {
         live = currentBlend != null,
         hazeState = hazeState,
         onDismiss = { MixViewRequest.open = false },
+        fullscreen = fullscreen,
     )
 }

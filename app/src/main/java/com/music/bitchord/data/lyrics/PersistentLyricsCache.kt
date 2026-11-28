@@ -18,6 +18,8 @@ import java.security.MessageDigest
  */
 data class CachedLyrics(
     val source: LyricsSource?,
+    /** Zero means this answer was obtained from exact-video sources before duration was known. */
+    val durationMs: Long,
     val lines: List<LyricLine>,
 )
 
@@ -66,7 +68,7 @@ object PersistentLyricsCache {
                 runCatching { LyricsSource.valueOf(name) }.getOrNull()
             }
             file.baseFile.setLastModified(System.currentTimeMillis())
-            CachedLyrics(source, lines)
+            CachedLyrics(source, root.optLong("durationMs", 0L), lines)
         } catch (_: Exception) {
             file.delete()
             null
@@ -77,6 +79,7 @@ object PersistentLyricsCache {
         context: Context,
         cacheKey: String,
         source: LyricsSource?,
+        durationMs: Long,
         lines: List<LyricLine>,
     ) {
         if (lines.isEmpty()) return
@@ -85,6 +88,7 @@ object PersistentLyricsCache {
                 val root = JSONObject()
                     .put("version", FORMAT_VERSION)
                     .put("source", source?.name ?: JSONObject.NULL)
+                    .put("durationMs", durationMs.coerceAtLeast(0L))
                     .put("savedAt", System.currentTimeMillis())
                     .put("lines", encodeLines(lines))
                 val bytes = root.toString().toByteArray(Charsets.UTF_8)

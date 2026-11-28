@@ -15,6 +15,11 @@
     <exclude domain="sharedpref" path="bitchord_sources_plain.xml" />
     <!-- Tester code: a credential for this phone's owner (see AddonAuth). -->
     <exclude domain="sharedpref" path="bitchord_tester.xml" />
+    <exclude domain="sharedpref" path="bitchord_tester_secure.xml" />
+    <exclude domain="sharedpref" path="bitchord_tester_secure_plain.xml" />
+    <exclude domain="sharedpref" path="bitchord_addon_auth.xml" />
+    <exclude domain="sharedpref" path="bitchord_addon_auth_secure.xml" />
+    <exclude domain="sharedpref" path="bitchord_addon_auth_secure_plain.xml" />
     <!-- Playback queues are local session state; do not resurrect them after reinstall. -->
     <exclude domain="sharedpref" path="bitchord_last_played.xml" />
     <exclude domain="sharedpref" path="bitchord_bounded_context.xml" />
@@ -27,4 +32,6 @@
     <exclude domain="sharedpref" path="bitchord_settings.xml" />
     <!-- Contains a live Listen Together party token and per-device identity. -->
     <exclude domain="sharedpref" path="bitchord_listen_together.xml" />
+    <exclude domain="sharedpref" path="bitchord_listen_together_secure.xml" />
+    <exclude domain="sharedpref" path="bitchord_listen_together_secure_plain.xml" />
 </full-backup-content>

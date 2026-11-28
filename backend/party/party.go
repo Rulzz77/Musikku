@@ -11,6 +11,7 @@ import (
 	"github.com/rulzz77/musikku/backend/clock"
 	"github.com/rulzz77/musikku/backend/codes"
 	"github.com/rulzz77/musikku/backend/config"
+	"github.com/rulzz77/musikku/backend/protocol"
 )
 
 // PartyError represents an error with an HTTP status code and wire error code.
@@ -61,10 +62,8 @@ func TrackFromWire(raw map[string]interface{}) *Track {
 	}
 
 	var thumbPtr *string
-	if t, ok := raw["thumbnailUrl"].(string); ok && t != "" {
-		if len(t) > 1000 {
-			t = t[:1000]
-		}
+	if t, ok := raw["thumbnailUrl"].(string); ok && len(t) <= 1000 &&
+		protocol.IsSafeRemoteHTTPURL(t) {
 		thumbPtr = &t
 	}
 

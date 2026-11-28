@@ -117,15 +117,25 @@ object Http {
      */
     private val webDavInterceptor = okhttp3.Interceptor { chain ->
         val request = chain.request()
-        if (request.header("Authorization") == null &&
-            com.music.bitchord.data.webdav.WebDavAuth.shouldAuthorize(request.url.toString())
-        ) {
-            val header = com.music.bitchord.data.webdav.WebDavAuth.authHeader
-            if (!header.isNullOrBlank()) {
-                return@Interceptor chain.proceed(
-                    request.newBuilder().header("Authorization", header).build(),
-                )
-            }
+        val configuredHeader = com.music.bitchord.data.webdav.WebDavAuth.authHeader
+        val existingHeader = request.header("Authorization")
+        val allowed = com.music.bitchord.data.webdav.WebDavAuth.shouldAuthorize(
+            request.url.toString(),
+        )
+
+        // OkHttp preserves Authorization on same-origin redirects. A redirect
+        // can stay on the same host/port but leave the configured DAV folder,
+        // so remove only the exact Basic header this interceptor owns whenever
+        // the follow-up URL is outside the trusted path prefix.
+        if (!allowed && !configuredHeader.isNullOrBlank() && existingHeader == configuredHeader) {
+            return@Interceptor chain.proceed(
+                request.newBuilder().removeHeader("Authorization").build(),
+            )
+        }
+        if (existingHeader == null && allowed && !configuredHeader.isNullOrBlank()) {
+            return@Interceptor chain.proceed(
+                request.newBuilder().header("Authorization", configuredHeader).build(),
+            )
         }
         chain.proceed(request)
     }

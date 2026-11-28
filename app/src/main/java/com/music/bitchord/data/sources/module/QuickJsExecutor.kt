@@ -11,6 +11,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Dns
 import okhttp3.OkHttpClient
@@ -87,6 +88,10 @@ internal object QuickJsExecutor {
      * enough that a three-module index is nine VMs and not thirty.
      */
     private const val ENGINES_PER_MODULE = 3
+    private const val MAX_MODULE_SOURCE_BYTES = 2 * 1024 * 1024
+    private const val MODULE_MEMORY_LIMIT_BYTES = 24L * 1024 * 1024
+    private const val MODULE_EVALUATION_TIMEOUT_MS = 15_000L
+    private const val MODULE_CALL_TIMEOUT_MS = 90_000L
 
     /**
      * One module's interpreters, and the source to make more from.
@@ -162,7 +167,10 @@ internal object QuickJsExecutor {
     private fun validateModuleFetchUrl(rawUrl: String): String {
         require(rawUrl.length <= MAX_FETCH_URL_LENGTH) { "Module URL is too long" }
         val parsed = rawUrl.toHttpUrlOrNull()
-            ?: throw IllegalArgumentException("Module fetch only supports HTTP(S) URLs")
+            ?: throw IllegalArgumentException("Module fetch only supports HTTPS URLs")
+        require(parsed.scheme == "https") {
+            "Module fetch requires HTTPS"
+        }
         require(parsed.username.isEmpty() && parsed.password.isEmpty()) {
             "Credentials embedded in module URLs are not allowed"
         }
@@ -222,8 +230,13 @@ internal object QuickJsExecutor {
 
     /** A fresh interpreter with [jsCode] evaluated into it, or a throw saying why not. */
     private suspend fun newEngine(jsCode: String, fetchBase: String): QuickJs {
+        require(jsCode.toByteArray(Charsets.UTF_8).size <= MAX_MODULE_SOURCE_BYTES) {
+            "Module source is too large"
+        }
         val qjs = QuickJs.create(Dispatchers.Default)
         qjs.maxStackSize = 512 * 1024L
+        qjs.memoryLimit = MODULE_MEMORY_LIMIT_BYTES
+        qjs.evaluationTimeoutMillis = MODULE_EVALUATION_TIMEOUT_MS
         try {
             bindConsole(qjs)
             bindAsyncFetch(qjs, fetchBase)
@@ -313,7 +326,9 @@ internal object QuickJsExecutor {
                 return@withContext Result.failure(e)
             }
             try {
-                callOn(qjs, moduleId, functionName, args)
+                withTimeout(MODULE_CALL_TIMEOUT_MS) {
+                    callOn(qjs, moduleId, functionName, args)
+                }
             } finally {
                 // Back into circulation on every path, including a throw: an
                 // engine that is never returned is a slot the pool can never

@@ -1201,6 +1201,7 @@ object AppSettings {
         lastfmApiKey.value = authStore.lastfmApiKey.orEmpty().ifBlank { BuildConfig.LASTFM_API_KEY }
         lastfmSecret.value = authStore.lastfmSecret.orEmpty().ifBlank { BuildConfig.LASTFM_SECRET }
         lastfmEndpoint.value = prefs.getString(KEY_LASTFM_ENDPOINT, "").orEmpty()
+            .let(::normalizeLastfmEndpointOrBlank)
         lastfmScrobbleEnabled.value = prefs.getBoolean(KEY_LASTFM_SCROBBLE_ENABLED, false)
         lastfmNowPlaying.value = prefs.getBoolean(KEY_LASTFM_NOW_PLAYING, false) && lastfmScrobbleEnabled.value
         lastfmPrimaryArtistOnly.value = prefs.getBoolean(KEY_LASTFM_PRIMARY_ARTIST_ONLY, false)
@@ -1957,9 +1958,15 @@ object AppSettings {
     }
 
     fun setLastfmEndpoint(value: String) {
-        lastfmEndpoint.value = value
-        prefs.edit().putString(KEY_LASTFM_ENDPOINT, value).apply()
+        val normalized = normalizeLastfmEndpointOrBlank(value)
+        lastfmEndpoint.value = normalized
+        prefs.edit().putString(KEY_LASTFM_ENDPOINT, normalized).apply()
     }
+
+    private fun normalizeLastfmEndpointOrBlank(value: String): String =
+        if (value.isBlank()) "" else runCatching {
+            com.music.bitchord.data.scrobbling.LastFM.normalizeEndpoint(value)
+        }.getOrDefault("")
 
     fun setSpotifySpdcToken(value: String) {
         spotifySpdcToken.value = value
@@ -2354,6 +2361,11 @@ object AppSettings {
         KEY_SCROBBLE_MIN_DURATION -> value is Int && value in 15..120
         KEY_SCROBBLE_DELAY_PERCENT -> value is Float && value.isFinite() && value in 0.1f..1f
         KEY_SCROBBLE_DELAY_SECONDS -> value is Int && value in 30..300
+        KEY_LASTFM_ENDPOINT -> value is String && (
+            value.isBlank() || runCatching {
+                com.music.bitchord.data.scrobbling.LastFM.normalizeEndpoint(value)
+            }.isSuccess
+        )
         else -> true
     }
 

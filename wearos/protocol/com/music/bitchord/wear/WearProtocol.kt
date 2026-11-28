@@ -28,6 +28,10 @@ object WearProtocol {
     /** Advertised by the watch app, so the phone only does the work with one around. */
     const val CAPABILITY_WATCH = "bitchord_watch"
 
+    /** Device-local persisted source of truth for the phone selected by the watch. */
+    const val PREFS_PHONE_SELECTION = "bitchord_phone_selection"
+    const val PREF_SELECTED_PHONE_NODE = "selected_phone_node"
+
     const val PATH_NOW_PLAYING = "/bitchord/now_playing"
     const val PATH_QUEUE = "/bitchord/queue"
     const val PATH_COMMAND = "/bitchord/command"

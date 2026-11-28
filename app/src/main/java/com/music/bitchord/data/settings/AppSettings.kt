@@ -203,6 +203,28 @@ internal fun normalizeScrobbleDelayPercent(value: Float): Float =
 
 internal fun normalizeScrobbleDelaySeconds(value: Int): Int = value.coerceIn(30, 300)
 
+internal fun webDavCredentialBindingChanged(
+    oldUrl: String?,
+    oldUsername: String?,
+    newUrl: String?,
+    newUsername: String?,
+): Boolean =
+    com.music.bitchord.data.webdav.WebDavConfig.originOf(oldUrl.orEmpty()) !=
+        com.music.bitchord.data.webdav.WebDavConfig.originOf(newUrl.orEmpty()) ||
+        oldUsername.orEmpty().trim() != newUsername.orEmpty().trim()
+
+internal fun smbCredentialBindingChanged(
+    oldHost: String?,
+    oldUsername: String?,
+    newHost: String?,
+    newUsername: String?,
+): Boolean {
+    val oldAddress = com.music.bitchord.data.smb.SmbConfig.splitHostPort(oldHost.orEmpty())
+    val newAddress = com.music.bitchord.data.smb.SmbConfig.splitHostPort(newHost.orEmpty())
+    return oldAddress != newAddress ||
+        oldUsername.orEmpty().trim() != newUsername.orEmpty().trim()
+}
+
 object AppSettings {
 
     private lateinit var prefs: SharedPreferences
@@ -2395,12 +2417,47 @@ object AppSettings {
     fun importPrefs(values: Map<String, Any?>) {
         if (!this::prefs.isInitialized) return
         val kept = prefs.all.filterKeys { it in SECRETS || it in DEVICE_LOCAL }
+        val incoming = values.filterKeys { it !in SECRETS && it !in DEVICE_LOCAL }
+        require(incoming.all { (key, value) -> isValidImportedPreference(key, value) }) {
+            "Imported settings contain an out-of-range player value"
+        }
+
+        // Backup files deliberately exclude remote-storage passwords, but they
+        // do contain endpoint and username settings. Never combine a password
+        // that was saved on this phone with a different endpoint from an
+        // untrusted backup: WebDAV would send Basic auth and SMB would perform
+        // an NTLM challenge against the replacement server.
+        val oldWebDavUrl = prefs.getString(KEY_WEBDAV_URL, "").orEmpty()
+        val oldWebDavUsername = prefs.getString(KEY_WEBDAV_USERNAME, "").orEmpty()
+        val newWebDavUrl = incoming[KEY_WEBDAV_URL] as? String ?: ""
+        val newWebDavUsername = incoming[KEY_WEBDAV_USERNAME] as? String ?: ""
+        val clearWebDavPassword = webDavCredentialBindingChanged(
+            oldWebDavUrl,
+            oldWebDavUsername,
+            newWebDavUrl,
+            newWebDavUsername,
+        )
+
+        val oldSmbHost = prefs.getString(KEY_SMB_HOST, "").orEmpty()
+        val oldSmbUsername = prefs.getString(KEY_SMB_USERNAME, "").orEmpty()
+        val newSmbHost = incoming[KEY_SMB_HOST] as? String ?: ""
+        val newSmbUsername = incoming[KEY_SMB_USERNAME] as? String ?: ""
+        val clearSmbPassword = smbCredentialBindingChanged(
+            oldSmbHost,
+            oldSmbUsername,
+            newSmbHost,
+            newSmbUsername,
+        )
+
+        if (clearWebDavPassword && !authStore.webdavPassword.isNullOrEmpty()) {
+            authStore.webdavPassword = null
+        }
+        if (clearSmbPassword && !authStore.smbPassword.isNullOrEmpty()) {
+            authStore.smbPassword = null
+        }
+
         prefs.edit().apply {
             clear()
-            val incoming = values.filterKeys { it !in SECRETS && it !in DEVICE_LOCAL }
-            require(incoming.all { (key, value) -> isValidImportedPreference(key, value) }) {
-                "Imported settings contain an out-of-range player value"
-            }
             (kept + incoming).forEach { (key, value) ->
                 when (value) {
                     is Boolean -> putBoolean(key, value)

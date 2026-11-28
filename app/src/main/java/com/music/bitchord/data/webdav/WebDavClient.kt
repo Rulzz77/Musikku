@@ -32,6 +32,17 @@ import javax.xml.parsers.DocumentBuilderFactory
  */
 object WebDavClient {
 
+    // DAV endpoints often return redirects for login portals or path aliases.
+    // Requests below may carry explicit Basic headers (including the first
+    // connection test before WebDavAuth has been updated), so do not follow
+    // redirects and risk forwarding credentials to a different resource.
+    private val client by lazy {
+        Http.client.newBuilder()
+            .followRedirects(false)
+            .followSslRedirects(false)
+            .build()
+    }
+
     private const val MAX_MULTISTATUS_BYTES = 8L * 1024L * 1024L
     private const val MAX_MULTISTATUS_ENTRIES = 10_000
 
@@ -58,7 +69,7 @@ object WebDavClient {
                 val target = WebDavConfig.normalizeUrl(url)
                 require(WebDavConfig.isConfigured(target)) { "Enter a http(s) server URL" }
                 val request = propfindRequest(target, depth = "0", username, password)
-                Http.client.newCall(request).execute().use { response ->
+                client.newCall(request).execute().use { response ->
                     if (response.code !in 200..299 && response.code != 207) {
                         throw WebDavException("Server answered ${response.code}")
                     }
@@ -145,7 +156,7 @@ object WebDavClient {
             runCatching {
                 val builder = Request.Builder().url(fileUrl).head()
                 WebDavConfig.basicAuthHeader(username, password)?.let { builder.header("Authorization", it) }
-                Http.client.newCall(builder.build()).execute().use { response ->
+                client.newCall(builder.build()).execute().use { response ->
                     when (response.code) {
                         200 -> true
                         404 -> false
@@ -189,7 +200,7 @@ object WebDavClient {
             val builder = Request.Builder().url(fileUrl).put(body)
             if (!overwrite) builder.header("If-None-Match", "*")
             WebDavConfig.basicAuthHeader(username, password)?.let { builder.header("Authorization", it) }
-            Http.client.newCall(builder.build()).execute().use { response ->
+            client.newCall(builder.build()).execute().use { response ->
                 when (response.code) {
                     in 200..299 -> PutResult.Uploaded
                     412 -> PutResult.AlreadyExists
@@ -209,7 +220,7 @@ object WebDavClient {
             runCatching {
                 val builder = Request.Builder().url(dirUrl).method("MKCOL", null)
                 WebDavConfig.basicAuthHeader(username, password)?.let { builder.header("Authorization", it) }
-                Http.client.newCall(builder.build()).execute().use { response ->
+                client.newCall(builder.build()).execute().use { response ->
                     if (response.code !in 200..299 && response.code != 405) {
                         throw WebDavException("Could not create folder (${response.code})")
                     }
@@ -220,7 +231,7 @@ object WebDavClient {
     private fun propfind(dirUrl: String, username: String, password: String): Result<List<Entry>> {
         return runCatching {
             val request = propfindRequest(dirUrl, depth = "1", username, password)
-            Http.client.newCall(request).execute().use { response ->
+            client.newCall(request).execute().use { response ->
                 if (response.code != 207 && response.code !in 200..299) {
                     throw WebDavException("Listing failed with ${response.code}")
                 }

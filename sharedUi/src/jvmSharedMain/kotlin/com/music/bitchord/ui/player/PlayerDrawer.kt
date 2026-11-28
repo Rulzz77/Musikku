@@ -90,14 +90,14 @@ internal val DRAWER_SHAPE = RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp)
 internal val DRAWER_MAX_WIDTH = 640.dp
 internal val ROW_SHAPE = RoundedCornerShape(16.dp)
 internal val FULLSCREEN_PLAYER_PANEL_SHAPE = RoundedCornerShape(22.dp)
-internal val FULLSCREEN_PLAYER_PANEL_MAX_WIDTH = 520.dp
+val FULLSCREEN_PLAYER_PANEL_MAX_WIDTH = 520.dp
 internal val FULLSCREEN_PLAYER_PANEL_BACKGROUND = Color(0xF51A1720)
 internal val FULLSCREEN_PLAYER_PANEL_BORDER = Color.White.copy(alpha = 0.10f)
-internal const val FULLSCREEN_PLAYER_PANEL_WIDTH_FRACTION = 0.54f
+const val FULLSCREEN_PLAYER_PANEL_WIDTH_FRACTION = 0.54f
 internal val SCRIM_COLOR = Color.Black.copy(alpha = 0.5f)
 
 /** Shared surface used by the fullscreen queue and every fullscreen player drawer. */
-internal fun Modifier.fullscreenPlayerPanelSurface(): Modifier = this
+fun Modifier.fullscreenPlayerPanelSurface(): Modifier = this
     .clip(FULLSCREEN_PLAYER_PANEL_SHAPE)
     .background(FULLSCREEN_PLAYER_PANEL_BACKGROUND)
     .border(1.dp, FULLSCREEN_PLAYER_PANEL_BORDER, FULLSCREEN_PLAYER_PANEL_SHAPE)

@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.FullscreenExit
 import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.MoreHoriz
+import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -309,6 +310,7 @@ internal fun FullscreenLyricsToolbar(
     onOpenQueue: () -> Unit,
     onOpenOutput: () -> Unit,
     onOpenLyricsSources: () -> Unit,
+    onOpenBackground: () -> Unit,
     onOpenMenu: () -> Unit,
     onExitFullscreen: () -> Unit,
     modifier: Modifier = Modifier,
@@ -339,6 +341,12 @@ internal fun FullscreenLyricsToolbar(
             icon = BitChordIcons.LyricsQuote,
             contentDescription = "Lyrics sources",
             onClick = onOpenLyricsSources,
+            modifier = Modifier.size(30.dp),
+        )
+        CircleGlyph(
+            icon = Icons.Rounded.Palette,
+            contentDescription = "Lyrics background",
+            onClick = onOpenBackground,
             modifier = Modifier.size(30.dp),
         )
         CircleGlyph(

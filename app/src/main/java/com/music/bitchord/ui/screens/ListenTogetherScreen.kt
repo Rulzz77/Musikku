@@ -93,6 +93,7 @@ import coil3.compose.AsyncImage
 import com.music.bitchord.R
 import com.music.bitchord.data.listentogether.JamInviteLink
 import com.music.bitchord.data.listentogether.ListenTogether
+import com.music.bitchord.data.listentogether.isSafePartyImageUrl
 import com.music.bitchord.data.listentogether.PartyActivity
 import com.music.bitchord.data.listentogether.PartyMember
 import com.music.bitchord.data.listentogether.ServerConnectionState
@@ -1018,9 +1019,10 @@ private fun connectionLine(state: ListenTogether.State): String = when {
  */
 @Composable
 private fun PartyAvatar(url: String?, size: Dp = ICON_SIZE) {
-    if (url != null) {
+    val safeUrl = url?.takeIf(::isSafePartyImageUrl)
+    if (safeUrl != null) {
         AsyncImage(
-            model = url,
+            model = safeUrl,
             contentDescription = null,
             contentScale = ContentScale.Crop,
             modifier = Modifier.size(size).clip(CircleShape),
@@ -1051,9 +1053,10 @@ private fun MemberRow(member: PartyMember, isYou: Boolean, canKick: Boolean = fa
                 .background(MaterialTheme.colorScheme.surface),
             contentAlignment = Alignment.Center,
         ) {
-            if (member.avatarUrl != null) {
+            val avatarUrl = member.avatarUrl?.takeIf(::isSafePartyImageUrl)
+            if (avatarUrl != null) {
                 AsyncImage(
-                    model = member.avatarUrl,
+                    model = avatarUrl,
                     contentDescription = null,
                     modifier = Modifier.size(32.dp).clip(CircleShape),
                 )

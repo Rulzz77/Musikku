@@ -115,11 +115,6 @@ class ModuleManager {
     private val indexCache = mutableMapOf<String, CachedIndex>()
     private val indexLock = Mutex()
 
-    private companion object {
-        const val MAX_MODULE_INDEX_BYTES = 4 * 1024 * 1024
-        const val MAX_MODULE_SOURCE_BYTES = 2 * 1024 * 1024
-    }
-
     /** Read a module response without allowing a remote server to exhaust app memory. */
     private fun ResponseBody.readUtf8Limited(maxBytes: Int): String {
         require(contentLength() <= maxBytes || contentLength() < 0) {
@@ -418,6 +413,8 @@ class ModuleManager {
 
     private companion object {
         const val TAG = "BitChord"
+        const val MAX_MODULE_INDEX_BYTES = 4 * 1024 * 1024
+        const val MAX_MODULE_SOURCE_BYTES = 2 * 1024 * 1024
 
         /**
          * How long a fetched index is trusted. Long enough that a run of

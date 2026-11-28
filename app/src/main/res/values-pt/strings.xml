@@ -1580,4 +1580,8 @@
     <string name="automix_mini_art_transition">Transição de capa no minirreprodutor</string>
     <string name="automix_mini_art_transition_subtitle">Mostra transições de capas no minirreprodutor durante o AutoMix.</string>
     <string name="listen_together_invalid_qr">Este código QR não é um convite válido para ouvir em conjunto.</string>
+    <string name="player_more_playback_lyrics">Reprodução e letras</string>
+    <string name="player_more_queue_actions">Ações da fila</string>
+    <string name="player_more_library_downloads">Biblioteca e downloads</string>
+    <string name="player_more_song_details">Detalhes da música</string>
 </resources>

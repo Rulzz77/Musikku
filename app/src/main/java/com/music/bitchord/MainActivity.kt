@@ -1298,6 +1298,7 @@ private fun BitChordApp(
     var optimisticVersionSong by remember { mutableStateOf<Song?>(null) }
 
     val syncedLyricsEnabled by AppSettings.syncedLyrics.collectAsStateWithLifecycle()
+    val lyricsBackgroundMode by AppSettings.lyricsBackgroundMode.collectAsStateWithLifecycle()
     val lyricsSources by AppSettings.lyricsSources.collectAsStateWithLifecycle()
     val lyricsSourceOrder by AppSettings.lyricsSourceOrder.collectAsStateWithLifecycle()
     val prioritizeSyllableSync by AppSettings.prioritizeSyllableSync.collectAsStateWithLifecycle()
@@ -2685,6 +2686,26 @@ private fun BitChordApp(
                 )
             }
             ?: effectiveSong
+        // Artist Image is fetched only when selected. Prefer an already-known
+        // Apple artist header; otherwise use the YouTube Music artist page's
+        // own header thumbnail, then let LyricsViewBackdrop fall back to cover.
+        val artistImageUrl by produceState<String?>(
+            initialValue = displayedSong.artistId?.let { AppleArtistArtRepository.cached(it)?.heroUrl },
+            displayedSong.artistId,
+            displayedSong.artist,
+            lyricsBackgroundMode,
+            appleArtVersion,
+        ) {
+            val artistId = displayedSong.artistId
+            value = if (lyricsBackgroundMode == com.music.bitchord.data.settings.LyricsBackgroundMode.ARTIST_IMAGE &&
+                !artistId.isNullOrBlank()
+            ) {
+                AppleArtistArtRepository.cached(artistId)?.heroUrl
+                    ?: YtMusicRepository.artistLanding(artistId).getOrNull()?.thumbnailUrl
+            } else {
+                null
+            }
+        }
         val playedBy = partyState
             .takeIf {
                 it.inParty && it.playback.track?.videoId == displayedSong.videoId
@@ -2698,7 +2719,7 @@ private fun BitChordApp(
             }
         NowPlayingScreen(
             song = displayedSong,
-            artistImageUrl = displayedSong.artistId?.let { AppleArtistArtRepository.cached(it)?.heroUrl },
+            artistImageUrl = artistImageUrl,
             playedBy = playedBy,
             accountName = account?.name,
             windowWidth = windowWidth,

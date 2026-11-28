@@ -183,6 +183,26 @@ enum class SongSort {
  * same flows and applies changes to the live ExoPlayer instance immediately —
  * no restart, no rebinding.
  */
+internal fun normalizeCrossfadeSeconds(value: Int): Int = value.coerceIn(0, 12)
+
+internal fun normalizeEqualizerBalance(value: Float): Float =
+    value.takeIf(Float::isFinite)?.coerceIn(-1f, 1f) ?: 0f
+
+internal fun normalizeEqualizerBands(values: List<Float>, count: Int, rangeDb: Float): List<Float> =
+    List(count) { index ->
+        values.getOrElse(index) { 0f }
+            .takeIf(Float::isFinite)
+            ?.coerceIn(-rangeDb, rangeDb)
+            ?: 0f
+    }
+
+internal fun normalizeScrobbleMinDuration(value: Int): Int = value.coerceIn(15, 120)
+
+internal fun normalizeScrobbleDelayPercent(value: Float): Float =
+    value.takeIf(Float::isFinite)?.coerceIn(0.1f, 1f) ?: 0.5f
+
+internal fun normalizeScrobbleDelaySeconds(value: Int): Int = value.coerceIn(30, 300)
+
 object AppSettings {
 
     private lateinit var prefs: SharedPreferences
@@ -1038,7 +1058,7 @@ object AppSettings {
         exportDownloads.value = prefs.getBoolean(KEY_EXPORT_DOWNLOADS, false)
         syncDownloadedPlaylists.value = prefs.getBoolean(KEY_SYNC_DOWNLOADED_PLAYLISTS, false)
         downloadLikedSongs.value = prefs.getBoolean(KEY_DOWNLOAD_LIKED_SONGS, false)
-        crossfadeSeconds.value = prefs.getInt(KEY_CROSSFADE, 0)
+        crossfadeSeconds.value = normalizeCrossfadeSeconds(prefs.getInt(KEY_CROSSFADE, 0))
         smartFadeEnabled.value = prefs.getBoolean(KEY_SMART_FADE, false)
         _autoMixArtwork.value = AutoMixArtworkPreferences(
             artTransition = prefs.getBoolean(KEY_AUTOMIX_ART_TRANSITION, false),
@@ -1075,7 +1095,7 @@ object AppSettings {
         equalizerToneX.value = prefs.getInt(KEY_EQ_TONE_X, 0).coerceIn(-EqLayout.TONE_STEPS, EqLayout.TONE_STEPS)
         equalizerToneY.value = prefs.getInt(KEY_EQ_TONE_Y, 0).coerceIn(-EqLayout.TONE_STEPS, EqLayout.TONE_STEPS)
         equalizerFocused.value = prefs.getBoolean(KEY_EQ_FOCUSED, false)
-        equalizerBalance.value = prefs.getFloat(KEY_EQ_BALANCE, 0f).coerceIn(-1f, 1f)
+        equalizerBalance.value = normalizeEqualizerBalance(prefs.getFloat(KEY_EQ_BALANCE, 0f))
         equalizerBands.value = readEqualizerBands()
         equalizerPreset.value = EqualizerPreset.matching(equalizerBands.value)
         playbackSpeed.value = prefs.getFloat(KEY_SPEED, 1.0f)
@@ -1184,9 +1204,15 @@ object AppSettings {
         lastfmScrobbleEnabled.value = prefs.getBoolean(KEY_LASTFM_SCROBBLE_ENABLED, false)
         lastfmNowPlaying.value = prefs.getBoolean(KEY_LASTFM_NOW_PLAYING, false) && lastfmScrobbleEnabled.value
         lastfmPrimaryArtistOnly.value = prefs.getBoolean(KEY_LASTFM_PRIMARY_ARTIST_ONLY, false)
-        scrobbleMinDuration.value = prefs.getInt(KEY_SCROBBLE_MIN_DURATION, 30)
-        scrobbleDelayPercent.value = prefs.getFloat(KEY_SCROBBLE_DELAY_PERCENT, 0.5f)
-        scrobbleDelaySeconds.value = prefs.getInt(KEY_SCROBBLE_DELAY_SECONDS, 180)
+        scrobbleMinDuration.value = normalizeScrobbleMinDuration(
+            prefs.getInt(KEY_SCROBBLE_MIN_DURATION, 30),
+        )
+        scrobbleDelayPercent.value = normalizeScrobbleDelayPercent(
+            prefs.getFloat(KEY_SCROBBLE_DELAY_PERCENT, 0.5f),
+        )
+        scrobbleDelaySeconds.value = normalizeScrobbleDelaySeconds(
+            prefs.getInt(KEY_SCROBBLE_DELAY_SECONDS, 180),
+        )
         listenBrainzEnabled.value = prefs.getBoolean(KEY_LISTENBRAINZ_ENABLED, false)
         listenBrainzToken.value = authStore.listenBrainzToken.orEmpty()
         listenBrainzPrimaryArtistOnly.value = prefs.getBoolean(KEY_LISTENBRAINZ_PRIMARY_ARTIST_ONLY, false)
@@ -1384,8 +1410,9 @@ object AppSettings {
     }
 
     fun setCrossfadeSeconds(value: Int) {
-        crossfadeSeconds.value = value
-        prefs.edit().putInt(KEY_CROSSFADE, value).apply()
+        val normalized = normalizeCrossfadeSeconds(value)
+        crossfadeSeconds.value = normalized
+        prefs.edit().putInt(KEY_CROSSFADE, normalized).apply()
     }
 
     fun setSmartFadeEnabled(value: Boolean) {
@@ -1480,7 +1507,7 @@ object AppSettings {
     }
 
     fun setEqualizerBalance(value: Float) {
-        val clamped = value.coerceIn(-1f, 1f)
+        val clamped = normalizeEqualizerBalance(value)
         equalizerBalance.value = clamped
         prefs.edit().putFloat(KEY_EQ_BALANCE, clamped).apply()
     }
@@ -1493,9 +1520,11 @@ object AppSettings {
      * one string is one thing to keep in step rather than seven.
      */
     fun setEqualizerBands(values: List<Float>) {
-        val clamped = List(EqLayout.MANUAL_COUNT) {
-            values.getOrElse(it) { 0f }.coerceIn(-EqLayout.MANUAL_RANGE_DB, EqLayout.MANUAL_RANGE_DB)
-        }
+        val clamped = normalizeEqualizerBands(
+            values,
+            count = EqLayout.MANUAL_COUNT,
+            rangeDb = EqLayout.MANUAL_RANGE_DB,
+        )
         equalizerBands.value = clamped
         equalizerPreset.value = EqualizerPreset.matching(clamped)
         prefs.edit().putString(KEY_EQ_BANDS, clamped.joinToString(",")).apply()
@@ -1510,13 +1539,15 @@ object AppSettings {
     private fun readEqualizerBands(): List<Float> {
         val stored = prefs.getString(KEY_EQ_BANDS, null)
             ?.split(",")
-            ?.mapNotNull { it.trim().toFloatOrNull() }
+            ?.mapNotNull { token -> token.trim().toFloatOrNull()?.takeIf(Float::isFinite) }
             .orEmpty()
         // Padded rather than rejected: a backup written by a build with a
         // different number of bands should restore the ones it does have.
-        return List(EqLayout.MANUAL_COUNT) {
-            stored.getOrElse(it) { 0f }.coerceIn(-EqLayout.MANUAL_RANGE_DB, EqLayout.MANUAL_RANGE_DB)
-        }
+        return normalizeEqualizerBands(
+            stored,
+            count = EqLayout.MANUAL_COUNT,
+            rangeDb = EqLayout.MANUAL_RANGE_DB,
+        )
     }
 
     fun setPlaybackSpeed(value: Float) {
@@ -2008,18 +2039,21 @@ object AppSettings {
     }
 
     fun setScrobbleMinDuration(value: Int) {
-        scrobbleMinDuration.value = value
-        prefs.edit().putInt(KEY_SCROBBLE_MIN_DURATION, value).apply()
+        val normalized = normalizeScrobbleMinDuration(value)
+        scrobbleMinDuration.value = normalized
+        prefs.edit().putInt(KEY_SCROBBLE_MIN_DURATION, normalized).apply()
     }
 
     fun setScrobbleDelayPercent(value: Float) {
-        scrobbleDelayPercent.value = value
-        prefs.edit().putFloat(KEY_SCROBBLE_DELAY_PERCENT, value).apply()
+        val normalized = normalizeScrobbleDelayPercent(value)
+        scrobbleDelayPercent.value = normalized
+        prefs.edit().putFloat(KEY_SCROBBLE_DELAY_PERCENT, normalized).apply()
     }
 
     fun setScrobbleDelaySeconds(value: Int) {
-        scrobbleDelaySeconds.value = value
-        prefs.edit().putInt(KEY_SCROBBLE_DELAY_SECONDS, value).apply()
+        val normalized = normalizeScrobbleDelaySeconds(value)
+        scrobbleDelaySeconds.value = normalized
+        prefs.edit().putInt(KEY_SCROBBLE_DELAY_SECONDS, normalized).apply()
     }
 
     fun setListenBrainzEnabled(value: Boolean) {
@@ -2315,6 +2349,11 @@ object AppSettings {
     fun isValidImportedPreference(key: String, value: Any?): Boolean = when (key) {
         KEY_SPEED -> value is Float && value.isFinite() && value in MIN_PLAYBACK_SPEED..MAX_PLAYBACK_SPEED
         KEY_REPEAT_MODE -> value is Int && value in Player.REPEAT_MODE_OFF..Player.REPEAT_MODE_ALL
+        KEY_CROSSFADE -> value is Int && value in 0..12
+        KEY_EQ_BALANCE -> value is Float && value.isFinite() && value in -1f..1f
+        KEY_SCROBBLE_MIN_DURATION -> value is Int && value in 15..120
+        KEY_SCROBBLE_DELAY_PERCENT -> value is Float && value.isFinite() && value in 0.1f..1f
+        KEY_SCROBBLE_DELAY_SECONDS -> value is Int && value in 30..300
         else -> true
     }
 

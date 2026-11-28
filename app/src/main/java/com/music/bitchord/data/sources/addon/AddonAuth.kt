@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import com.music.bitchord.BuildConfig
+import com.music.bitchord.auth.EncryptedPrefs
 import com.music.bitchord.data.Http
 import com.music.bitchord.data.TrackLog
 import kotlinx.coroutines.CancellationException
@@ -94,8 +95,9 @@ object AddonAuth {
 
     /**
      * Separate from [prefs], which [drop] clears whenever the token is thrown
-     * away, and left out of backups (see backup_rules.xml): a tester code is a
-     * credential for this phone's owner, not data to restore elsewhere.
+     * away. Both this code and the verification session are encrypted and left
+     * out of Android backups: they belong to this phone's owner, not data to
+     * restore onto another device.
      */
     @Volatile private var testerPrefs: SharedPreferences? = null
     @Volatile private var session: Session? = null
@@ -111,8 +113,19 @@ object AddonAuth {
 
     /** Restores the last token, so a process restart doesn't cost a fresh attestation. */
     fun init(context: Context) {
-        testerPrefs = context.getSharedPreferences("bitchord_tester", Context.MODE_PRIVATE)
-        val p = context.getSharedPreferences("bitchord_addon_auth", Context.MODE_PRIVATE)
+        // Migrate the old cleartext preference files into Keystore-backed
+        // stores. EncryptedPrefs removes the legacy files only after a
+        // successful read-back of every value.
+        testerPrefs = EncryptedPrefs.open(
+            context,
+            "bitchord_tester_secure",
+            "bitchord_tester",
+        )
+        val p = EncryptedPrefs.open(
+            context,
+            "bitchord_addon_auth_secure",
+            "bitchord_addon_auth",
+        )
         prefs = p
         val token = p.getString("token", null)
         val alias = p.getString("alias", null)

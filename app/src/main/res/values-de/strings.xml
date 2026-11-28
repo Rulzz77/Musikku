@@ -1575,4 +1575,8 @@
     <string name="automix_mini_art_transition">Cover-Übergang im Mini-Player</string>
     <string name="automix_mini_art_transition_subtitle">Zeigt während AutoMix Cover-Übergänge im Mini-Player.</string>
     <string name="listen_together_invalid_qr">Dieser QR-Code ist keine gültige Einladung zum gemeinsamen Hören.</string>
+    <string name="player_more_playback_lyrics">Wiedergabe &amp; Songtexte</string>
+    <string name="player_more_queue_actions">Warteschlangenaktionen</string>
+    <string name="player_more_library_downloads">Mediathek &amp; Downloads</string>
+    <string name="player_more_song_details">Songdetails</string>
 </resources>

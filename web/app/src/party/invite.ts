@@ -19,6 +19,26 @@ function isLocalDevelopmentHost(hostname: string): boolean {
     host === '127.0.0.1' || host === '::1';
 }
 
+function isPrivateHost(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  const ipv4 = host.split('.').map(Number);
+  if (ipv4.length === 4 && ipv4.every((part) => Number.isInteger(part) && part >= 0 && part <= 255)) {
+    const [a, b, c] = ipv4;
+    return a === 0 || a === 10 || a === 127 || a >= 224 ||
+      (a === 100 && b! >= 64 && b! <= 127) ||
+      (a === 169 && b === 254) ||
+      (a === 172 && b! >= 16 && b! <= 31) ||
+      (a === 192 && (b === 0 || b === 168)) ||
+      (a === 198 && (b === 18 || b === 19 || (b === 51 && c === 100))) ||
+      (a === 203 && b === 0 && c === 113);
+  }
+  if (host.includes(':')) {
+    return host === '::' || host.startsWith('fc') || host.startsWith('fd') ||
+      /^fe[89ab]/.test(host) || host.startsWith('::ffff:');
+  }
+  return false;
+}
+
 export function sanitizeServerUrl(raw: string | null | undefined): string | null {
   const trimmed = raw?.trim().replace(/\/+$/, '');
   if (!trimmed) return null;
@@ -26,11 +46,13 @@ export function sanitizeServerUrl(raw: string | null | undefined): string | null
   try {
     const parsed = new URL(withScheme);
     if (!parsed.hostname || parsed.username || parsed.password || parsed.search || parsed.hash) return null;
+    if (!isLocalDevelopmentHost(parsed.hostname) && isPrivateHost(parsed.hostname)) return null;
     // Production party servers must use TLS. Plain HTTP is only accepted for
     // local development servers where TLS is commonly unavailable.
     if (parsed.protocol !== 'https:' &&
         !(parsed.protocol === 'http:' && isLocalDevelopmentHost(parsed.hostname))) return null;
-    return `${parsed.protocol}//${parsed.host}${parsed.pathname.replace(/\\/+$/, '')}`;
+    if (parsed.pathname !== '/' && parsed.pathname !== '') return null;
+    return `${parsed.protocol}//${parsed.host}`;
   } catch {
     return null;
   }

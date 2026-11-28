@@ -1575,4 +1575,8 @@
     <string name="automix_mini_art_transition">मिनी प्लेयर कवर ट्रांज़िशन</string>
     <string name="automix_mini_art_transition_subtitle">AutoMix के दौरान मिनी प्लेयर में कवर आर्ट ट्रांज़िशन दिखाता है।</string>
     <string name="listen_together_invalid_qr">यह QR कोड साथ में सुनने का मान्य आमंत्रण नहीं है।</string>
+    <string name="player_more_playback_lyrics">प्लेबैक और बोल</string>
+    <string name="player_more_queue_actions">कतार की कार्रवाइयाँ</string>
+    <string name="player_more_library_downloads">लाइब्रेरी और डाउनलोड</string>
+    <string name="player_more_song_details">गाने का विवरण</string>
 </resources>

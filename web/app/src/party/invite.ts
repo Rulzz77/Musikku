@@ -14,13 +14,13 @@ export function cleanCode(raw: string): string | null {
 }
 
 function isLocalDevelopmentHost(hostname: string): boolean {
-  const host = hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
   return host === 'localhost' || host.endsWith('.localhost') ||
     host === '127.0.0.1' || host === '::1';
 }
 
 function isPrivateHost(hostname: string): boolean {
-  const host = hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
   if (
     host === 'localhost' || host.endsWith('.localhost') ||
     host.endsWith('.local') || host.endsWith('.lan') ||
@@ -41,7 +41,8 @@ function isPrivateHost(hostname: string): boolean {
   }
   if (host.includes(':')) {
     return host.startsWith('::') || host.startsWith('fc') || host.startsWith('fd') ||
-      /^fe[89a-f]/.test(host) || host.startsWith('2001:db8:');
+      host.startsWith('ff') || /^fe[89a-f]/.test(host) ||
+      host.startsWith('2001:db8:');
   }
   return false;
 }

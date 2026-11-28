@@ -189,6 +189,42 @@ class WebDavTest {
     }
 
     @Test
+    fun rejectsEncodedPathTraversalAndEscapedFolderBoundaries() {
+        listOf(
+            "https://cloud.example.com/api/private.mp3",
+            "https://cloud.example.com/music/%2e%2e/api/private.mp3",
+            "https://cloud.example.com/music/%2E%2E%2Fapi/private.mp3",
+            "https://cloud.example.com/music/%2f%2fattacker/private.mp3",
+            "https://cloud.example.com/music/%5c%5cattacker/private.mp3",
+            "https://cloud.example.com/music/%00/private.mp3",
+        ).forEach { href ->
+            try {
+                WebDavClient.resolveHref("https://cloud.example.com/music", href)
+                throw AssertionError("Path outside the configured WebDAV root was accepted: $href")
+            } catch (_: IllegalArgumentException) {
+                // Expected: credentials are bound to the decoded root path.
+            }
+        }
+    }
+
+    @Test
+    fun webDavAuthDoesNotAuthorizeEncodedTraversalWithinSameOrigin() {
+        WebDavAuth.update("https://cloud.example.com/music", "user", "pass")
+        try {
+            assertEquals(
+                "Basic dXNlcjpwYXNz",
+                WebDavAuth.authHeader,
+            )
+            assertFalse(WebDavAuth.shouldAuthorize("https://cloud.example.com/music/%2e%2e/admin"))
+            assertFalse(WebDavAuth.shouldAuthorize("https://cloud.example.com/music/%2F%2Fadmin"))
+            assertFalse(WebDavAuth.shouldAuthorize("https://cloud.example.com/music/%5c%5cadmin"))
+            assertTrue(WebDavAuth.shouldAuthorize("https://cloud.example.com/music/Album/song.mp3"))
+        } finally {
+            WebDavAuth.update("", "", "")
+        }
+    }
+
+    @Test
     fun rejectsCrossOriginCredentialsAndDowngradeHrefs() {
         listOf(
             "https://other.example.com/a.mp3",

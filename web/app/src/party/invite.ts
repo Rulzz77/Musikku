@@ -25,7 +25,8 @@ function isPrivateHost(hostname: string): boolean {
     host === 'localhost' || host.endsWith('.localhost') ||
     host.endsWith('.local') || host.endsWith('.lan') ||
     host.endsWith('.internal') || host.endsWith('.home') ||
-    host.endsWith('.localdomain')
+    host.endsWith('.home.arpa') || host.endsWith('.localdomain') ||
+    host.endsWith('.test') || host.endsWith('.example') || host.endsWith('.invalid')
   ) return true;
   const ipv4 = host.split('.').map(Number);
   if (ipv4.length === 4 && ipv4.every((part) => Number.isInteger(part) && part >= 0 && part <= 255)) {
@@ -62,7 +63,8 @@ export function sanitizePartyImageUrl(raw: string | null | undefined): string | 
     if (
       (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') ||
       !parsed.hostname || parsed.username || parsed.password ||
-      isPrivateHost(parsed.hostname) || !parsed.hostname.includes('.')
+      isPrivateHost(parsed.hostname) ||
+      (!parsed.hostname.includes('.') && !parsed.hostname.includes(':'))
     ) return null;
     return parsed.href;
   } catch {

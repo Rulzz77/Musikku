@@ -4,7 +4,9 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
 import android.webkit.CookieManager
-import android.webkit.JavascriptInterface
+import android.webkit.WebChromeClient
+import android.webkit.JsResult
+import android.webkit.WebResourceRequest
 import android.webkit.WebStorage
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -29,6 +31,26 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.Base64
 
+internal fun isSpotifyPlayerOrigin(rawUrl: String?): Boolean {
+    val uri = runCatching { java.net.URI(rawUrl ?: return false) }.getOrNull() ?: return false
+    return uri.scheme.equals("https", ignoreCase = true) &&
+        uri.host.equals("open.spotify.com", ignoreCase = true) &&
+        uri.port in setOf(-1, 443)
+}
+
+internal fun isAllowedSpotifyNavigation(rawUrl: String): Boolean {
+    val uri = runCatching { java.net.URI(rawUrl) }.getOrNull() ?: return false
+    if (!uri.scheme.equals("https", ignoreCase = true) || uri.userInfo != null || uri.port !in setOf(-1, 443)) {
+        return false
+    }
+    return uri.host.equals("open.spotify.com", ignoreCase = true) ||
+        uri.host.equals("accounts.spotify.com", ignoreCase = true)
+}
+
+internal fun isValidSpotifyAccessToken(token: String): Boolean =
+    token.length in 20..4_096 &&
+        token.all { it in 'A'..'Z' || it in 'a'..'z' || it in '0'..'9' || it in "._-=" }
+
 /**
  * The bearer token behind Spotify's own web player, minted from the
  * listener's session cookie ([AppSettings.spotifySpdcToken]) rather than an
@@ -42,8 +64,8 @@ import java.util.Base64
 internal object SpotifyToken {
 
     private const val TAG = "SpotifyToken"
-    private const val BRIDGE_NAME = "BitChordSpotifyTokenBridge"
     private const val HARVEST_TIMEOUT_MS = 12_000L
+    private const val MAX_TOKEN_RESPONSE_CHARS = 32 * 1024
     private const val DEFAULT_TOKEN_LIFETIME_MS = 3_600_000L
 
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
@@ -142,9 +164,14 @@ internal object SpotifyToken {
         }
         // The player caches its token in web storage and skips a fresh
         // /api/token request if a live one is already sitting there, leaving
-        // the hook with nothing to see — wipe storage so every harvest forces
-        // a real mint.
-        runCatching { WebStorage.getInstance().deleteAllData() }
+        // the hook with nothing to see. Clear Spotify's origins only: the
+        // previous deleteAllData() also erased Discord/YouTube website state.
+        runCatching {
+            WebStorage.getInstance().apply {
+                deleteOrigin("https://open.spotify.com")
+                deleteOrigin("https://accounts.spotify.com")
+            }
+        }
 
         var webView: WebView? = null
         return try {
@@ -153,19 +180,42 @@ internal object SpotifyToken {
                 settings.domStorageEnabled = true
                 settings.userAgentString = CANVAS_UA
                 cookieManager.setAcceptThirdPartyCookies(this, true)
-                addJavascriptInterface(TokenBridge(deferred), BRIDGE_NAME)
+                val bridge = TokenBridge(deferred)
 
                 webViewClient = object : WebViewClient() {
+                    override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+                        // This offscreen view exists only to mint Spotify's
+                        // player token. Do not let an unexpected top-level
+                        // navigation carry its privileged bridge elsewhere.
+                        return request.isForMainFrame && !isAllowedSpotifyNavigation(request.url.toString())
+                    }
+
                     override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
                         super.onPageStarted(view, url, favicon)
-                        view.evaluateJavascript(HOOK_SCRIPT, null)
+                        if (isSpotifyPlayerOrigin(url)) view.evaluateJavascript(HOOK_SCRIPT, null)
                     }
 
                     override fun onPageFinished(view: WebView, url: String?) {
                         super.onPageFinished(view, url)
-                        // Re-assert in case the player navigated client-side
-                        // after the onPageStarted injection ran.
-                        view.evaluateJavascript(HOOK_SCRIPT, null)
+                        // Re-assert only on the Spotify player origin in case it
+                        // navigated client-side after the first injection.
+                        if (isSpotifyPlayerOrigin(url)) view.evaluateJavascript(HOOK_SCRIPT, null)
+                    }
+                }
+
+                // Unlike addJavascriptInterface, an alert carries the calling
+                // frame's URL. Only token responses raised by open.spotify.com
+                // are accepted; cross-origin frames cannot submit a fake token.
+                webChromeClient = object : WebChromeClient() {
+                    override fun onJsAlert(
+                        view: WebView,
+                        url: String,
+                        message: String,
+                        result: JsResult,
+                    ): Boolean {
+                        result.confirm()
+                        if (isSpotifyPlayerOrigin(url)) bridge.onTokenPayload(message)
+                        return true
                     }
                 }
                 loadUrl("https://open.spotify.com/")
@@ -177,27 +227,30 @@ internal object SpotifyToken {
             null
         } finally {
             runCatching {
-                webView?.removeJavascriptInterface(BRIDGE_NAME)
                 webView?.stopLoading()
                 webView?.destroy()
             }
         }
     }
 
-    /** Receives raw `/api/token` response bodies from the hooked page. */
+    /** Receives raw `/api/token` response bodies from the Spotify-origin alert bridge. */
     private class TokenBridge(private val deferred: CompletableDeferred<HarvestedToken?>) {
-        @JavascriptInterface
         fun onTokenPayload(payload: String?) {
-            if (payload.isNullOrBlank() || deferred.isCompleted) return
+            if (
+                payload.isNullOrBlank() ||
+                payload.length > MAX_TOKEN_RESPONSE_CHARS ||
+                deferred.isCompleted
+            ) return
             runCatching {
                 val root = json.parseToJsonElement(payload).jsonObject
                 val token = root["accessToken"]?.jsonPrimitive?.contentOrNull
+                    ?.takeIf(::isValidSpotifyAccessToken)
                 val anonymous = root["isAnonymous"]?.jsonPrimitive?.contentOrNull
                     ?.toBooleanStrictOrNull() ?: false
                 // The player also mints an anonymous token before the cookie
                 // takes effect; that one can't read canvases, so keep waiting
                 // for the logged-in one.
-                if (token.isNullOrBlank() || anonymous) return
+                if (token == null || anonymous) return
                 val expiresAt = root["accessTokenExpirationTimestampMs"]?.jsonPrimitive?.contentOrNull
                     ?.toLongOrNull()?.takeIf { it > System.currentTimeMillis() }
                     ?: (System.currentTimeMillis() + DEFAULT_TOKEN_LIFETIME_MS)
@@ -212,7 +265,7 @@ internal object SpotifyToken {
           if (window.__bitchordTokenHook) return;
           window.__bitchordTokenHook = true;
           var report = function (body) {
-            try { $BRIDGE_NAME.onTokenPayload(body); } catch (e) {}
+            try { window.alert(String(body)); } catch (e) {}
           };
           var isToken = function (u) {
             try { return String(u).indexOf('/api/token') !== -1; } catch (e) { return false; }

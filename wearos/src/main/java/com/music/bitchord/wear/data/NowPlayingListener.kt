@@ -20,6 +20,16 @@ import com.music.bitchord.wear.R
 import com.music.bitchord.wear.WearActivity
 import com.music.bitchord.wear.WearProtocol as P
 
+/** Background Now Playing events are accepted only from the selected PhoneLink node. */
+internal fun isSelectedNowPlayingEvent(
+    selectedNode: String?,
+    eventHost: String?,
+    eventPath: String?,
+): Boolean =
+    !selectedNode.isNullOrBlank() &&
+        eventHost == selectedNode &&
+        eventPath == P.PATH_NOW_PLAYING
+
 /**
  * Puts BitChord's own icon on the watch face while the phone plays.
  *
@@ -61,9 +71,11 @@ class NowPlayingListener : WearableListenerService() {
             .getString(P.PREF_SELECTED_PHONE_NODE, null)
             ?: return
         val latest = events.lastOrNull { event ->
-            event.dataItem.uri.host == selectedNode &&
-                event.dataItem.uri.path == P.PATH_NOW_PLAYING &&
-                event.type in setOf(DataEvent.TYPE_CHANGED, DataEvent.TYPE_DELETED)
+            isSelectedNowPlayingEvent(
+                selectedNode = selectedNode,
+                eventHost = event.dataItem.uri.host,
+                eventPath = event.dataItem.uri.path,
+            ) && event.type in setOf(DataEvent.TYPE_CHANGED, DataEvent.TYPE_DELETED)
         } ?: return
 
         if (latest.type == DataEvent.TYPE_DELETED) {

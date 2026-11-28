@@ -346,6 +346,7 @@ private fun FullscreenLyricsAmbientBackdrop(
     trackKey: String,
     imageUrl: String?,
     canvasFrame: ImageBitmap?,
+    fallbackImage: ImageBitmap?,
     modifier: Modifier = Modifier,
 ) {
     val mesh = rememberArtworkMesh(imageUrl, canvasFrame, ART_PX, seed = null, clipKey = trackKey)
@@ -367,21 +368,37 @@ private fun FullscreenLyricsAmbientBackdrop(
         }
     }
 
-    if (mesh != null) {
-        ArtworkMeshBackdrop(
-            mesh = mesh,
-            modifier = modifier.graphicsLayer {
-                // Overscan keeps the clearly visible pan from exposing an edge.
-                // Translation and subtle rotation transform the small,
-                // pre-blurred mesh rather than blurring the full screen per frame.
-                scaleX = 1.20f
-                scaleY = 1.20f
-                val phase = drift.value
-                translationX = kotlin.math.sin(phase) * size.width * 0.036f
-                translationY = kotlin.math.cos(phase * 0.86f) * size.height * 0.032f
-                rotationZ = kotlin.math.sin(phase * 0.53f) * 1.15f
-            },
-        )
+    // The blurred cover is a real fallback while the mesh is being prepared.
+    // Once the mesh is ready it takes over in one crossfade; drawing both as
+    // permanent siblings made the opaque mesh cover the blur on every frame.
+    Crossfade(
+        targetState = mesh != null,
+        modifier = modifier,
+        animationSpec = tween(700, easing = FastOutSlowInEasing),
+        label = "fullscreenLyricsBackdrop",
+    ) { meshReady ->
+        val readyMesh = mesh.takeIf { meshReady }
+        if (readyMesh != null) {
+            ArtworkMeshBackdrop(
+                mesh = readyMesh,
+                modifier = Modifier.fillMaxSize().graphicsLayer {
+                    // Overscan keeps the clearly visible pan from exposing an edge.
+                    // Translation and subtle rotation transform the small,
+                    // pre-blurred mesh rather than blurring the full screen per frame.
+                    scaleX = 1.20f
+                    scaleY = 1.20f
+                    val phase = drift.value
+                    translationX = kotlin.math.sin(phase) * size.width * 0.036f
+                    translationY = kotlin.math.cos(phase * 0.86f) * size.height * 0.032f
+                    rotationZ = kotlin.math.sin(phase * 0.53f) * 1.15f
+                },
+            )
+        } else {
+            FullArtworkBlurBackdrop(
+                image = fallbackImage,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
     }
 }
 
@@ -399,14 +416,11 @@ private fun LyricsViewBackdrop(
 ) {
     when (mode) {
         LyricsBackgroundMode.DYNAMIC_KAWARP -> {
-            FullArtworkBlurBackdrop(
-                image = fullArtworkBlurImage,
-                modifier = modifier,
-            )
             FullscreenLyricsAmbientBackdrop(
                 trackKey = trackKey,
                 imageUrl = imageUrl,
                 canvasFrame = canvasFrame,
+                fallbackImage = fullArtworkBlurImage,
                 modifier = modifier,
             )
         }
@@ -3364,7 +3378,14 @@ fun NowPlayingScreen(
                         )
                     },
                     lyricsPane = {
-                        LandscapeLyricsPane(
+                        // Keep the regular landscape pane composed so its scroll state
+                        // survives fullscreen entry/exit, but do not show it behind the Dialog.
+                        Box(
+                            Modifier.fillMaxSize().graphicsLayer {
+                                alpha = if (lyricsFullscreenVisible) 0f else 1f
+                            },
+                        ) {
+                            LandscapeLyricsPane(
                             hasLyrics = lyricsTranslation.displayedLyrics.isNotEmpty(),
                             placeholder = if (lyricsUnavailable) {
                                 stringResource(Res.string.lyrics_not_available)
@@ -3433,6 +3454,7 @@ fun NowPlayingScreen(
                                 )
                                 }
                             }
+                        }
                         }
                     },
                     queuePane = {
@@ -4996,7 +5018,17 @@ fun NowPlayingScreen(
                                     }
                                     // Arrives after the sleeve has finished collapsing
                                     // into the header rather than during — see [collapseDone].
-                                    .graphicsLayer { alpha = if (lyricsPanelVisible) panelFade.value else 0f },
+                                    // Fullscreen draws its own LyricsPanel in a Dialog.
+                                    // Hiding this retained copy is essential for the
+                                    // transparent background mode, or both lyric lists
+                                    // show through one another.
+                                    .graphicsLayer {
+                                        alpha = if (lyricsPanelVisible && !lyricsFullscreenVisible) {
+                                            panelFade.value
+                                        } else {
+                                            0f
+                                        }
+                                    },
                             ) {
                                 LyricsTranslationMotion(
                                     trigger = lyricsTranslation.transition,
@@ -5010,7 +5042,7 @@ fun NowPlayingScreen(
                                         playhead = lyricsPlayhead,
                                         looking = !lyricsUnavailable,
                                         isPlaying = isPlaying && position.advancing,
-                                        active = lyricsPanelVisible && !(lyricsFullscreen && sideways),
+                                        active = lyricsPanelVisible && !lyricsFullscreenVisible,
                                         onSeekToLine = seekToLyric,
                                         controlsOpen = lyricsControlsOpen,
                                         onRevealControls = { lyricsControlsOpen = true },
@@ -5038,7 +5070,8 @@ fun NowPlayingScreen(
                             // for reading, and a control parked over the words when
                             // nobody asked for the controls is one more thing between
                             // the reader and them.
-                            val translateShown = lyricsPanelVisible && lyricsControlsOpen
+                            val translateShown = lyricsPanelVisible &&
+                                lyricsControlsOpen && !lyricsFullscreenVisible
                             val translateFade by animateFloatAsState(
                                 targetValue = if (translateShown) 1f else 0f,
                                 animationSpec = tween(if (translateShown) 220 else 160),

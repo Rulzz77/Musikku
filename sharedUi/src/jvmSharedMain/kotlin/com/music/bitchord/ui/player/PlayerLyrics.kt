@@ -2775,7 +2775,7 @@ private fun Modifier.revealBacking(progress: State<Float>, alignEnd: Boolean): M
     }
 
 private fun String.differsFrom(original: String): Boolean =
-    trim().lowercase(Locale.ROOT) != original.trim().lowercase(Locale.ROOT)
+    differsFromLyrics(original)
 
 /**
  * The answering vocal without the parentheses every text-only source wraps it

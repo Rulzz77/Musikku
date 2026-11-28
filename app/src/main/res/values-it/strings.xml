@@ -1514,4 +1514,8 @@
     <string name="automix_mini_art_transition">Transizione copertina nel mini-player</string>
     <string name="automix_mini_art_transition_subtitle">Mostra le transizioni delle copertine nel mini-player durante AutoMix.</string>
     <string name="listen_together_invalid_qr">Questo codice QR non è un invito valido per ascoltare insieme.</string>
+    <string name="player_more_playback_lyrics">Riproduzione e testi</string>
+    <string name="player_more_queue_actions">Azioni della coda</string>
+    <string name="player_more_library_downloads">Libreria e download</string>
+    <string name="player_more_song_details">Dettagli del brano</string>
 </resources>

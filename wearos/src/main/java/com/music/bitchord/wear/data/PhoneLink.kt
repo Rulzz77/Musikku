@@ -390,6 +390,7 @@ class PhoneLink(context: Context, private val scope: CoroutineScope) :
                 queueArtworkGeneration.incrementAndGet()
             }
         }
+        _link.value = if (nodeId == null) Link.NoPhone else Link.Connecting
         phoneSelectionGeneration.incrementAndGet()
     }
 
@@ -414,7 +415,17 @@ class PhoneLink(context: Context, private val scope: CoroutineScope) :
             val sent = runCatching {
                 messageClient.sendMessage(node, "${P.PATH_COMMAND}/$command", arg.toByteArray()).await()
             }.onFailure { Log.w(TAG, "send $command (attempt $attempt): ${it.message}") }.isSuccess
-            if (sent && phoneNode == node) return true
+            if (sent) {
+                val stillSelected = synchronized(phoneSelectionLock) {
+                    if (phoneNode == node) {
+                        _link.value = Link.Connected
+                        true
+                    } else {
+                        false
+                    }
+                }
+                if (stillSelected) return true
+            }
             // The node may have changed (phone rebooted, re-paired): look again once.
             if (phoneNode == node) selectPhoneNode(null)
         }

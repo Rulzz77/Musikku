@@ -5,6 +5,7 @@ import androidx.media3.common.Player
 import com.music.bitchord.data.DebugLog as Log
 import com.music.bitchord.data.listentogether.ListenTogether
 import com.music.bitchord.data.listentogether.PartyTrack
+import com.music.bitchord.data.listentogether.isSafePartyImageUrl
 import com.music.bitchord.data.listentogether.partyQueueIndexOf
 import com.music.bitchord.data.model.QueueTier
 import com.music.bitchord.data.model.Song
@@ -1533,7 +1534,7 @@ internal fun PartyTrack.toSong(): Song = Song(
     videoId = videoId,
     title = title,
     artist = artist,
-    thumbnailUrl = thumbnailUrl,
+    thumbnailUrl = thumbnailUrl?.takeIf(::isSafePartyImageUrl),
     // Not cosmetic: this is what a cross-source match is made on, so a device
     // whose sources differ from the sender's needs it to find the same
     // recording. See [Song.matchQuery].

@@ -132,9 +132,11 @@ object WatchInstaller {
             while (true) {
                 val map = runCatching {
                     val items = Tasks.await(Wearable.getDataClient(app).getDataItems(uri), 5, TimeUnit.SECONDS)
-                    val found = items.firstOrNull()?.let { DataMapItem.fromDataItem(it).dataMap }
-                    items.release()
-                    found
+                    try {
+                        items.firstOrNull()?.let { DataMapItem.fromDataItem(it).dataMap }
+                    } finally {
+                        items.release()
+                    }
                 }.getOrNull()
                 // A fresh answer, not one left over from an earlier ask; the
                 // watch keeps the phone's time, so a little slack is enough.
@@ -184,16 +186,28 @@ object WatchInstaller {
                         if (c.path == channel.path) closed.complete(closeReason)
                     }
                 }
-                Tasks.await(client.registerChannelCallback(channel, callback), 10, TimeUnit.SECONDS)
-                Tasks.await(client.sendFile(channel, Uri.fromFile(apk)), 20, TimeUnit.SECONDS)
-                // A few MB over Bluetooth is a minute or so.
-                val reason = withTimeoutOrNull(5 * 60_000) { closed.await() }
-                runCatching { client.unregisterChannelCallback(channel, callback) }
-                when (reason) {
-                    ChannelClient.ChannelCallback.CLOSE_REASON_NORMAL -> Unit
-                    null, ChannelClient.ChannelCallback.CLOSE_REASON_CONNECTION_TIMEOUT -> error("the watch didn’t answer")
-                    ChannelClient.ChannelCallback.CLOSE_REASON_DISCONNECTED -> error("the watch disconnected")
-                    else -> error("the transfer stopped ($reason)")
+                var registered = false
+                try {
+                    Tasks.await(client.registerChannelCallback(channel, callback), 10, TimeUnit.SECONDS)
+                    registered = true
+                    Tasks.await(client.sendFile(channel, Uri.fromFile(apk)), 20, TimeUnit.SECONDS)
+                    // A few MB over Bluetooth is a minute or so.
+                    val reason = withTimeoutOrNull(5 * 60_000) { closed.await() }
+                    when (reason) {
+                        ChannelClient.ChannelCallback.CLOSE_REASON_NORMAL -> Unit
+                        null, ChannelClient.ChannelCallback.CLOSE_REASON_CONNECTION_TIMEOUT -> error("the watch didn’t answer")
+                        ChannelClient.ChannelCallback.CLOSE_REASON_DISCONNECTED -> error("the watch disconnected")
+                        else -> error("the transfer stopped ($reason)")
+                    }
+                } finally {
+                    // A timeout, sendFile failure or cancellation must not
+                    // leave the callback registered or the channel open.
+                    if (registered) {
+                        runCatching {
+                            Tasks.await(client.unregisterChannelCallback(channel, callback), 5, TimeUnit.SECONDS)
+                        }
+                    }
+                    runCatching { Tasks.await(client.close(channel), 5, TimeUnit.SECONDS) }
                 }
             }
             if (result.isSuccess) openOnWatch(app, nodeId)

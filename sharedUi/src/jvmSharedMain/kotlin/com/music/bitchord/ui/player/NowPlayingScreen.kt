@@ -2861,8 +2861,7 @@ fun NowPlayingScreen(
                                 .clickable(
                                     interactionSource = remember { MutableInteractionSource() },
                                     indication = null,
-                                ) {}
-                                ,
+                                ) {},
                         ) {
                             InlineQueue(
                                 queue = queue,

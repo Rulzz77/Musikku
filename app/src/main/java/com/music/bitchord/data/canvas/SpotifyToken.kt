@@ -156,25 +156,25 @@ internal object SpotifyToken {
     private suspend fun harvestViaWebView(context: Context, cookie: String): HarvestedToken? {
         val deferred = CompletableDeferred<HarvestedToken?>()
 
-        val cookieManager = CookieManager.getInstance().apply {
-            setAcceptCookie(true)
-            setCookie("https://open.spotify.com/", "sp_dc=$cookie; Domain=.spotify.com; Path=/; Secure")
-            setCookie("https://accounts.spotify.com/", "sp_dc=$cookie; Domain=.spotify.com; Path=/; Secure")
-            flush()
-        }
-        // The player caches its token in web storage and skips a fresh
-        // /api/token request if a live one is already sitting there, leaving
-        // the hook with nothing to see. Clear Spotify's origins only: the
-        // previous deleteAllData() also erased Discord/YouTube website state.
-        runCatching {
-            WebStorage.getInstance().apply {
-                deleteOrigin("https://open.spotify.com")
-                deleteOrigin("https://accounts.spotify.com")
-            }
-        }
-
         var webView: WebView? = null
         return try {
+            val cookieManager = CookieManager.getInstance().apply {
+                setAcceptCookie(true)
+                setCookie("https://open.spotify.com/", "sp_dc=$cookie; Domain=.spotify.com; Path=/; Secure")
+                setCookie("https://accounts.spotify.com/", "sp_dc=$cookie; Domain=.spotify.com; Path=/; Secure")
+                flush()
+            }
+            // The player caches its token in web storage and skips a fresh
+            // /api/token request if a live one is already sitting there, leaving
+            // the hook with nothing to see. Clear Spotify's origins only: the
+            // previous deleteAllData() also erased Discord/YouTube website state.
+            runCatching {
+                WebStorage.getInstance().apply {
+                    deleteOrigin("https://open.spotify.com")
+                    deleteOrigin("https://accounts.spotify.com")
+                }
+            }
+
             webView = WebView(context).apply {
                 settings.javaScriptEnabled = true
                 settings.domStorageEnabled = true

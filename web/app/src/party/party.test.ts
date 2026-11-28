@@ -124,6 +124,8 @@ describe('invites', () => {
     expect(parseInvite('https://[fed0::1]/invite/AB12CD')).toBeNull();
     expect(parseInvite('https://[2001:db8::1]/invite/AB12CD')).toBeNull();
     expect(parseInvite('https://bitchord.kushagrasingh.in/invite/AB12CD?server=https://[fc00::1]')).toBeNull();
+    expect(parseInvite('bitchord://party/AB12CD?server=https%3A%2F%2Flocalhost')).toBeNull();
+    expect(parseInvite('bitchord://party/AB12CD?server=https%3A%2F%2F%5B%3A%3A1%5D')).toBeNull();
     expect(parseInvite('http://[::1]:8080/invite/AB12CD')).toEqual({ code: 'AB12CD', serverUrl: null });
     expect(parseInvite('https://bitchord.kushagrasingh.in/invite/AB12CD?server=http://jam.example.com')).toBeNull();
     expect(parseInvite('http://localhost:8080/invite/AB12CD')).toEqual({ code: 'AB12CD', serverUrl: null });
@@ -135,5 +137,6 @@ describe('invites', () => {
     expect(inviteUrl('AB12CD', 'https://jam.example.com/')).toBe('https://jam.example.com/invite/AB12CD');
     expect(inviteUrl('AB12CD', 'http://jam.example.com')).toBe('https://bitchord.kushagrasingh.in/invite/AB12CD');
     expect(inviteUrl('AB12CD', 'https://192.168.1.8')).toBe('https://bitchord.kushagrasingh.in/invite/AB12CD');
+    expect(inviteUrl('AB12CD', 'https://localhost')).toBe('https://bitchord.kushagrasingh.in/invite/AB12CD');
   });
 });

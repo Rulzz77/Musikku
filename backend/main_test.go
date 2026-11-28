@@ -40,6 +40,27 @@ func setupTestServer() *httptest.Server {
 	return httptest.NewServer(corsMiddleware(mux))
 }
 
+func TestJoinEndpointRateLimitsRepeatedAttemptsPerIP(t *testing.T) {
+	server := setupTestServer()
+	defer server.Close()
+	joinLimiter = newIPRateLimiter(time.Minute, 1, 10)
+
+	request := func() int {
+		resp, err := http.Post(server.URL+"/api/parties/ABCDEF/join", "application/json", strings.NewReader("{}"))
+		if err != nil {
+			t.Fatalf("POST join: %v", err)
+		}
+		defer resp.Body.Close()
+		return resp.StatusCode
+	}
+	if status := request(); status == http.StatusTooManyRequests {
+		t.Fatalf("first attempt unexpectedly rate limited: %d", status)
+	}
+	if status := request(); status != http.StatusTooManyRequests {
+		t.Fatalf("second attempt should be rate limited, got %d", status)
+	}
+}
+
 func TestJoinRateLimiterRejectsBurstPerIP(t *testing.T) {
 	limiter := newIPRateLimiter(time.Minute, 2, 10)
 	if !limiter.Allow("203.0.113.10") {

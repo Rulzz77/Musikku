@@ -9,6 +9,9 @@ import android.view.OrientationEventListener
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalContext
 
 private class ActivityOrientation(private val activity: Activity) : ScreenOrientation {
@@ -71,7 +74,19 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
 @Composable
 actual fun rememberScreenOrientation(): ScreenOrientation {
     val activity = LocalContext.current.findActivity() ?: return NoOrientation
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
     val orientation = remember(activity) { ActivityOrientation(activity) }
-    DisposableEffect(orientation) { onDispose { orientation.release() } }
+    DisposableEffect(orientation, lifecycle) {
+        val observer = LifecycleEventObserver { _, event ->
+            // Compose remains mounted while the activity is stopped. Release
+            // the temporary landscape/portrait request here, not only on dispose.
+            if (event == Lifecycle.Event.ON_STOP) orientation.release()
+        }
+        lifecycle.addObserver(observer)
+        onDispose {
+            lifecycle.removeObserver(observer)
+            orientation.release()
+        }
+    }
     return orientation
 }

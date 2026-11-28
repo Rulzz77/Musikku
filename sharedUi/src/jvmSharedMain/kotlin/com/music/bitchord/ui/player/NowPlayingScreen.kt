@@ -2803,8 +2803,8 @@ fun NowPlayingScreen(
                                 modifier = Modifier
                                     .align(Alignment.CenterEnd)
                                     .fillMaxHeight()
-                                    .fillMaxWidth(0.52f)
-                                    .widthIn(min = 300.dp, max = 480.dp)
+                                    .fillMaxWidth(0.60f)
+                                    .widthIn(max = 480.dp)
                                     .padding(10.dp)
                                     .clip(RoundedCornerShape(22.dp))
                                     .background(Color(0xF51A1720))
@@ -4974,24 +4974,34 @@ fun NowPlayingScreen(
                         // header — which is its first frame of moving.
                         val lyricsPanelVisible = lyricsOpen && collapseDone
                         if (lyricsPanelVisible || playerPrewarmStage >= 2) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(top = HEADER_HEIGHT)
+                                    // Keep the prepared list measured but completely
+                                    // outside hit-testing/drawing until it is needed.
+                                    .offset {
+                                        if (lyricsPanelVisible) IntOffset.Zero else IntOffset(100_000, 0)
+                                    }
+                                    // Arrives after the sleeve has finished collapsing
+                                    // into the header rather than during — see [collapseDone].
+                                    .graphicsLayer { alpha = if (lyricsPanelVisible) panelFade.value else 0f },
+                            ) {
+                                LyricsViewBackdrop(
+                                    trackKey = song.videoId,
+                                    mode = lyricsBackgroundMode,
+                                    imageUrl = remoteArt,
+                                    artistImageUrl = artistImageUrl,
+                                    blurPx = lyricsBackgroundBlurPx,
+                                    canvasFrame = canvasFrame,
+                                    isPlaying = isPlaying,
+                                    fullArtworkBlurImage = fullArtworkBlurImage,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
                                 LyricsTranslationMotion(
                                     trigger = lyricsTranslation.transition,
                                     reduceMotion = lyricsTranslation.reduceMotion,
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(top = HEADER_HEIGHT)
-                                        // Keep the prepared list measured but completely
-                                        // outside hit-testing/drawing until it is needed.
-                                        .offset {
-                                            if (lyricsPanelVisible) IntOffset.Zero else IntOffset(100_000, 0)
-                                        }
-                                        // Arrives after the sleeve has finished collapsing
-                                        // into the header rather than during — see
-                                        // [collapseDone]. Fading lyrics in over a sleeve
-                                        // still mid-collapse doubled the same movement in
-                                        // two places on screen at once, and composing them
-                                        // there was what made the collapse stutter.
-                                        .graphicsLayer { alpha = if (lyricsPanelVisible) panelFade.value else 0f },
+                                    modifier = Modifier.fillMaxSize(),
                                 ) { particleProgress ->
                                     LyricsPanel(
                                         lines = lyrics.orEmpty(),
@@ -5015,6 +5025,7 @@ fun NowPlayingScreen(
                                         modifier = Modifier.fillMaxSize(),
                                     )
                                 }
+                            }
                             // Floated over the foot of the lyrics rather than placed in
                             // the controls below them. In the controls it was a row of
                             // layout like any other, and the bottom block is measured at

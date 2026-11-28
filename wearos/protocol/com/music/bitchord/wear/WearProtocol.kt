@@ -213,6 +213,9 @@ object WearProtocol {
     /** The playing item's id when the queue was read, to tell a stale list from a live one. */
     const val KEY_QUEUE_MEDIA_ID = "queue_media_id"
 
+    /** Monotonic phone-side revision to reject queue snapshots delivered out of order. */
+    const val KEY_QUEUE_REVISION = "queue_revision"
+
     /** Side of the cover JPEG on [PATH_NOW_PLAYING]. */
     const val ART_PX = 240
 

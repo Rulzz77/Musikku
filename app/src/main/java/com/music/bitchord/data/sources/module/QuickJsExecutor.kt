@@ -224,7 +224,7 @@ internal object QuickJsExecutor {
         }
         evicted.forEach { runCatching { it.close() } }
 
-        TrackLog.d(TAG, "QuickJsExecutor.loadModule($moduleId) fetchBase=$fetchBase jsCodeLength=${jsCode.length}")
+        TrackLog.d(TAG, "QuickJsExecutor.loadModule($moduleId) origin=${safeModuleOrigin(fetchBase)} jsCodeLength=${jsCode.length}")
         return withContext(Dispatchers.Default) {
             runCatching { newEngine(jsCode, fetchBase) }
                 .onSuccess { qjs ->
@@ -237,7 +237,7 @@ internal object QuickJsExecutor {
                     pool.free.trySend(qjs)
                     synchronized(engineLock) { pools[moduleId] = pool }
                 }
-                .onFailure { TrackLog.e(TAG, "  ✗ loadModule FAILED for $moduleId: ${it.message}", it) }
+                .onFailure { TrackLog.e(TAG, "  ✗ loadModule FAILED for $moduleId (${it.javaClass.simpleName})") }
                 .map { }
         }
     }
@@ -391,10 +391,10 @@ internal object QuickJsExecutor {
                 )
 
                 val rawResult = qjs.evaluate<String>("__spine_resolved_json")
-                TrackLog.d(TAG, "  callExport result (${rawResult.length} chars): ${rawResult.take(500)}")
+                TrackLog.d(TAG, "  callExport result (${rawResult.length} chars)")
                 rawResult
             }.onFailure {
-                TrackLog.e(TAG, "  ✗ callExport FAILED for $moduleId.$functionName: ${it.message}", it)
+                TrackLog.e(TAG, "  ✗ callExport FAILED for $moduleId.$functionName (${it.javaClass.simpleName})")
             }
         }
 
@@ -482,6 +482,9 @@ internal object QuickJsExecutor {
 
     // ── Fetch binding ────────────────────────────────────────────────────
 
+    private fun safeModuleOrigin(rawUrl: String): String =
+        rawUrl.toHttpUrlOrNull()?.let { "${it.scheme}://${it.host}" } ?: "<invalid-url>"
+
     private suspend fun bindAsyncFetch(qjs: QuickJs, fetchBase: String) {
         qjs.define("__spine") {
             asyncFunction("fetch", object : AsyncFunctionBinding<String> {
@@ -493,7 +496,7 @@ internal object QuickJsExecutor {
                     val body = args[3]?.toString()
                     val url = validateModuleFetchUrl(resolveUrl(rawUrl, fetchBase))
 
-                    TrackLog.d(TAG, "  → fetch $method ${redactModuleUrl(url)}")
+                    TrackLog.d(TAG, "  → fetch $method ${safeModuleOrigin(url)}")
                     val (statusCode, responseBody) = fetchUrlSync(url, method, headersJson, body)
                     TrackLog.d(TAG, "    HTTP $statusCode (${responseBody.length} bytes)")
 

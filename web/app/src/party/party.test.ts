@@ -119,6 +119,10 @@ describe('invites', () => {
     expect(parseInvite('https://example.com/nope')).toBeNull();
     expect(parseInvite('http://jam.example.com/invite/AB12CD')).toBeNull();
     expect(parseInvite('https://192.168.1.8/invite/AB12CD?server=192.168.1.9')).toBeNull();
+    expect(parseInvite('https://bitchord.kushagrasingh.in/invite/AB12CD?server=https://192.0.1.1')).toEqual({
+      code: 'AB12CD',
+      serverUrl: 'https://192.0.1.1',
+    });
     expect(parseInvite('https://[fc00::1]/invite/AB12CD')).toBeNull();
     expect(parseInvite('https://[fe80::1]/invite/AB12CD')).toBeNull();
     expect(parseInvite('https://[fed0::1]/invite/AB12CD')).toBeNull();

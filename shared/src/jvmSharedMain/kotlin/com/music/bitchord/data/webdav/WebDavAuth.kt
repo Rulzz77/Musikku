@@ -10,6 +10,7 @@ package com.music.bitchord.data.webdav
 object WebDavAuth {
     /** Canonical origin (scheme + host + effective port), never just hostname. */
     @Volatile private var origin: String? = null
+    @Volatile private var pathPrefix: String? = null
     @Volatile var authHeader: String? = null
 
     /**
@@ -17,25 +18,37 @@ object WebDavAuth {
      * A different port or switching HTTPS to HTTP must never inherit Basic auth.
      */
     fun update(serverUrl: String?, header: String?) {
-        origin = originOf(serverUrl)
+        val uri = serverUrl?.let(::parseUrl)
+        origin = uri?.let(::originOf)
+        pathPrefix = uri?.rawPath?.trimEnd('/')?.ifEmpty { "/" }
         authHeader = header?.takeIf { it.isNotBlank() && origin != null }
     }
 
     fun shouldAuthorize(requestUrl: String): Boolean {
-        val expected = origin ?: return false
+        val expectedOrigin = origin ?: return false
+        val expectedPath = pathPrefix ?: return false
         val header = authHeader ?: return false
         if (header.isBlank()) return false
-        return originOf(requestUrl) == expected
+        val request = parseUrl(requestUrl) ?: return false
+        if (originOf(request) != expectedOrigin) return false
+        val path = request.rawPath.orEmpty().ifEmpty { "/" }
+        return expectedPath == "/" || path == expectedPath || path.startsWith(expectedPath + "/")
     }
 
-    private fun originOf(raw: String?): String? = runCatching {
-        val uri = java.net.URI(raw ?: return null)
-        val scheme = uri.scheme?.lowercase(java.util.Locale.ROOT) ?: return null
-        if (scheme != "https" && scheme != "http") return null
-        if (uri.isOpaque || uri.userInfo != null || uri.host.isNullOrBlank()) return null
-        val port = uri.port
-        if (port !in -1..65535) return null
-        val effectivePort = if (port >= 0) port else if (scheme == "https") 443 else 80
-        scheme + "://" + uri.host.lowercase(java.util.Locale.ROOT) + ":" + effectivePort
+    private fun parseUrl(raw: String): java.net.URI? = runCatching {
+        java.net.URI(raw).also { uri ->
+            require(!uri.isOpaque && uri.userInfo == null)
+            require(uri.host.isNullOrBlank().not())
+            require(uri.scheme.equals("https", true) || uri.scheme.equals("http", true))
+            require(uri.port in -1..65535)
+            require(uri.normalize().rawPath == uri.rawPath)
+        }
     }.getOrNull()
+
+    private fun originOf(uri: java.net.URI): String {
+        val scheme = uri.scheme.lowercase(java.util.Locale.ROOT)
+        val port = uri.port
+        val effectivePort = if (port >= 0) port else if (scheme == "https") 443 else 80
+        return scheme + "://" + uri.host.lowercase(java.util.Locale.ROOT) + ":" + effectivePort
+    }
 }

@@ -67,6 +67,7 @@ import com.music.bitchord.data.webdav.WebDavUploads
 import com.music.bitchord.download.DownloadState
 import com.music.bitchord.download.Downloads
 import com.music.bitchord.playback.SleepTimer
+import com.music.bitchord.ui.player.PlayerBackHandler
 import com.music.bitchord.ui.components.thumbnailBorder
 import com.music.bitchord.ui.theme.ArtworkPalette
 import kotlinx.coroutines.delay
@@ -257,6 +258,14 @@ fun SongActionsMenu(
     var popupSection by remember(song.videoId, compactPopup) {
         mutableStateOf(SongMenuPopupSection.HOME)
     }
+    // Back returns to the previous compact popup page before dismissing the menu.
+    PlayerBackHandler(
+        enabled = compactPopup && (popupSection != SongMenuPopupSection.HOME || pickingSleepTimer),
+        onBack = {
+            if (pickingSleepTimer) pickingSleepTimer = false
+            else popupSection = SongMenuPopupSection.HOME
+        },
+    )
     // A menu has no pages to swap, so Song Info opens as a dialog.
     if (showingSongInfo) SongInfoDialog(song) { showingSongInfo = false }
     // Neutral rather than the sleeve's colours: the panel floats over the page

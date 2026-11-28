@@ -2,7 +2,6 @@ package com.music.bitchord.data.sources.module
 
 import android.util.Log
 import com.music.bitchord.data.TrackLog
-import com.music.bitchord.data.Http
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -38,8 +37,10 @@ internal fun redactModuleUrl(url: String): String =
  * Fetches a module index, downloads and loads module JS, and calls the
  * module's exported search/stream functions.
  *
- * Ported from Convx's `ModuleManager`, adapted to use BitChord's shared
- * [Http.client] OkHttp instance rather than a separate Ktor client.
+ * Ported from Convx's `ModuleManager`. Module indexes, source code and
+ * add-on fetch calls all use [QuickJsExecutor.moduleHttpClient], an isolated
+ * OkHttp client that does not attach the app's WebDAV credentials and rejects
+ * insecure or private-network destinations.
  *
  * One instance should be held per [ModuleSource] config so that loaded
  * engines survive across successive search calls.

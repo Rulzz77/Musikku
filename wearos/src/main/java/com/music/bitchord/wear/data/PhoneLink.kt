@@ -38,6 +38,14 @@ import com.music.bitchord.wear.WearProtocol as P
 internal fun isSelectedPhoneNode(selectedNode: String?, eventHost: String?): Boolean =
     !selectedNode.isNullOrBlank() && eventHost == selectedNode
 
+/** Old connect/cache callbacks must not apply after a newer node selection. */
+internal fun isCurrentPhoneSelection(
+    currentNode: String?,
+    requestedNode: String?,
+    currentGeneration: Long,
+    requestedGeneration: Long,
+): Boolean = currentNode == requestedNode && currentGeneration == requestedGeneration
+
 /**
  * The watch's whole view of the phone.
  *
@@ -93,6 +101,7 @@ class PhoneLink(context: Context, private val scope: CoroutineScope) :
     private val phoneSelectionLock = Any()
     private val phoneSelectionGeneration = AtomicLong()
     private var artId: String? = null
+    private var lastNowPlayingAt = 0L
     private val artworkGeneration = AtomicLong()
     private var artJob: Job? = null
     private val queueSnapshotLock = Any()
@@ -347,7 +356,7 @@ class PhoneLink(context: Context, private val scope: CoroutineScope) :
 
     private suspend fun connectTo(nodeId: String?, generation: Long) {
         synchronized(phoneSelectionLock) {
-            if (generation != phoneSelectionGeneration.get() || phoneNode != nodeId) return
+            if (!isCurrentPhoneSelection(phoneNode, nodeId, phoneSelectionGeneration.get(), generation)) return
         }
         if (nodeId == null) {
             _link.value = Link.NoPhone
@@ -360,7 +369,7 @@ class PhoneLink(context: Context, private val scope: CoroutineScope) :
         }.isSuccess
 
         synchronized(phoneSelectionLock) {
-            if (generation != phoneSelectionGeneration.get() || phoneNode != nodeId) return
+            if (!isCurrentPhoneSelection(phoneNode, nodeId, phoneSelectionGeneration.get(), generation)) return
             if (sent) _link.value = Link.Connected else _link.value = Link.NoPhone
         }
         if (sent) readCached(nodeId)
@@ -377,6 +386,7 @@ class PhoneLink(context: Context, private val scope: CoroutineScope) :
             artJob?.cancel()
             artJob = null
             artId = null
+            lastNowPlayingAt = 0L
             artworkGeneration.incrementAndGet()
             _artwork.value = null
             _queue.value = null
@@ -444,6 +454,11 @@ class PhoneLink(context: Context, private val scope: CoroutineScope) :
     }
 
     private fun applyNowPlaying(map: DataMap) {
+        // Data Layer callbacks and the initial cached read can race. Preserve
+        // the newest player snapshot even when an older event arrives late.
+        val positionAt = map.getLong(P.KEY_POSITION_AT, 0L)
+        if (positionAt > 0L && positionAt < lastNowPlayingAt) return
+        if (positionAt > 0L) lastNowPlayingAt = positionAt
         _heard.value = true
         _watchSpeaker.value = map.getBoolean(P.KEY_WATCH_SPEAKER)
         val now = System.currentTimeMillis()

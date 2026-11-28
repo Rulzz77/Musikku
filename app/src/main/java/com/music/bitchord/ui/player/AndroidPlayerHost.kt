@@ -427,6 +427,7 @@ class AndroidPlayerHost(context: Context) : PlayerHost {
             hazeState = hazeState,
             onDismiss = onDismiss,
             isPlaying = isPlaying,
+            fullscreen = fullscreen,
         )
 
     // The ⋯ menu's own material: a still of the player, blurred under each

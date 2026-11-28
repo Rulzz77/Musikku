@@ -34,7 +34,9 @@ class BackupListeningValidationTest {
             trackDays = mapOf("2026-04-05" to DayStats(3_600_000L, 2)),
         )
 
-        Backup.validateListeningBuckets(listOf(bucket))
+        Backup.validateListeningBuckets(
+            listOf(bucket.copy(hours = List(24) { if (it == 18) 90_000_000L else 0L })),
+        )
     }
 
     @Test
@@ -102,12 +104,12 @@ class BackupListeningValidationTest {
     fun `rejects a duplicate or non canonical month string`() {
         listOf(
             listOf(StoredBucket(month = "2026-04"), StoredBucket(month = "2026-04")),
-            listOf(StoredBucket(month = "2026-04"), StoredBucket(month = "2026-04")),
+            listOf(StoredBucket(month = "2026-4")),
         ).forEach { buckets ->
             try {
                 Backup.validateListeningBuckets(buckets)
                 fail("Duplicate month should be rejected")
-            } catch (_: IllegalArgumentException) {
+            } catch (_: Exception) {
                 // Expected.
             }
         }

@@ -26,6 +26,8 @@
         <exclude domain="sharedpref" path="bitchord_listen_together.xml" />
         <exclude domain="sharedpref" path="bitchord_listen_together_secure.xml" />
         <exclude domain="sharedpref" path="bitchord_listen_together_secure_plain.xml" />
+        <!-- WebView's Chromium profile holds persistent cookies and website sessions. -->
+        <exclude domain="root" path="app_webview/" />
     </cloud-backup>
     <device-transfer>
         <exclude domain="sharedpref" path="bitchord_auth.xml" />
@@ -49,5 +51,7 @@
         <exclude domain="sharedpref" path="bitchord_listen_together.xml" />
         <exclude domain="sharedpref" path="bitchord_listen_together_secure.xml" />
         <exclude domain="sharedpref" path="bitchord_listen_together_secure_plain.xml" />
+        <!-- Website session cookies must never be copied to another device. -->
+        <exclude domain="root" path="app_webview/" />
     </device-transfer>
 </data-extraction-rules>

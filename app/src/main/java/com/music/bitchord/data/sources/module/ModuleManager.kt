@@ -146,7 +146,7 @@ class ModuleManager {
                 }.onSuccess {
                     indexCache[sourceUrl] = CachedIndex(it, System.currentTimeMillis())
                 }.onFailure {
-                    TrackLog.e(TAG, "  ✗ fetchIndex FAILED for ${redactModuleUrl(sourceUrl)}: ${it.message}", it)
+                    TrackLog.e(TAG, "  ✗ fetchIndex FAILED for ${redactModuleUrl(sourceUrl)} (${it.javaClass.simpleName})")
                 }
             }
         }
@@ -206,7 +206,7 @@ class ModuleManager {
             loadedModules.remove(module.id)
         }
 
-        TrackLog.d(TAG, "▶ loadModule(${module.id}) download=${module.download}")
+        TrackLog.d(TAG, "▶ loadModule(${module.id}) download configured")
         runCatching {
             val downloadUrl = if (module.download.startsWith("http")) {
                 module.download

@@ -16,6 +16,8 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.core.Animatable
@@ -2428,11 +2430,8 @@ fun NowPlayingScreen(
                                 canvas = fullscreenLyricsCanvas,
                                 isPlaying = isPlaying,
                                 modifier = Modifier.fillMaxSize(),
-                                // Portrait Canvas artwork should remain fully composed
-                                // in the narrower landscape pane. FIT_PORTRAIT only
-                                // contains portrait clips; square and landscape clips
-                                // keep their existing crop-to-fill behavior.
-                                contentMode = CanvasContentMode.FIT_PORTRAIT,
+                                // Keep the original fullscreen Canvas crop behavior.
+                                contentMode = CanvasContentMode.CROP,
                                 onRenderedChanged = { canvasRendered = it },
                                 onFrameCaptured = { fullscreenCanvasFrame = it },
                                 refreshFrameEveryMs = if (isPlaying) MESH_REFRESH_MS else null,
@@ -2790,101 +2789,100 @@ fun NowPlayingScreen(
                         }
                         }
                     }
-                    // The queue floats over fullscreen lyrics. The scrim dims
-                    // the reading surface slightly, but the lyrics Dialog and its
-                    // Canvas decoder stay mounted underneath the interactive list.
-                    AnimatedVisibility(
-                        visible = fullscreenQueueOpen,
-                        enter = fadeIn(tween(180)),
-                        exit = fadeOut(tween(140)),
+                    // Close the split Row before drawing overlays. A Row measures
+                    // non-weighted children only in the space left after its weighted
+                    // columns; placing a fillMaxSize overlay inside it made the queue
+                    // collapse to a thin strip. These layers now cover the whole dialog.
+                }
+                // The dim layer stays full-screen and dismisses the queue on outside taps.
+                AnimatedVisibility(
+                    visible = fullscreenQueueOpen,
+                    enter = fadeIn(tween(180)),
+                    exit = fadeOut(tween(160)),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .zIndex(20f),
+                ) {
+                    Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .zIndex(20f),
+                            .background(Color.Black.copy(alpha = 0.22f))
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                            ) { fullscreenQueueOpen = false },
+                    )
+                }
+                // The queue is an overlay on the right lyric column, not a third
+                // Row child. Its 54% width preserves the left Canvas exactly as laid out.
+                AnimatedVisibility(
+                    visible = fullscreenQueueOpen,
+                    enter = slideInHorizontally(
+                        initialOffsetX = { it },
+                        animationSpec = tween(260, easing = FastOutSlowInEasing),
+                    ) + fadeIn(tween(180)),
+                    exit = slideOutHorizontally(
+                        targetOffsetX = { it },
+                        animationSpec = tween(220, easing = FastOutSlowInEasing),
+                    ) + fadeOut(tween(140)),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .zIndex(21f),
+                ) {
+                    BoxWithConstraints(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.CenterEnd,
                     ) {
+                        val panelWidth = minOf(maxWidth * 0.54f, 520.dp)
                         Box(
                             modifier = Modifier
-                                .fillMaxSize()
-                                .background(Color.Black.copy(alpha = 0.18f))
+                                .width(panelWidth)
+                                .fillMaxHeight()
+                                .padding(10.dp)
+                                .clip(RoundedCornerShape(22.dp))
+                                .background(Color(0xF51A1720))
+                                // Keep taps inside the panel from dismissing the scrim.
                                 .clickable(
                                     interactionSource = remember { MutableInteractionSource() },
                                     indication = null,
-                                ) { fullscreenQueueOpen = false },
+                                ) {}
+                                .border(
+                                    1.dp,
+                                    Color.White.copy(alpha = 0.10f),
+                                    RoundedCornerShape(22.dp),
+                                ),
                         ) {
-                            Box(
+                            InlineQueue(
+                                queue = queue,
+                                currentIndex = queueIndex,
+                                autoplayEnabled = autoplayEnabled,
+                                controlsLocked = controlsLocked,
+                                hazeState = queueHaze,
+                                onJumpTo = onJumpTo,
+                                onRemove = onRemoveFromQueue,
+                                onMove = onMoveInQueue,
+                                onClear = onClearQueue,
+                                onSongMenu = onQueueSongMenu,
+                                onScrollingChange = { queueScrolling = it },
+                                onDragActiveChange = onQueueDragActiveChange,
+                                onSwipeToQueue = onQueueSwipeToQueue,
+                                gesturesEnabled = fullscreenQueueOpen,
+                                undoNotice = queueUndoNotice,
+                                selection = queueSelection,
+                                onBulkAction = onQueueBulkAction,
+                                onRemoveSelected = onQueueRemoveEntries,
+                                onClose = { fullscreenQueueOpen = false },
                                 modifier = Modifier
-                                    .align(Alignment.CenterEnd)
-                                    .fillMaxHeight()
-                                    .fillMaxWidth(0.62f)
-                                    .widthIn(max = 480.dp)
-                                    .padding(10.dp)
-                                    .clip(RoundedCornerShape(22.dp))
-                                    .background(Color(0xF51A1720))
-                                    // Consume taps on empty panel space so they do not
-                                    // fall through to the scrim and dismiss the queue.
-                                    .clickable(
-                                        interactionSource = remember { MutableInteractionSource() },
-                                        indication = null,
-                                    ) {}
-                                    .border(
-                                        1.dp,
-                                        Color.White.copy(alpha = 0.10f),
-                                        RoundedCornerShape(22.dp),
-                                    ),
-                            ) {
-                                InlineQueue(
-                                    queue = queue,
-                                    currentIndex = queueIndex,
-                                    autoplayEnabled = autoplayEnabled,
-                                    controlsLocked = controlsLocked,
-                                    hazeState = queueHaze,
-                                    onJumpTo = onJumpTo,
-                                    onRemove = onRemoveFromQueue,
-                                    onMove = onMoveInQueue,
-                                    onClear = onClearQueue,
-                                    onSongMenu = onQueueSongMenu,
-                                    onScrollingChange = { queueScrolling = it },
-                                    onDragActiveChange = onQueueDragActiveChange,
-                                    onSwipeToQueue = onQueueSwipeToQueue,
-                                    gesturesEnabled = fullscreenQueueOpen,
-                                    undoNotice = queueUndoNotice,
-                                    selection = queueSelection,
-                                    onBulkAction = onQueueBulkAction,
-                                    onRemoveSelected = onQueueRemoveEntries,
-                                    // InlineQueue bleeds its scroll surface by PLAYER_GUTTER
-                                    // on either side. Keep the header and the rows on
-                                    // the same inset, and leave a clean touch margin
-                                    // between the content and the rounded panel edge.
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(horizontal = PLAYER_GUTTER)
-                                        .padding(top = 44.dp),
-                                    onAddAllToPlaylist = onQueueAddAllToPlaylist,
-                                )
-                                Box(
-                                    modifier = Modifier
-                                        .align(Alignment.TopEnd)
-                                        .padding(top = 8.dp, end = 8.dp)
-                                        .size(36.dp)
-                                        .clip(CircleShape)
-                                        .background(Color.Black.copy(alpha = 0.44f))
-                                        .clickable { fullscreenQueueOpen = false },
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Close,
-                                        contentDescription = stringResource(Res.string.close_lyrics),
-                                        tint = Color.White,
-                                    )
-                                }
-                            }
+                                    .fillMaxSize()
+                                    .padding(horizontal = PLAYER_GUTTER)
+                                    .padding(top = 16.dp, bottom = 12.dp),
+                                onAddAllToPlaylist = onQueueAddAllToPlaylist,
+                            )
                         }
                     }
-
-                    // Draw the player drawers in this Dialog window. The normal
-                    // player overlays sit in the Activity window underneath it,
-                    // which made Audio Output and Lyrics Sources look unresponsive.
-                    playerOverlays()
                 }
+                // Draw player drawers in this same dialog, above both the lyrics and queue.
+                playerOverlays()
             }
         }
     }

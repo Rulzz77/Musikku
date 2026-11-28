@@ -330,6 +330,8 @@ internal fun InlineQueue(
     collapsePlayerOnScroll: Boolean = false,
     onRevealPlayer: () -> Unit = {},
     onHidePlayer: () -> Unit = {},
+    /** Optional close action for a queue hosted as an overlay. */
+    onClose: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
@@ -460,6 +462,15 @@ internal fun InlineQueue(
                         .clickable(enabled = !controlsLocked, onClick = selectionState::start)
                         .padding(horizontal = 8.dp, vertical = 4.dp),
                 )
+                if (onClose != null) {
+                    IconButton(onClick = onClose, modifier = Modifier.size(36.dp)) {
+                        Icon(
+                            Icons.Rounded.Close,
+                            contentDescription = stringResource(Res.string.close_lyrics),
+                            tint = Color.White,
+                        )
+                    }
+                }
             }
         }
         Spacer(Modifier.height(4.dp))

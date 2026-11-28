@@ -113,7 +113,8 @@ internal object QuickJsExecutor {
     fun isLoaded(moduleId: String): Boolean =
         synchronized(engineLock) { pools.containsKey(moduleId) }
 
-    private val syncHttpClient by lazy {
+    /** Isolated from the app-wide WebDAV auth interceptor; addon servers never receive those credentials. */
+    internal val moduleHttpClient by lazy {
         OkHttpClient.Builder()
             .connectTimeout(20, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)
@@ -158,7 +159,7 @@ internal object QuickJsExecutor {
             // IPv4-mapped IPv6 must inherit the IPv4 policy. Otherwise a
             // private IPv4 literal could be wrapped as ::ffff:a.b.c.d.
             if (bytes.take(10).all { it == 0 } && bytes[10] == 0xff && bytes[11] == 0xff) {
-                val mappedIpv4 = InetAddress.getByAddress(bytes.drop(12).map(Int::toByte).toByteArray())
+                val mappedIpv4 = InetAddress.getByAddress(bytes.drop(12).map { it.toByte() }.toByteArray())
                 return isBlockedModuleAddress(mappedIpv4)
             }
             // IPv6 unique-local fc00::/7 and the documentation-only 2001:db8::/32.
@@ -590,6 +591,9 @@ internal object QuickJsExecutor {
         val builder = Request.Builder().url(validateModuleFetchUrl(url))
 
         if (body != null) {
+            require(body.length <= MAX_FETCH_REQUEST_BYTES) {
+                "Module request body is too large"
+            }
             require(body.toByteArray(Charsets.UTF_8).size <= MAX_FETCH_REQUEST_BYTES) {
                 "Module request body is too large"
             }
@@ -623,7 +627,7 @@ internal object QuickJsExecutor {
             else -> builder.get()
         }
 
-        syncHttpClient.newCall(builder.build()).execute().use { response ->
+        moduleHttpClient.newCall(builder.build()).execute().use { response ->
             val responseBody = response.body?.let { responseBody ->
                 if (responseBody.contentLength() > MAX_FETCH_RESPONSE_BYTES) {
                     throw IOException("Module response is too large")

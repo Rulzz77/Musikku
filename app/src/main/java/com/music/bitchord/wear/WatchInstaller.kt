@@ -308,6 +308,25 @@ object WatchInstaller {
                 }
                 Log.i(TAG, "watch install: ${output.trim()}")
                 if (!output.contains("Success")) error(output.trim().ifEmpty { "install failed" })
+
+                // The production companion previously shipped as
+                // com.music.bitchord. Its corrected applicationId now matches
+                // the phone (id.musikku.player), so install -r creates the new
+                // package rather than upgrading the old one. Remove the legacy
+                // package only after the replacement has installed successfully;
+                // failure to remove an absent/managed legacy package must not
+                // invalidate the working new companion.
+                runCatching {
+                    val legacyOutput = manager.openStream("exec:cmd package uninstall com.music.bitchord").use { stream ->
+                        withTimeoutOrNull(15_000) {
+                            runInterruptible { readInstallerReply(stream.openInputStream()) }
+                        }
+                    }
+                    if (legacyOutput != null && !legacyOutput.contains("Success")) {
+                        Log.i(TAG, "legacy Watch companion cleanup: ${legacyOutput.trim()}")
+                    }
+                }.onFailure { Log.w(TAG, "couldn't remove legacy Watch companion: ${it.message}") }
+
                 // Opened once, over the same connection: a just-installed app
                 // is "stopped" until it first runs, and Play services will not
                 // wake it to answer the phone until then. It is also the

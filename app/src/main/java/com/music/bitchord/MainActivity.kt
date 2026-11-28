@@ -2698,6 +2698,7 @@ private fun BitChordApp(
             }
         NowPlayingScreen(
             song = displayedSong,
+            artistImageUrl = displayedSong.artistId?.let { AppleArtistArtRepository.cached(it)?.heroUrl },
             playedBy = playedBy,
             accountName = account?.name,
             windowWidth = windowWidth,

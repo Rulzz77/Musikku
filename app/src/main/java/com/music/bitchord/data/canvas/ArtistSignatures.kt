@@ -59,11 +59,26 @@ object ArtistSignatureRepository {
     fun normalizeBaseUrl(raw: String): String =
         raw.trim().trimEnd('/').take(MAX_BASE_URL_LENGTH)
 
-    /** Only http(s) URLs are ever requested. Blank never is. */
+    /**
+     * User-configured endpoint: allow HTTP for an explicitly selected LAN
+     * service, but require a real absolute HTTP(S) URL with no user-info,
+     * fragment or query. It is device-local and never imported from backups.
+     */
     fun isValidBaseUrl(baseUrl: String): Boolean {
         val base = normalizeBaseUrl(baseUrl)
-        if (base.isEmpty()) return false
-        return base.startsWith("http://") || base.startsWith("https://")
+        if (base.isEmpty() || base.length > MAX_BASE_URL_LENGTH) return false
+        return runCatching {
+            val uri = java.net.URI(base)
+            val scheme = uri.scheme?.lowercase(Locale.ROOT)
+            (scheme == "http" || scheme == "https") &&
+                !uri.isOpaque &&
+                uri.userInfo == null &&
+                !uri.host.isNullOrBlank() &&
+                uri.port in -1..65535 &&
+                uri.query == null &&
+                uri.fragment == null &&
+                uri.normalize().rawPath == uri.rawPath
+        }.getOrDefault(false)
     }
 
     /** Effective base, or null when the provider is off/unconfigured. */

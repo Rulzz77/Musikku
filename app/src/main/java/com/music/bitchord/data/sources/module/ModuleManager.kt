@@ -232,7 +232,7 @@ class ModuleManager {
             TrackLog.d(TAG, "  ✓ Loaded module ${module.id}: ${jsCode.length} chars, baseUrl=${redactModuleUrl(baseUrl)}")
             loaded
         }.onFailure {
-            TrackLog.e(TAG, "  ✗ loadModule FAILED for ${module.id}: ${it.message}", it)
+            TrackLog.e(TAG, "  ✗ loadModule FAILED for ${module.id} (${it.javaClass.simpleName})")
         }
     }
 
@@ -249,7 +249,7 @@ class ModuleManager {
         // query does: the same search under a different quality tier is a
         // different question.
         key = keyOf(loaded.module.id, query, limit.toString(), contextArg(settings)),
-        describe = { "▶ searchTracks() module=${loaded.module.id} query=\"$query\" limit=$limit" },
+        describe = { "▶ searchTracks() module=${loaded.module.id} queryLength=${query.length} limit=$limit" },
     ) {
         searchTracksNow(loaded, query, limit, settings)
     }
@@ -261,7 +261,7 @@ class ModuleManager {
         settings: Map<String, String>,
     ): Result<ModuleSearchResponse> = withContext(Dispatchers.IO) {
         val contextArg = contextArg(settings)
-        TrackLog.d(TAG, "▶ searchTracks() module=${loaded.module.id} query=\"$query\" limit=$limit")
+        TrackLog.d(TAG, "▶ searchTracks() module=${loaded.module.id} queryLength=${query.length} limit=$limit")
         runCatching {
             val result = QuickJsExecutor.callExport(
                 moduleId = loaded.module.id,
@@ -272,7 +272,7 @@ class ModuleManager {
                 TrackLog.d(TAG, "  ✓ Parsed ${it.tracks.size} tracks (total=${it.total})")
             }
         }.onCancellation().onFailure {
-            TrackLog.e(TAG, "  ✗ searchTracks FAILED for ${loaded.module.id} query='$query': ${it.message}", it)
+            TrackLog.e(TAG, "  ✗ searchTracks FAILED for ${loaded.module.id} (${it.javaClass.simpleName})")
         }
     }
 
@@ -295,7 +295,7 @@ class ModuleManager {
         settings: Map<String, String> = emptyMap(),
     ): Result<ModuleStreamResponse> = streams.get(
         key = keyOf(loaded.module.id, trackId, quality, contextArg(settings)),
-        describe = { "▶ getStreamUrl() module=${loaded.module.id} trackId=$trackId quality=$quality" },
+        describe = { "▶ getStreamUrl() module=${loaded.module.id} trackIdLength=${trackId.length} quality=$quality" },
     ) {
         getStreamUrlNow(loaded, trackId, quality, settings)
     }
@@ -307,7 +307,7 @@ class ModuleManager {
         settings: Map<String, String>,
     ): Result<ModuleStreamResponse> = withContext(Dispatchers.IO) {
         val contextArg = contextArg(settings)
-        TrackLog.d(TAG, "▶ getStreamUrl() module=${loaded.module.id} trackId=$trackId quality=$quality")
+        TrackLog.d(TAG, "▶ getStreamUrl() module=${loaded.module.id} trackIdLength=${trackId.length} quality=$quality")
         runCatching {
             val result = QuickJsExecutor.callExport(
                 moduleId = loaded.module.id,
@@ -315,10 +315,10 @@ class ModuleManager {
                 args = listOf(JSONObject.quote(trackId), JSONObject.quote(quality), contextArg),
             ).getOrThrow()
             json.decodeFromString<ModuleStreamResponse>(result).also {
-                TrackLog.d(TAG, "  ✓ streamUrl=${it.streamUrl?.take(100) ?: "<none>"} quality=${it.track?.audioQuality}")
+                TrackLog.d(TAG, "  ✓ stream URL available=${!it.streamUrl.isNullOrBlank()} quality=${it.track?.audioQuality}")
             }
         }.onCancellation().onFailure {
-            TrackLog.e(TAG, "  ✗ getStreamUrl FAILED for ${loaded.module.id} trackId=$trackId: ${it.message}", it)
+            TrackLog.e(TAG, "  ✗ getStreamUrl FAILED for ${loaded.module.id} (${it.javaClass.simpleName})")
         }
     }
 

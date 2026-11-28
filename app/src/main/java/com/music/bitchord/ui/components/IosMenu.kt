@@ -584,8 +584,14 @@ fun <T : Any> IosMenuPopover(
 
         val scrimPlaceable = measurables[0].measure(Constraints.fixed(width, height))
         val panelWidth = IosMenuWidth.roundToPx().coerceAtMost(width - margin * 2)
+        val availablePanelHeight = (bottom - top).coerceAtLeast(0)
+        val panelMaxHeight = if (dialogWindow) {
+            minOf(availablePanelHeight, 340.dp.roundToPx())
+        } else {
+            availablePanelHeight
+        }
         val panel = measurables[2].measure(
-            Constraints(minWidth = panelWidth, maxWidth = panelWidth, maxHeight = (bottom - top).coerceAtLeast(0)),
+            Constraints(minWidth = panelWidth, maxWidth = panelWidth, maxHeight = panelMaxHeight),
         )
         val shadowPlate = measurables[1].measure(Constraints.fixed(panel.width, panel.height))
         val anchorBounds = menuAnchor?.translate(-overlayOffset)

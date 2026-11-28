@@ -19,7 +19,9 @@ class QuickJsNetworkPolicyTest {
             "169.254.169.254",
             "172.16.0.1",
             "172.31.255.254",
+            "192.0.0.1",
             "192.0.2.1",
+            "192.88.99.1",
             "192.168.1.1",
             "198.18.0.1",
             "198.51.100.1",
@@ -59,7 +61,7 @@ class QuickJsNetworkPolicyTest {
 
     @Test
     fun `allows normal public resolver addresses`() {
-        listOf("8.8.8.8", "1.1.1.1", "2606:4700:4700::1111").forEach { address ->
+        listOf("8.8.8.8", "1.1.1.1", "192.0.1.1", "192.0.3.1", "2606:4700:4700::1111").forEach { address ->
             assertFalse(
                 "$address should remain usable by an add-on",
                 QuickJsExecutor.isBlockedModuleAddress(InetAddress.getByName(address)),

@@ -97,7 +97,6 @@ import java.util.Locale
  * [IosMenuPopover] hung off the ⋮ or the player's ⋯ that opened it, or
  * [HeldContextMenu] under the row a hold lifted.
  */
-@Composable
 private enum class SongMenuPopupSection { HOME, PLAYBACK, QUEUE, LIBRARY, DETAILS }
 
 @Composable

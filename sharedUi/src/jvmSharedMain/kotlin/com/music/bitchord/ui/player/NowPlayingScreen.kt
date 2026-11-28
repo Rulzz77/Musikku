@@ -2847,14 +2847,17 @@ fun NowPlayingScreen(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.CenterEnd,
                     ) {
-                        val panelWidth = minOf(maxWidth * 0.54f, 520.dp)
+                        val panelWidth = minOf(
+                            maxWidth * FULLSCREEN_PLAYER_PANEL_WIDTH_FRACTION,
+                            FULLSCREEN_PLAYER_PANEL_MAX_WIDTH,
+                        )
                         Box(
                             modifier = Modifier
                                 .width(panelWidth)
                                 .fillMaxHeight()
                                 .padding(10.dp)
-                                .clip(RoundedCornerShape(22.dp))
-                                .background(Color(0xF51A1720))
+                                .clip(FULLSCREEN_PLAYER_PANEL_SHAPE)
+                                .background(FULLSCREEN_PLAYER_PANEL_BACKGROUND)
                                 // Keep taps inside the panel from dismissing the scrim.
                                 .clickable(
                                     interactionSource = remember { MutableInteractionSource() },
@@ -2862,8 +2865,8 @@ fun NowPlayingScreen(
                                 ) {}
                                 .border(
                                     1.dp,
-                                    Color.White.copy(alpha = 0.10f),
-                                    RoundedCornerShape(22.dp),
+                                    FULLSCREEN_PLAYER_PANEL_BORDER,
+                                    FULLSCREEN_PLAYER_PANEL_SHAPE,
                                 ),
                         ) {
                             InlineQueue(

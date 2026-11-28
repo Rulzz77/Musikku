@@ -1200,8 +1200,13 @@ object AppSettings {
         lastfmSessionKey.value = authStore.lastfmSessionKey.orEmpty()
         lastfmApiKey.value = authStore.lastfmApiKey.orEmpty().ifBlank { BuildConfig.LASTFM_API_KEY }
         lastfmSecret.value = authStore.lastfmSecret.orEmpty().ifBlank { BuildConfig.LASTFM_SECRET }
-        lastfmEndpoint.value = prefs.getString(KEY_LASTFM_ENDPOINT, "").orEmpty()
-            .let(::normalizeLastfmEndpointOrBlank)
+        val storedLastfmEndpoint = prefs.getString(KEY_LASTFM_ENDPOINT, "").orEmpty()
+        lastfmEndpoint.value = normalizeLastfmEndpointOrBlank(storedLastfmEndpoint)
+        if (lastfmEndpoint.value != storedLastfmEndpoint) {
+            // Purge old/custom or malformed destinations from disk as well as
+            // from the live flow so a later backup cannot re-export them.
+            prefs.edit().putString(KEY_LASTFM_ENDPOINT, lastfmEndpoint.value).apply()
+        }
         lastfmScrobbleEnabled.value = prefs.getBoolean(KEY_LASTFM_SCROBBLE_ENABLED, false)
         lastfmNowPlaying.value = prefs.getBoolean(KEY_LASTFM_NOW_PLAYING, false) && lastfmScrobbleEnabled.value
         lastfmPrimaryArtistOnly.value = prefs.getBoolean(KEY_LASTFM_PRIMARY_ARTIST_ONLY, false)

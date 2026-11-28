@@ -9,8 +9,8 @@ package com.music.bitchord.wear
  *
  * Which phone a watch talks to is not decided here at all. The Wearable Data
  * Layer only ever delivers between apps with the same package name *and* the
- * same signing key, so the dev watch app (`com.dev.bitchord`) can only ever see
- * the dev phone app, and prod only prod. That is why the watch app takes the
+ * same signing key, so the dev watch app (`id.musikku.dev`) can only ever see
+ * the dev phone app, and prod (`id.musikku.player`) only prod. That is why the watch app takes the
  * phone app's application ids rather than ids of its own.
  *
  * Two channels:

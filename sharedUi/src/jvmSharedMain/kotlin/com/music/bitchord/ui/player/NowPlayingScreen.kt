@@ -481,9 +481,6 @@ private fun LyricsViewBackdrop(
             }
         }
 
-        LyricsBackgroundMode.TRANSPARENT -> {
-            Box(modifier = modifier.background(Color.Transparent))
-        }
     }
 }
 
@@ -2399,13 +2396,7 @@ fun NowPlayingScreen(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(
-                        if (lyricsBackgroundMode == LyricsBackgroundMode.TRANSPARENT) {
-                            Color.Transparent
-                        } else {
-                            Color.Black
-                        },
-                    ),
+                    .background(Color.Black),
             ) {
                 LyricsViewBackdrop(
                     trackKey = song.videoId,

@@ -275,7 +275,7 @@ object Backup {
      * malformed dates, duplicate IDs, oversized maps, and negative counters
      * here rather than letting corrupt values leak into chart arithmetic.
      */
-    private fun validateListeningBuckets(buckets: List<StoredBucket>) {
+    internal fun validateListeningBuckets(buckets: List<StoredBucket>) {
         val months = HashSet<String>()
         buckets.forEach { bucket ->
             val month = runCatching { YearMonth.parse(bucket.month) }.getOrNull()
@@ -285,12 +285,13 @@ object Backup {
             }
             val daysInMonth = month.lengthOfMonth()
             val monthMs = daysInMonth * 86_400_000L
+            val monthPlayLimit = daysInMonth * 86_400
             fun validDate(dateKey: String): Boolean =
                 runCatching { LocalDate.parse(dateKey) }.getOrNull()?.let {
                     YearMonth.from(it) == month
                 } == true
             fun validDailyStats(stats: DayStats): Boolean =
-                stats.ms in 0L..86_400_000L && stats.plays >= 0
+                stats.ms in 0L..86_400_000L && stats.plays in 0..86_400
             fun validDays(days: Map<String, DayStats>): Boolean =
                 days.size <= daysInMonth && days.all { (date, stats) ->
                     validDate(date) && validDailyStats(stats)
@@ -318,7 +319,7 @@ object Backup {
                     (track.localUri?.length ?: 0) <= 4_096 &&
                     (track.localPath?.length ?: 0) <= 4_096 &&
                     (track.durationText?.length ?: 0) <= 256 &&
-                    track.ms in 0L..monthMs && track.plays >= 0 && track.last >= 0L &&
+                    track.ms in 0L..monthMs && track.plays in 0..monthPlayLimit && track.last >= 0L &&
                     track.days.size <= daysInMonth && validDays(track.days)) {
                     "Backup contains an invalid listening-history track in $month"
                 }
@@ -329,7 +330,7 @@ object Backup {
                     (artist.art?.length ?: 0) <= 4_096 &&
                     (artist.id?.length ?: 0) <= 4_096 &&
                     (artist.key?.length ?: 0) <= 8_192 &&
-                    artist.ms in 0L..monthMs && artist.plays >= 0 &&
+                    artist.ms in 0L..monthMs && artist.plays in 0..monthPlayLimit &&
                     artist.days.size <= daysInMonth && validDays(artist.days)) {
                     "Backup contains an invalid listening-history artist in $month"
                 }
@@ -340,7 +341,7 @@ object Backup {
                     (album.art?.length ?: 0) <= 4_096 &&
                     (album.id?.length ?: 0) <= 4_096 &&
                     (album.key?.length ?: 0) <= 8_192 &&
-                    album.ms in 0L..monthMs && album.plays >= 0 &&
+                    album.ms in 0L..monthMs && album.plays in 0..monthPlayLimit &&
                     album.days.size <= daysInMonth && validDays(album.days)) {
                     "Backup contains an invalid listening-history album in $month"
                 }
